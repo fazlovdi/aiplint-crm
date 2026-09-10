@@ -1,11 +1,55 @@
 import streamlit as st
-import json, os, re, urllib.parse
+import json, os, re, urllib.parse, requests
 from datetime import datetime
 
 FILE_NAME = "web_crm_database_v2.json"
 UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR): 
     os.makedirs(UPLOAD_DIR)
+
+# Чтение токена Яндекса из секретов Streamlit Cloud
+YANDEX_TOKEN = st.secrets.get("YANDEX_DISK_TOKEN", "")
+
+def yandex_headers():
+    return {"Authorization": f"OAuth {YANDEX_TOKEN}"}
+
+def init_yandex_folders():
+    if not YANDEX_TOKEN: return
+    # Создаем папку приложения на Яндекс Диске, если её нет
+    url = "https://yandex.net"
+    requests.put(url, params={"path": "app:/"}, headers=yandex_headers())
+    requests.put(url, params={"path": "app:/uploads"}, headers=yandex_headers())
+
+def download_db_from_yandex():
+    if not YANDEX_TOKEN: return
+    init_yandex_folders()
+    url = "https://yandex.net/download"
+    res = requests.get(url, params={"path": f"app:/{FILE_NAME}"}, headers=yandex_headers())
+    if res.status_code == 200:
+        download_url = res.json().get("href")
+        file_res = requests.get(download_url)
+        if file_res.status_code == 200:
+            with open(FILE_NAME, "w", encoding="utf-8") as f:
+                f.write(file_res.text)
+
+def upload_db_to_yandex():
+    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
+    url = "https://yandex.net/upload"
+    res = requests.get(url, params={"path": f"app:/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+    if res.status_code == 200:
+        upload_url = res.json().get("href")
+        with open(FILE_NAME, "rb") as f:
+            requests.put(upload_url, files={"file": f})
+
+def upload_file_to_yandex(local_path, remote_name):
+    if not YANDEX_TOKEN or not os.path.exists(local_path): return
+    url = "https://yandex.net/upload"
+    remote_path = f"app:/uploads/{remote_name}"
+    res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
+    if res.status_code == 200:
+        upload_url = res.json().get("href")
+        with open(local_path, "rb") as f:
+            requests.put(upload_url, files={"file": f})
 
 def format_phone(p_str):
     if not p_str: return ""
@@ -17,8 +61,10 @@ def format_phone(p_str):
 def save_uploaded_file(u_file, c_id, prefix=""):
     if u_file is not None:
         s_name = u_file.name
-        s_path = os.path.join(UPLOAD_DIR, f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{s_name}")
+        unique_name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{s_name}"
+        s_path = os.path.join(UPLOAD_DIR, unique_name)
         with open(s_path, "wb") as f: f.write(u_file.getbuffer())
+        upload_file_to_yandex(s_path, unique_name)
         return {"path": s_path, "name": s_name}
     return None
 
@@ -34,6 +80,7 @@ def display_file_or_image(f_path, f_name, key_unique):
             except Exception: st.caption("📁 Файл на сервере.")
 
 def load_data():
+    download_db_from_yandex()
     if os.path.exists(FILE_NAME):
         try:
             with open(FILE_NAME, "r", encoding="utf-8") as f:
@@ -52,7 +99,8 @@ def save_data(data):
     try:
         with open(FILE_NAME, "w", encoding="utf-8") as f: 
             json.dump(data, f, ensure_ascii=False, indent=4)
-    except Exception as e: st.error(f"Ошибка: {e}")
+        upload_db_to_yandex()
+    except Exception as e: st.error(f"Ошибка сохранения: {e}")
 
 if "crm_store" not in st.session_state: st.session_state.crm_store = load_data()
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
@@ -71,7 +119,7 @@ with col_m1:
     if st.button("📅 Расписание и План", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"; st.rerun()
 with col_menu2:
-    if st.button("👥 База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
+    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"; st.rerun()
 with col_menu3:
     if st.button("📋  Канбан сделок", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
@@ -85,7 +133,7 @@ if st.session_state.active_tab == "Задачи":
 
     for client in st.session_state.crm_store.get("clients", []):
         client_deals = [d for d in st.session_state.crm_store.get("deals", []) if d["client_id"] == client["id"]]
-        main_deal_title = client_deals[0]["title"] if client_deals else ""
+        main_deal_title = client_deals["title"] if client_deals else ""
         
         for task in client.get("tasks", []):
             if not task.get("done", False):
@@ -141,7 +189,7 @@ if st.session_state.active_tab == "Задачи":
                         if st.button(f"🔍 Перейти к {t['deal_title']}", key=f"focus_fut_{idx}"):
                             st.session_state.search_input_key = t["deal_title"]
                             st.session_state.last_id = t["client_id"]
-                            st.session_state.active_tab = "禮лиенты"
+                            st.session_state.active_tab = "Клиенты"
                             st.rerun()
                     st.markdown("---")
             else: st.caption("План на будущие дни пуст.")
@@ -169,8 +217,7 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.f_ph[i]["name"] = st.text_input(f"ФИО #{i+1}", value=ph["name"], key=f"f_nm_{i}")
                 st.session_state.f_ph[i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{i}")
             if st.button("➕ Добавить сотрудника"): 
-                st.session_state.f_ph.append({"phone":"", "name":"", "role":""})
-                st.rerun()
+                st.session_state.f_ph.append({"phone":"", "name":"", "role":""}); st.rerun()
         with col_s2:
             st.markdown("**✉️ Доп. Email**")
             for i, em in enumerate(st.session_state.f_em): st.session_state.f_em[i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{i}")
@@ -194,21 +241,19 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.crm_store["clients"].append(new_client)
                 save_data(st.session_state.crm_store)
                 st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
-                
                 st.session_state.last_id = new_id
                 st.session_state.form_version += 1
                 st.session_state["scroll_to_card"] = True
-                
                 st.toast(f"🎉 Клиент {c_name} успешно добавлен в базу!", icon="✅")
                 st.rerun()
             else: st.error("Заполните ФИО и телефон!")
+
     st.markdown("### 🔍 Фильтры базы")
     col_search1, col_search2 = st.columns(2)
     with col_search1: 
         search_query = st.text_input("Поиск по имени, компании или телефону:", key="search_input_key", placeholder="Введите текст...").strip().lower()
     with col_search2: 
         category_filter = st.selectbox("Фильтр по категории:", ["Все", "Дизайнер", "Строитель", "Дилер", "Покупатель"])
-
     all_clients = st.session_state.crm_store["clients"]
     filtered_clients = []
     search_digits = re.sub(r"\D", "", search_query)
@@ -239,24 +284,22 @@ elif st.session_state.active_tab == "Клиенты":
                 with st.expander(f"👤 {client['name']} — ID: {client['id']} `[{client.get('category', 'Покупатель')}]`", expanded=is_target_card):
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
-                        st.markdown(f"📞 Тел: **{client['phone']}** | ✉️ Email: `{client.get('email','')}` | 📍 Адрес: *{client.get('address','')}*")
+                        st.markdown(f"📞 Тел: **{client['phone']}** | ✉️ Email: `{client.get('email','')}` | 📍 ...Адрес: *{client.get('address','')}*")
                         st.markdown(f"🏷️ Скидка: `{client.get('discount',0)}%` | 📝 Описание: {client.get('base_comment','')}")
                         
                         clean_phone = re.sub(r"\D", "", client['phone'])
-                        if clean_phone.startswith("8") and len(clean_phone) == 11:
-                            clean_phone = "7" + clean_phone[1:]
-                        elif not clean_phone:
-                            clean_phone = "79990000000"
+                        if clean_phone.startswith("8") and len(clean_phone) == 11: clean_phone = "7" + clean_phone[1:]
+                        elif not clean_phone: clean_phone = "79990000000"
                         
                         st.markdown("**💬 Быстрая связь в мессенджерах:**")
                         col_msg1, col_menu_msg2, col_menu_msg3 = st.columns(3)
                         with col_msg1:
                             wa_text = "Здравствуйте! По поводу вашего заказа из Айплинт CRM..."
                             encoded_text = urllib.parse.quote(wa_text)
-                            wa_url = f"https://wa.me/{clean_phone}?text={encoded_text}"
+                            wa_url = f"https://wa.me{clean_phone}?text={encoded_text}"
                             st.link_button("💬 WhatsApp", wa_url, use_container_width=True)
                         with col_menu_msg2:
-                            tg_url = f"https://t.me/{clean_phone}"
+                            tg_url = f"https://t.me{clean_phone}"
                             st.link_button("✈️ Telegram", tg_url, use_container_width=True)
                         with col_menu_msg3:
                             max_url = f"sms:{clean_phone}" 
@@ -301,11 +344,7 @@ elif st.session_state.active_tab == "Клиенты":
                             
         if st.session_state.get("scroll_to_card") and st.session_state.last_id:
             st.session_state["scroll_to_card"] = False
-            js_scroll = f"""
-            <script>
-                window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});
-            </script>
-            """
+            js_scroll = f"<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
             st.components.v1.html(js_scroll, height=0, width=0)
     else: st.info("База клиентов пуста.")
 elif st.session_state.active_tab == "Сделки":
@@ -369,13 +408,12 @@ elif st.session_state.active_tab == "Сделки":
                             clean_comm = task.get('task_comment', '').replace('\n', '<br>').replace("'", "`") if task.get('task_comment') else task.get('task_comment_simple', '').replace('\n', '<br>').replace("'", "`")
                             clean_tk = task.get('tk_num', '')
                             
-                            # 🌟 ИСПРАВЛЕНО: Безопасный вывод печатной формы через HTML-компонент, который открывается без пустых страниц
                             print_btn_html = f"""
                             <a href="data:text/html;charset=utf-8,<html><head><title>Накладная</title><style>body{{font-family:Arial;margin:40px;line-height:1.6;}} .h{{text-align:center;border-bottom:2px solid %23000;padding-bottom:10px;}} .s{{margin-bottom:12px;}} .b{{font-weight:bold;}}</style></head><body><div class='h'><h2>БЛАНК ЗАДАЧИ К {deal['title']}</h2><p>Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}</p></div><br><div class='s'><span class='b'>Клиент:</span> {client['name']} ({client['phone']})</div><div class='s'><span class='b'>Тип действия:</span> {t_type}</div><div class='s'><span class='b'>Срок (Дедлайн):</span> {task.get('deadline','')}</div><hr><h3>ДАННЫЕ ЗАКАЗА:</h3><div class='s'><span class='b'>Товары:</span><br>{clean_products}</div><div class='s'><span class='b'>Адрес доставки:</span> {clean_addr}</div><div class='s'><span class='b'>Получатель:</span> {clean_rec} ({task.get('receiver_phone', '')})</div><div class='s'><span class='b'>Оплата ТК:</span> {task.get('ship_pay', '')}</div><div class='s'><span class='b'>Трек-номер:</span> {clean_tk}</div><div class='s'><span class='b'>Комментарий:</span> {clean_comm}</div><br><br><br><p style='text-align:right;'>Ответственный: _________________</p><script>window.print();</script></body></html>" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:10px; background-color:%23262730; color:white; border:1px solid %23464855; border-radius:4px; cursor:pointer; font-family:sans-serif; font-size:14px;">🖨️ Открыть бланк для печати</button></a>
                             """
                             st.components.v1.html(print_btn_html, height=45)
                             with st.expander("✏️ Редактировать задачу"):
-                                edit_t_text = st.text_input("Изменить суть задачи:", value=task["text"].split(" (Файл:")[0], key=f"ed_t_txt_{deal['id']}_{i}")
+                                edit_t_text = st.text_input("Изменить суть задачи:", value=task["text"].split(" (Файл:"), key=f"ed_t_txt_{deal['id']}_{i}")
                                 if st.button("💾 Сохранить изменения задачи", key=f"ed_t_btn_{deal['id']}_{i}", use_container_width=True):
                                     if edit_t_text.strip():
                                         task["text"] = edit_t_text.strip() + (" (Файл: " + task["file_name"] + ")" if task.get("file_path") else "")
