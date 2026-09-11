@@ -316,10 +316,10 @@ elif st.session_state.active_tab == "Клиенты":
                         with col_msg1:
                             wa_text = "Здравствуйте! По поводу вашего заказа из Айплинт CRM..."
                             encoded_text = urllib.parse.quote(wa_text)
-                            wa_url = f"https://wa.me{clean_phone}?text={encoded_text}"
+                            wa_url = f"https://wa.me/{clean_phone}?text={encoded_text}"
                             st.link_button("💬 WhatsApp", wa_url, use_container_width=True)
                         with col_menu_msg2:
-                            tg_url = f"https://t.me+{clean_phone}"
+                            tg_url = f"https://t.me/{clean_phone}"
                             st.link_button("✈️ Telegram", tg_url, use_container_width=True)
                         with col_menu_msg3:
                             max_url = f"sms:{clean_phone}" 
