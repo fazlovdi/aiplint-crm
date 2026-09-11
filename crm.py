@@ -9,6 +9,7 @@ if not os.path.exists(UPLOAD_DIR):
 
 # Актуальный базовый URL для API Яндекс Диска
 YANDEX_API_URL = "https://yandex.net"
+# Чтение токена Яндекса из секретов Streamlit Cloud
 YANDEX_TOKEN = st.secrets.get("YANDEX_DISK_TOKEN", "")
 
 def yandex_headers():
@@ -20,7 +21,7 @@ def yandex_headers():
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
     try:
-        # Проверяем/создаем корневую папку приложения (в папке Приложения/Айплинт CRM)
+        # Проверяем/создаем корневую папку приложения
         requests.put(YANDEX_API_URL, params={"path": "app:/"}, headers=yandex_headers())
         # Создаем папку под вложения
         requests.put(YANDEX_API_URL, params={"path": "app:/uploads"}, headers=yandex_headers())
@@ -31,7 +32,6 @@ def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     init_yandex_folders()
     try:
-        # Получаем ссылку на скачивание
         url = f"{YANDEX_API_URL}/download"
         res = requests.get(url, params={"path": f"app:/{FILE_NAME}"}, headers=yandex_headers())
         if res.status_code == 200:
@@ -41,7 +41,6 @@ def download_db_from_yandex():
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     f.write(file_res.text)
         elif res.status_code == 404:
-            # Если файла еще нет на Диске, это норма (первый запуск). Просто создадим пустую структуру.
             if not os.path.exists(FILE_NAME):
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     json.dump({"clients": [], "deals": []}, f)
@@ -51,7 +50,6 @@ def download_db_from_yandex():
 def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
-        # Запрашиваем ссылку для загрузки с перезаписью
         url = f"{YANDEX_API_URL}/upload"
         res = requests.get(url, params={"path": f"app:/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
@@ -64,7 +62,6 @@ def upload_db_to_yandex():
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
-        # Безопасно кодируем имя файла для передачи в URL
         safe_remote_name = urllib.parse.quote(remote_name)
         url = f"{YANDEX_API_URL}/upload"
         remote_path = f"app:/uploads/{safe_remote_name}"
@@ -79,7 +76,7 @@ def upload_file_to_yandex(local_path, remote_name):
 def format_phone(p_str):
     if not p_str: return ""
     digits = re.sub(r"\D", "", p_str)
-    if len(digits) == 11 and digits in ["7", "8"]: digits = digits[1:]
+    if len(digits) == 11 and digits[0] in ["7", "8"]: digits = digits[1:]
     if len(digits) == 10: return f"+7 {digits[0:3]} {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
     return p_str.strip()
 
@@ -126,7 +123,6 @@ def save_data(data):
             json.dump(data, f, ensure_ascii=False, indent=4)
         upload_db_to_yandex()
     except Exception as e: st.error(f"Ошибка сохранения: {e}")
-
 if "crm_store" not in st.session_state: st.session_state.crm_store = load_data()
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
@@ -144,7 +140,7 @@ with col_m1:
     if st.button("📅 Расписание и План", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"; st.rerun()
 with col_menu2:
-    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
+    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Slow" or st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"; st.rerun()
 with col_menu3:
     if st.button("📋  Канбан сделок", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
@@ -158,7 +154,7 @@ if st.session_state.active_tab == "Задачи":
 
     for client in st.session_state.crm_store.get("clients", []):
         client_deals = [d for d in st.session_state.crm_store.get("deals", []) if d["client_id"] == client["id"]]
-        main_deal_title = client_deals["title"] if client_deals else ""
+        main_deal_title = client_deals[0]["title"] if client_deals else ""
         
         for task in client.get("tasks", []):
             if not task.get("done", False):
@@ -298,7 +294,6 @@ elif st.session_state.active_tab == "Клиенты":
             match_by_employee_name = search_query in client_text
             if not (match_by_text or match_by_phone or match_by_employee_name): continue
         filtered_clients.append(client)
-
     if all_clients:
         with st.expander(f"🔍 Посмотреть карточки клиентов (Найдено: {len(filtered_clients)})", expanded=True):
             for client in filtered_clients:
@@ -324,7 +319,7 @@ elif st.session_state.active_tab == "Клиенты":
                             wa_url = f"https://wa.me{clean_phone}?text={encoded_text}"
                             st.link_button("💬 WhatsApp", wa_url, use_container_width=True)
                         with col_menu_msg2:
-                            tg_url = f"https://t.me{clean_phone}"
+                            tg_url = f"https://t.me+{clean_phone}"
                             st.link_button("✈️ Telegram", tg_url, use_container_width=True)
                         with col_menu_msg3:
                             max_url = f"sms:{clean_phone}" 
