@@ -362,11 +362,11 @@ elif st.session_state.active_tab == "Клиенты":
                             st.session_state.crm_store["deals"].append({"id": max_d_id + 1, "client_id": client["id"], "title": auto_title, "budget": db, "status": "Новый", "deal_comments": []})
                             save_data(st.session_state.crm_store); st.rerun()
                             
-if st.session_state.get("scroll_to_card") and st.session_state.last_id:
-    st.session_state["scroll_to_card"] = False
-    # Передаем JS-код через data URI внутри st.iframe
-    js_scroll = f"data:text/html;charset=utf-8,<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
-    st.iframe(js_scroll, height=0, width=0)
+                        if st.session_state.get("scroll_to_card") and st.session_state.last_id:
+                            st.session_state["scroll_to_card"] = False
+                            # Передаем JS-код через data URI внутри st.iframe
+                            js_scroll = f"data:text/html;charset=utf-8,<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
+                            st.iframe(js_scroll, height=0, width=0)
 
     else: st.info("База клиентов пуста.")
 elif st.session_state.active_tab == "Сделки":
