@@ -7,49 +7,74 @@ UPLOAD_DIR = "uploads"
 if not os.path.exists(UPLOAD_DIR): 
     os.makedirs(UPLOAD_DIR)
 
-# Чтение токена Яндекса из секретов Streamlit Cloud
+# Актуальный базовый URL для API Яндекс Диска
+YANDEX_API_URL = "https://yandex.net"
 YANDEX_TOKEN = st.secrets.get("YANDEX_DISK_TOKEN", "")
 
 def yandex_headers():
-    return {"Authorization": f"OAuth {YANDEX_TOKEN}"}
+    return {
+        "Authorization": f"OAuth {YANDEX_TOKEN}",
+        "Accept": "application/json"
+    }
 
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
-    # Создаем папку приложения на Яндекс Диске, если её нет
-    url = "https://yandex.net"
-    requests.put(url, params={"path": "app:/"}, headers=yandex_headers())
-    requests.put(url, params={"path": "app:/uploads"}, headers=yandex_headers())
+    try:
+        # Проверяем/создаем корневую папку приложения (в папке Приложения/Айплинт CRM)
+        requests.put(YANDEX_API_URL, params={"path": "app:/"}, headers=yandex_headers())
+        # Создаем папку под вложения
+        requests.put(YANDEX_API_URL, params={"path": "app:/uploads"}, headers=yandex_headers())
+    except Exception as e:
+        st.warning(f"⚠️ Не удалось инициализировать папки на Яндекс.Диске: {e}")
 
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     init_yandex_folders()
-    url = "https://yandex.net/download"
-    res = requests.get(url, params={"path": f"app:/{FILE_NAME}"}, headers=yandex_headers())
-    if res.status_code == 200:
-        download_url = res.json().get("href")
-        file_res = requests.get(download_url)
-        if file_res.status_code == 200:
-            with open(FILE_NAME, "w", encoding="utf-8") as f:
-                f.write(file_res.text)
+    try:
+        # Получаем ссылку на скачивание
+        url = f"{YANDEX_API_URL}/download"
+        res = requests.get(url, params={"path": f"app:/{FILE_NAME}"}, headers=yandex_headers())
+        if res.status_code == 200:
+            download_url = res.json().get("href")
+            file_res = requests.get(download_url)
+            if file_res.status_code == 200:
+                with open(FILE_NAME, "w", encoding="utf-8") as f:
+                    f.write(file_res.text)
+        elif res.status_code == 404:
+            # Если файла еще нет на Диске, это норма (первый запуск). Просто создадим пустую структуру.
+            if not os.path.exists(FILE_NAME):
+                with open(FILE_NAME, "w", encoding="utf-8") as f:
+                    json.dump({"clients": [], "deals": []}, f)
+    except Exception as e:
+        st.error(f"🔴 Ошибка при загрузке базы данных: {e}")
 
 def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
-    url = "https://yandex.net/upload"
-    res = requests.get(url, params={"path": f"app:/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
-    if res.status_code == 200:
-        upload_url = res.json().get("href")
-        with open(FILE_NAME, "rb") as f:
-            requests.put(upload_url, files={"file": f})
+    try:
+        # Запрашиваем ссылку для загрузки с перезаписью
+        url = f"{YANDEX_API_URL}/upload"
+        res = requests.get(url, params={"path": f"app:/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+        if res.status_code == 200:
+            upload_url = res.json().get("href")
+            with open(FILE_NAME, "rb") as f:
+                requests.put(upload_url, files={"file": f})
+    except Exception as e:
+        st.error(f"🔴 Ошибка при выгрузке базы данных: {e}")
 
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
-    url = "https://yandex.net/upload"
-    remote_path = f"app:/uploads/{remote_name}"
-    res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
-    if res.status_code == 200:
-        upload_url = res.json().get("href")
-        with open(local_path, "rb") as f:
-            requests.put(upload_url, files={"file": f})
+    try:
+        # Безопасно кодируем имя файла для передачи в URL
+        safe_remote_name = urllib.parse.quote(remote_name)
+        url = f"{YANDEX_API_URL}/upload"
+        remote_path = f"app:/uploads/{safe_remote_name}"
+        res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
+        if res.status_code == 200:
+            upload_url = res.json().get("href")
+            with open(local_path, "rb") as f:
+                requests.put(upload_url, files={"file": f})
+    except Exception as e:
+        st.warning(f"⚠️ Ошибка при загрузке файла {remote_name} в облако: {e}")
 
 def format_phone(p_str):
     if not p_str: return ""
