@@ -23,15 +23,27 @@ def yandex_headers():
         "Accept": "application/json"
     }
 
+# Найти функцию init_yandex_folders и полностью заменить её этим кодом:
+
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
     try:
-        # Создаем папку Айплинт_CRM в общем корне вашего Яндекс Диска
-        requests.put(YANDEX_API_URL, params={"path": "disk:/Айплинт_CRM"}, headers=yandex_headers())
-        # Создаем внутри неё папку под загружаемые файлы
-        requests.put(YANDEX_API_URL, params={"path": "disk:/Айплинт_CRM/uploads"}, headers=yandex_headers())
+        # Проверяем, существует ли уже папка Айплинт_CRM на Диске
+        check_url = "https://yandex.net"
+        res_main = requests.get(check_url, params={"path": "disk:/Айплинт_CRM"}, headers=yandex_headers())
+        
+        # Если папки нет (код 404), принудительно создаем её через PUT
+        if res_main.status_code == 404:
+            requests.put(check_url, params={"path": "disk:/Айплинт_CRM"}, headers=yandex_headers())
+            st.sidebar.info("📂 Создана корневая папка 'Айплинт_CRM' на Яндекс.Диске")
+            
+        # Теперь проверяем внутреннюю папку uploads внутри Айплинт_CRM
+        res_uploads = requests.get(check_url, params={"path": "disk:/Айплинт_CRM/uploads"}, headers=yandex_headers())
+        if res_uploads.status_code == 404:
+            requests.put(check_url, params={"path": "disk:/Айплинт_CRM/uploads"}, headers=yandex_headers())
+            
     except Exception as e:
-        st.sidebar.error(f"⚠️ Не удалось создать папки: {e}")
+        st.sidebar.error(f"⚠️ Не удалось инициализировать структуру папок: {e}")
 
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
