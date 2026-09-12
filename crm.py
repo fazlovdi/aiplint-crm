@@ -52,7 +52,7 @@ def upload_db_to_yandex():
     try:
         # Исправлено: добавлен эндпоинт /upload к базовому URL
         url = f"{YANDEX_API_URL}/upload"
-        res = requests.get(url, params={"path": f"app:/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": f"app:{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
@@ -69,7 +69,7 @@ def upload_file_to_yandex(local_path, remote_name):
         safe_remote_name = urllib.parse.quote(remote_name)
         # Исправлено: добавлен эндпоинт /upload к базовому URL
         url = f"{YANDEX_API_URL}/upload"
-        remote_path = f"app:/uploads/{safe_remote_name}"
+        remote_path = f"app:uploads/{safe_remote_name}"
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
