@@ -25,7 +25,6 @@ def yandex_headers():
 
 def init_yandex_folders():
     pass
-
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     try:
@@ -63,7 +62,6 @@ def upload_db_to_yandex():
             st.sidebar.error(f"🔴 Ошибка получения ссылки. Код: {res.status_code}")
     except Exception as e:
         st.sidebar.error(f"🔴 Исключение при синхронизации: {e}")
-
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
@@ -106,7 +104,6 @@ def display_file_or_image(f_path, f_name, key_unique):
                     st.download_button(label=f"📎 Скачать {f_name}", data=f.read(), file_name=f_name, key=key_unique)
             except Exception: 
                 st.caption("📁 Файл на сервере.")
-
 def load_data():
     download_db_from_yandex()
     if os.path.exists(FILE_NAME):
@@ -318,7 +315,8 @@ elif st.session_state.active_tab == "Клиенты":
             st.markdown("---")
             st.markdown("### 📋 Список активных сотрудников")
             for u in st.session_state.crm_store.get("users", []):
-                col_list1, col_list2 = st.columns(2)  # 🟢 Просто добавьте цифру 2
+                # 🟢 ИСПРАВЛЕНО: Явно передаем число 2 для разделения строки на две равные части под стандарты Streamlit
+                col_list1, col_list2 = st.columns(2)
                 with col_list1:
                     st.markdown(f"• **{u.get('name', u['login'])}** (Логин: `{u['login']}` | Роль: `{u['role']}`)")
                 with col_list2:
@@ -377,7 +375,7 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.last_id = new_id
                 st.session_state.form_version += 1
                 st.session_state["scroll_to_card"] = True
-                st.toast(f"🎉 Клиент {c_name} успешно добавлен в базу!", icon="✅")
+                st.toast(f"🎉  Клиент {c_name} успешно добавлен в базу!", icon="✅")
                 st.rerun()
             else: st.error("Заполните ФИО и телефон!")
 
@@ -578,7 +576,6 @@ elif st.session_state.active_tab == "Сделки":
                                 with st.container(border=True):
                                     rt = st.text_input("Что сделано? (Отчет):", key=f"rt_{deal['id']}_{i}")
                                     uf = st.file_uploader("Файл/Фото отчета:", key=f"uf_{deal['id']}_{i}")
-                                    # 🟢 ИСПРАВЛЕНО: убрана опечатка Hask
                                     cn = st.checkbox("Следующая задача", key=f"cn_{deal['id']}_{i}")
                                     if st.button("💾 Подтвердить", key=f"cbtn_{deal['id']}_{i}", use_container_width=True):
                                         if rt.strip():
@@ -597,12 +594,9 @@ elif st.session_state.active_tab == "Сделки":
                                                 })
                                                 if cn: 
                                                     client["tasks"].append({"text": "Новое действие", "deadline": datetime.now().strftime("%Y-%m-%d %H:%M"), "done": False, "type": "Связаться"})
-                                                
-                                                # 🟢 ИСПРАВЛЕНО: корректный вызов без лишних закрывающих скобок
                                                 save_data(st.session_state.crm_store)
                                                 st.toast("✅ Отчет успешно сохранен!", icon="📝")
                                                 st.rerun()
-
                 else: st.caption("Нет задач.")
                 
                 with st.expander("➕ Новая задача"):
