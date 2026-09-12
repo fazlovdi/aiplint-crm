@@ -33,7 +33,7 @@ def download_db_from_yandex():
         # Проверяем наличие локального файла, чтобы не скачивать его каждую секунду
         if not os.path.exists(FILE_NAME):
             url = f"{YANDEX_API_URL}/download"
-            res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}"}, headers=yandex_headers())
+            res = requests.get(url, params={"path": f"disk:/CRM-не трогать!/{FILE_NAME}"}, headers=yandex_headers())
             
             if res.status_code == 200:
                 download_url = res.json().get("href")
@@ -53,7 +53,7 @@ def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
         url = f"{YANDEX_API_URL}/upload"
-        res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": f"disk:/CRM-не трогать!/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
@@ -72,7 +72,7 @@ def upload_file_to_yandex(local_path, remote_name):
     try:
         safe_remote_name = urllib.parse.quote(remote_name)
         url = f"{YANDEX_API_URL}/upload"
-        remote_path = f"disk:/Айплинт_CRM/uploads/{safe_remote_name}"
+        remote_path = f"disk:/CRM-не трогать!/uploads/{safe_remote_name}"
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
