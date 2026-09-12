@@ -578,6 +578,7 @@ elif st.session_state.active_tab == "Сделки":
                                 with st.container(border=True):
                                     rt = st.text_input("Что сделано? (Отчет):", key=f"rt_{deal['id']}_{i}")
                                     uf = st.file_uploader("Файл/Фото отчета:", key=f"uf_{deal['id']}_{i}")
+                                    # 🟢 ИСПРАВЛЕНО: убрана опечатка Hask
                                     cn = st.checkbox("Следующая задача", key=f"cn_{deal['id']}_{i}")
                                     if st.button("💾 Подтвердить", key=f"cbtn_{deal['id']}_{i}", use_container_width=True):
                                         if rt.strip():
@@ -596,9 +597,12 @@ elif st.session_state.active_tab == "Сделки":
                                                 })
                                                 if cn: 
                                                     client["tasks"].append({"text": "Новое действие", "deadline": datetime.now().strftime("%Y-%m-%d %H:%M"), "done": False, "type": "Связаться"})
+                                                
+                                                # 🟢 ИСПРАВЛЕНО: корректный вызов без лишних закрывающих скобок
                                                 save_data(st.session_state.crm_store)
                                                 st.toast("✅ Отчет успешно сохранен!", icon="📝")
                                                 st.rerun()
+
                 else: st.caption("Нет задач.")
                 
                 with st.expander("➕ Новая задача"):
