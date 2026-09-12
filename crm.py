@@ -45,26 +45,40 @@ def init_yandex_folders():
     except Exception as e:
         st.sidebar.error(f"⚠️ Не удалось инициализировать структуру папок: {e}")
 
+# Найти функцию download_db_from_yandex и полностью заменить её этим кодом:
+
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     init_yandex_folders()
     try:
         url = f"{YANDEX_API_URL}/download"
         res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}"}, headers=yandex_headers())
+        
         if res.status_code == 200:
             download_url = res.json().get("href")
             file_res = requests.get(download_url)
             if file_res.status_code == 200:
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     f.write(file_res.text)
-                st.sidebar.success("🔄 База успешно скачана с Яндекс.Диска!")
+                st.sidebar.success("🔄 База успешно синхронизирована с Яндекс.Диском!")
+                
         elif res.status_code == 404:
-            # При первом старте создаем пустую локальную базу
+            # 🟢 ИСПРАВЛЕНО: Если файла в облаке нет, создаем его локально И СРАЗУ ЖЕ отправляем на Яндекс.Диск
             if not os.path.exists(FILE_NAME):
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     json.dump({"clients": [], "deals": []}, f)
+                
+                # Принудительный вызов выгрузки, чтобы пустой файл инициализировался в облаке
+                st.sidebar.info("✨ Инициализация новой базы данных в облаке...")
+                upload_url_init = f"{YANDEX_API_URL}/upload"
+                res_init = requests.get(upload_url_init, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+                if res_init.status_code == 200:
+                    href_init = res_init.json().get("href")
+                    with open(FILE_NAME, "rb") as f_init:
+                        requests.put(href_init, files={"file": f_init})
+                        st.sidebar.success("📁 Файл базы данных успешно создан на Яндекс.Диске!")
         else:
-            st.sidebar.warning(f"ℹ️ Статус загрузки базы: {res.status_code}")
+            st.sidebar.warning(f"ℹ️ Нетипичный ответ Яндекса при загрузке: {res.status_code}")
     except Exception as e:
         st.sidebar.error(f"🔴 Ошибка загрузки базы: {e}")
 
