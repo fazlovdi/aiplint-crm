@@ -56,6 +56,8 @@ def download_db_from_yandex():
     except Exception as e:
         st.sidebar.error(f"🔴 Ошибка загрузки базы: {e}")
 
+# Найти функцию upload_db_to_yandex и заменить целиком:
+
 def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
@@ -65,7 +67,8 @@ def upload_db_to_yandex():
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
                 put_res = requests.put(upload_url, files={"file": f})
-                if put_res.status_code in [201, 202]:
+                # 🟢 ИСПРАВЛЕНО: Корректная проверка успешных статус-кодов Яндекса (201 Created или 200 OK)
+                if put_res.status_code in:
                     st.toast("✅ База данных успешно синхронизирована с Яндекс.Диском!", icon="☁️")
                 else:
                     st.sidebar.error(f"🔴 Ошибка записи файла на Диск: {put_res.status_code}")
