@@ -67,8 +67,8 @@ def upload_db_to_yandex():
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
                 put_res = requests.put(upload_url, files={"file": f})
-                # Строка 71 исправлена:
-                if put_res.status_code in:
+                # Успешные коды ответов Яндекса: 200 (ОК) или 201 (Создано)
+                if put_res.status_code == 200 or put_res.status_code == 201:
                     st.toast("✅ База данных успешно синхронизирована с Яндекс.Диском!", icon="☁️")
                 else:
                     st.sidebar.error(f"🔴 Ошибка записи файла на Диск: {put_res.status_code}")
