@@ -72,8 +72,9 @@ def upload_file_to_yandex(local_path, remote_name):
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
+            # 🟢 ИСПРАВЛЕНО: Передаем файл как чистый бинарный поток data= для любых типов файлов
             with open(local_path, "rb") as f:
-                requests.put(upload_url, files={"file": f})
+                requests.put(upload_url, data=f.read(), headers={"Authorization": f"OAuth {YANDEX_TOKEN}"})
     except Exception as e:
         st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name}: {e}")
 
