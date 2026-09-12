@@ -33,7 +33,7 @@ def download_db_from_yandex():
     try:
         # Исправлено: добавлен эндпоинт /download к базовому URL
         url = f"{YANDEX_API_URL}/download"
-        res = requests.get(url, params={"path": f"app:/{FILE_NAME}"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": f"app:{FILE_NAME}"}, headers=yandex_headers())
         if res.status_code == 200:
             download_url = res.json().get("href")
             file_res = requests.get(download_url)
