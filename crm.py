@@ -460,20 +460,30 @@ elif st.session_state.active_tab == "Клиенты":
                             ea = st.text_input("Адрес", value=client.get('address',''), key=f"ea_{client['id']}")
                             ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(client.get('discount',0)), key=f"ed_{client['id']}")
                             ec = st.text_area("Описание", value=client.get('base_comment',''), key=f"ec_{client['id']}")
-                            if st.button("💾 Сохранить", key=f"es_{client['id']}", use_container_width=True)             
-                                client['name'], client['phone'], client['email'], client['address'], client['discount'], client['base_comment'] = en, format_phone(ep), ee, ea, int(ed), ec
-                                save_data(st.session_state.crm_store); st.rerun()
-                    with col_c2:
-                        deals = st.session_state.crm_store["deals"]
-                        auto_title = f"Заказ №{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
-                        st.markdown(f"**Запустить новую сделку:**")
-                        st.info(f"Будет создан: **{auto_title}**")
-                        db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{client['id']}")
-                        if st.button("🚀 Открыть сделку", key=f"dbn_{client['id']}", use_container_width=True):
-                            max_d_id = max([d['id'] for d in deals]) if deals else 0
-                            st.session_state.crm_store["deals"].append({"id": max_d_id + 1, "client_id": client["id"], "title": auto_title, "budget": db, "status": "Новый", "deal_comments": []})
-                            save_data(st.session_state.crm_store); st.rerun()
                             
+                            if st.button("💾 Сохранить", key=f"es_{client['id']}", use_container_width=True):
+                                client['name'], client['phone'], client['email'], client['address'], client['discount'], client['base_comment'] = en, format_phone(ep), ee, ea, int(ed), ec
+                                save_data(st.session_state.crm_store)
+                                st.rerun()
+                            
+                            # 👑 ДОСТУПНО ТОЛЬКО ДЛЯ АДМИНИСТРАТОРА: Удаление клиента и его сделок
+                            if st.session_state.user_role == "admin":
+                                st.markdown("---")
+                                st.warning(f"⚠️ Внимание! Удаление контрагента **{client['name']}** сотрет всю историю его задач и связанные сделки из Канбана.")
+                                if st.button("❌ Полностью удалить клиента и все его сделки", key=f"del_cli_btn_{client['id']}", use_container_width=True, type="secondary"):
+                                    # 1. Удаляем связанные сделки из списка сделок
+                                    if "deals" in st.session_state.crm_store:
+                                        st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != client["id"]]
+                                    
+                                    # 2. Удаляем самого клиента из списка клиентов
+                                    st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != client["id"]]
+                                    
+                                    # 3. Сохраняем чистый JSON на Яндекс.Диск и сбрасываем фокус
+                                    save_data(st.session_state.crm_store)
+                                    st.session_state.last_id = None
+                                    st.toast(f"Клиент и его сделки успешно удалены!", icon="🗑️")
+                                    st.rerun()
+
         if st.session_state.get("scroll_to_card") and st.session_state.last_id:
             st.session_state["scroll_to_card"] = False
             js_scroll = f"data:text/html;charset=utf-8,<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
