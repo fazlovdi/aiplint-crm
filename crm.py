@@ -8,7 +8,7 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 # Актуальный базовый URL для API Яндекс Диска
-YANDEX_API_URL = "https://yandex.net"
+YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
 
 # Чтение и очистка токена из секретов Streamlit Cloud
 raw_token = st.secrets.get("YANDEX_DISK_TOKEN", "")
@@ -23,62 +23,29 @@ def yandex_headers():
         "Accept": "application/json"
     }
 
-# Найти функцию init_yandex_folders и полностью заменить её этим кодом:
-
 def init_yandex_folders():
-    if not YANDEX_TOKEN: return
-    try:
-        # Проверяем, существует ли уже папка Айплинт_CRM на Диске
-        check_url = "https://yandex.net"
-        res_main = requests.get(check_url, params={"path": "disk:/Айплинт_CRM"}, headers=yandex_headers())
-        
-        # Если папки нет (код 404), принудительно создаем её через PUT
-        if res_main.status_code == 404:
-            requests.put(check_url, params={"path": "disk:/Айплинт_CRM"}, headers=yandex_headers())
-            st.sidebar.info("📂 Создана корневая папка 'Айплинт_CRM' на Яндекс.Диске")
-            
-        # Теперь проверяем внутреннюю папку uploads внутри Айплинт_CRM
-        res_uploads = requests.get(check_url, params={"path": "disk:/Айплинт_CRM/uploads"}, headers=yandex_headers())
-        if res_uploads.status_code == 404:
-            requests.put(check_url, params={"path": "disk:/Айплинт_CRM/uploads"}, headers=yandex_headers())
-            
-    except Exception as e:
-        st.sidebar.error(f"⚠️ Не удалось инициализировать структуру папок: {e}")
-
-# Найти функцию download_db_from_yandex и полностью заменить её этим кодом:
+    # Мы пропускаем автоматическое создание, так как вы уже создали папки вручную
+    pass
 
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
-    init_yandex_folders()
     try:
-        url = f"{YANDEX_API_URL}/download"
-        res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}"}, headers=yandex_headers())
-        
-        if res.status_code == 200:
-            download_url = res.json().get("href")
-            file_res = requests.get(download_url)
-            if file_res.status_code == 200:
-                with open(FILE_NAME, "w", encoding="utf-8") as f:
-                    f.write(file_res.text)
-                st.sidebar.success("🔄 База успешно синхронизирована с Яндекс.Диском!")
-                
-        elif res.status_code == 404:
-            # 🟢 ИСПРАВЛЕНО: Если файла в облаке нет, создаем его локально И СРАЗУ ЖЕ отправляем на Яндекс.Диск
-            if not os.path.exists(FILE_NAME):
+        # Проверяем наличие локального файла, чтобы не скачивать его каждую секунду
+        if not os.path.exists(FILE_NAME):
+            url = f"{YANDEX_API_URL}/download"
+            res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}"}, headers=yandex_headers())
+            
+            if res.status_code == 200:
+                download_url = res.json().get("href")
+                file_res = requests.get(download_url)
+                if file_res.status_code == 200:
+                    with open(FILE_NAME, "w", encoding="utf-8") as f:
+                        f.write(file_res.text)
+                    st.sidebar.success("🔄 База успешно скачана с Яндекс.Диска!")
+            else:
+                # Если в облаке файла еще нет, просто создаем чистую структуру локально
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     json.dump({"clients": [], "deals": []}, f)
-                
-                # Принудительный вызов выгрузки, чтобы пустой файл инициализировался в облаке
-                st.sidebar.info("✨ Инициализация новой базы данных в облаке...")
-                upload_url_init = f"{YANDEX_API_URL}/upload"
-                res_init = requests.get(upload_url_init, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
-                if res_init.status_code == 200:
-                    href_init = res_init.json().get("href")
-                    with open(FILE_NAME, "rb") as f_init:
-                        requests.put(href_init, files={"file": f_init})
-                        st.sidebar.success("📁 Файл базы данных успешно создан на Яндекс.Диске!")
-        else:
-            st.sidebar.warning(f"ℹ️ Нетипичный ответ Яндекса при загрузке: {res.status_code}")
     except Exception as e:
         st.sidebar.error(f"🔴 Ошибка загрузки базы: {e}")
 
@@ -91,15 +58,14 @@ def upload_db_to_yandex():
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
                 put_res = requests.put(upload_url, files={"file": f})
-                # Успешные коды ответов Яндекса: 200 (ОК) или 201 (Создано)
                 if put_res.status_code == 200 or put_res.status_code == 201:
-                    st.toast("✅ База данных успешно синхронизирована с Яндекс.Диском!", icon="☁️")
+                    st.toast("✅ База данных успешно отправлена на Яндекс.Диск!", icon="☁️")
                 else:
-                    st.sidebar.error(f"🔴 Ошибка записи файла на Диск: {put_res.status_code}")
+                    st.sidebar.error(f"🔴 Ошибка записи на Диск. Код: {put_res.status_code}")
         else:
-            st.sidebar.error(f"🔴 Яндекс отказал в ссылке выгрузки. Код: {res.status_code}")
+            st.sidebar.error(f"🔴 Ошибка получения ссылки. Код: {res.status_code}, Ответ: {res.text}")
     except Exception as e:
-        st.sidebar.error(f"🔴 Ошибка синхронизации с облаком: {e}")
+        st.sidebar.error(f"🔴 Исключение при синхронизации: {e}")
 
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
@@ -113,7 +79,7 @@ def upload_file_to_yandex(local_path, remote_name):
             with open(local_path, "rb") as f:
                 requests.put(upload_url, files={"file": f})
     except Exception as e:
-        st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name} в облако: {e}")
+        st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name}: {e}")
 
 def format_phone(p_str):
     if not p_str: return ""
@@ -134,7 +100,7 @@ def save_uploaded_file(u_file, c_id, prefix=""):
 
 def display_file_or_image(f_path, f_name, key_unique):
     if f_path and os.path.exists(f_path):
-        file_ext = os.path.splitext(f_path)[1].lower()
+        file_ext = os.path.splitext(f_path).lower()
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]: 
             st.image(f_path, caption=f_name, width=250)
         else:
