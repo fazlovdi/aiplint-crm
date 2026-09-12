@@ -21,10 +21,9 @@ def yandex_headers():
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
     try:
-        # Проверяем/создаем корневую папку приложения
-        requests.put(YANDEX_API_URL, params={"path": "app:/"}, headers=yandex_headers())
-        # Создаем папку под вложения
-        requests.put(YANDEX_API_URL, params={"path": "app:/uploads"}, headers=yandex_headers())
+        # Убран лишний слэш — теперь пути строго соответствуют документации Яндекса
+        requests.put(YANDEX_API_URL, params={"path": "app:"}, headers=yandex_headers())
+        requests.put(YANDEX_API_URL, params={"path": "app:uploads"}, headers=yandex_headers())
     except Exception as e:
         st.warning(f"⚠️ Не удалось инициализировать папки на Яндекс.Диске: {e}")
 
