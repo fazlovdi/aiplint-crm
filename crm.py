@@ -56,8 +56,6 @@ def download_db_from_yandex():
     except Exception as e:
         st.sidebar.error(f"🔴 Ошибка загрузки базы: {e}")
 
-# Найти функцию upload_db_to_yandex и заменить целиком:
-
 def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
