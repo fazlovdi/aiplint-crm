@@ -318,7 +318,7 @@ elif st.session_state.active_tab == "Клиенты":
             st.markdown("---")
             st.markdown("### 📋 Список активных сотрудников")
             for u in st.session_state.crm_store.get("users", []):
-                col_list1, col_list2 = st.columns()
+                col_list1, col_list2 = st.columns(2)  # 🟢 Просто добавьте цифру 2
                 with col_list1:
                     st.markdown(f"• **{u.get('name', u['login'])}** (Логин: `{u['login']}` | Роль: `{u['role']}`)")
                 with col_list2:
