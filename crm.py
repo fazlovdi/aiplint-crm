@@ -450,9 +450,19 @@ elif st.session_state.active_tab == "Клиенты":
                         uploaded_cf = st.file_uploader("➕ Загрузить файл в профиль:", key=f"cf_up_{client['id']}")
                         if st.button("💾 Сохранить файл в карточку", key=f"cf_btn_{client['id']}", use_container_width=True):
                             if uploaded_cf is not None:
-                                f_info = save_uploaded_file(uploaded_cf, client["id"], "profile")
-                                client["client_files"].append({"file_path": f_info["path"], "file_name": f_info["name"]})
-                                save_data(st.session_state.crm_store); st.rerun()
+                                # Добавляем статус-индикатор на экран
+                                with st.spinner("📤 Загрузка файла на Яндекс.Диск..."):
+                                    f_info = save_uploaded_file(uploaded_cf, client["id"], "profile")
+                                    if f_info:
+                                        client["client_files"].append({"file_path": f_info["path"], "file_name": f_info["name"]})
+                                        save_data(st.session_state.crm_store)
+                                        st.toast(f"✅ Файл '{uploaded_cf.name}' успешно сохранен в облако!", icon="📁")
+                                        st.rerun()
+                                    else:
+                                        st.error("🔴 Ошибка: Не удалось загрузить файл на Яндекс.Диск. Проверьте логи.")
+                            else:
+                                st.warning("⚠️ Сначала выберите файл для загрузки!")
+n_state.crm_store); st.rerun()
 
                         with st.expander("✏️ Редактировать данные"):
                             en = st.text_input("ФИО", value=client['name'], key=f"en_{client['id']}")
@@ -570,12 +580,27 @@ elif st.session_state.active_tab == "Сделки":
                                     cn = st.checkbox("Следующая задача", key=f"cn_{deal['id']}_{i}")
                                     if st.button("💾 Подтвердить", key=f"cbtn_{deal['id']}_{i}", use_container_width=True):
                                         if rt.strip():
-                                            task["done"] = True; f_info = save_uploaded_file(uf, deal['id'], "task_report")
-                                            rep = f"✅ Закрыта задача [{t_type}] '{task['text']}'. Отчет: {rt.strip()}"
-                                            if t_type == "Отправить заказ": rep += f" | Кому: {task.get('receiver', '')} | Трек: {task.get('tk_num', 'нет')}"
-                                            client["comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": rep, "file_path": f_info["path"] if f_info else None, "file_name": f_info["name"] if f_info else None})
-                                            if cn: client["tasks"].append({"text": "Новое действие", "deadline": datetime.now().strftime("%Y-%m-%d %H:%M"), "done": False, "type": "Связаться"})
-                                            save_data(st.session_state.crm_store); st.rerun()
+                                            with st.spinner("📤 Сохранение отчета и отправка в облако..."):
+                                                task["done"] = True
+                                                f_info = save_uploaded_file(uf, deal['id'], "task_report")
+                                                rep = f"✅ Закрыта задача [{t_type}] '{task['text']}'. Отчет: {rt.strip()}"
+                                                if t_type == "Отправить заказ": 
+                                                    rep += f" | Кому: {task.get('receiver', '')} | Трек: {task.get('tk_num', 'нет')}"
+                                                
+                                                client["comments"].append({
+                                                    "time": datetime.now().strftime("%d.%m.%Y %H:%M"), 
+                                                    "text": rep, 
+                                                    "file_path": f_info["path"] if f_info else None, 
+                                                    "file_name": f_info["name"] if f_info else None
+                                                })
+                                                
+                                                if cn: 
+                                                    client["tasks"].append({"text": "Новое действие", "deadline": datetime.now().strftime("%Y-%m-%d %H:%M"), "done": False, "type": "Связаться"})
+                                                
+                                                save_data(st.session_state.crm_store)
+                                                st.toast("✅ Отчет успешно сохранен!", icon="📝")
+                                                st.rerun()
+
                 else: st.caption("Нет задач.")
                 
                 with st.expander("➕ Новая задача"):
