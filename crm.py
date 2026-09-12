@@ -143,9 +143,55 @@ if "last_id" not in st.session_state: st.session_state.last_id = None
 if "search_input_key" not in st.session_state: st.session_state.search_input_key = ""
 if "active_tab" not in st.session_state: st.session_state.active_tab = "Задачи"
 if "form_version" not in st.session_state: st.session_state.form_version = 0
+# 🔒 БЛОК АВТОРИЗАЦИИ СИСТЕМЫ
+
+# Инициализируем статус авторизации и роль пользователя в сессии
+if "authenticated" not in st.session_state: st.session_state.authenticated = False
+if "user_role" not in st.session_state: st.session_state.user_role = None
+
+def check_login(username, password):
+    """Функция сверки введенных данных с Secrets"""
+    secret_admin_log = st.secrets.get("ADMIN_LOGIN", "admin")
+    secret_admin_pass = st.secrets.get("ADMIN_PASSWORD", "admin")
+    secret_manager_log = st.secrets.get("MANAGER_LOGIN", "manager")
+    secret_manager_pass = st.secrets.get("MANAGER_PASSWORD", "manager")
+    
+    if username == secret_admin_log and password == secret_admin_pass:
+        st.session_state.authenticated = True
+        st.session_state.user_role = "admin"
+        return True
+    elif username == secret_manager_log and password == secret_manager_pass:
+        st.session_state.authenticated = True
+        st.session_state.user_role = "manager"
+        return True
+    return False
+
+# Если пользователь еще не вошел в систему, рисуем окно авторизации
+if not st.session_state.authenticated:
+    st.set_page_config(page_title="Вход в Айплинт CRM", layout="centered")
+    
+    st.markdown("<h2 style='text-align: center;'>🔒 Авторизация «Айплинт CRM»</h2>", unsafe_allow_html=True)
+    with st.container(border=True):
+        input_user = st.text_input("Логин пользователя:")
+        input_pass = st.text_input("Пароль доступа:", type="password")
+        st.markdown("---")
+        if st.button("🔐 Войти в систему", use_container_width=True, type="primary"):
+            if check_login(input_user, input_pass):
+                st.toast(f"Добро пожаловать в систему!", icon="🔓")
+                st.rerun()
+            else:
+                st.error("❌ Неверный логин или пароль! Доступ заблокирован.")
+    st.stop() # Полностью останавливаем выполнение кода CRM ниже, пока пользователь не зайдет
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 st.title("💼 Айплинт CRM: Клиенты и Сделки")
+# Кнопка выхода в боковой панели
+with st.sidebar:
+    st.markdown(f"👤 Вы вошли как: **{st.session_state.user_role}**")
+    if st.button("🚪 Выйти из системы", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.user_role = None
+        st.rerun()
 
 col_m1, col_menu2, col_menu3 = st.columns(3)
 with col_m1:
