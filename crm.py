@@ -28,10 +28,13 @@ def init_yandex_folders():
     except Exception as e:
         st.warning(f"⚠️ Не удалось инициализировать папки на Яндекс.Диске: {e}")
 
+# Заменяем функции в Части 1 (ориентировочно с 30 по 85 строки)
+
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     init_yandex_folders()
     try:
+        # Исправлено: добавлен эндпоинт /download к базовому URL
         url = f"{YANDEX_API_URL}/download"
         res = requests.get(url, params={"path": f"app:/{FILE_NAME}"}, headers=yandex_headers())
         if res.status_code == 200:
@@ -50,18 +53,24 @@ def download_db_from_yandex():
 def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
+        # Исправлено: добавлен эндпоинт /upload к базовому URL
         url = f"{YANDEX_API_URL}/upload"
         res = requests.get(url, params={"path": f"app:/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
                 requests.put(upload_url, files={"file": f})
+        else:
+            # Выводим ошибку на экран, если Яндекс отказал (например, неверный токен)
+            st.error(f"🔴 Яндекс.Диск отказал в загрузке базы. Код: {res.status_code}, Ответ: {res.text}")
     except Exception as e:
         st.error(f"🔴 Ошибка при выгрузке базы данных: {e}")
+
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
         safe_remote_name = urllib.parse.quote(remote_name)
+        # Исправлено: добавлен эндпоинт /upload к базовому URL
         url = f"{YANDEX_API_URL}/upload"
         remote_path = f"app:/uploads/{safe_remote_name}"
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
