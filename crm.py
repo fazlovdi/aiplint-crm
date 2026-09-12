@@ -99,15 +99,18 @@ def save_uploaded_file(u_file, c_id, prefix=""):
     return None
 
 def display_file_or_image(f_path, f_name, key_unique):
-    if f_path and os.path.exists(f_path):
-        file_ext = os.path.splitext(f_path).lower()
+    if f_path and isinstance(f_path, str) and os.path.exists(f_path):
+        # 🟢 ИСПРАВЛЕНО: берем элемент [1] (расширение) из кортежа и только потом делаем .lower()
+        file_ext = os.path.splitext(f_path)[1].lower()
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]: 
             st.image(f_path, caption=f_name, width=250)
         else:
             try:
                 with open(f_path, "rb") as f: 
                     st.download_button(label=f"📎 Скачать {f_name}", data=f.read(), file_name=f_name, key=key_unique)
-            except Exception: st.caption("📁 Файл на сервере.")
+            except Exception: 
+                st.caption("📁 Файл на сервере.")
+
 
 def load_data():
     download_db_from_yandex()
