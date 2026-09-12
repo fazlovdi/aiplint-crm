@@ -58,7 +58,6 @@ def upload_db_to_yandex():
                 requests.put(upload_url, files={"file": f})
     except Exception as e:
         st.error(f"🔴 Ошибка при выгрузке базы данных: {e}")
-
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
@@ -76,7 +75,7 @@ def upload_file_to_yandex(local_path, remote_name):
 def format_phone(p_str):
     if not p_str: return ""
     digits = re.sub(r"\D", "", p_str)
-    if len(digits) == 11 and digits[0] in ["7", "8"]: digits = digits[1:]
+    if len(digits) == 11 and digits in ["7", "8"]: digits = digits[1:]
     if len(digits) == 10: return f"+7 {digits[0:3]} {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
     return p_str.strip()
 
@@ -140,7 +139,7 @@ with col_m1:
     if st.button("📅 Расписание и План", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"; st.rerun()
 with col_menu2:
-    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Slow" or st.session_state.active_tab == "Клиенты" else "secondary"):
+    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Slow" or st.session_state.active_tab == "Slow_Card" or st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"; st.rerun()
 with col_menu3:
     if st.button("📋  Канбан сделок", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
@@ -272,7 +271,7 @@ elif st.session_state.active_tab == "Клиенты":
     st.markdown("### 🔍 Фильтры базы")
     col_search1, col_search2 = st.columns(2)
     with col_search1: 
-        search_query = st.text_input("Поиск по имени, компании или телефону:", key="search_input_key", placeholder="Введите текст...").strip().lower()
+        search_query = st.text_input("Поиск по имени, компании или телефону:", key="search_input_key", placeholder="Введите text...").strip().lower()
     with col_search2: 
         category_filter = st.selectbox("Фильтр по категории:", ["Все", "Дизайнер", "Строитель", "Дилер", "Покупатель"])
     all_clients = st.session_state.crm_store["clients"]
@@ -298,8 +297,9 @@ elif st.session_state.active_tab == "Клиенты":
         with st.expander(f"🔍 Посмотреть карточки клиентов (Найдено: {len(filtered_clients)})", expanded=True):
             for client in filtered_clients:
                 is_target_card = (st.session_state.last_id == client["id"])
-                anchor_html = f"<div id='client-card-{client['id']}'></div>"
-                st.components.v1.html(anchor_html, height=0, width=0)
+                # Исправленный скрытый якорь под строгие стандарты Streamlit
+                anchor_html = f"data:text/html;charset=utf-8,<div id='client-card-{client['id']}' style='display:none;'></div>"
+                st.iframe(anchor_html, height=1, width=1)
                 
                 with st.expander(f"👤 {client['name']} — ID: {client['id']} `[{client.get('category', 'Покупатель')}]`", expanded=is_target_card):
                     col_c1, col_c2 = st.columns(2)
@@ -316,10 +316,10 @@ elif st.session_state.active_tab == "Клиенты":
                         with col_msg1:
                             wa_text = "Здравствуйте! По поводу вашего заказа из Айплинт CRM..."
                             encoded_text = urllib.parse.quote(wa_text)
-                            wa_url = f"https://wa.me/{clean_phone}?text={encoded_text}"
+                            wa_url = f"https://wa.me{clean_phone}?text={encoded_text}"
                             st.link_button("💬 WhatsApp", wa_url, use_container_width=True)
                         with col_menu_msg2:
-                            tg_url = f"https://t.me/{clean_phone}"
+                            tg_url = f"https://t.me+{clean_phone}"
                             st.link_button("✈️ Telegram", tg_url, use_container_width=True)
                         with col_menu_msg3:
                             max_url = f"sms:{clean_phone}" 
@@ -362,12 +362,11 @@ elif st.session_state.active_tab == "Клиенты":
                             st.session_state.crm_store["deals"].append({"id": max_d_id + 1, "client_id": client["id"], "title": auto_title, "budget": db, "status": "Новый", "deal_comments": []})
                             save_data(st.session_state.crm_store); st.rerun()
                             
-                        if st.session_state.get("scroll_to_card") and st.session_state.last_id:
-                            st.session_state["scroll_to_card"] = False
-                            # Передаем JS-код через data URI внутри st.iframe
-                            js_scroll = f"data:text/html;charset=utf-8,<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
-                            st.iframe(js_scroll, height=0, width=0)
-
+        # Исправленный плавный JS-скролл без применения удаленного st.components.v1.html
+        if st.session_state.get("scroll_to_card") and st.session_state.last_id:
+            st.session_state["scroll_to_card"] = False
+            js_scroll = f"data:text/html;charset=utf-8,<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
+            st.iframe(js_scroll, height=1, width=1)
     else: st.info("База клиентов пуста.")
 elif st.session_state.active_tab == "Сделки":
     st.header("📋  Канбан-доска сделок")
@@ -433,7 +432,7 @@ elif st.session_state.active_tab == "Сделки":
                             print_btn_html = f"""
                             <a href="data:text/html;charset=utf-8,<html><head><title>Накладная</title><style>body{{font-family:Arial;margin:40px;line-height:1.6;}} .h{{text-align:center;border-bottom:2px solid %23000;padding-bottom:10px;}} .s{{margin-bottom:12px;}} .b{{font-weight:bold;}}</style></head><body><div class='h'><h2>БЛАНК ЗАДАЧИ К {deal['title']}</h2><p>Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}</p></div><br><div class='s'><span class='b'>Клиент:</span> {client['name']} ({client['phone']})</div><div class='s'><span class='b'>Тип действия:</span> {t_type}</div><div class='s'><span class='b'>Срок (Дедлайн):</span> {task.get('deadline','')}</div><hr><h3>ДАННЫЕ ЗАКАЗА:</h3><div class='s'><span class='b'>Товары:</span><br>{clean_products}</div><div class='s'><span class='b'>Адрес доставки:</span> {clean_addr}</div><div class='s'><span class='b'>Получатель:</span> {clean_rec} ({task.get('receiver_phone', '')})</div><div class='s'><span class='b'>Оплата ТК:</span> {task.get('ship_pay', '')}</div><div class='s'><span class='b'>Трек-номер:</span> {clean_tk}</div><div class='s'><span class='b'>Комментарий:</span> {clean_comm}</div><br><br><br><p style='text-align:right;'>Ответственный: _________________</p><script>window.print();</script></body></html>" target="_blank" style="text-decoration:none;"><button style="width:100%; padding:10px; background-color:%23262730; color:white; border:1px solid %23464855; border-radius:4px; cursor:pointer; font-family:sans-serif; font-size:14px;">🖨️ Открыть бланк для печати</button></a>
                             """
-                            st.components.v1.html(print_btn_html, height=45)
+                            st.iframe(f"data:text/html;charset=utf-8,{print_btn_html}", height=55)
                             with st.expander("✏️ Редактировать задачу"):
                                 edit_t_text = st.text_input("Изменить суть задачи:", value=task["text"].split(" (Файл:"), key=f"ed_t_txt_{deal['id']}_{i}")
                                 if st.button("💾 Сохранить изменения задачи", key=f"ed_t_btn_{deal['id']}_{i}", use_container_width=True):
