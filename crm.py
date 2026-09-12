@@ -9,8 +9,13 @@ if not os.path.exists(UPLOAD_DIR):
 
 # Актуальный базовый URL для API Яндекс Диска
 YANDEX_API_URL = "https://yandex.net"
-# Чтение токена Яндекса из секретов Streamlit Cloud
-YANDEX_TOKEN = st.secrets.get("YANDEX_DISK_TOKEN", "")
+
+# Чтение и очистка токена из секретов Streamlit Cloud
+raw_token = st.secrets.get("YANDEX_DISK_TOKEN", "")
+if isinstance(raw_token, str):
+    YANDEX_TOKEN = raw_token.strip().strip('"').strip("'")
+else:
+    YANDEX_TOKEN = ""
 
 def yandex_headers():
     return {
@@ -21,62 +26,67 @@ def yandex_headers():
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
     try:
-        # Убран лишний слэш — теперь пути строго соответствуют документации Яндекса
-        requests.put(YANDEX_API_URL, params={"path": "app:"}, headers=yandex_headers())
-        requests.put(YANDEX_API_URL, params={"path": "app:uploads"}, headers=yandex_headers())
+        # Создаем папку Айплинт_CRM в общем корне вашего Яндекс Диска
+        requests.put(YANDEX_API_URL, params={"path": "disk:/Айплинт_CRM"}, headers=yandex_headers())
+        # Создаем внутри неё папку под загружаемые файлы
+        requests.put(YANDEX_API_URL, params={"path": "disk:/Айплинт_CRM/uploads"}, headers=yandex_headers())
     except Exception as e:
-        st.warning(f"⚠️ Не удалось инициализировать папки на Яндекс.Диске: {e}")
+        st.sidebar.error(f"⚠️ Не удалось создать папки: {e}")
 
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     init_yandex_folders()
     try:
-        # Исправлено: добавлен эндпоинт /download к базовому URL
         url = f"{YANDEX_API_URL}/download"
-        res = requests.get(url, params={"path": f"app:{FILE_NAME}"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}"}, headers=yandex_headers())
         if res.status_code == 200:
             download_url = res.json().get("href")
             file_res = requests.get(download_url)
             if file_res.status_code == 200:
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     f.write(file_res.text)
+                st.sidebar.success("🔄 База успешно скачана с Яндекс.Диска!")
         elif res.status_code == 404:
+            # При первом старте создаем пустую локальную базу
             if not os.path.exists(FILE_NAME):
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     json.dump({"clients": [], "deals": []}, f)
+        else:
+            st.sidebar.warning(f"ℹ️ Статус загрузки базы: {res.status_code}")
     except Exception as e:
-        st.error(f"🔴 Ошибка при загрузке базы данных: {e}")
+        st.sidebar.error(f"🔴 Ошибка загрузки базы: {e}")
 
 def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
-        # Исправлено: добавлен эндпоинт /upload к базовому URL
         url = f"{YANDEX_API_URL}/upload"
-        res = requests.get(url, params={"path": f"app:{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": f"disk:/Айплинт_CRM/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
-                requests.put(upload_url, files={"file": f})
+                put_res = requests.put(upload_url, files={"file": f})
+                if put_res.status_code in [201, 202]:
+                    st.toast("✅ База данных успешно синхронизирована с Яндекс.Диском!", icon="☁️")
+                else:
+                    st.sidebar.error(f"🔴 Ошибка записи файла на Диск: {put_res.status_code}")
         else:
-            # Выводим ошибку на экран, если Яндекс отказал (например, неверный токен)
-            st.error(f"🔴 Яндекс.Диск отказал в загрузке базы. Код: {res.status_code}, Ответ: {res.text}")
+            st.sidebar.error(f"🔴 Яндекс отказал в ссылке выгрузки. Код: {res.status_code}")
     except Exception as e:
-        st.error(f"🔴 Ошибка при выгрузке базы данных: {e}")
+        st.sidebar.error(f"🔴 Ошибка синхронизации с облаком: {e}")
 
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
         safe_remote_name = urllib.parse.quote(remote_name)
-        # Исправлено: добавлен эндпоинт /upload к базовому URL
         url = f"{YANDEX_API_URL}/upload"
-        remote_path = f"app:uploads/{safe_remote_name}"
+        remote_path = f"disk:/Айплинт_CRM/uploads/{safe_remote_name}"
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
             with open(local_path, "rb") as f:
                 requests.put(upload_url, files={"file": f})
     except Exception as e:
-        st.warning(f"⚠️ Ошибка при загрузке файла {remote_name} в облако: {e}")
+        st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name} в облако: {e}")
 
 def format_phone(p_str):
     if not p_str: return ""
@@ -127,7 +137,8 @@ def save_data(data):
         with open(FILE_NAME, "w", encoding="utf-8") as f: 
             json.dump(data, f, ensure_ascii=False, indent=4)
         upload_db_to_yandex()
-    except Exception as e: st.error(f"Ошибка сохранения: {e}")
+    except Exception as e: st.sidebar.error(f"Ошибка сохранения JSON: {e}")
+
 if "crm_store" not in st.session_state: st.session_state.crm_store = load_data()
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
