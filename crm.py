@@ -24,14 +24,14 @@ def yandex_headers():
     }
 
 def init_yandex_folders():
-    # Пропускаем создание папок, так как они настроены вручную на Яндекс.Диске
     pass
+
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     try:
         if not os.path.exists(FILE_NAME):
             url = f"{YANDEX_API_URL}/download"
-            res = requests.get(url, params={"path": f"disk:/CRM-не трогать!/{FILE_NAME}"}, headers=yandex_headers())
+            res = requests.get(url, params={"path": f"disk:/CRM_НЕ_ТРОГАТЬ/{FILE_NAME}"}, headers=yandex_headers())
             
             if res.status_code == 200:
                 download_url = res.json().get("href")
@@ -50,7 +50,7 @@ def upload_db_to_yandex():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     try:
         url = f"{YANDEX_API_URL}/upload"
-        res = requests.get(url, params={"path": f"disk:/CRM-не трогать!/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": f"disk:/CRM_НЕ_ТРОГАТЬ/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
             with open(FILE_NAME, "rb") as f:
@@ -60,21 +60,21 @@ def upload_db_to_yandex():
                 else:
                     st.sidebar.error(f"🔴 Ошибка записи на Диск. Код: {put_res.status_code}")
         else:
-            st.sidebar.error(f"🔴 Ошибка получения ссылки. Код: {res.status_code}, Ответ: {res.text}")
+            st.sidebar.error(f"🔴 Ошибка получения ссылки. Код: {res.status_code}")
     except Exception as e:
         st.sidebar.error(f"🔴 Исключение при синхронизации: {e}")
+
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
         safe_remote_name = urllib.parse.quote(remote_name)
         url = f"{YANDEX_API_URL}/upload"
-        remote_path = f"disk:/CRM-не трогать!/uploads/{safe_remote_name}"
+        remote_path = f"disk:/CRM_НЕ_ТРОГАТЬ/uploads/{safe_remote_name}"
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
-            # Передаем файл как чистый бинарный поток data= для любых типов файлов
             with open(local_path, "rb") as f:
-                requests.put(upload_url, data=f.read(), headers={"Authorization": f"OAuth {YANDEX_TOKEN}"})
+                requests.put(upload_url, data=f)
     except Exception as e:
         st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name}: {e}")
 
@@ -97,7 +97,6 @@ def save_uploaded_file(u_file, c_id, prefix=""):
 
 def display_file_or_image(f_path, f_name, key_unique):
     if f_path and isinstance(f_path, str) and os.path.exists(f_path):
-        # Корректное извлечение расширения из кортежа os.path.splitext под Python 3.14
         file_ext = os.path.splitext(f_path)[1].lower()
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]: 
             st.image(f_path, caption=f_name, width=250)
@@ -107,6 +106,7 @@ def display_file_or_image(f_path, f_name, key_unique):
                     st.download_button(label=f"📎 Скачать {f_name}", data=f.read(), file_name=f_name, key=key_unique)
             except Exception: 
                 st.caption("📁 Файл на сервере.")
+
 def load_data():
     download_db_from_yandex()
     if os.path.exists(FILE_NAME):
