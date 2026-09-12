@@ -8,7 +8,7 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 # Актуальный базовый URL для API Яндекс Диска
-YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
+YANDEX_API_URL = "https://yandex.net"
 
 # Чтение и очистка токена из секретов Streamlit Cloud
 raw_token = st.secrets.get("YANDEX_DISK_TOKEN", "")
@@ -24,13 +24,11 @@ def yandex_headers():
     }
 
 def init_yandex_folders():
-    # Мы пропускаем автоматическое создание, так как вы уже создали папки вручную
+    # Пропускаем создание папок, так как они настроены вручную на Яндекс.Диске
     pass
-
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     try:
-        # Проверяем наличие локального файла, чтобы не скачивать его каждую секунду
         if not os.path.exists(FILE_NAME):
             url = f"{YANDEX_API_URL}/download"
             res = requests.get(url, params={"path": f"disk:/CRM-не трогать!/{FILE_NAME}"}, headers=yandex_headers())
@@ -43,9 +41,8 @@ def download_db_from_yandex():
                         f.write(file_res.text)
                     st.sidebar.success("🔄 База успешно скачана с Яндекс.Диска!")
             else:
-                # Если в облаке файла еще нет, просто создаем чистую структуру локально
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
-                    json.dump({"clients": [], "deals": []}, f)
+                    json.dump({"clients": [], "deals": [], "users": [{"login": "admin", "password": "admin", "role": "admin", "name": "Администратор"}]}, f)
     except Exception as e:
         st.sidebar.error(f"🔴 Ошибка загрузки базы: {e}")
 
@@ -66,7 +63,6 @@ def upload_db_to_yandex():
             st.sidebar.error(f"🔴 Ошибка получения ссылки. Код: {res.status_code}, Ответ: {res.text}")
     except Exception as e:
         st.sidebar.error(f"🔴 Исключение при синхронизации: {e}")
-
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
@@ -100,7 +96,7 @@ def save_uploaded_file(u_file, c_id, prefix=""):
 
 def display_file_or_image(f_path, f_name, key_unique):
     if f_path and isinstance(f_path, str) and os.path.exists(f_path):
-        # 🟢 ИСПРАВЛЕНО: берем элемент [1] (расширение) из кортежа и только потом делаем .lower()
+        # Исправлено под Python 3.14: корректное извлечение расширения из кортежа
         file_ext = os.path.splitext(f_path)[1].lower()
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]: 
             st.image(f_path, caption=f_name, width=250)
@@ -111,13 +107,17 @@ def display_file_or_image(f_path, f_name, key_unique):
             except Exception: 
                 st.caption("📁 Файл на сервере.")
 
-
 def load_data():
     download_db_from_yandex()
     if os.path.exists(FILE_NAME):
         try:
             with open(FILE_NAME, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                # Перенос пользователей в JSON-базу для динамического управления
+                if "users" not in data:
+                    data["users"] = [
+                        {"login": "admin", "password": "admin", "role": "admin", "name": "Администратор"}
+                    ]
                 for c in data.get("clients", []):
                     for k, val in [("email", ""), ("address", ""), ("base_comment", ""), ("category", "Покупатель"), ("discount", 0), ("extra_phones", []), ("extra_emails", []), ("extra_addresses", []), ("client_files", [])]:
                         if k not in c or c[k] == "-": c[k] = val
@@ -125,8 +125,9 @@ def load_data():
                     if "deal_comments" not in d: d["deal_comments"] = []
                     if d.get("status") == "New": d["status"] = "Новый"
                 return data
-        except Exception: return {"clients": [], "deals": []}
-    return {"clients": [], "deals": []}
+        except Exception: 
+            return {"clients": [], "deals": [], "users": [{"login": "admin", "password": "admin", "role": "admin", "name": "Администратор"}]}
+    return {"clients": [], "deals": [], "users": [{"login": "admin", "password": "admin", "role": "admin", "name": "Администратор"}]}
 
 def save_data(data):
     try:
@@ -134,7 +135,6 @@ def save_data(data):
             json.dump(data, f, ensure_ascii=False, indent=4)
         upload_db_to_yandex()
     except Exception as e: st.sidebar.error(f"Ошибка сохранения JSON: {e}")
-
 if "crm_store" not in st.session_state: st.session_state.crm_store = load_data()
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
@@ -143,33 +143,26 @@ if "last_id" not in st.session_state: st.session_state.last_id = None
 if "search_input_key" not in st.session_state: st.session_state.search_input_key = ""
 if "active_tab" not in st.session_state: st.session_state.active_tab = "Задачи"
 if "form_version" not in st.session_state: st.session_state.form_version = 0
-# 🔒 БЛОК АВТОРИЗАЦИИ СИСТЕМЫ
 
-# Инициализируем статус авторизации и роль пользователя в сессии
+# Инициализация статуса авторизации в сессии
 if "authenticated" not in st.session_state: st.session_state.authenticated = False
 if "user_role" not in st.session_state: st.session_state.user_role = None
+if "user_login" not in st.session_state: st.session_state.user_login = None
+if "user_name" not in st.session_state: st.session_state.user_name = None
 
 def check_login(username, password):
-    """Функция сверки введенных данных с Secrets"""
-    secret_admin_log = st.secrets.get("ADMIN_LOGIN", "admin")
-    secret_admin_pass = st.secrets.get("ADMIN_PASSWORD", "admin")
-    secret_manager_log = st.secrets.get("MANAGER_LOGIN", "manager")
-    secret_manager_pass = st.secrets.get("MANAGER_PASSWORD", "manager")
-    
-    if username == secret_admin_log and password == secret_admin_pass:
-        st.session_state.authenticated = True
-        st.session_state.user_role = "admin"
-        return True
-    elif username == secret_manager_log and password == secret_manager_pass:
-        st.session_state.authenticated = True
-        st.session_state.user_role = "manager"
-        return True
+    users_list = st.session_state.crm_store.get("users", [])
+    for u in users_list:
+        if u["login"] == username.strip() and u["password"] == password.strip():
+            st.session_state.authenticated = True
+            st.session_state.user_role = u["role"]
+            st.session_state.user_login = u["login"]
+            st.session_state.user_name = u.get("name", u["login"])
+            return True
     return False
 
-# Если пользователь еще не вошел в систему, рисуем окно авторизации
 if not st.session_state.authenticated:
     st.set_page_config(page_title="Вход в Айплинт CRM", layout="centered")
-    
     st.markdown("<h2 style='text-align: center;'>🔒 Авторизация «Айплинт CRM»</h2>", unsafe_allow_html=True)
     with st.container(border=True):
         input_user = st.text_input("Логин пользователя:")
@@ -177,28 +170,47 @@ if not st.session_state.authenticated:
         st.markdown("---")
         if st.button("🔐 Войти в систему", use_container_width=True, type="primary"):
             if check_login(input_user, input_pass):
-                st.toast(f"Добро пожаловать в систему!", icon="🔓")
+                st.toast("Успешный вход в систему!", icon="🔓")
                 st.rerun()
             else:
                 st.error("❌ Неверный логин или пароль! Доступ заблокирован.")
-    st.stop() # Полностью останавливаем выполнение кода CRM ниже, пока пользователь не зайдет
+    st.stop()
 
+# Базовая конфигурация интерфейса CRM после успешного входа
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 st.title("💼 Айплинт CRM: Клиенты и Сделки")
-# Кнопка выхода в боковой панели
+
+# Боковая панель: ЛК сотрудника и смена пароля
 with st.sidebar:
-    st.markdown(f"👤 Вы вошли как: **{st.session_state.user_role}**")
+    st.markdown(f"👤 Пользователь: **{st.session_state.user_name}** `[{st.session_state.user_role}]`")
+    with st.expander("🔑 Сменить свой пароль"):
+        current_user_login = st.session_state.user_login
+        new_pwd = st.text_input("Новый пароль:", type="password", key="self_new_pwd")
+        confirm_pwd = st.text_input("Повторите пароль:", type="password", key="self_conf_pwd")
+        if st.button("💾 Обновить пароль", key="btn_save_self_pwd", use_container_width=True):
+            if new_pwd and new_pwd == confirm_pwd:
+                for u in st.session_state.crm_store["users"]:
+                    if u["login"] == current_user_login:
+                        u["password"] = new_pwd.strip()
+                        save_data(st.session_state.crm_store)
+                        st.success("Пароль успешно изменен!")
+                        st.rerun()
+            else:
+                st.error("Пароли не совпадают или пусты!")
     if st.button("🚪 Выйти из системы", use_container_width=True):
         st.session_state.authenticated = False
         st.session_state.user_role = None
+        st.session_state.user_login = None
+        st.session_state.user_name = None
         st.rerun()
 
+# Переключатели вкладок главного меню
 col_m1, col_menu2, col_menu3 = st.columns(3)
 with col_m1:
     if st.button("📅 Расписание и План", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"; st.rerun()
 with col_menu2:
-    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Slow" or st.session_state.active_tab == "Slow_Card" or st.session_state.active_tab == "Клиенты" else "secondary"):
+    if st.button("👥  База клиентов", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"; st.rerun()
 with col_menu3:
     if st.button("📋  Канбан сделок", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
@@ -246,7 +258,7 @@ if st.session_state.active_tab == "Задачи":
                     icon = "📞" if t["type"] == "Связаться" else "📦"
                     time_alert = "🔴 ПРОСРОЧЕНО" if t["deadline_obj"] < now_time else "🕒 На сегодня"
                     st.markdown(f"**{time_alert} ({t['deadline_str']})** | {icon} **{t['type']}**")
-                    st.markdown(f"👤 Клиент: **{t['client_name']}** ({t['client_phone']})  \n📄 {t['text']}  \n* {t['details']}")
+                    st.markdown(f"👤 : **{t['client_name']}** ({t['client_phone']})  \n📄 {t['text']}  \n* {t['details']}")
                     if t["deal_title"]:
                         if st.button(f"🔍 Перейти к {t['deal_title']}", key=f"focus_tod_{idx}"):
                             st.session_state.search_input_key = t["deal_title"]
@@ -263,7 +275,7 @@ if st.session_state.active_tab == "Задачи":
                 for idx, t in enumerate(future_tasks):
                     icon = "📞" if t["type"] == "Связаться" else "📦"
                     st.markdown(f"**🕒 Срок: {t['deadline_str']}** | {icon} **{t['type']}**")
-                    st.markdown(f"👤 Клиент: **{t['client_name']}** ({t['client_phone']})  \n📄 {t['text']}  \n* {t['details']}")
+                    st.markdown(f"👤 : **{t['client_name']}** ({t['client_phone']})  \n📄 {t['text']}  \n* {t['details']}")
                     if t["deal_title"]:
                         if st.button(f"🔍 Перейти к {t['deal_title']}", key=f"focus_fut_{idx}"):
                             st.session_state.search_input_key = t["deal_title"]
@@ -275,6 +287,48 @@ if st.session_state.active_tab == "Задачи":
 elif st.session_state.active_tab == "Клиенты":
     st.header("👥 База постоянных клиентов")
     
+    # 👑 ДОСТУПНО ТОЛЬКО ДЛЯ АДМИНИСТРАТОРА: Панель управления сотрудниками
+    if st.session_state.user_role == "admin":
+        with st.expander("👑 Панель администратора: Управление сотрудниками CRM", expanded=False):
+            st.markdown("### ➕ Зарегистрировать нового сотрудника")
+            col_u1, col_u2 = st.columns(2)
+            with col_u1:
+                new_u_login = st.text_input("Логин сотрудника (для входа):", key="admin_new_u_log")
+                new_u_pass = st.text_input("Стартовый пароль:", key="admin_new_u_pass")
+            with col_u2:
+                new_u_name = st.text_input("Имя / Должность (например: Менеджер Мария):", key="admin_new_u_name")
+                new_u_role = st.selectbox("Роль в системе:", ["manager", "admin"], key="admin_new_u_role")
+            
+            if st.button("🚀 Создать учетную запись", use_container_width=True, type="primary"):
+                if new_u_login and new_u_pass and new_u_name:
+                    exists = any(u["login"] == new_u_login.strip() for u in st.session_state.crm_store.get("users", []))
+                    if not exists:
+                        st.session_state.crm_store.setdefault("users", []).append({
+                            "login": new_u_login.strip(),
+                            "password": new_u_pass.strip(),
+                            "role": new_u_role,
+                            "name": new_u_name.strip()
+                        })
+                        save_data(st.session_state.crm_store)
+                        st.toast(f"Пользователь {new_u_name} успешно создан!", icon="✅")
+                        st.rerun()
+                    else: st.error("Пользователь с таким логином уже существует!")
+                else: st.error("Заполните все поля формы!")
+            
+            st.markdown("---")
+            st.markdown("### 📋 Список активных сотрудников")
+            for u in st.session_state.crm_store.get("users", []):
+                col_list1, col_list2 = st.columns([3, 1])
+                with col_list1:
+                    st.markdown(f"• **{u.get('name', u['login'])}** (Логин: `{u['login']}` | Роль: `{u['role']}`)")
+                with col_list2:
+                    if u["login"] != st.session_state.user_login:
+                        if st.button("❌ Удалить", key=f"del_user_{u['login']}", use_container_width=True):
+                            st.session_state.crm_store["users"] = [usr for usr in st.session_state.crm_store["users"] if usr["login"] != u["login"]]
+                            save_data(st.session_state.crm_store)
+                            st.rerun()
+
+    # Форма регистрации новых контрагентов
     with st.expander("➕ Зарегистрировать нового клиента", expanded=False, key=f"add_client_form_{st.session_state.form_version}"):
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -304,7 +358,7 @@ elif st.session_state.active_tab == "Клиенты":
         with col_s3:
             st.markdown("**📍 Доп. Адреса**")
             for i, ad in enumerate(st.session_state.f_ad): st.session_state.f_ad[i] = st.text_input(f"Адрес #{i+1}", value=ad, key=f"f_ad_{i}")
-            if st.button("➕ Добавить Адрес"): st.session_state.f_ad.append(""); st.rerun()
+            if st.button("➕ Добавить  "): st.session_state.f_ad.append(""); st.rerun()
 
         if st.button("Внести клиента в базу", use_container_width=True, type="primary"):
             if c_name and c_phone:
@@ -330,7 +384,7 @@ elif st.session_state.active_tab == "Клиенты":
     st.markdown("### 🔍 Фильтры базы")
     col_search1, col_search2 = st.columns(2)
     with col_search1: 
-        search_query = st.text_input("Поиск по имени, компании или телефону:", key="search_input_key", placeholder="Введите text...").strip().lower()
+        search_query = st.text_input("Поиск по имени, компании или телефону:", key="search_input_key", placeholder="Введите текст...").strip().lower()
     with col_search2: 
         category_filter = st.selectbox("Фильтр по категории:", ["Все", "Дизайнер", "Строитель", "Дилер", "Покупатель"])
     all_clients = st.session_state.crm_store["clients"]
@@ -356,14 +410,13 @@ elif st.session_state.active_tab == "Клиенты":
         with st.expander(f"🔍 Посмотреть карточки клиентов (Найдено: {len(filtered_clients)})", expanded=True):
             for client in filtered_clients:
                 is_target_card = (st.session_state.last_id == client["id"])
-                # Исправленный скрытый якорь под строгие стандарты Streamlit
                 anchor_html = f"data:text/html;charset=utf-8,<div id='client-card-{client['id']}' style='display:none;'></div>"
                 st.iframe(anchor_html, height=1, width=1)
                 
                 with st.expander(f"👤 {client['name']} — ID: {client['id']} `[{client.get('category', 'Покупатель')}]`", expanded=is_target_card):
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
-                        st.markdown(f"📞 Тел: **{client['phone']}** | ✉️ Email: `{client.get('email','')}` | 📍 ...Адрес: *{client.get('address','')}*")
+                        st.markdown(f"📞 Тел: **{client['phone']}** | ✉️ Email: `{client.get('email','')}` | 📍 Адрес: *{client.get('address','')}*")
                         st.markdown(f"🏷️ Скидка: `{client.get('discount',0)}%` | 📝 Описание: {client.get('base_comment','')}")
                         
                         clean_phone = re.sub(r"\D", "", client['phone'])
@@ -421,7 +474,6 @@ elif st.session_state.active_tab == "Клиенты":
                             st.session_state.crm_store["deals"].append({"id": max_d_id + 1, "client_id": client["id"], "title": auto_title, "budget": db, "status": "Новый", "deal_comments": []})
                             save_data(st.session_state.crm_store); st.rerun()
                             
-        # Исправленный плавный JS-скролл без применения удаленного st.components.v1.html
         if st.session_state.get("scroll_to_card") and st.session_state.last_id:
             st.session_state["scroll_to_card"] = False
             js_scroll = f"data:text/html;charset=utf-8,<script>window.parent.document.getElementById('client-card-{st.session_state.last_id}').scrollIntoView({{behavior: 'smooth', block: 'center'}});</script>"
@@ -544,12 +596,24 @@ elif st.session_state.active_tab == "Сделки":
                 st.markdown("---")
                 cb1, cb2 = st.columns(2)
                 if deal['status'] == "Новый":
-                    if cb1.button("👉 В работу", key=f"wf_{deal['id']}", use_container_width=True): deal['status'] = "В работе"; save_data(st.session_state.crm_store); st.rerun()
+                    if cb1.button("👉 В работу", key=f"wf_{deal['id']}", use_container_width=True): 
+                        deal['status'] = "В работе"
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
                 elif deal['status'] == "В работе":
-                    if cb1.button("👈 Назад", key=f"wb_{deal['id']}", use_container_width=True): deal['status'] = "Новый"; save_data(st.session_state.crm_store); st.rerun()
-                    if cb2.button("🎉 Закрыть", key=f"wc_{deal['id']}", use_container_width=True): deal['status'] = "Сделка закрыта"; save_data(st.session_state.crm_store); st.rerun()
+                    if cb1.button("👈 Назад", key=f"wb_{deal['id']}", use_container_width=True): 
+                        deal['status'] = "Новый"
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
+                    if cb2.button("🎉 Закрыть", key=f"wc_{deal['id']}", use_container_width=True): 
+                        deal['status'] = "Сделка закрыта"
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
                 elif deal['status'] == "Сделка закрыта":
-                    if cb1.button("🔄 Возобновить", key=f"wr_{deal['id']}", use_container_width=True): deal['status'] = "В работе"; save_data(st.session_state.crm_store); st.rerun()
+                    if cb1.button("🔄 Возобновить", key=f"wr_{deal['id']}", use_container_width=True): 
+                        deal['status'] = "В работе"
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
 
     def get_client(c_id):
         for c in st.session_state.crm_store["clients"]:
@@ -559,12 +623,15 @@ elif st.session_state.active_tab == "Сделки":
     with st_new:
         st.markdown(f"#### 🔵 НОВЫЕ СДЕЛКИ  \n💰 `{t_new:,.0f} руб.`")
         for d in st.session_state.crm_store["deals"]:
-            if d["status"] == "Новый": draw_deal_card(d, get_client(d["client_id"]))
+            if d["status"] == "Новый": 
+                draw_deal_card(d, get_client(d["client_id"]))
     with st_prg:
         st.markdown(f"#### 🟡 В РАБОТЕ  \n💰 `{t_prg:,.0f} руб.`")
         for d in st.session_state.crm_store["deals"]:
-            if d["status"] == "В работе": draw_deal_card(d, get_client(d["client_id"]))
+            if d["status"] == "В работе": 
+                draw_deal_card(d, get_client(d["client_id"]))
     with st_cls:
         st.markdown(f"#### 🟢 ЗАКРЫТЫ  \n💰 `{t_cls:,.0f} руб.`")
         for d in st.session_state.crm_store["deals"]:
-            if d["status"] == "Сделка закрыта": draw_deal_card(d, get_client(d["client_id"]))
+            if d["status"] == "Сделка закрыта": 
+                draw_deal_card(d, get_client(d["client_id"]))
