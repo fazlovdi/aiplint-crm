@@ -28,8 +28,6 @@ def init_yandex_folders():
     except Exception as e:
         st.warning(f"⚠️ Не удалось инициализировать папки на Яндекс.Диске: {e}")
 
-# Заменяем функции в Части 1 (ориентировочно с 30 по 85 строки)
-
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     init_yandex_folders()
