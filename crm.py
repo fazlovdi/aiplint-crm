@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
 from datetime import datetime
 
@@ -57,100 +56,37 @@ if isinstance(raw_token, str):
 else:
     YANDEX_TOKEN = ""
 
-# --- Цветные рамки через JavaScript ---
+# --- Цветные рамки через CSS :has() ---
 
 def color_expander_border(color):
     """Красит рамку stExpander, внутри которого вызван."""
     uid = f"exp_{uuid.uuid4().hex[:8]}"
     st.markdown(f"""
     <style>
-        [data-testid="stExpander"]:has(#{uid}) {{
+        div[data-testid="stExpander"]:has(#{uid}) {{
             border-color: {color} !important;
             border-width: 2px !important;
             border-style: solid !important;
             border-radius: 14px !important;
         }}
     </style>
-    <div id="{uid}" style="width:0;height:0;overflow:hidden;"></div>
+    <span id="{uid}" style="display:none;"></span>
     """, unsafe_allow_html=True)
-    components.html(f"""
-    <script>
-        (function() {{
-            function apply() {{
-                const doc = window.parent ? window.parent.document : document;
-                const marker = doc.getElementById('{uid}');
-                if (!marker) return false;
-                let el = marker.parentElement;
-                while (el && el !== doc.body) {{
-                    if (el.getAttribute('data-testid') === 'stExpander') {{
-                        el.style.borderColor = '{color}';
-                        el.style.borderWidth = '2px';
-                        el.style.borderStyle = 'solid';
-                        el.style.borderRadius = '14px';
-                        return true;
-                    }}
-                    el = el.parentElement;
-                }}
-                return false;
-            }}
-            if (!apply()) {{
-                let n = 0;
-                const t = setInterval(function() {{
-                    if (apply() || n >= 30) clearInterval(t);
-                    n++;
-                }}, 100);
-            }}
-        }})();
-    </script>
-    """, height=0)
 
 def color_container_border(color):
     """Красит рамку st.container(border=True), внутри которого вызван."""
     uid = f"cnt_{uuid.uuid4().hex[:8]}"
     st.markdown(f"""
     <style>
-        [data-testid="stVerticalBlockBorderWrapper"]:has(#{uid}) {{
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(#{uid}) {{
             border-color: {color} !important;
             border-width: 2px !important;
             border-style: solid !important;
             border-radius: 14px !important;
         }}
     </style>
-    <div id="{uid}" style="width:0;height:0;overflow:hidden;"></div>
+    <span id="{uid}" style="display:none;"></span>
     """, unsafe_allow_html=True)
-    components.html(f"""
-    <script>
-        (function() {{
-            function apply() {{
-                const doc = window.parent ? window.parent.document : document;
-                const marker = doc.getElementById('{uid}');
-                if (!marker) return false;
-                let el = marker.parentElement;
-                while (el && el !== doc.body) {{
-                    const t = el.getAttribute('data-testid') || '';
-                    if (t === 'stVerticalBlockBorderWrapper' ||
-                        t === 'stVerticalBlockBorderContainer' ||
-                        t.toLowerCase().includes('borderwrapper')) {{
-                        el.style.borderColor = '{color}';
-                        el.style.borderWidth = '2px';
-                        el.style.borderStyle = 'solid';
-                        el.style.borderRadius = '14px';
-                        return true;
-                    }}
-                    el = el.parentElement;
-                }}
-                return false;
-            }}
-            if (!apply()) {{
-                let n = 0;
-                const t = setInterval(function() {{
-                    if (apply() || n >= 30) clearInterval(t);
-                    n++;
-                }}, 100);
-            }}
-        }})();
-    </script>
-    """, height=0)
 
 # --- Пароли ---
 
@@ -1101,10 +1037,16 @@ elif st.session_state.active_tab == "Сделки":
                 has_overdue = True
                 break
         with st.container(border=True):
-            if has_overdue:
-                color_container_border("#D65757")
-            elif not has_tasks:
-                color_container_border("#4CAF50")
+            # Логика цвета рамки:
+            # - закрыта/архив → серая (по умолчанию, не красим)
+            # - есть просроченная задача → красная
+            # - есть непросроченные задачи → зелёная
+            # - нет задач → серая (по умолчанию, не красим)
+            if deal['status'] not in ("Сделка закрыта", "Архив"):
+                if has_overdue:
+                    color_container_border("#D65757")
+                elif has_tasks:
+                    color_container_border("#4CAF50")
             card_title = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(card_title, expanded=is_open):
                 st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
