@@ -35,6 +35,24 @@ st.markdown("""
     .deal-col-header h4 { margin: 0; font-size: 1.1rem; }
     .deal-col-header p { margin: 0.2rem 0 0.8rem 0; color: #7F8C9A; font-size: 0.85rem; }
     .greeting-block { margin-bottom: 1.5rem !important; }
+
+    /* Кнопки у телефона — чтобы не обрезались */
+    .phone-action-group { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .phone-btn {
+        background: #EEF0F3 !important;
+        border: 1px solid #DCE0E5 !important;
+        border-radius: 8px !important;
+        padding: 6px 10px !important;
+        font-size: 0.85rem !important;
+        color: #5A6B7D !important;
+        cursor: pointer !important;
+        min-width: 44px !important;
+        height: 32px !important;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .phone-btn:hover { background: #DCE0E5 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -48,19 +66,6 @@ if isinstance(raw_token, str):
     YANDEX_TOKEN = raw_token.strip().strip('"').strip("'")
 else:
     YANDEX_TOKEN = ""
-
-# --- Цветные рамки ---
-
-def inject_border_css(key, color):
-    if color:
-        st.markdown(f"""
-        <style>
-            .st-key-{key} > .stExpander > details {{
-                border: 2px solid {color} !important;
-                border-radius: 14px !important;
-            }}
-        </style>
-        """, unsafe_allow_html=True)
 
 # --- Пароли ---
 
@@ -233,7 +238,7 @@ def auto_task_title(tt, cn, dt):
     if tt == "Отправить заказ": return f"Отправка по {dt}" if dt else f"Отправка: {cn}"
     return f"Связаться: {cn}"
 
-# --- Телефон с кнопками копирования и звонка ---
+# --- Телефон с кнопками копирования и звонка (основной) ---
 
 def render_phone_inline(phone, uid):
     cph = re.sub(r"\D", "", phone)
@@ -243,12 +248,30 @@ def render_phone_inline(phone, uid):
         cph = "79990000000"
     safe_uid = re.sub(r'[^a-zA-Z0-9_]', '_', str(uid))
     components.html(f"""
-    <div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
+    <div class="phone-action-group" style="padding:4px 0;">
         <span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='✓';setTimeout(function(){{b.textContent='📋';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;transition:all 0.15s;">📋</button>
-        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:2px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;">📞</a>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='✓';setTimeout(function(){{b.textContent='📋';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">📋</button>
+        <a href="tel:+{cph}" class="phone-btn" style="text-decoration:none;" title="Позвонить">📞</a>
     </div>
-    """, height=30)
+    """, height=40)
+
+# --- Телефон с кнопками (дополнительный, уменьшенный) ---
+
+def render_extra_phone_inline(phone, name, role, uid):
+    cph = re.sub(r"\D", "", phone)
+    if cph.startswith("8") and len(cph) == 11:
+        cph = "7" + cph[1:]
+    elif not cph:
+        cph = "79990000000"
+    safe_uid = re.sub(r'[^a-zA-Z0-9_]', '_', str(uid))
+    info = f"{phone} — {name} ({role})" if name else phone
+    components.html(f"""
+    <div class="phone-action-group" style="padding:2px 0;flex-wrap:wrap;">
+        <span style="font-size:0.9rem;color:#3C4A5A;">{info}</span>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='✓';setTimeout(function(){{b.textContent='📋';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Скопировать">📋</button>
+        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Позвонить">📞</a>
+    </div>
+    """, height=32)
 
 def render_file_action_buttons(fp, fn, kp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
@@ -862,7 +885,7 @@ if st.session_state.active_tab == "Задачи":
                         task["order_amount"] = eoa
                     commit_and_rerun(st.session_state.crm_store, "Задача сохранена")
 
-    # --- Две колонки со свёрнутыми задачами через st.expander ---
+    # --- Две колонки со свёрнутыми задачами ---
 
     task_l, task_r = st.columns(2)
     with task_l:
@@ -1270,7 +1293,10 @@ elif st.session_state.active_tab == "Клиенты":
                 if st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True):
                     if ncc.strip():
                         st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
+                        st.toast("Комментарий добавлен", icon="✅")
                         st.rerun()
+                    else:
+                        st.warning("Введите текст")
                 if st.session_state.get("pending_client_comments"):
                     for pc in st.session_state["pending_client_comments"]:
                         st.markdown(f"- *{pc['time']}*: {pc['text']}")
@@ -1284,14 +1310,14 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.f_ph[i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{fv}_{i}")
             if st.button("Добавить телефон", key=f"add_ph_btn_{fv}"):
                 st.session_state.f_ph.append({"phone": "", "name": "", "role": ""})
-                st.rerun()
+                st.success("Поле для телефона добавлено")
         with ac_em:
             st.markdown("**Доп. Email**")
             for i, em in enumerate(st.session_state.f_em):
                 st.session_state.f_em[i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{fv}_{i}")
             if st.button("Добавить Email", key=f"add_em_btn_{fv}"):
                 st.session_state.f_em.append("")
-                st.rerun()
+                st.success("Поле для Email добавлено")
         with ac_ad:
             st.markdown("**Доп. адреса**")
             for i, ad in enumerate(st.session_state.f_ad):
@@ -1302,7 +1328,7 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.f_ad[i]["resp_email"] = st.text_input(f"Email #{i+1}", value=ad.get("resp_email", ""), key=f"f_ad_re_{fv}_{i}")
             if st.button("Добавить адрес", key=f"add_ad_btn_{fv}"):
                 st.session_state.f_ad.append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
-                st.rerun()
+                st.success("Поле для адреса добавлено")
         st.markdown("---")
         cf = st.file_uploader("Прикрепить файл:", key=f"cf_{fv}")
         if st.button("Внести клиента в базу", use_container_width=True, type="primary", key=f"add_client_btn_{fv}"):
@@ -1386,8 +1412,8 @@ elif st.session_state.active_tab == "Клиенты":
                     mc3.link_button("Написать в MAX", MAX_URL, use_container_width=True, help=f"Ваш номер в MAX: {MAX_NUMBER}. Найдите клиента по номеру {cl['phone']}.")
                     if cl.get("extra_phones"):
                         st.markdown("**Доп. телефоны:**")
-                        for p in cl["extra_phones"]:
-                            st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
+                        for pi, p in enumerate(cl["extra_phones"]):
+                            render_extra_phone_inline(p['phone'], p['name'], p['role'], f"{cl['id']}_extra_{pi}")
                     if cl.get("extra_addresses"):
                         st.markdown("**Доп. адреса:**")
                         for ea in cl["extra_addresses"]:
@@ -1453,9 +1479,9 @@ elif st.session_state.active_tab == "Клиенты":
                                 if st.button("Удалить", key=f"ep_del_{cl['id']}_{pi}"):
                                     cl["extra_phones"].pop(pi)
                                     commit_and_rerun(st.session_state.crm_store, "Телефон удалён")
-                            nph = st.text_input("Новый телефон", key=f"ep_new_ph_{cl['id']}")
-                            npn = st.text_input("Новое ФИО", key=f"ep_new_nm_{cl['id']}")
-                            npr = st.text_input("Новая должность", key=f"ep_new_rl_{cl['id']}")
+                            nph = st.text_input("Телефон", key=f"ep_new_ph_{cl['id']}")
+                            npn = st.text_input("ФИО", key=f"ep_new_nm_{cl['id']}")
+                            npr = st.text_input("Должность", key=f"ep_new_rl_{cl['id']}")
                             if st.button("Добавить телефон", key=f"ep_add_btn_{cl['id']}"):
                                 if nph.strip():
                                     cl.setdefault("extra_phones", []).append({"phone": format_phone(nph), "name": npn, "role": npr})
@@ -1468,7 +1494,7 @@ elif st.session_state.active_tab == "Клиенты":
                                 if st.button("Удалить", key=f"ee_del_{cl['id']}_{ei}"):
                                     cl["extra_emails"].pop(ei)
                                     commit_and_rerun(st.session_state.crm_store, "Email удалён")
-                            nem = st.text_input("Новый Email", key=f"ee_new_{cl['id']}")
+                            nem = st.text_input("Email", key=f"ee_new_{cl['id']}")
                             if st.button("Добавить Email", key=f"ee_add_btn_{cl['id']}"):
                                 if nem.strip():
                                     cl.setdefault("extra_emails", []).append(nem.strip())
@@ -1485,7 +1511,7 @@ elif st.session_state.active_tab == "Клиенты":
                                 if st.button("Удалить адрес", key=f"ea_del_{cl['id']}_{ai}"):
                                     cl["extra_addresses"].pop(ai)
                                     commit_and_rerun(st.session_state.crm_store, "Адрес удалён")
-                            naa = st.text_input("Новый адрес", key=f"ea_new_addr_{cl['id']}")
+                            naa = st.text_input("Адрес", key=f"ea_new_addr_{cl['id']}")
                             nar = st.text_input("Ответственный", key=f"ea_new_rn_{cl['id']}")
                             nrr = st.text_input("Должность", key=f"ea_new_rr_{cl['id']}")
                             nrp = st.text_input("Телефон", key=f"ea_new_rp_{cl['id']}")
@@ -1523,3 +1549,4 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
+
