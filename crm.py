@@ -61,51 +61,21 @@ def color_expander_border(color):
     <span id="{uid}" style="display:none;"></span>
     """, unsafe_allow_html=True)
 
-def color_container_border(color):
-    uid = f"cnt_{uuid.uuid4().hex[:8]}"
-    st.markdown(f"""
-    <style>
-        [data-testid="stVerticalBlockBorderWrapper"]:has(#{uid}),
-        [data-testid*="Border"]:has(#{uid}) {{
-            border-color: {color} !important;
-            border-width: 2px !important;
-            border-style: solid !important;
-            border-radius: 14px !important;
-        }}
-    </style>
-    <span id="{uid}" style="display:none;"></span>
-    """, unsafe_allow_html=True)
-    components.html(f"""
-    <script>
-        (function() {{
-            function apply() {{
-                try {{
-                    const doc = window.parent ? window.parent.document : document;
-                    const marker = doc.getElementById('{uid}');
-                    if (!marker) return false;
-                    let el = marker.parentElement;
-                    while (el && el !== doc.body) {{
-                        const t = (el.getAttribute('data-testid') || '').toLowerCase();
-                        if (t.includes('border')) {{
-                            el.style.setProperty('border-color', '{color}', 'important');
-                            el.style.setProperty('border-width', '2px', 'important');
-                            el.style.setProperty('border-style', 'solid', 'important');
-                            el.style.setProperty('border-radius', '14px', 'important');
-                            return true;
-                        }}
-                        el = el.parentElement;
-                    }}
-                    return false;
-                }} catch(e) {{ return false; }}
+def styled_container(border_color=None, key_prefix="card"):
+    """Создаёт st.container(border=True) с цветной рамкой через CSS-класс key."""
+    key = f"{key_prefix}-{uuid.uuid4().hex[:8]}"
+    if border_color:
+        st.markdown(f"""
+        <style>
+            .st-key-{key} {{
+                border-color: {border_color} !important;
+                border-width: 2px !important;
+                border-style: solid !important;
+                border-radius: 14px !important;
             }}
-            let n = 0;
-            const t = setInterval(function() {{
-                if (apply() || n >= 30) clearInterval(t);
-                n++;
-            }}, 100);
-        }})();
-    </script>
-    """, height=0)
+        </style>
+        """, unsafe_allow_html=True)
+    return st.container(key=key, border=True)
 
 # --- Пароли ---
 
@@ -244,7 +214,7 @@ def get_client_by_id(c_id):
 def parse_deadline(ds):
     if not ds: return datetime.now().date()
     try: return datetime.strptime(ds, "%Y-%m-%d").date()
-    except: 
+    except:
         try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").date()
         except: return datetime.now().date()
 
@@ -436,9 +406,6 @@ with st.sidebar:
 
 # --- Навигация ---
 
-for label, key in [("Задачи", "col_m1"), ("Клиенты", "col_m2"), ("Сделки", "col_m3")]:
-    pass
-
 c1, c2, c3 = st.columns(3)
 with c1:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"): st.session_state.active_tab = "Задачи"; st.rerun()
@@ -537,9 +504,10 @@ if st.session_state.active_tab == "Задачи":
             st.markdown("---")
             cd2 = parse_deadline(task.get("deadline", ""))
             st.markdown("**Изменить срок:**")
-            with st.columns([3, 1])[0]:
+            dl_c1, dl_c2 = st.columns([3, 1])
+            with dl_c1:
                 ndd = st.date_input("Дата", value=cd2, format="DD/MM/YYYY", key=f"dl_d_{sk}_{t['client_id']}_{t['task_idx']}")
-            with st.columns([3, 1])[1]:
+            with dl_c2:
                 st.write("")
                 if st.button("Обновить", key=f"dl_btn_{sk}_{t['client_id']}_{t['task_idx']}"):
                     task["deadline"] = ndd.isoformat(); commit_and_rerun(st.session_state.crm_store)
@@ -854,12 +822,15 @@ elif st.session_state.active_tab == "Сделки":
         is_open = (st.session_state.get("open_deal_id") == deal["id"])
         has_tasks = len(client.get("tasks", [])) > 0
         has_overdue = any(not t.get("done") and is_task_overdue(t) for t in client.get("tasks", []))
-        with st.container(border=True):
-            if deal['status'] not in ("Сделка закрыта", "Архив"):
-                if has_overdue:
-                    color_container_border("#D65757")
-                elif has_tasks:
-                    color_container_border("#4CAF50")
+
+        border_color = None
+        if deal['status'] not in ("Сделка закрыта", "Архив"):
+            if has_overdue:
+                border_color = "#D65757"
+            elif has_tasks:
+                border_color = "#4CAF50"
+
+        with styled_container(border_color=border_color, key_prefix=f"deal-{deal['id']}"):
             ct2 = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(ct2, expanded=is_open):
                 st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
@@ -1015,4 +986,5 @@ elif st.session_state.active_tab == "Сделки":
     if ad:
         st.markdown("---")
         with st.expander(f"Архив ({len(ad)})", expanded=False):
-            for d in ad: draw_deal_card(d, gc(d["client_id"]))
+            for d in ad:
+                draw_deal_card(d, gc(d["client_id"]))
