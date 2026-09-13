@@ -40,6 +40,8 @@ st.markdown("""
 
 FILE_NAME = "web_crm_database_v2.json"
 YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
+MAX_URL = "https://max.ru"
+MAX_NUMBER = "+79003293300"
 
 raw_token = st.secrets.get("YANDEX_DISK_TOKEN", "")
 if isinstance(raw_token, str):
@@ -283,7 +285,7 @@ def render_file_action_buttons(fp, fn, kp):
     else:
         st.download_button("Скачать", data=fb, file_name=fn, key=f"dl_{kp}")
 
-# --- Печать задачи через window.open + document.write ---
+# --- Печать задачи ---
 
 def build_print_html(task, cl, tp, fd):
     def esc(s):
@@ -358,7 +360,6 @@ hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }}
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
     html_json = json.dumps(html_content).replace('<', '\\u003c')
-
     safe_key = key_suffix.replace('-', '_').replace('.', '_')
     btn_id = f"print_btn_{safe_key}"
     js_func = f"doPrint_{safe_key}"
@@ -367,17 +368,9 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     components.html(f"""
     <style>
     #{btn_id} {{
-        width: 100%;
-        padding: 10px;
-        background: #bc1661;
-        color: white;
-        border: none;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 600;
-        font-family: inherit;
-        transition: background 0.15s;
+        width: 100%; padding: 10px; background: #bc1661; color: white;
+        border: none; border-radius: 10px; cursor: pointer; font-size: 14px;
+        font-weight: 600; font-family: inherit; transition: background 0.15s;
     }}
     #{btn_id}:hover {{ background: #9a1452; }}
     </style>
@@ -387,20 +380,13 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     function {js_func}() {{
         var html = {var_name};
         var w = window.open('', '_blank');
-        if (!w) {{
-            alert('Разрешите всплывающие окна для печати');
-            return;
-        }}
+        if (!w) {{ alert('Разрешите всплывающие окна для печати'); return; }}
         w.document.open();
         w.document.write(html);
         w.document.close();
         w.focus();
-        setTimeout(function() {{
-            try {{ w.print(); }} catch(e) {{}}
-        }}, 500);
-        w.onafterprint = function() {{
-            setTimeout(function() {{ w.close(); }}, 300);
-        }};
+        setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500);
+        w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }};
     }}
     </script>
     """, height=45)
@@ -441,7 +427,6 @@ def load_data():
                 with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=4)
                 upload_db_to_yandex_async()
             else:
-                # Докидываем новые поля для старых задач
                 for c in data.get("clients", []):
                     for t in c.get("tasks", []):
                         if "completion_report" not in t: t["completion_report"] = ""
@@ -625,7 +610,7 @@ if not st.session_state.authenticated:
                         st.error("Неверный логин или пароль.")
         st.stop()
 
-# --- Заголовок по центру + приветствие ---
+# --- Заголовок ---
 
 st.markdown(f"""
 <div class="greeting-block">
@@ -828,33 +813,50 @@ if st.session_state.active_tab == "Задачи":
                             commit_and_rerun(st.session_state.crm_store)
                     else:
                         st.warning("Введите отчёт")
+
+            # --- Полное редактирование задачи ---
             with st.expander("Редактировать задачу", expanded=False):
                 nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_{sk}_{t['client_id']}_{t['task_idx']}")
+                edl = st.date_input("Срок", value=parse_deadline(task.get("deadline", "")), format="DD/MM/YYYY", key=f"ed_dl_{sk}_{t['client_id']}_{t['task_idx']}")
                 if tp == "Отправить заказ":
+                    ep = st.text_area("Товары", value=task.get('products', ''), key=f"ed_p_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ea = st.text_input("Адрес", value=task.get('ship_addr', ''), key=f"ed_a_{sk}_{t['client_id']}_{t['task_idx']}")
+                    er = st.text_input("Получатель", value=task.get('receiver', ''), key=f"ed_r_{sk}_{t['client_id']}_{t['task_idx']}")
+                    erp = st.text_input("Тел. получателя", value=task.get('receiver_phone', ''), key=f"ed_rp_{sk}_{t['client_id']}_{t['task_idx']}")
+                    esp = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], index=["Включено в счёт", "Оплата при получении"].index(task.get('ship_pay', 'Включено в счёт')) if task.get('ship_pay', 'Включено в счёт') in ["Включено в счёт", "Оплата при получении"] else 0, key=f"ed_sp_{sk}_{t['client_id']}_{t['task_idx']}")
+                    etn = st.text_input("Трек-номер", value=task.get('tk_num', ''), key=f"ed_tn_{sk}_{t['client_id']}_{t['task_idx']}")
                     eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_{sk}_{t['client_id']}_{t['task_idx']}")
-                if st.button("Сохранить", key=f"ed_btn_{sk}_{t['client_id']}_{t['task_idx']}", use_container_width=True):
+                ec = st.text_area("Комментарии", value=task.get('task_comment', ''), key=f"ed_c_{sk}_{t['client_id']}_{t['task_idx']}")
+                if st.button("Сохранить", key=f"ed_btn_{sk}_{t['client_id']}_{t['task_idx']}", use_container_width=True, type="primary"):
                     task["manager"] = nm
+                    task["deadline"] = edl.isoformat()
+                    task["task_comment"] = ec
                     if tp == "Отправить заказ":
+                        task["products"] = ep
+                        task["ship_addr"] = ea
+                        task["receiver"] = er
+                        task["receiver_phone"] = format_phone(erp)
+                        task["ship_pay"] = esp
+                        task["tk_num"] = etn
                         task["order_amount"] = eoa
                     commit_and_rerun(st.session_state.crm_store)
 
-    task_l, task_r = st.columns(2)
-    with task_l:
-        with st.container(border=True):
-            st.subheader(f"На сегодня ({len(tt)})")
-            if tt:
-                for t in tt:
-                    render_task_block(t, "today")
-            else:
-                st.success("Все задачи на сегодня закрыты.")
-    with task_r:
-        with st.container(border=True):
-            st.subheader(f"Предстоящие ({len(ft)})")
-            if ft:
-                for t in ft:
-                    render_task_block(t, "future")
-            else:
-                st.caption("План на будущие дни пуст.")
+    # --- Одна колонка на всю ширину ---
+    with st.container(border=True):
+        st.subheader(f"На сегодня ({len(tt)})")
+        if tt:
+            for t in tt:
+                render_task_block(t, "today")
+        else:
+            st.success("Все задачи на сегодня закрыты.")
+    st.markdown("---")
+    with st.container(border=True):
+        st.subheader(f"Предстоящие ({len(ft)})")
+        if ft:
+            for t in ft:
+                render_task_block(t, "future")
+        else:
+            st.caption("План на будущие дни пуст.")
 
 # --- Вкладка «Сделки» ---
 
@@ -903,7 +905,6 @@ elif st.session_state.active_tab == "Сделки":
             st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
             st.markdown("---")
 
-            # --- Смена ответственного ---
             with st.expander("Изменить ответственного", expanded=False):
                 cur_mgr_idx = mgrs.index(client.get('manager', '')) if client.get('manager', '') in mgrs else 0
                 new_mgr = st.selectbox("Ответственный:", mgrs, index=cur_mgr_idx, key=f"dm_{deal['id']}")
@@ -919,7 +920,6 @@ elif st.session_state.active_tab == "Сделки":
                 for com in deal["deal_comments"]:
                     st.markdown(f"*{com['time']}* — {com['text']}")
 
-            # --- Заметка к заказу (с очисткой поля) ---
             note_ver = st.session_state.deal_note_ver.get(deal['id'], 0)
             ik = f"ndc_val_{deal['id']}_{note_ver}"
             ndc = st.text_input("Заметка к заказу:", key=ik, placeholder="Например: Согласовали доставку")
@@ -957,7 +957,6 @@ elif st.session_state.active_tab == "Сделки":
 
                     with st.expander(ht2, expanded=False, key=task_exp_key):
                         if task.get("done"):
-                            # --- Полная информация о закрытой задаче ---
                             st.markdown(f"~~{task['text']}~~ — выполнено")
                             st.markdown("---")
                             st.markdown(f"**Тип:** {tp2} | **Срок:** {fdl} | **Ответственный:** {task.get('manager','—')}")
@@ -978,7 +977,6 @@ elif st.session_state.active_tab == "Сделки":
                             if task.get("file_path"):
                                 st.markdown(f"📄 Вложенный файл: {task.get('file_name', '')}")
                                 render_file_action_buttons(task["file_path"], task.get("file_name", ""), f"dtk_done_{deal['id']}_{orig_i}")
-                            # --- Отчёт о выполнении ---
                             if task.get("completion_report"):
                                 st.markdown("---")
                                 st.markdown("**Отчёт о выполнении:**")
@@ -1026,13 +1024,27 @@ elif st.session_state.active_tab == "Сделки":
 
                             with st.expander("Редактировать", expanded=False):
                                 nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_d_{deal['id']}_{orig_i}")
-                                if tp2 == "Отправить заказ":
-                                    eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_d_{deal['id']}_{orig_i}")
                                 edl = st.date_input("Срок", value=parse_deadline(task.get("deadline", "")), format="DD/MM/YYYY", key=f"ed_dl_d_{deal['id']}_{orig_i}")
-                                if st.button("Сохранить", key=f"ed_t_btn_d_{deal['id']}_{orig_i}", use_container_width=True):
+                                if tp2 == "Отправить заказ":
+                                    ep = st.text_area("Товары", value=task.get('products', ''), key=f"ed_p_d_{deal['id']}_{orig_i}")
+                                    ea = st.text_input("Адрес", value=task.get('ship_addr', ''), key=f"ed_a_d_{deal['id']}_{orig_i}")
+                                    er = st.text_input("Получатель", value=task.get('receiver', ''), key=f"ed_r_d_{deal['id']}_{orig_i}")
+                                    erp = st.text_input("Тел. получателя", value=task.get('receiver_phone', ''), key=f"ed_rp_d_{deal['id']}_{orig_i}")
+                                    esp = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], index=["Включено в счёт", "Оплата при получении"].index(task.get('ship_pay', 'Включено в счёт')) if task.get('ship_pay', 'Включено в счёт') in ["Включено в счёт", "Оплата при получении"] else 0, key=f"ed_sp_d_{deal['id']}_{orig_i}")
+                                    etn = st.text_input("Трек-номер", value=task.get('tk_num', ''), key=f"ed_tn_d_{deal['id']}_{orig_i}")
+                                    eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_d_{deal['id']}_{orig_i}")
+                                ec = st.text_area("Комментарии", value=task.get('task_comment', ''), key=f"ed_c_d_{deal['id']}_{orig_i}")
+                                if st.button("Сохранить", key=f"ed_t_btn_d_{deal['id']}_{orig_i}", use_container_width=True, type="primary"):
                                     task["manager"] = nm
                                     task["deadline"] = edl.isoformat()
+                                    task["task_comment"] = ec
                                     if tp2 == "Отправить заказ":
+                                        task["products"] = ep
+                                        task["ship_addr"] = ea
+                                        task["receiver"] = er
+                                        task["receiver_phone"] = format_phone(erp)
+                                        task["ship_pay"] = esp
+                                        task["tk_num"] = etn
                                         task["order_amount"] = eoa
                                     commit_and_rerun(st.session_state.crm_store)
                             if not task.get("done"):
@@ -1341,9 +1353,9 @@ elif st.session_state.active_tab == "Клиенты":
                     elif not cph:
                         cph = "79990000000"
                     mc1, mc2, mc3 = st.columns(3)
-                    mc1.link_button("WhatsApp", f"https://wa.me/{cph}?text={urllib.parse.quote('Здравствуйте! По поводу вашего заказа...')}", use_container_width=True)
+                    mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
                     mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
-                    mc3.link_button("SMS", f"sms:{cph}", use_container_width=True)
+                    mc3.link_button("Написать в MAX", MAX_URL, use_container_width=True, help=f"Ваш номер в MAX: {MAX_NUMBER}. Найдите клиента по номеру {cl['phone']}.")
                     if cl.get("extra_phones"):
                         st.markdown("**Доп. телефоны:**")
                         for p in cl["extra_phones"]:
