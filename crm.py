@@ -884,6 +884,8 @@ if st.session_state.active_tab == "Задачи":
                     st.markdown(f"Сумма: {oa:,.0f} | Скидка: {dp}% ({da:,.0f}) | **Итого: {ta:,.0f}**".replace(",", " "))
                 if task.get('tk_num'):
                     st.markdown(f"Трек: `{task['tk_num']}`")
+            if task.get('task_comment'):
+                st.markdown(f"**Комментарии:** {task['task_comment']}")
             st.markdown("---")
             st.markdown(f"**Ответственный:** {task.get('manager', '\u2014')}")
             st.markdown("---")
@@ -1130,6 +1132,8 @@ elif st.session_state.active_tab == "Сделки":
                                         st.markdown(f"**Трек:** `{t['tk_num']}`")
                                     if t.get('order_amount', 0) > 0:
                                         st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
+                                    if t.get('task_comment'):
+                                        st.markdown(f"**Комментарии:** {t['task_comment']}")
                                     if t.get("file_path"):
                                         st.markdown(f"**Файл:** {t.get('file_name', '')}")
                                         render_file_action_buttons(t["file_path"], t.get("file_name", ""), f"deal_dtask_file_{d['id']}_{ti}")
@@ -1234,15 +1238,12 @@ elif st.session_state.active_tab == "Сделки":
                         if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
                             close_deal_dialog(d["id"])
                     elif current_status == "Сделка закрыта":
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if st.button("Вернуть в работу", key=f"deal_reopen_{d['id']}", use_container_width=True):
-                                d["status"] = "В работе"
-                                commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в работу")
-                        with b2:
-                            if st.button("В архив", key=f"deal_archive_{d['id']}", use_container_width=True, type="primary"):
-                                d["status"] = "Архив"
-                                commit_and_rerun(st.session_state.crm_store, "Сделка в архиве")
+                        if st.button("Вернуть в работу", key=f"deal_reopen_{d['id']}", use_container_width=True):
+                            d["status"] = "В работе"
+                            commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в работу")
+                        if st.button("В архив", key=f"deal_archive_{d['id']}", use_container_width=True, type="primary"):
+                            d["status"] = "Архив"
+                            commit_and_rerun(st.session_state.crm_store, "Сделка в архиве")
 
                     if st.session_state.user_role == "admin":
                         st.markdown("---")
@@ -1283,15 +1284,12 @@ elif st.session_state.active_tab == "Сделки":
                         for dfi, dff in enumerate(d["deal_files"]):
                             st.markdown(f"\U0001F4C4 {dff.get('file_name', '')}")
                             render_file_action_buttons(dff.get("file_path"), dff.get("file_name", "файл"), f"arch_file_{d['id']}_{dfi}")
-                    b1, b2 = st.columns(2)
-                    with b1:
-                        if st.button("Вернуть в работу", key=f"arch_reopen_{d['id']}", use_container_width=True):
-                            d["status"] = "В работе"
-                            commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в работу")
-                    with b2:
-                        if st.button("В закрытые", key=f"arch_toclosed_{d['id']}", use_container_width=True, type="primary"):
-                            d["status"] = "Сделка закрыта"
-                            commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в закрытые")
+                    if st.button("Вернуть в работу", key=f"arch_reopen_{d['id']}", use_container_width=True):
+                        d["status"] = "В работе"
+                        commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в работу")
+                    if st.button("В закрытые", key=f"arch_toclosed_{d['id']}", use_container_width=True, type="primary"):
+                        d["status"] = "Сделка закрыта"
+                        commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в закрытые")
                     if st.session_state.user_role == "admin":
                         st.markdown("---")
                         if st.button("Удалить сделку", key=f"arch_del_{d['id']}", use_container_width=True):
