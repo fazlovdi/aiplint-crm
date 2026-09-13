@@ -293,7 +293,7 @@ def get_logo_base64():
 def export_clients_csv():
     output = io.StringIO()
     writer = csv.writer(output, delimiter=";")
-    writer.writerow(["ID", "ФИО", "Телефон", "Email", "Адрес", "Категория", "Скидка %", "Менеджер"])
+    writer.writerow(["ID", "ФИО", "Телефон", "Email", "Адрес", "Категория", "Скидка %", "Ответственный"])
     for c in st.session_state.crm_store["clients"]:
         writer.writerow([c["id"], c["name"], c["phone"], c.get("email", ""), c.get("address", ""), c.get("category", ""), c.get("discount", 0), c.get("manager", "")])
     return output.getvalue().encode("utf-8-sig")
@@ -443,7 +443,7 @@ def client_card_dialog(client_id):
     st.markdown(f"**Email:** {client.get('email', '')}")
     st.markdown(f"**Адрес:** {client.get('address', '')}")
     st.markdown(f"**Скидка:** {client.get('discount', 0)}%")
-    st.markdown(f"**Менеджер:** {client.get('manager', '—')}")
+    st.markdown(f"**Ответственный:** {client.get('manager', '—')}")
     if client.get("extra_phones"):
         st.markdown("---")
         st.markdown("**Доп. телефоны:**")
@@ -616,7 +616,7 @@ if st.session_state.active_tab == "Задачи":
     current_user_name = st.session_state.user_name
     managers = get_managers_list()
     manager_options = ["Мои задачи", "Все"] + managers
-    manager_filter = st.selectbox("Менеджер", manager_options, index=0)
+    manager_filter = st.selectbox("Ответственный", manager_options, index=0)
 
     all_active_tasks = []
     for client in st.session_state.crm_store.get("clients", []):
@@ -704,7 +704,7 @@ if st.session_state.active_tab == "Задачи":
             logo_tag = f"<img src='data:image/png;base64,{logo_b64}' width='180' style='float:left; margin-right:20px;'/>" if logo_b64 else "<div style='font-size:24px; font-weight:bold; float:left; margin-right:20px;'>АЙПЛИНТ</div>"
             calc_html = f"<div>Сумма: {oa_val:,.0f} руб.</div><div>Скидка: {disc_pct}% ({disc_amt:,.0f} руб.)</div><div style='font-size:18px;font-weight:bold;'>Итого: {total_amt:,.0f} руб.</div>".replace(",", " ") if oa_val > 0 else ""
             print_html = f"""
-<a href="data:text/html;charset=utf-8,<html><head><title>Задача</title><style>body{{font-family:Arial;margin:40px;}} .h{{text-align:center;border-bottom:2px solid %23000;padding:10px;clear:both;}} .s{{margin:8px 0;}}</style></head><body>{logo_tag}<div class='h'><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div><div class='s'><b>Клиент:</b> {client['name']} ({client['phone']})</div><div class='s'><b>Тип:</b> {t_type}</div><div class='s'><b>Срок:</b> {formatted_date}</div><div class='s'><b>Менеджер:</b> {task.get('manager','')}</div><hr><div class='s'><b>Товары:</b><br>{clean_products}</div><div class='s'><b>Адрес:</b> {clean_addr}</div><div class='s'><b>Получатель:</b> {clean_rec} ({task.get('receiver_phone', '')})</div><div class='s'><b>Оплата:</b> {task.get('ship_pay', '')}</div><div class='s'><b>Трек:</b> {clean_tk}</div>{calc_html}<br><br><p>Отпустил: _____________</p><p>Получил: _____________</p><script>window.print();</script></body></html>" target="_blank" style="text-decoration:none;"><button style="width:100%;padding:10px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;">Распечатать задачу</button></a>
+<a href="data:text/html;charset=utf-8,<html><head><title>Задача</title><style>body{{font-family:Arial;margin:40px;}} .h{{text-align:center;border-bottom:2px solid %23000;padding:10px;clear:both;}} .s{{margin:8px 0;}}</style></head><body>{logo_tag}<div class='h'><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div><div class='s'><b>Клиент:</b> {client['name']} ({client['phone']})</div><div class='s'><b>Тип:</b> {t_type}</div><div class='s'><b>Срок:</b> {formatted_date}</div><div class='s'><b>Ответственный:</b> {task.get('manager','')}</div><hr><div class='s'><b>Товары:</b><br>{clean_products}</div><div class='s'><b>Адрес:</b> {clean_addr}</div><div class='s'><b>Получатель:</b> {clean_rec} ({task.get('receiver_phone', '')})</div><div class='s'><b>Оплата:</b> {task.get('ship_pay', '')}</div><div class='s'><b>Трек:</b> {clean_tk}</div>{calc_html}<br><br><p>Отпустил: _____________</p><p>Получил: _____________</p><script>window.print();</script></body></html>" target="_blank" style="text-decoration:none;"><button style="width:100%;padding:10px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;">Распечатать задачу</button></a>
 """
             st.markdown(print_html, unsafe_allow_html=True)
             st.markdown("---")
@@ -837,7 +837,7 @@ elif st.session_state.active_tab == "Клиенты":
             c_phone = st.text_input("Основной телефон")
             c_email = st.text_input("Основной Email")
             c_discount = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1)
-            c_manager = st.selectbox("Ответственный менеджер:", managers, index=managers.index(current_user_name) if current_user_name in managers else 0, key="new_client_manager")
+            c_manager = st.selectbox("Ответственный:", managers, index=managers.index(current_user_name) if current_user_name in managers else 0, key="new_client_manager")
         with col_f2:
             c_address = st.text_input("Основной адрес")
             c_category = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"])
@@ -935,7 +935,7 @@ elif st.session_state.active_tab == "Клиенты":
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
                         st.markdown(f"**{client['phone']}** | {client.get('email','')} | {client.get('address','')}")
-                        st.markdown(f"Скидка: **{client.get('discount',0)}%** | Менеджер: **{client.get('manager','—')}**")
+                        st.markdown(f"Скидка: **{client.get('discount',0)}%** | Ответственный: **{client.get('manager','—')}**")
                         clean_phone = re.sub(r"\D", "", client['phone'])
                         if clean_phone.startswith("8") and len(clean_phone) == 11:
                             clean_phone = "7" + clean_phone[1:]
@@ -1005,7 +1005,7 @@ elif st.session_state.active_tab == "Клиенты":
                             ea_val = st.text_input("Адрес", value=client.get('address',''), key=f"ea_{client['id']}")
                             ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(client.get('discount',0)), key=f"ed_{client['id']}")
                             ec = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], index=["Дизайнер","Строитель","Дилер","Покупатель"].index(client.get('category','Покупатель')) if client.get('category','Покупатель') in ["Дизайнер","Строитель","Дилер","Покупатель"] else 3, key=f"ec_{client['id']}")
-                            em_mgr = st.selectbox("Ответственный менеджер:", managers, index=managers.index(client.get('manager','')) if client.get('manager','') in managers else 0, key=f"em_{client['id']}")
+                            em_mgr = st.selectbox("Ответственный:", managers, index=managers.index(client.get('manager','')) if client.get('manager','') in managers else 0, key=f"em_{client['id']}")
                             if st.button("Сохранить основные данные", key=f"es_{client['id']}", use_container_width=True):
                                 client['name'], client['phone'], client['email'], client['address'], client['discount'], client['category'], client['manager'] = en, format_phone(ep), ee, ea_val, int(ed), ec, em_mgr
                                 commit_and_rerun(st.session_state.crm_store)
@@ -1087,6 +1087,7 @@ elif st.session_state.active_tab == "Сделки":
     st.header("Сделки")
     deal_search = st.text_input("Поиск по сделкам (название, клиент, трек-номер, получатель):", key="deal_search_input", placeholder="Введите текст...").strip().lower()
     current_user_name = st.session_state.user_name
+    managers = get_managers_list()
 
     def get_client(c_id):
         for c in st.session_state.crm_store["clients"]:
@@ -1125,7 +1126,7 @@ elif st.session_state.active_tab == "Сделки":
             card_title = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(card_title, expanded=is_open):
                 st.session_state.open_deal_id = None
-                st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Менеджер: {client.get('manager','—')}")
+                st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
                 st.markdown("---")
                 if deal.get("deal_comments"):
                     for com in deal["deal_comments"]:
@@ -1162,7 +1163,7 @@ elif st.session_state.active_tab == "Сделки":
                             if task.get("done"):
                                 st.markdown(f"~~{task['text']}~~ — выполнено")
                             else:
-                                st.markdown(f"**{t_type}** | Срок: {formatted_dl} | Менеджер: {task.get('manager','—')}")
+                                st.markdown(f"**{t_type}** | Срок: {formatted_dl} | Ответственный: {task.get('manager','—')}")
                                 if t_type == "Отправить заказ":
                                     with st.container(border=True):
                                         st.markdown(f"Товары: {task.get('products', '')}")
