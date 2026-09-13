@@ -442,8 +442,10 @@ def save_data(data):
         upload_db_to_yandex_async()
     except Exception as e: st.sidebar.error(f"Ошибка сохранения: {e}")
 
-def commit_and_rerun(data=None):
+def commit_and_rerun(data=None, toast_msg=None):
     if data is not None: save_data(data)
+    if toast_msg:
+        st.toast(toast_msg, icon="✅")
     st.rerun()
 
 @st.dialog("Завершить сделку", width="medium")
@@ -477,6 +479,7 @@ def close_deal_dialog(deal_id):
                     d['close_report'] = report.strip()
                     break
             save_data(st.session_state.crm_store)
+            st.toast("Сделка завершена", icon="✅")
             st.rerun()
         else: st.error("Заполните отчёт")
 
@@ -502,6 +505,7 @@ if "yandex_folders_ready" not in st.session_state:
 if "current_remember_token" not in st.session_state: st.session_state.current_remember_token = None
 if "set_remember_token" not in st.session_state: st.session_state.set_remember_token = None
 if "deal_note_ver" not in st.session_state: st.session_state.deal_note_ver = {}
+if "expanded_task_key" not in st.session_state: st.session_state.expanded_task_key = None
 
 # --- Авторизация ---
 
@@ -636,7 +640,7 @@ with st.sidebar:
         if st.button("Обновить", key="btn_save_self_pwd", use_container_width=True):
             if np and np == cp:
                 for u in st.session_state.crm_store["users"]:
-                    if u["login"] == cul: u["password"] = hash_password(np); save_data(st.session_state.crm_store); st.success("Пароль изменён"); st.rerun()
+                    if u["login"] == cul: u["password"] = hash_password(np); commit_and_rerun(st.session_state.crm_store, "Пароль изменён")
             else: st.error("Пароли не совпадают")
     if st.session_state.user_role == "admin":
         with st.expander("Экспорт базы"):
@@ -702,161 +706,193 @@ if st.session_state.active_tab == "Задачи":
     tt = [t for t in aat if t["sort_date"] <= now_time.date()]
     ft = [t for t in aat if t["sort_date"] > now_time.date()]
 
-    def render_task_block(t, sk):
+    def render_task_block_full(t, sk):
         task = t["task_obj"]
         cl = t["client_obj"]
         tp = task.get("type", "Связаться")
         io_ = is_task_overdue(task)
         sl = "Просрочено" if io_ else ("Сегодня" if t["sort_date"] == now_time.date() else "Срок")
         fd = format_date(t["deadline_str"])
-        ht = f"{fd} — {t['client_name']} — {t['type']}"
 
-        exp_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
-        inject_border_css(exp_key, "#D65757" if io_ else "#4CAF50")
+        st.markdown(f"### {t['client_name']} — {t['type']}")
+        st.markdown(f"**{sl}** — {fd} | {tp}")
+        st.markdown(f"👤 **{t['client_name']}** ({t['client_phone']})")
+        if tp == "Отправить заказ":
+            st.markdown("---")
+            st.markdown("**Данные отправки:**")
+            st.markdown(f"Товары: {task.get('products', '')}")
+            st.markdown(f"Адрес: {task.get('ship_addr', '')}")
+            st.markdown(f"Получатель: {task.get('receiver', '')} ({task.get('receiver_phone', '')})")
+            st.markdown(f"Оплата: {task.get('ship_pay', '')}")
+            if task.get('order_amount', 0) > 0:
+                oa = task['order_amount']
+                dp = cl.get('discount', 0)
+                da = oa * dp / 100
+                ta = oa - da
+                st.markdown(f"Сумма: {oa:,.0f} | Скидка: {dp}% ({da:,.0f}) | **Итого: {ta:,.0f}**".replace(",", " "))
+            if task.get('tk_num'):
+                st.markdown(f"Трек: `{task['tk_num']}`")
+        st.markdown("---")
+        st.markdown(f"**Ответственный:** {task.get('manager', '—')}")
+        st.markdown("---")
+        st.markdown("**Файл:**")
+        if task.get("file_path"):
+            st.markdown(f"📄 {task.get('file_name', '')}")
+            render_file_action_buttons(task["file_path"], task.get("file_name", ""), f"task_{sk}_{t['client_id']}_{t['task_idx']}")
+            if st.session_state.user_role == "admin":
+                if st.button("Удалить файл", key=f"del_tfile_{sk}_{t['client_id']}_{t['task_idx']}"):
+                    task["file_path"] = None
+                    task["file_name"] = None
+                    commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+        ntf = st.file_uploader("Добавить файл:", key=f"new_tfile_{sk}_{t['client_id']}_{t['task_idx']}")
+        if st.button("Сохранить файл", key=f"save_tfile_{sk}_{t['client_id']}_{t['task_idx']}"):
+            if ntf:
+                fi = save_uploaded_file(ntf, t["client_id"], "task_file")
+                if fi:
+                    task["file_path"] = fi["path"]
+                    task["file_name"] = fi["name"]
+                    commit_and_rerun(st.session_state.crm_store, "Файл сохранён")
+            else:
+                st.warning("Выберите файл")
+        st.markdown("---")
 
-        with st.expander(ht, expanded=False, key=exp_key):
-            st.markdown(f"**{sl}** — {fd} | {tp}")
-            st.markdown(f"👤 **{t['client_name']}** ({t['client_phone']})")
-            if tp == "Отправить заказ":
+        render_print_button(task, cl, tp, fd, f"task_{sk}_{t['client_id']}_{t['task_idx']}")
+
+        st.markdown("---")
+        cd2 = parse_deadline(task.get("deadline", ""))
+        st.markdown("**Изменить срок:**")
+        dl_c1, dl_c2 = st.columns([3, 1])
+        with dl_c1:
+            ndd = st.date_input("Дата", value=cd2, format="DD/MM/YYYY", key=f"dl_d_{sk}_{t['client_id']}_{t['task_idx']}")
+        with dl_c2:
+            st.write("")
+            if st.button("Обновить", key=f"dl_btn_{sk}_{t['client_id']}_{t['task_idx']}"):
+                task["deadline"] = ndd.isoformat()
+                commit_and_rerun(st.session_state.crm_store, "Срок обновлён")
+        st.markdown("---")
+        with st.expander("Выполнить задачу", expanded=False):
+            rt = st.text_input("Отчёт:", key=f"rt_{sk}_{t['client_id']}_{t['task_idx']}")
+            uf = st.file_uploader("Файл/фото отчёта:", key=f"uf_{sk}_{t['client_id']}_{t['task_idx']}")
+            cn = st.checkbox("Создать следующую задачу", key=f"cn_{sk}_{t['client_id']}_{t['task_idx']}")
+            ne = {}
+            ntd = None
+            ntt = None
+            if cn:
                 st.markdown("---")
-                st.markdown("**Данные отправки:**")
-                st.markdown(f"Товары: {task.get('products', '')}")
-                st.markdown(f"Адрес: {task.get('ship_addr', '')}")
-                st.markdown(f"Получатель: {task.get('receiver', '')} ({task.get('receiver_phone', '')})")
-                st.markdown(f"Оплата: {task.get('ship_pay', '')}")
-                if task.get('order_amount', 0) > 0:
-                    oa = task['order_amount']
-                    dp = cl.get('discount', 0)
-                    da = oa * dp / 100
-                    ta = oa - da
-                    st.markdown(f"Сумма: {oa:,.0f} | Скидка: {dp}% ({da:,.0f}) | **Итого: {ta:,.0f}**".replace(",", " "))
-                if task.get('tk_num'):
-                    st.markdown(f"Трек: `{task['tk_num']}`")
-            st.markdown("---")
-            st.markdown(f"**Ответственный:** {task.get('manager', '—')}")
-            st.markdown("---")
-            st.markdown("**Файл:**")
-            if task.get("file_path"):
-                st.markdown(f"📄 {task.get('file_name', '')}")
-                render_file_action_buttons(task["file_path"], task.get("file_name", ""), f"task_{sk}_{t['client_id']}_{t['task_idx']}")
-                if st.session_state.user_role == "admin":
-                    if st.button("Удалить файл", key=f"del_tfile_{sk}_{t['client_id']}_{t['task_idx']}"):
-                        task["file_path"] = None
-                        task["file_name"] = None
-                        commit_and_rerun(st.session_state.crm_store)
-            ntf = st.file_uploader("Добавить файл:", key=f"new_tfile_{sk}_{t['client_id']}_{t['task_idx']}")
-            if st.button("Сохранить файл", key=f"save_tfile_{sk}_{t['client_id']}_{t['task_idx']}"):
-                if ntf:
-                    fi = save_uploaded_file(ntf, t["client_id"], "task_file")
-                    if fi:
-                        task["file_path"] = fi["path"]
-                        task["file_name"] = fi["name"]
-                        commit_and_rerun(st.session_state.crm_store)
-            st.markdown("---")
+                ntt = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"nt_type_{sk}_{t['client_id']}_{t['task_idx']}")
+                ntm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"nt_mgr_{sk}_{t['client_id']}_{t['task_idx']}")
+                if ntt == "Отправить заказ":
+                    ne["products"] = st.text_area("Товары", key=f"nt_p_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ne["ship_addr"] = st.text_input("Адрес", key=f"nt_a_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ne["receiver"] = st.text_input("Получатель", key=f"nt_r_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ne["receiver_phone"] = format_phone(st.text_input("Тел. получателя", key=f"nt_rp_{sk}_{t['client_id']}_{t['task_idx']}"))
+                    ne["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"nt_sp_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ne["tk_num"] = st.text_input("Трек-номер", key=f"nt_tk_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ne["order_amount"] = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, key=f"nt_oa_{sk}_{t['client_id']}_{t['task_idx']}")
+                    ne["task_comment"] = st.text_area("Комментарии", key=f"nt_c_{sk}_{t['client_id']}_{t['task_idx']}")
+                else:
+                    ne["order_amount"] = 0
+                    ne["task_comment"] = st.text_area("Комментарии", key=f"nt_cs_{sk}_{t['client_id']}_{t['task_idx']}")
+                ntd = st.date_input("Дата новой задачи", format="DD/MM/YYYY", key=f"nt_d_{sk}_{t['client_id']}_{t['task_idx']}")
+            if st.button("Подтвердить выполнение", key=f"cbtn_{sk}_{t['client_id']}_{t['task_idx']}", use_container_width=True, type="primary"):
+                if rt.strip():
+                    with st.spinner("Сохранение..."):
+                        task["done"] = True
+                        task["completion_report"] = rt.strip()
+                        fi = save_uploaded_file(uf, t["client_id"], "task_report")
+                        if fi:
+                            task["completion_file_path"] = fi["path"]
+                            task["completion_file_name"] = fi["name"]
+                        rp = f"Закрыта задача [{tp}] '{task['text']}'. Отчёт: {rt.strip()}"
+                        if tp == "Отправить заказ":
+                            rp += f" | Кому: {task.get('receiver', '')} | Трек: {task.get('tk_num', 'нет')}"
+                        cl["comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": rp, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None})
+                        if cn and ntt:
+                            at = auto_task_title(ntt, t['client_name'], t['deal_title'])
+                            te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
+                            te.update(ne)
+                            cl.setdefault("tasks", []).append(te)
+                        commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
+                else:
+                    st.warning("Введите отчёт")
 
-            render_print_button(task, cl, tp, fd, f"task_{sk}_{t['client_id']}_{t['task_idx']}")
-
-            st.markdown("---")
-            cd2 = parse_deadline(task.get("deadline", ""))
-            st.markdown("**Изменить срок:**")
-            dl_c1, dl_c2 = st.columns([3, 1])
-            with dl_c1:
-                ndd = st.date_input("Дата", value=cd2, format="DD/MM/YYYY", key=f"dl_d_{sk}_{t['client_id']}_{t['task_idx']}")
-            with dl_c2:
-                st.write("")
-                if st.button("Обновить", key=f"dl_btn_{sk}_{t['client_id']}_{t['task_idx']}"):
-                    task["deadline"] = ndd.isoformat()
-                    commit_and_rerun(st.session_state.crm_store)
-            st.markdown("---")
-            with st.expander("Выполнить задачу", expanded=False):
-                rt = st.text_input("Отчёт:", key=f"rt_{sk}_{t['client_id']}_{t['task_idx']}")
-                uf = st.file_uploader("Файл/фото отчёта:", key=f"uf_{sk}_{t['client_id']}_{t['task_idx']}")
-                cn = st.checkbox("Создать следующую задачу", key=f"cn_{sk}_{t['client_id']}_{t['task_idx']}")
-                ne = {}
-                ntd = None
-                ntt = None
-                if cn:
-                    st.markdown("---")
-                    ntt = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"nt_type_{sk}_{t['client_id']}_{t['task_idx']}")
-                    ntm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"nt_mgr_{sk}_{t['client_id']}_{t['task_idx']}")
-                    if ntt == "Отправить заказ":
-                        ne["products"] = st.text_area("Товары", key=f"nt_p_{sk}_{t['client_id']}_{t['task_idx']}")
-                        ne["ship_addr"] = st.text_input("Адрес", key=f"nt_a_{sk}_{t['client_id']}_{t['task_idx']}")
-                        ne["receiver"] = st.text_input("Получатель", key=f"nt_r_{sk}_{t['client_id']}_{t['task_idx']}")
-                        ne["receiver_phone"] = format_phone(st.text_input("Тел. получателя", key=f"nt_rp_{sk}_{t['client_id']}_{t['task_idx']}"))
-                        ne["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"nt_sp_{sk}_{t['client_id']}_{t['task_idx']}")
-                        ne["tk_num"] = st.text_input("Трек-номер", key=f"nt_tk_{sk}_{t['client_id']}_{t['task_idx']}")
-                        ne["order_amount"] = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, key=f"nt_oa_{sk}_{t['client_id']}_{t['task_idx']}")
-                        ne["task_comment"] = st.text_area("Комментарии", key=f"nt_c_{sk}_{t['client_id']}_{t['task_idx']}")
-                    else:
-                        ne["order_amount"] = 0
-                        ne["task_comment"] = st.text_area("Комментарии", key=f"nt_cs_{sk}_{t['client_id']}_{t['task_idx']}")
-                    ntd = st.date_input("Дата новой задачи", format="DD/MM/YYYY", key=f"nt_d_{sk}_{t['client_id']}_{t['task_idx']}")
-                if st.button("Подтвердить выполнение", key=f"cbtn_{sk}_{t['client_id']}_{t['task_idx']}", use_container_width=True, type="primary"):
-                    if rt.strip():
-                        with st.spinner("Сохранение..."):
-                            task["done"] = True
-                            task["completion_report"] = rt.strip()
-                            fi = save_uploaded_file(uf, t["client_id"], "task_report")
-                            if fi:
-                                task["completion_file_path"] = fi["path"]
-                                task["completion_file_name"] = fi["name"]
-                            rp = f"Закрыта задача [{tp}] '{task['text']}'. Отчёт: {rt.strip()}"
-                            if tp == "Отправить заказ":
-                                rp += f" | Кому: {task.get('receiver', '')} | Трек: {task.get('tk_num', 'нет')}"
-                            cl["comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": rp, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None})
-                            if cn and ntt:
-                                at = auto_task_title(ntt, t['client_name'], t['deal_title'])
-                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
-                                te.update(ne)
-                                cl.setdefault("tasks", []).append(te)
-                            commit_and_rerun(st.session_state.crm_store)
-                    else:
-                        st.warning("Введите отчёт")
-
-            # --- Полное редактирование задачи ---
-            with st.expander("Редактировать задачу", expanded=False):
-                nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_{sk}_{t['client_id']}_{t['task_idx']}")
-                edl = st.date_input("Срок", value=parse_deadline(task.get("deadline", "")), format="DD/MM/YYYY", key=f"ed_dl_{sk}_{t['client_id']}_{t['task_idx']}")
+        with st.expander("Редактировать задачу", expanded=False):
+            nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_{sk}_{t['client_id']}_{t['task_idx']}")
+            edl = st.date_input("Срок", value=parse_deadline(task.get("deadline", "")), format="DD/MM/YYYY", key=f"ed_dl_{sk}_{t['client_id']}_{t['task_idx']}")
+            if tp == "Отправить заказ":
+                ep = st.text_area("Товары", value=task.get('products', ''), key=f"ed_p_{sk}_{t['client_id']}_{t['task_idx']}")
+                ea = st.text_input("Адрес", value=task.get('ship_addr', ''), key=f"ed_a_{sk}_{t['client_id']}_{t['task_idx']}")
+                er = st.text_input("Получатель", value=task.get('receiver', ''), key=f"ed_r_{sk}_{t['client_id']}_{t['task_idx']}")
+                erp = st.text_input("Тел. получателя", value=task.get('receiver_phone', ''), key=f"ed_rp_{sk}_{t['client_id']}_{t['task_idx']}")
+                esp = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], index=["Включено в счёт", "Оплата при получении"].index(task.get('ship_pay', 'Включено в счёт')) if task.get('ship_pay', 'Включено в счёт') in ["Включено в счёт", "Оплата при получении"] else 0, key=f"ed_sp_{sk}_{t['client_id']}_{t['task_idx']}")
+                etn = st.text_input("Трек-номер", value=task.get('tk_num', ''), key=f"ed_tn_{sk}_{t['client_id']}_{t['task_idx']}")
+                eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_{sk}_{t['client_id']}_{t['task_idx']}")
+            ec = st.text_area("Комментарии", value=task.get('task_comment', ''), key=f"ed_c_{sk}_{t['client_id']}_{t['task_idx']}")
+            if st.button("Сохранить", key=f"ed_btn_{sk}_{t['client_id']}_{t['task_idx']}", use_container_width=True, type="primary"):
+                task["manager"] = nm
+                task["deadline"] = edl.isoformat()
+                task["task_comment"] = ec
                 if tp == "Отправить заказ":
-                    ep = st.text_area("Товары", value=task.get('products', ''), key=f"ed_p_{sk}_{t['client_id']}_{t['task_idx']}")
-                    ea = st.text_input("Адрес", value=task.get('ship_addr', ''), key=f"ed_a_{sk}_{t['client_id']}_{t['task_idx']}")
-                    er = st.text_input("Получатель", value=task.get('receiver', ''), key=f"ed_r_{sk}_{t['client_id']}_{t['task_idx']}")
-                    erp = st.text_input("Тел. получателя", value=task.get('receiver_phone', ''), key=f"ed_rp_{sk}_{t['client_id']}_{t['task_idx']}")
-                    esp = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], index=["Включено в счёт", "Оплата при получении"].index(task.get('ship_pay', 'Включено в счёт')) if task.get('ship_pay', 'Включено в счёт') in ["Включено в счёт", "Оплата при получении"] else 0, key=f"ed_sp_{sk}_{t['client_id']}_{t['task_idx']}")
-                    etn = st.text_input("Трек-номер", value=task.get('tk_num', ''), key=f"ed_tn_{sk}_{t['client_id']}_{t['task_idx']}")
-                    eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_{sk}_{t['client_id']}_{t['task_idx']}")
-                ec = st.text_area("Комментарии", value=task.get('task_comment', ''), key=f"ed_c_{sk}_{t['client_id']}_{t['task_idx']}")
-                if st.button("Сохранить", key=f"ed_btn_{sk}_{t['client_id']}_{t['task_idx']}", use_container_width=True, type="primary"):
-                    task["manager"] = nm
-                    task["deadline"] = edl.isoformat()
-                    task["task_comment"] = ec
-                    if tp == "Отправить заказ":
-                        task["products"] = ep
-                        task["ship_addr"] = ea
-                        task["receiver"] = er
-                        task["receiver_phone"] = format_phone(erp)
-                        task["ship_pay"] = esp
-                        task["tk_num"] = etn
-                        task["order_amount"] = eoa
-                    commit_and_rerun(st.session_state.crm_store)
+                    task["products"] = ep
+                    task["ship_addr"] = ea
+                    task["receiver"] = er
+                    task["receiver_phone"] = format_phone(erp)
+                    task["ship_pay"] = esp
+                    task["tk_num"] = etn
+                    task["order_amount"] = eoa
+                commit_and_rerun(st.session_state.crm_store, "Задача сохранена")
 
-    # --- Одна колонка на всю ширину ---
-    with st.container(border=True):
-        st.subheader(f"На сегодня ({len(tt)})")
-        if tt:
-            for t in tt:
-                render_task_block(t, "today")
+    # --- Двухколоночный режим + раскрытие на всю ширину ---
+
+    expanded_key = st.session_state.get("expanded_task_key")
+
+    if expanded_key:
+        # Одна задача раскрыта на всю ширину
+        found = None
+        for t in tt + ft:
+            tk = f"{t['client_id']}_{t['task_idx']}"
+            if tk == expanded_key:
+                found = t
+                break
+        if found:
+            if st.button("← Назад к списку задач", use_container_width=True):
+                st.session_state.expanded_task_key = None
+                st.rerun()
+            st.markdown("---")
+            render_task_block_full(found, "expanded")
         else:
-            st.success("Все задачи на сегодня закрыты.")
-    st.markdown("---")
-    with st.container(border=True):
-        st.subheader(f"Предстоящие ({len(ft)})")
-        if ft:
-            for t in ft:
-                render_task_block(t, "future")
-        else:
-            st.caption("План на будущие дни пуст.")
+            st.session_state.expanded_task_key = None
+            st.rerun()
+    else:
+        # Две колонки со свёрнутыми задачами
+        task_l, task_r = st.columns(2)
+        with task_l:
+            with st.container(border=True):
+                st.subheader(f"На сегодня ({len(tt)})")
+                if tt:
+                    for t in tt:
+                        io_ = is_task_overdue(t["task_obj"])
+                        fd = format_date(t["deadline_str"])
+                        label = f"{'⚠️ ' if io_ else '📌 ' if t['sort_date'] == now_time.date() else ''}{fd} — {t['client_name']} — {t['type']}"
+                        tk = f"{t['client_id']}_{t['task_idx']}"
+                        if st.button(label, key=f"btn_task_today_{tk}", use_container_width=True):
+                            st.session_state.expanded_task_key = tk
+                            st.rerun()
+                else:
+                    st.success("Все задачи на сегодня закрыты.")
+        with task_r:
+            with st.container(border=True):
+                st.subheader(f"Предстоящие ({len(ft)})")
+                if ft:
+                    for t in ft:
+                        fd = format_date(t["deadline_str"])
+                        label = f"{fd} — {t['client_name']} — {t['type']}"
+                        tk = f"{t['client_id']}_{t['task_idx']}"
+                        if st.button(label, key=f"btn_task_future_{tk}", use_container_width=True):
+                            st.session_state.expanded_task_key = tk
+                            st.rerun()
+                else:
+                    st.caption("План на будущие дни пуст.")
 
 # --- Вкладка «Сделки» ---
 
@@ -913,7 +949,7 @@ elif st.session_state.active_tab == "Сделки":
                     for t in client.get("tasks", []):
                         if not t.get("done"):
                             t["manager"] = new_mgr
-                    commit_and_rerun(st.session_state.crm_store)
+                    commit_and_rerun(st.session_state.crm_store, "Ответственный изменён")
             st.markdown("---")
 
             if deal.get("deal_comments"):
@@ -928,6 +964,7 @@ elif st.session_state.active_tab == "Сделки":
                     deal["deal_comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ndc.strip()})
                     save_data(st.session_state.crm_store)
                     st.session_state.deal_note_ver[deal['id']] = note_ver + 1
+                    st.toast("Заметка сохранена", icon="✅")
                     st.rerun()
 
             st.markdown("---")
@@ -1010,7 +1047,7 @@ elif st.session_state.active_tab == "Сделки":
                                     if st.button("Удалить файл", key=f"dtk_del_{deal['id']}_{orig_i}"):
                                         task["file_path"] = None
                                         task["file_name"] = None
-                                        commit_and_rerun(st.session_state.crm_store)
+                                        commit_and_rerun(st.session_state.crm_store, "Файл удалён")
                             ntf = st.file_uploader("Добавить файл:", key=f"ntf_d_{deal['id']}_{orig_i}")
                             if st.button("Сохранить файл", key=f"stf_d_{deal['id']}_{orig_i}"):
                                 if ntf:
@@ -1018,7 +1055,9 @@ elif st.session_state.active_tab == "Сделки":
                                     if fi:
                                         task["file_path"] = fi["path"]
                                         task["file_name"] = fi["name"]
-                                        commit_and_rerun(st.session_state.crm_store)
+                                        commit_and_rerun(st.session_state.crm_store, "Файл сохранён")
+                                else:
+                                    st.warning("Выберите файл")
 
                             render_print_button(task, client, tp2, fdl, f"deal_{deal['id']}_{orig_i}")
 
@@ -1046,7 +1085,7 @@ elif st.session_state.active_tab == "Сделки":
                                         task["ship_pay"] = esp
                                         task["tk_num"] = etn
                                         task["order_amount"] = eoa
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Задача сохранена")
                             if not task.get("done"):
                                 if st.checkbox("Выполнить", key=f"tsk_{deal['id']}_{orig_i}"):
                                     with st.container(border=True):
@@ -1092,7 +1131,7 @@ elif st.session_state.active_tab == "Сделки":
                                                         ted = {"text": atd, "deadline": ntdd.isoformat(), "done": False, "type": nttd, "file_path": None, "file_name": None, "manager": ntmd, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
                                                         ted.update(ned)
                                                         client["tasks"].append(ted)
-                                                    commit_and_rerun(st.session_state.crm_store)
+                                                    commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
                                             else:
                                                 st.warning("Введите отчёт")
             else:
@@ -1137,11 +1176,11 @@ elif st.session_state.active_tab == "Сделки":
             if deal['status'] == "Новый":
                 if b1.button("В работу", key=f"wf_{deal['id']}", use_container_width=True):
                     deal['status'] = "В работе"
-                    commit_and_rerun(st.session_state.crm_store)
+                    commit_and_rerun(st.session_state.crm_store, "Сделка в работе")
             elif deal['status'] == "В работе":
                 if b1.button("Назад", key=f"wb_{deal['id']}", use_container_width=True):
                     deal['status'] = "Новый"
-                    commit_and_rerun(st.session_state.crm_store)
+                    commit_and_rerun(st.session_state.crm_store, "Статус изменён")
                 incomplete_count = sum(1 for t in client.get("tasks", []) if not t.get("done"))
                 if incomplete_count > 0:
                     b2.warning(f"Есть невыполненные задачи ({incomplete_count})")
@@ -1151,14 +1190,14 @@ elif st.session_state.active_tab == "Сделки":
             elif deal['status'] == "Сделка закрыта":
                 if b1.button("Возобновить", key=f"wr_{deal['id']}", use_container_width=True):
                     deal['status'] = "В работе"
-                    commit_and_rerun(st.session_state.crm_store)
+                    commit_and_rerun(st.session_state.crm_store, "Сделка возобновлена")
                 if b2.button("В архив", key=f"ar_{deal['id']}", use_container_width=True):
                     deal['status'] = "Архив"
-                    commit_and_rerun(st.session_state.crm_store)
+                    commit_and_rerun(st.session_state.crm_store, "Сделка в архиве")
             elif deal['status'] == "Архив":
                 if b1.button("Возобновить", key=f"ura_{deal['id']}", use_container_width=True):
                     deal['status'] = "В работе"
-                    commit_and_rerun(st.session_state.crm_store)
+                    commit_and_rerun(st.session_state.crm_store, "Сделка возобновлена")
 
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
@@ -1207,7 +1246,7 @@ elif st.session_state.active_tab == "Клиенты":
                 if nul and nup and nun:
                     if not any(u["login"] == nul.strip() for u in st.session_state.crm_store.get("users", [])):
                         st.session_state.crm_store.setdefault("users", []).append({"login": nul.strip(), "password": hash_password(nup), "role": nur, "name": nun.strip()})
-                        commit_and_rerun(st.session_state.crm_store)
+                        commit_and_rerun(st.session_state.crm_store, "Сотрудник создан")
                     else:
                         st.error("Логин уже занят")
                 else:
@@ -1223,7 +1262,7 @@ elif st.session_state.active_tab == "Клиенты":
                         cd = st.checkbox("Подтвердить", key=f"confirm_del_user_{u['login']}")
                         if cd and st.button("Удалить", key=f"del_user_{u['login']}", use_container_width=True):
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
-                            commit_and_rerun(st.session_state.crm_store)
+                            commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
 
     fv = st.session_state.client_form_version
     with st.expander("Добавить клиента", expanded=False, key=f"add_client_form_{fv}"):
@@ -1379,7 +1418,7 @@ elif st.session_state.active_tab == "Клиенты":
                         if st.button("Добавить", key=f"cc_btn_{cl['id']}", use_container_width=True):
                             if nci.strip():
                                 cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
-                                commit_and_rerun(st.session_state.crm_store)
+                                commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
                             else:
                                 st.warning("Введите текст")
                     st.markdown("---")
@@ -1392,7 +1431,7 @@ elif st.session_state.active_tab == "Клиенты":
                         if st.session_state.user_role == "admin":
                             if st.button("Удалить файл", key=f"cf_del_{cl['id']}_{cfi}"):
                                 cl["client_files"].pop(cfi)
-                                commit_and_rerun(st.session_state.crm_store)
+                                commit_and_rerun(st.session_state.crm_store, "Файл удалён")
                     ucf = st.file_uploader("Загрузить файл:", key=f"cf_up_{cl['id']}")
                     if st.button("Сохранить файл", key=f"cf_btn_{cl['id']}", use_container_width=True):
                         if ucf:
@@ -1415,7 +1454,7 @@ elif st.session_state.active_tab == "Клиенты":
                         em = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cl.get('manager', '')) if cl.get('manager', '') in mgrs else 0, key=f"em_{cl['id']}")
                         if st.button("Сохранить основные данные", key=f"es_{cl['id']}", use_container_width=True):
                             cl['name'], cl['phone'], cl['email'], cl['address'], cl['discount'], cl['category'], cl['manager'] = en, format_phone(ep), ee, ea, int(ed), ec, em
-                            commit_and_rerun(st.session_state.crm_store)
+                            commit_and_rerun(st.session_state.crm_store, "Данные клиента сохранены")
                         st.markdown("---")
                         with st.expander("Доп. телефоны (редактировать)", expanded=False):
                             for pi, ph in enumerate(cl.get("extra_phones", [])):
@@ -1424,25 +1463,29 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.text_input(f"Должность #{pi+1}", value=ph.get('role', ''), key=f"ep_r_{cl['id']}_{pi}")
                                 if st.button("Удалить", key=f"ep_del_{cl['id']}_{pi}"):
                                     cl["extra_phones"].pop(pi)
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Телефон удалён")
                             nph = st.text_input("Новый телефон", key=f"ep_new_ph_{cl['id']}")
                             npn = st.text_input("Новое ФИО", key=f"ep_new_nm_{cl['id']}")
                             npr = st.text_input("Новая должность", key=f"ep_new_rl_{cl['id']}")
                             if st.button("Добавить телефон", key=f"ep_add_btn_{cl['id']}"):
                                 if nph.strip():
                                     cl.setdefault("extra_phones", []).append({"phone": format_phone(nph), "name": npn, "role": npr})
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Телефон добавлен")
+                                else:
+                                    st.warning("Введите телефон")
                         with st.expander("Доп. Email (редактировать)", expanded=False):
                             for ei, em in enumerate(cl.get("extra_emails", [])):
                                 st.text_input(f"Email #{ei+1}", value=em, key=f"ee_e_{cl['id']}_{ei}")
                                 if st.button("Удалить", key=f"ee_del_{cl['id']}_{ei}"):
                                     cl["extra_emails"].pop(ei)
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Email удалён")
                             nem = st.text_input("Новый Email", key=f"ee_new_{cl['id']}")
                             if st.button("Добавить Email", key=f"ee_add_btn_{cl['id']}"):
                                 if nem.strip():
                                     cl.setdefault("extra_emails", []).append(nem.strip())
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Email добавлен")
+                                else:
+                                    st.warning("Введите Email")
                         with st.expander("Доп. адреса (редактировать)", expanded=False):
                             for ai, ad in enumerate(cl.get("extra_addresses", [])):
                                 st.text_input(f"Адрес #{ai+1}", value=ad.get('address', ''), key=f"ea_a_{cl['id']}_{ai}")
@@ -1452,7 +1495,7 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.text_input(f"Email #{ai+1}", value=ad.get('resp_email', ''), key=f"ea_re_{cl['id']}_{ai}")
                                 if st.button("Удалить адрес", key=f"ea_del_{cl['id']}_{ai}"):
                                     cl["extra_addresses"].pop(ai)
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Адрес удалён")
                             naa = st.text_input("Новый адрес", key=f"ea_new_addr_{cl['id']}")
                             nar = st.text_input("Ответственный", key=f"ea_new_rn_{cl['id']}")
                             nrr = st.text_input("Должность", key=f"ea_new_rr_{cl['id']}")
@@ -1461,7 +1504,9 @@ elif st.session_state.active_tab == "Клиенты":
                             if st.button("Добавить адрес", key=f"ea_add_btn_{cl['id']}"):
                                 if naa.strip():
                                     cl.setdefault("extra_addresses", []).append({"address": naa.strip(), "resp_name": nar.strip(), "resp_role": nrr.strip(), "resp_phone": nrp.strip(), "resp_email": nre.strip()})
-                                    commit_and_rerun(st.session_state.crm_store)
+                                    commit_and_rerun(st.session_state.crm_store, "Адрес добавлен")
+                                else:
+                                    st.warning("Введите адрес")
                         if st.session_state.user_role == "admin":
                             st.markdown("---")
                             st.warning(f"Удаление {cl['name']} сотрёт все данные и сделки.")
@@ -1470,7 +1515,7 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != cl["id"]]
                                 st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
                                 st.session_state.last_id = None
-                                commit_and_rerun(st.session_state.crm_store)
+                                commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
                 with cl_r:
                     deals = st.session_state.crm_store["deals"]
                     at = f"Заказ №{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
@@ -1483,6 +1528,7 @@ elif st.session_state.active_tab == "Клиенты":
                         save_data(st.session_state.crm_store)
                         st.session_state.open_deal_id = ndi
                         st.session_state.active_tab = "Сделки"
+                        st.toast("Сделка создана", icon="✅")
                         st.rerun()
             if st.session_state.get("last_id"):
                 st.session_state.last_id = None
