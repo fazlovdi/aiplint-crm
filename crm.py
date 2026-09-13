@@ -233,6 +233,23 @@ def auto_task_title(tt, cn, dt):
     if tt == "Отправить заказ": return f"Отправка по {dt}" if dt else f"Отправка: {cn}"
     return f"Связаться: {cn}"
 
+# --- Телефон с кнопками копирования и звонка ---
+
+def render_phone_inline(phone, uid):
+    cph = re.sub(r"\D", "", phone)
+    if cph.startswith("8") and len(cph) == 11:
+        cph = "7" + cph[1:]
+    elif not cph:
+        cph = "79990000000"
+    safe_uid = re.sub(r'[^a-zA-Z0-9_]', '_', str(uid))
+    components.html(f"""
+    <div style="display:flex;align-items:center;gap:6px;padding:2px 0;">
+        <span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='✓';setTimeout(function(){{b.textContent='📋';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;transition:all 0.15s;">📋</button>
+        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:2px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;">📞</a>
+    </div>
+    """, height=30)
+
 def render_file_action_buttons(fp, fn, kp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
         try:
@@ -1250,7 +1267,7 @@ elif st.session_state.active_tab == "Клиенты":
             with st.container(border=True):
                 st.markdown("**Комментарии:**")
                 ncc = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
-                if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
+                if st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True):
                     if ncc.strip():
                         st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
                         st.rerun()
@@ -1355,7 +1372,8 @@ elif st.session_state.active_tab == "Клиенты":
             with st.expander(f"{cl['name']} — ID: {cl['id']} [{cl.get('category', 'Покупатель')}]", expanded=itc, key=client_exp_key):
                 cl_l, cl_r = st.columns(2)
                 with cl_l:
-                    st.markdown(f"**{cl['phone']}** | {cl.get('email','')} | {cl.get('address','')}")
+                    render_phone_inline(cl['phone'], cl['id'])
+                    st.markdown(f"{cl.get('email','')} | {cl.get('address','')}")
                     st.markdown(f"Скидка: **{cl.get('discount',0)}%** | Ответственный: **{cl.get('manager','—')}**")
                     cph = re.sub(r"\D", "", cl['phone'])
                     if cph.startswith("8") and len(cph) == 11:
@@ -1386,7 +1404,7 @@ elif st.session_state.active_tab == "Клиенты":
                         else:
                             st.caption("Пока нет комментариев")
                         nci = st.text_input("Добавить комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите комментарий...")
-                        if st.button("Добавить", key=f"cc_btn_{cl['id']}", use_container_width=True):
+                        if st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True):
                             if nci.strip():
                                 cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
                                 commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
