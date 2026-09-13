@@ -302,8 +302,8 @@ def render_extra_phone_inline(phone, name, role, uid):
     components.html(f"""
     <div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;">
         <span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;" title="Скопировать">\U0001F4CB</button>
-        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;" title="Позвонить">\U0001F4DE</a>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\U0001F4CB</button>
+        <a href="tel:+{cph}" class="phone-btn" style="text-decoration:none;" title="Позвонить">\U0001F4DE</a>
     </div>
     """, height=44)
 
@@ -443,6 +443,8 @@ def migrate_data(data):
         if "remember_tokens" not in u:
             u["remember_tokens"] = []
     for c in data.get("clients", []):
+        client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
+        first_deal_id = client_deals[0]["id"] if client_deals else None
         for k, v in [("email",""),("address",""),("base_comment",""),("category","Покупатель"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[])]:
             if k not in c or c[k] == "-":
                 c[k] = v
@@ -461,11 +463,15 @@ def migrate_data(data):
                 t["completion_file_path"] = None
             if "completion_file_name" not in t:
                 t["completion_file_name"] = None
+            if "deal_id" not in t:
+                t["deal_id"] = first_deal_id
     for d in data.get("deals", []):
         if "deal_comments" not in d:
             d["deal_comments"] = []
         if d.get("status") == "New":
             d["status"] = "Новый"
+        if d.get("status") == "На согласовании":
+            d["status"] = "В работе"
     data["_migrated"] = "v2"
     return data
 
@@ -483,6 +489,8 @@ def load_data():
                 upload_db_to_yandex_async()
             else:
                 for c in data.get("clients", []):
+                    client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
+                    first_deal_id = client_deals[0]["id"] if client_deals else None
                     for t in c.get("tasks", []):
                         if "completion_report" not in t:
                             t["completion_report"] = ""
@@ -490,6 +498,11 @@ def load_data():
                             t["completion_file_path"] = None
                         if "completion_file_name" not in t:
                             t["completion_file_name"] = None
+                        if "deal_id" not in t:
+                            t["deal_id"] = first_deal_id
+                for d in data.get("deals", []):
+                    if d.get("status") == "На согласовании":
+                        d["status"] = "В работе"
             return data
         except Exception:
             return db
@@ -521,7 +534,7 @@ def close_deal_dialog(deal_id):
         st.error("Сделка не найдена")
         return
     client = get_client_by_id(deal["client_id"])
-    incomplete = [t for t in (client.get("tasks", []) if client else []) if not t.get("done")]
+    incomplete = [t for t in (client.get("tasks", []) if client else []) if not t.get("done") and t.get("deal_id") == deal_id]
     if incomplete:
         st.warning(f"Нельзя завершить сделку: {len(incomplete)} невыполненных задач(и).")
         st.markdown("**Невыполненные задачи:**")
@@ -802,11 +815,9 @@ if st.session_state.active_tab == "Задачи":
     mf = st.selectbox("Ответственный", ["Мои задачи", "Все"] + mgrs, index=0)
     di = {}
     for d in st.session_state.crm_store.get("deals", []):
-        di.setdefault(d["client_id"], d)
+        di[d["id"]] = d
     aat = []
     for cl in st.session_state.crm_store.get("clients", []):
-        cd = di.get(cl["id"])
-        mdt = cd["title"] if cd else ""
         for ti, tk in enumerate(cl.get("tasks", [])):
             if not tk.get("done", False):
                 tm = tk.get("manager", "")
@@ -816,6 +827,8 @@ if st.session_state.active_tab == "Задачи":
                 elif mf != "Все":
                     if tm != mf:
                         continue
+                task_deal = di.get(tk.get("deal_id"))
+                mdt = task_deal["title"] if task_deal else ""
                 aat.append({"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl})
     aat.sort(key=lambda x: x["sort_date"])
     tt = [t for t in aat if t["sort_date"] <= now_time.date()]
@@ -924,7 +937,7 @@ if st.session_state.active_tab == "Задачи":
                             cl["comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": rp, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None})
                             if cn and ntt:
                                 at = auto_task_title(ntt, t['client_name'], t['deal_title'])
-                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
+                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None, "deal_id": task.get("deal_id")}
                                 te.update(ne)
                                 cl.setdefault("tasks", []).append(te)
                             commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
@@ -977,8 +990,10 @@ if st.session_state.active_tab == "Задачи":
 elif st.session_state.active_tab == "Сделки":
     deals = st.session_state.crm_store.get("deals", [])
     clients = st.session_state.crm_store.get("clients", [])
-    statuses = ["Новый", "В работе", "Сделка закрыта"]
-    col_widths = [1, 1, 1]
+    cu = st.session_state.user_name
+    mgrs = get_managers_list()
+    statuses = ["Новый", "В работе", "Сделка закрыта", "Архив"]
+    col_widths = [1, 1, 1, 1]
     kanban_cols = st.columns(col_widths)
 
     for idx, status in enumerate(statuses):
@@ -989,7 +1004,18 @@ elif st.session_state.active_tab == "Сделки":
                 client = get_client_by_id(d["client_id"])
                 c_name = client["name"] if client else "Неизвестный клиент"
                 c_phone = client["phone"] if client else ""
-                with st.expander(f"{d.get('title', 'Без названия')}", expanded=(st.session_state.get("open_deal_id") == d["id"]), key=f"deal_exp_{d['id']}"):
+                deal_tasks = [t for t in (client.get("tasks", []) if client else []) if t.get("deal_id") == d["id"]]
+                deal_has_overdue = any(not t.get("done") and is_task_overdue(t) for t in deal_tasks)
+                deal_has_active = any(not t.get("done") for t in deal_tasks)
+                if deal_has_overdue:
+                    deal_border_color = "#D65757"
+                elif deal_has_active:
+                    deal_border_color = "#4CAF50"
+                else:
+                    deal_border_color = None
+                deal_exp_key = f"deal_exp_{d['id']}"
+                inject_border_css(deal_exp_key, deal_border_color)
+                with st.expander(f"{d.get('title', 'Без названия')}", expanded=(st.session_state.get("open_deal_id") == d["id"]), key=deal_exp_key):
                     st.markdown(f"**Клиент:** {c_name}")
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
@@ -997,11 +1023,10 @@ elif st.session_state.active_tab == "Сделки":
                     st.markdown(f"**Статус:** {d.get('status')}")
 
                     if client:
-                        all_client_tasks = client.get("tasks", [])
-                        all_client_tasks.sort(key=lambda t: (t.get("done", False), get_task_sort_date(t)))
-                        if all_client_tasks:
-                            st.markdown(f"**Задачи клиента ({len(all_client_tasks)}):**")
-                            for ti, t in enumerate(all_client_tasks):
+                        deal_tasks.sort(key=lambda t: (t.get("done", False), get_task_sort_date(t)))
+                        if deal_tasks:
+                            st.markdown(f"**Задачи сделки ({len(deal_tasks)}):**")
+                            for ti, t in enumerate(deal_tasks):
                                 dl = format_date(t.get("deadline", ""))
                                 t_done = t.get("done", False)
                                 t_overdue = is_task_overdue(t)
@@ -1048,6 +1073,31 @@ elif st.session_state.active_tab == "Сделки":
                         else:
                             st.caption("Нет задач")
 
+                    if client and d.get("status") != "Архив":
+                        with st.expander("Создать задачу", expanded=False, key=f"deal_new_task_{d['id']}"):
+                            ntt = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"ct_type_{d['id']}")
+                            ntm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"ct_mgr_{d['id']}")
+                            ntd = st.date_input("Срок:", format="DD/MM/YYYY", key=f"ct_d_{d['id']}")
+                            ne = {}
+                            if ntt == "Отправить заказ":
+                                ne["products"] = st.text_area("Товары", key=f"ct_p_{d['id']}")
+                                ne["ship_addr"] = st.text_input("Адрес", key=f"ct_a_{d['id']}")
+                                ne["receiver"] = st.text_input("Получатель", key=f"ct_r_{d['id']}")
+                                ne["receiver_phone"] = format_phone(st.text_input("Тел. получателя", key=f"ct_rp_{d['id']}"))
+                                ne["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"ct_sp_{d['id']}")
+                                ne["tk_num"] = st.text_input("Трек-номер", key=f"ct_tk_{d['id']}")
+                                ne["order_amount"] = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, key=f"ct_oa_{d['id']}")
+                                ne["task_comment"] = st.text_area("Комментарии", key=f"ct_c_{d['id']}")
+                            else:
+                                ne["order_amount"] = 0
+                                ne["task_comment"] = st.text_area("Комментарии", key=f"ct_cs_{d['id']}")
+                            if st.button("Создать задачу", key=f"ct_btn_{d['id']}", use_container_width=True, type="primary"):
+                                at = auto_task_title(ntt, c_name, d.get("title", ""))
+                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None, "deal_id": d["id"]}
+                                te.update(ne)
+                                client.setdefault("tasks", []).append(te)
+                                commit_and_rerun(st.session_state.crm_store, "Задача создана")
+
                     if d.get("deal_comments"):
                         st.markdown("**Комментарии:**")
                         for cm in d["deal_comments"]:
@@ -1061,16 +1111,24 @@ elif st.session_state.active_tab == "Сделки":
                             st.warning("Введите текст")
                     st.markdown("---")
 
-                    current_status_idx = statuses.index(d.get("status", "Новый")) if d.get("status", "Новый") in statuses else 0
-                    if current_status_idx < len(statuses) - 1:
-                        next_status = statuses[current_status_idx + 1]
-                        if next_status == "Сделка закрыта":
-                            if st.button("Закрыть сделку", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
-                                close_deal_dialog(d["id"])
-                        else:
-                            if st.button(f"Перевести в \u00ab{next_status}\u00bb", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
-                                d["status"] = next_status
-                                commit_and_rerun(st.session_state.crm_store, "Статус обновлён")
+                    current_status = d.get("status", "Новый")
+                    if current_status == "Новый":
+                        if st.button("Перевести в \u00abВ работе\u00bb", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
+                            d["status"] = "В работе"
+                            commit_and_rerun(st.session_state.crm_store, "Статус обновлён")
+                    elif current_status == "В работе":
+                        if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
+                            close_deal_dialog(d["id"])
+                    elif current_status == "Сделка закрыта":
+                        b1, b2 = st.columns(2)
+                        with b1:
+                            if st.button("Вернуть в работу", key=f"deal_reopen_{d['id']}", use_container_width=True):
+                                d["status"] = "В работе"
+                                commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в работу")
+                        with b2:
+                            if st.button("В архив", key=f"deal_archive_{d['id']}", use_container_width=True, type="primary"):
+                                d["status"] = "Архив"
+                                commit_and_rerun(st.session_state.crm_store, "Сделка в архиве")
 
                     if st.session_state.user_role == "admin":
                         st.markdown("---")
