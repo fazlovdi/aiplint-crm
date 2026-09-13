@@ -25,6 +25,7 @@ def yandex_headers():
 
 def init_yandex_folders():
     pass
+
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     try:
@@ -62,17 +63,20 @@ def upload_db_to_yandex():
             st.sidebar.error(f"🔴 Ошибка получения ссылки. Код: {res.status_code}")
     except Exception as e:
         st.sidebar.error(f"🔴 Исключение при синхронизации: {e}")
+
 def upload_file_to_yandex(local_path, remote_name):
     if not YANDEX_TOKEN or not os.path.exists(local_path): return
     try:
         safe_remote_name = urllib.parse.quote(remote_name)
         url = f"{YANDEX_API_URL}/upload"
+        # Путь строго скорректирован под вашу рабочую папку CRM_НЕ_ТРОГАТЬ
         remote_path = f"disk:/CRM_НЕ_ТРОГАТЬ/uploads/{safe_remote_name}"
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
+            # Используем ваш 100% рабочий метод отправки через форму files=
             with open(local_path, "rb") as f:
-                requests.put(upload_url, data=f)
+                requests.put(upload_url, files={"file": f})
     except Exception as e:
         st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name}: {e}")
 
@@ -104,6 +108,7 @@ def display_file_or_image(f_path, f_name, key_unique):
                     st.download_button(label=f"📎 Скачать {f_name}", data=f.read(), file_name=f_name, key=key_unique)
             except Exception: 
                 st.caption("📁 Файл на сервере.")
+
 def load_data():
     download_db_from_yandex()
     if os.path.exists(FILE_NAME):
