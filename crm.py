@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
 from datetime import datetime
 
@@ -56,34 +57,57 @@ if isinstance(raw_token, str):
 else:
     YANDEX_TOKEN = ""
 
-# --- Цветные рамки через CSS :has() ---
+# --- Цветные рамки через JavaScript ---
 
 def color_expander_border(color):
     """Красит рамку stExpander, внутри которого вызван."""
-    uid = f"exp_{uuid.uuid4().hex[:8]}"
-    st.markdown(f"""
-    <style>
-        div[data-testid="stExpander"]:has(#{uid}) {{
-            border: 2px solid {color} !important;
-            border-radius: 14px !important;
-        }}
-    </style>
-    <span id="{uid}" style="display:none"></span>
-    """, unsafe_allow_html=True)
+    components.html(f"""
+    <script>
+        (function() {{
+            function apply() {{
+                const iframe = window.frameElement;
+                if (!iframe) return;
+                let p = iframe.parentElement;
+                while (p) {{
+                    if (p.getAttribute('data-testid') === 'stExpander') {{
+                        p.style.borderColor = '{color}';
+                        p.style.borderWidth = '2px';
+                        p.style.borderRadius = '14px';
+                        return;
+                    }}
+                    p = p.parentElement;
+                }}
+            }}
+            apply();
+            setTimeout(apply, 50);
+        }})();
+    </script>
+    """, height=0)
 
 def color_container_border(color):
     """Красит рамку st.container(border=True), внутри которого вызван."""
-    uid = f"cnt_{uuid.uuid4().hex[:8]}"
-    st.markdown(f"""
-    <style>
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(#{uid}) {{
-            border-color: {color} !important;
-            border-width: 2px !important;
-            border-radius: 14px !important;
-        }}
-    </style>
-    <span id="{uid}" style="display:none"></span>
-    """, unsafe_allow_html=True)
+    components.html(f"""
+    <script>
+        (function() {{
+            function apply() {{
+                const iframe = window.frameElement;
+                if (!iframe) return;
+                let p = iframe.parentElement;
+                while (p) {{
+                    if (p.getAttribute('data-testid') === 'stVerticalBlockBorderWrapper') {{
+                        p.style.borderColor = '{color}';
+                        p.style.borderWidth = '2px';
+                        p.style.borderRadius = '14px';
+                        return;
+                    }}
+                    p = p.parentElement;
+                }}
+            }}
+            apply();
+            setTimeout(apply, 50);
+        }})();
+    </script>
+    """, height=0)
 
 # --- Пароли ---
 
