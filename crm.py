@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
 from datetime import datetime
 
@@ -260,6 +261,7 @@ def migrate_data(data):
     if "users" not in data: data["users"] = du
     for u in data["users"]:
         if not is_hashed(u.get("password", "")): u["password"] = hash_password(u["password"])
+        if "remember_tokens" not in u: u["remember_tokens"] = []
     for c in data.get("clients", []):
         for k, v in [("email",""),("address",""),("base_comment",""),("category","Покупатель"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[])]:
             if k not in c or c[k] == "-": c[k] = v
@@ -333,6 +335,8 @@ if "cloud_ok" not in st.session_state: st.session_state.cloud_ok = check_cloud_s
 if "open_deal_id" not in st.session_state: st.session_state.open_deal_id = None
 if "yandex_folders_ready" not in st.session_state:
     init_yandex_folders(); st.session_state.yandex_folders_ready = True
+if "current_remember_token" not in st.session_state: st.session_state.current_remember_token = None
+if "set_remember_token" not in st.session_state: st.session_state.set_remember_token = None
 
 # --- Авторизация ---
 
@@ -346,21 +350,106 @@ def check_login(username, password):
             return True
     return False
 
+def find_user_by_token(token):
+    for u in st.session_state.crm_store.get("users", []):
+        if token in u.get("remember_tokens", []):
+            return u
+    return None
+
+def clear_remember_token():
+    current = st.session_state.get("current_remember_token")
+    if current:
+        for u in st.session_state.crm_store.get("users", []):
+            if u["login"] == st.session_state.user_login:
+                if current in u.get("remember_tokens", []):
+                    u["remember_tokens"].remove(current)
+                break
+        save_data(st.session_state.crm_store)
+    components.html("<script>try{localStorage.removeItem('crm_remember_token');}catch(e){}</script>", height=0)
+    try: del st.query_params["remember_token"]
+    except: pass
+
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Авторизуйтесь для входа в систему</p>", unsafe_allow_html=True)
-    lc, mc, rc = st.columns([1, 2, 1])
-    with mc:
-        with st.container(border=True):
-            iu = st.text_input("Логин:", placeholder="Введите логин")
-            ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
-            st.markdown("---")
-            if st.button("Войти", use_container_width=True, type="primary"):
-                if check_login(iu, ip): st.toast("Успешный вход", icon="🔓"); st.rerun()
-                else: st.error("Неверный логин или пароль.")
-    st.stop()
+    try:
+        qp_token = st.query_params.get("remember_token", None)
+    except AttributeError:
+        qp_token = None
+
+    if qp_token:
+        user = find_user_by_token(qp_token)
+        if user:
+            st.session_state.authenticated = True
+            st.session_state.user_role = user["role"]
+            st.session_state.user_login = user["login"]
+            st.session_state.user_name = user.get("name", user["login"])
+            st.session_state.current_remember_token = qp_token
+            st.rerun()
+        else:
+            try: del st.query_params["remember_token"]
+            except: pass
+            components.html("<script>try{localStorage.removeItem('crm_remember_token');}catch(e){}</script>", height=0)
+
+    if not st.session_state.authenticated:
+        components.html("""
+        <script>
+        try {
+            var token = localStorage.getItem('crm_remember_token');
+            if (token) {
+                var url = new URL(window.parent.location.href);
+                if (!url.searchParams.has('remember_token')) {
+                    url.searchParams.set('remember_token', token);
+                    window.parent.location.href = url.toString();
+                }
+            }
+        } catch(e) {
+            try {
+                var token = localStorage.getItem('crm_remember_token');
+                if (token) {
+                    var url = new URL(window.top.location.href);
+                    if (!url.searchParams.has('remember_token')) {
+                        url.searchParams.set('remember_token', token);
+                        window.top.location.href = url.toString();
+                    }
+                }
+            } catch(e2) {}
+        }
+        </script>
+        """, height=0)
+
+    if not st.session_state.authenticated:
+        st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Авторизуйтесь для входа в систему</p>", unsafe_allow_html=True)
+        lc, mc, rc = st.columns([1, 2, 1])
+        with mc:
+            with st.container(border=True):
+                iu = st.text_input("Логин:", placeholder="Введите логин")
+                ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
+                rm = st.checkbox("Запомнить меня на этом устройстве", value=True, key="remember_me_chk")
+                st.markdown("---")
+                if st.button("Войти", use_container_width=True, type="primary"):
+                    if check_login(iu, ip):
+                        if rm:
+                            token = secrets.token_hex(32)
+                            for u in st.session_state.crm_store["users"]:
+                                if u["login"] == iu.strip():
+                                    u.setdefault("remember_tokens", []).append(token)
+                                    break
+                            save_data(st.session_state.crm_store)
+                            st.session_state.current_remember_token = token
+                            st.session_state.set_remember_token = token
+                            try: st.query_params["remember_token"] = token
+                            except: pass
+                        st.toast("Успешный вход", icon="🔓")
+                        st.rerun()
+                    else:
+                        st.error("Неверный логин или пароль.")
+        st.stop()
 
 st.title("Айплинт CRM")
+
+if st.session_state.get("set_remember_token"):
+    _tok = st.session_state.pop("set_remember_token")
+    components.html(f"<script>try{{localStorage.setItem('crm_remember_token','{_tok}');}}catch(e){{}}</script>", height=0)
 
 with st.sidebar:
     if st.session_state.cloud_ok: st.success("Облако активно")
@@ -382,7 +471,13 @@ with st.sidebar:
             st.download_button("Скачать CSV", data=export_clients_csv(), file_name="clients_export.csv", mime="text/csv", use_container_width=True)
     st.markdown("---")
     if st.button("Выйти", use_container_width=True):
-        st.session_state.authenticated = False; st.session_state.user_role = None; st.session_state.user_login = None; st.session_state.user_name = None; st.rerun()
+        clear_remember_token()
+        st.session_state.authenticated = False
+        st.session_state.user_role = None
+        st.session_state.user_login = None
+        st.session_state.user_name = None
+        st.session_state.current_remember_token = None
+        st.rerun()
 
 # --- Навигация (Клиенты → Задачи → Сделки, по умолчанию Задачи) ---
 
