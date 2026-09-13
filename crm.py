@@ -46,17 +46,18 @@ else:
 
 # --- Цветные рамки ---
 
+_border_css_parts = []
+
 def inject_border_css(key, color):
     """Инъекция CSS для окраски рамки ТОЛЬКО внешнего экспандера.
-    Используем > (direct child) чтобы не задевать вложенные экспандеры.
-    box-sizing: border-box чтобы рамка не меняла размеры布局."""
+    Целимся в .st-key-{key} > .stExpander > details — прямой потомок,
+    чтобы вложенные экспандеры не наследовали цвет рамки."""
     if color:
         st.markdown(f"""
         <style>
-            .st-key-{key} > details {{
+            .st-key-{key} > .stExpander > details {{
                 border: 2px solid {color} !important;
                 border-radius: 14px !important;
-                box-sizing: border-box !important;
             }}
         </style>
         """, unsafe_allow_html=True)
@@ -354,7 +355,8 @@ def check_login(username, password):
 if not st.session_state.authenticated:
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Авторизуйтесь для входа в систему</p>", unsafe_allow_html=True)
-    with st.columns([1, 2, 1])[1]:
+    lc, mc, rc = st.columns([1, 2, 1])
+    with mc:
         with st.container(border=True):
             iu = st.text_input("Логин:", placeholder="Введите логин")
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
@@ -390,12 +392,12 @@ with st.sidebar:
 
 # --- Навигация ---
 
-c1, c2, c3 = st.columns(3)
-with c1:
+nc1, nc2, nc3 = st.columns(3)
+with nc1:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"): st.session_state.active_tab = "Задачи"; st.rerun()
-with c2:
+with nc2:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"): st.session_state.active_tab = "Клиенты"; st.rerun()
-with c3:
+with nc3:
     if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"): st.session_state.active_tab = "Сделки"; st.rerun()
 st.markdown("---")
 
@@ -543,13 +545,14 @@ if st.session_state.active_tab == "Задачи":
                     if tp == "Отправить заказ": task["order_amount"] = eoa
                     commit_and_rerun(st.session_state.crm_store)
 
-    with st.columns(2)[0]:
+    task_l, task_r = st.columns(2)
+    with task_l:
         with st.container(border=True):
             st.subheader(f"На сегодня ({len(tt)})")
             if tt:
                 for t in tt: render_task_block(t, "today")
             else: st.success("Все задачи на сегодня закрыты.")
-    with st.columns(2)[1]:
+    with task_r:
         with st.container(border=True):
             st.subheader(f"Предстоящие ({len(ft)})")
             if ft:
@@ -565,10 +568,11 @@ elif st.session_state.active_tab == "Клиенты":
     if st.session_state.user_role == "admin":
         with st.expander("Управление сотрудниками", expanded=False):
             st.markdown("### Новый сотрудник")
-            with st.columns(2)[0]:
+            au_l, au_r = st.columns(2)
+            with au_l:
                 nul = st.text_input("Логин:", key="admin_new_u_log")
                 nup = st.text_input("Пароль:", key="admin_new_u_pass")
-            with st.columns(2)[1]:
+            with au_r:
                 nun = st.text_input("Имя / Должность:", key="admin_new_u_name")
                 nur = st.selectbox("Роль:", ["manager", "admin"], key="admin_new_u_role")
             if st.button("Создать", use_container_width=True, type="primary"):
@@ -580,8 +584,9 @@ elif st.session_state.active_tab == "Клиенты":
                 else: st.error("Заполните все поля")
             st.markdown("---"); st.markdown("### Сотрудники")
             for u in st.session_state.crm_store.get("users", []):
-                with st.columns(2)[0]: st.markdown(f"**{u.get('name', u['login'])}** — `{u['login']}` ({u['role']})")
-                with st.columns(2)[1]:
+                eu_l, eu_r = st.columns(2)
+                with eu_l: st.markdown(f"**{u.get('name', u['login'])}** — `{u['login']}` ({u['role']})")
+                with eu_r:
                     if u["login"] != st.session_state.user_login:
                         cd = st.checkbox("Подтвердить", key=f"confirm_del_user_{u['login']}")
                         if cd and st.button("Удалить", key=f"del_user_{u['login']}", use_container_width=True):
@@ -590,13 +595,14 @@ elif st.session_state.active_tab == "Клиенты":
 
     fv = st.session_state.client_form_version
     with st.expander("Добавить клиента", expanded=False, key=f"add_client_form_{fv}"):
-        with st.columns(2)[0]:
+        acl, acr = st.columns(2)
+        with acl:
             cn = st.text_input("ФИО / Компания", key=f"cn_{fv}")
             cp = st.text_input("Основной телефон", key=f"cp_{fv}")
             ce = st.text_input("Основной Email", key=f"ce_{fv}")
             cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, key=f"cd_{fv}")
             cm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"cm_{fv}")
-        with st.columns(2)[1]:
+        with acr:
             ca = st.text_input("Основной адрес", key=f"ca_{fv}")
             cc = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], key=f"cc_{fv}")
             st.markdown('<div class="comments-box">', unsafe_allow_html=True)
@@ -608,18 +614,19 @@ elif st.session_state.active_tab == "Клиенты":
                 for pc in st.session_state["pending_client_comments"]: st.markdown(f"- *{pc['time']}*: {pc['text']}")
             st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
-        with st.columns(3)[0]:
+        ac_ph, ac_em, ac_ad = st.columns(3)
+        with ac_ph:
             st.markdown("**Доп. телефоны**")
             for i, ph in enumerate(st.session_state.f_ph):
                 st.session_state.f_ph[i]["phone"] = st.text_input(f"Телефон #{i+1}", value=ph["phone"], key=f"f_ph_{fv}_{i}")
                 st.session_state.f_ph[i]["name"] = st.text_input(f"ФИО #{i+1}", value=ph["name"], key=f"f_nm_{fv}_{i}")
                 st.session_state.f_ph[i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{fv}_{i}")
             if st.button("Добавить телефон", key=f"add_ph_btn_{fv}"): st.session_state.f_ph.append({"phone":"","name":"","role":""}); st.rerun()
-        with st.columns(3)[1]:
+        with ac_em:
             st.markdown("**Доп. Email**")
             for i, em in enumerate(st.session_state.f_em): st.session_state.f_em[i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{fv}_{i}")
             if st.button("Добавить Email", key=f"add_em_btn_{fv}"): st.session_state.f_em.append(""); st.rerun()
-        with st.columns(3)[2]:
+        with ac_ad:
             st.markdown("**Доп. адреса**")
             for i, ad in enumerate(st.session_state.f_ad):
                 st.session_state.f_ad[i]["address"] = st.text_input(f"Адрес #{i+1}", value=ad.get("address", ""), key=f"f_ad_addr_{fv}_{i}")
@@ -686,7 +693,8 @@ elif st.session_state.active_tab == "Клиенты":
             inject_border_css(client_exp_key, cl_border_color)
 
             with st.expander(f"{cl['name']} — ID: {cl['id']} [{cl.get('category', 'Покупатель')}]", expanded=itc, key=client_exp_key):
-                with st.columns(2)[0]:
+                cl_l, cl_r = st.columns(2)
+                with cl_l:
                     st.markdown(f"**{cl['phone']}** | {cl.get('email','')} | {cl.get('address','')}")
                     st.markdown(f"Скидка: **{cl.get('discount',0)}%** | Ответственный: **{cl.get('manager','—')}**")
                     cph = re.sub(r"\D", "", cl['phone'])
@@ -783,7 +791,7 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != cl["id"]]
                                 st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
                                 st.session_state.last_id = None; commit_and_rerun(st.session_state.crm_store)
-                with st.columns(2)[1]:
+                with cl_r:
                     deals = st.session_state.crm_store["deals"]
                     at = f"Заказ №{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
                     st.markdown(f"**Новая сделка:**"); st.info(f"Будет создан: **{at}**")
