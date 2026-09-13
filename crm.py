@@ -46,19 +46,20 @@ else:
 
 # --- Цветные рамки ---
 
-def color_expander_border(color):
-    uid = f"exp_{uuid.uuid4().hex[:8]}"
-    st.markdown(f"""
-    <style>
-        div[data-testid="stExpander"]:has(#{uid}) {{
-            border-color: {color} !important;
-            border-width: 2px !important;
-            border-style: solid !important;
-            border-radius: 14px !important;
-        }}
-    </style>
-    <span id="{uid}" style="display:none;"></span>
-    """, unsafe_allow_html=True)
+def inject_border_css(key, color):
+    """Инъекция CSS для окраски рамки экспандера через класс .st-key-<key>.
+    Вызывать ДО создания st.expander(..., key=key)."""
+    if color:
+        st.markdown(f"""
+        <style>
+            .st-key-{key} {{
+                border-color: {color} !important;
+                border-width: 2px !important;
+                border-style: solid !important;
+                border-radius: 14px !important;
+            }}
+        </style>
+        """, unsafe_allow_html=True)
 
 # --- Пароли ---
 
@@ -445,8 +446,11 @@ if st.session_state.active_tab == "Задачи":
         sl = "Просрочено" if io_ else ("Сегодня" if t["sort_date"] == now_time.date() else "Срок")
         fd = format_date(t["deadline_str"])
         ht = f"{fd} — {t['client_name']} — {t['type']}"
-        with st.expander(ht, expanded=False):
-            if io_: color_expander_border("#D65757")
+
+        exp_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
+        inject_border_css(exp_key, "#D65757" if io_ else None)
+
+        with st.expander(ht, expanded=False, key=exp_key):
             st.markdown(f"**{sl}** — {fd} | {tp}")
             st.markdown(f"👤 **{t['client_name']}** ({t['client_phone']})")
             if tp == "Отправить заказ":
@@ -813,10 +817,11 @@ elif st.session_state.active_tab == "Сделки":
             elif has_tasks:
                 border_color = "#4CAF50"
 
+        deal_exp_key = f"dc_{deal['id']}"
+        inject_border_css(deal_exp_key, border_color)
+
         ct2 = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
-        with st.expander(ct2, expanded=is_open):
-            if border_color:
-                color_expander_border(border_color)
+        with st.expander(ct2, expanded=is_open, key=deal_exp_key):
             st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
             st.markdown("---")
             if deal.get("deal_comments"):
@@ -842,8 +847,11 @@ elif st.session_state.active_tab == "Сделки":
                     to2 = is_task_overdue(task)
                     fdl = format_date(task.get("deadline", ""))
                     ht2 = f"✅ {tp2} — {fdl}" if task.get("done") else f"{tp2} — {fdl} — {task.get('manager','—')}"
-                    with st.expander(ht2, expanded=False):
-                        if to2: color_expander_border("#D65757")
+
+                    task_exp_key = f"dt_{deal['id']}_{i}"
+                    inject_border_css(task_exp_key, "#D65757" if to2 else None)
+
+                    with st.expander(ht2, expanded=False, key=task_exp_key):
                         if task.get("done"): st.markdown(f"~~{task['text']}~~ — выполнено")
                         else:
                             st.markdown(f"**{tp2}** | Срок: {fdl} | Ответственный: {task.get('manager','—')}")
@@ -912,8 +920,11 @@ elif st.session_state.active_tab == "Сделки":
                                             else: st.warning("Введите отчёт")
             else: st.caption("Нет задач.")
             dfv = f"{st.session_state.deal_form_version}_{deal['id']}"
-            with st.expander("Новая задача", expanded=False, key=f"new_task_exp_{dfv}"):
-                color_expander_border("#4CAF50")
+
+            new_task_key = f"nt_{dfv}"
+            inject_border_css(new_task_key, "#4CAF50")
+
+            with st.expander("Новая задача", expanded=False, key=new_task_key):
                 tt = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"t_type_sel_{dfv}")
                 ntm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"t_mgr_{dfv}")
                 ex = {}
