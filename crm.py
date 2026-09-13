@@ -16,9 +16,9 @@ st.markdown("""
     h1, h2, h3, h4 { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; font-weight: 700; color: #2C3E50 !important; letter-spacing: -0.02em; }
     h1 { font-size: 1.75rem; margin-bottom: 0.5rem; } h2 { font-size: 1.4rem; margin-top: 1rem; } h3 { font-size: 1.1rem; }
     hr { border: 0; height: 1px; background: #E8EBEF; margin: 1rem 0; }
-    button[kind="primary"], .stButton > button[kind="primary"] { background-color: #4F6D9C; color: #FFFFFF; border-radius: 10px; font-weight: 600; font-size: 0.95rem; padding: 0.55rem 1.1rem; border: none; box-shadow: 0 2px 6px rgba(79,109,156,0.2); transition: all 0.15s ease; }
-    button[kind="primary"]:hover { background-color: #3F5A82; box-shadow: 0 3px 10px rgba(79,109,156,0.25); }
-    button[kind="secondary"], .stButton > button[kind="secondary"] { background-color: transparent; color: #4F6D9C; border: 1px solid #C9CFD7; border-radius: 10px; font-weight: 500; font-size: 0.95rem; padding: 0.55rem 1.1rem; transition: all 0.15s ease; }
+    button[kind="primary"], .stButton > button[kind="primary"] { background-color: #bc1661; color: #FFFFFF; border-radius: 10px; font-weight: 600; font-size: 0.95rem; padding: 0.55rem 1.1rem; border: none; box-shadow: 0 2px 6px rgba(188,22,97,0.2); transition: all 0.15s ease; }
+    button[kind="primary"]:hover { background-color: #9a1452; box-shadow: 0 3px 10px rgba(188,22,97,0.25); }
+    button[kind="secondary"], .stButton > button[kind="secondary"] { background-color: transparent; color: #bc1661; border: 1px solid #C9CFD7; border-radius: 10px; font-weight: 500; font-size: 0.95rem; padding: 0.55rem 1.1rem; transition: all 0.15s ease; }
     .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; }
     .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
     .stTextInput > div > input:focus, .stTextArea > div > textarea:focus, .stNumberInput > div > div > input:focus, .stSelectbox > div > div:focus-within { outline: none; border-color: #DCE0E5 !important; box-shadow: none !important; }
@@ -251,7 +251,7 @@ def render_file_action_buttons(fp, fn, kp):
             mt = f"image/{ext[1:]}"
             img_html = f"<html><body style='margin:0;text-align:center;'><img src='data:{mt};base64,{b64}' style='max-width:100%;' onload='window.print();'/></body></html>"
             pu = f"data:text/html;charset=utf-8,{urllib.parse.quote(img_html)}"
-            st.markdown(f"<a href='{pu}' target='_blank'><button style='width:100%;padding:8px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;'>Распечатать</button></a>", unsafe_allow_html=True)
+            st.markdown(f"<a href='{pu}' target='_blank'><button style='width:100%;padding:8px;background:#bc1661;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;'>Распечатать</button></a>", unsafe_allow_html=True)
     elif ext == ".pdf":
         st.download_button("Открыть / Скачать PDF", data=fb, file_name=fn, mime="application/pdf", key=f"dl_{kp}")
     else:
@@ -259,7 +259,7 @@ def render_file_action_buttons(fp, fn, kp):
 
 # --- Печать задачи через window.open + document.write ---
 
-def build_print_html(task, cl, tp, fd):
+def build_print_html(task, cl, tp, fd, file_img_html=""):
     def esc(s):
         return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -277,7 +277,7 @@ def build_print_html(task, cl, tp, fd):
         ).replace(",", " ")
 
     file_reminder = ""
-    if task.get("file_path"):
+    if task.get("file_path") and not file_img_html:
         file_reminder = (
             "<div style='color:#D65757;font-weight:bold;margin:14px 0;"
             "border:2px solid #D65757;padding:8px;border-radius:8px;'>"
@@ -303,6 +303,9 @@ body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }}
 hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }}
 .sig {{ margin-top: 30px; }}
 .sig p {{ margin: 12px 0; }}
+.file-section {{ margin-top: 20px; }}
+.file-section h3 {{ margin-bottom: 10px; }}
+.file-section img {{ max-width: 100%; border: 1px solid #ccc; margin: 8px 0; }}
 @media print {{ body {{ margin: 15px; }} }}
 </style>
 </head>
@@ -320,6 +323,7 @@ hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }}
 <div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div>
 <div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>
 {cost_html}
+{file_img_html}
 {file_reminder}
 <div class="sig">
 <p>Отпустил: _____________</p>
@@ -330,16 +334,47 @@ hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }}
     return html
 
 def render_print_button(task, cl, tp, fd, key_suffix):
-    html_content = build_print_html(task, cl, tp, fd)
-    encoded = urllib.parse.quote(html_content, safe='')
-    btn_id = f"print_btn_{key_suffix}"
-    js_func = f"doPrint_{key_suffix.replace('-', '_')}"
+    # Получаем вложенный файл, если есть
+    file_img_html = ""
+    if task.get("file_path"):
+        fp = task["file_path"]
+        fn = task.get("file_name", "")
+        if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
+            try:
+                with open(fp, "rb") as f: fb = f.read()
+            except: fb = None
+        else:
+            rp = normalize_remote_path(fp)
+            fb = download_file_from_yandex(rp) if rp else None
+
+        if fb:
+            ext = os.path.splitext(fn)[1].lower()
+            if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+                b64 = base64.b64encode(fb).decode()
+                mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+                file_img_html = (
+                    f"<div class='file-section'><hr><h3>Вложенный файл: {fn}</h3>"
+                    f"<img src='data:{mt};base64,{b64}' "
+                    f"style='max-width:100%;border:1px solid #ccc;margin:8px 0;'/></div>"
+                )
+            # Для PDF и других — file_reminder в build_print_html сработает автоматически
+
+    html_content = build_print_html(task, cl, tp, fd, file_img_html)
+
+    # Безопасно встраиваем HTML в JavaScript через json.dumps
+    html_json = json.dumps(html_content).replace('<', '\\u003c')
+
+    safe_key = key_suffix.replace('-', '_').replace('.', '_')
+    btn_id = f"print_btn_{safe_key}"
+    js_func = f"doPrint_{safe_key}"
+    var_name = f"_pd_{safe_key}"
+
     components.html(f"""
     <style>
     #{btn_id} {{
         width: 100%;
         padding: 10px;
-        background: #4F6D9C;
+        background: #bc1661;
         color: white;
         border: none;
         border-radius: 10px;
@@ -349,28 +384,23 @@ def render_print_button(task, cl, tp, fd, key_suffix):
         font-family: inherit;
         transition: background 0.15s;
     }}
-    #{btn_id}:hover {{ background: #3F5A82; }}
+    #{btn_id}:hover {{ background: #9a1452; }}
     </style>
     <button id="{btn_id}" onclick="{js_func}()">Распечатать задачу</button>
     <script>
+    var {var_name} = {html_json};
     function {js_func}() {{
-        var encoded = "{encoded}";
-        var html = decodeURIComponent(encoded);
+        var html = {var_name};
         var w = window.open('', '_blank');
         if (!w) {{
-            alert('Разрешите всплывающие окна для печати (Ctrl+клик по кнопке или добавьте сайт в исключения блокировщика)');
+            alert('Разрешите всплывающие окна для печати');
             return;
         }}
         w.document.open();
         w.document.write(html);
         w.document.close();
         w.focus();
-        w.onload = function() {{
-            setTimeout(function() {{
-                w.print();
-            }}, 200);
-        }};
-        // fallback если onload не сработал
+        // Жёлтая задержка чтобы картинки успели отрисоваться
         setTimeout(function() {{
             try {{ w.print(); }} catch(e) {{}}
         }}, 500);
@@ -735,7 +765,7 @@ if st.session_state.active_tab == "Задачи":
                         commit_and_rerun(st.session_state.crm_store)
             st.markdown("---")
 
-            # --- Печать задачи ---
+            # --- Печать задачи (с вложенным файлом) ---
             render_print_button(task, cl, tp, fd, f"task_{sk}_{t['client_id']}_{t['task_idx']}")
 
             st.markdown("---")
@@ -941,7 +971,7 @@ elif st.session_state.active_tab == "Сделки":
                                         task["file_name"] = fi["name"]
                                         commit_and_rerun(st.session_state.crm_store)
 
-                            # Печать задачи внутри сделки
+                            # Печать задачи внутри сделки (с вложенным файлом)
                             render_print_button(task, client, tp2, fdl, f"deal_{deal['id']}_{orig_i}")
 
                             with st.expander("Редактировать", expanded=False):
