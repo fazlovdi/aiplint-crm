@@ -90,6 +90,27 @@ def verify_password(pwd, stored):
         return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
     return pwd.strip() == stored
 
+def create_remember_token(username):
+    random_part = secrets.token_hex(32)
+    raw = f"{username}:{random_part}"
+    return base64.b64encode(raw.encode()).decode()
+
+def decode_remember_token(token):
+    try:
+        raw = base64.b64decode(token.encode()).decode()
+        parts = raw.split(":", 1)
+        if len(parts) == 2:
+            return parts[0]
+    except Exception:
+        pass
+    return None
+
+def find_user_by_login(login):
+    for u in st.session_state.crm_store.get("users", []):
+        if u["login"] == login:
+            return u
+    return None
+
 def yandex_headers():
     return {"Authorization": f"OAuth {YANDEX_TOKEN}", "Accept": "application/json"}
 
@@ -440,8 +461,6 @@ def migrate_data(data):
     for u in data["users"]:
         if not is_hashed(u.get("password", "")):
             u["password"] = hash_password(u["password"])
-        if "remember_tokens" not in u:
-            u["remember_tokens"] = []
     for c in data.get("clients", []):
         client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
         first_deal_id = client_deals[0]["id"] if client_deals else None
@@ -636,21 +655,7 @@ def check_login(username, password):
             return True
     return False
 
-def find_user_by_token(token):
-    for u in st.session_state.crm_store.get("users", []):
-        if token in u.get("remember_tokens", []):
-            return u
-    return None
-
 def clear_remember_token():
-    current = st.session_state.get("current_remember_token")
-    if current:
-        for u in st.session_state.crm_store.get("users", []):
-            if u["login"] == st.session_state.user_login:
-                if current in u.get("remember_tokens", []):
-                    u["remember_tokens"].remove(current)
-                break
-        save_data(st.session_state.crm_store)
     components.html("<script>try{localStorage.removeItem('crm_remember_token');}catch(e){}</script>", height=0)
     try:
         del st.query_params["remember_token"]
@@ -663,15 +668,17 @@ if not st.session_state.authenticated:
     except AttributeError:
         qp_token = None
     if qp_token:
-        user = find_user_by_token(qp_token)
-        if user:
-            st.session_state.authenticated = True
-            st.session_state.user_role = user["role"]
-            st.session_state.user_login = user["login"]
-            st.session_state.user_name = user.get("name", user["login"])
-            st.session_state.current_remember_token = qp_token
-            st.rerun()
-        else:
+        login_from_token = decode_remember_token(qp_token)
+        if login_from_token:
+            user = find_user_by_login(login_from_token)
+            if user:
+                st.session_state.authenticated = True
+                st.session_state.user_role = user["role"]
+                st.session_state.user_login = user["login"]
+                st.session_state.user_name = user.get("name", user["login"])
+                st.session_state.current_remember_token = qp_token
+                st.rerun()
+        if not st.session_state.authenticated:
             try:
                 del st.query_params["remember_token"]
             except Exception:
@@ -716,12 +723,7 @@ if not st.session_state.authenticated:
                 if st.button("Войти", use_container_width=True, type="primary"):
                     if check_login(iu, ip):
                         if rm:
-                            token = secrets.token_hex(32)
-                            for u in st.session_state.crm_store["users"]:
-                                if u["login"] == iu.strip():
-                                    u.setdefault("remember_tokens", []).append(token)
-                                    break
-                            save_data(st.session_state.crm_store)
+                            token = create_remember_token(iu.strip())
                             st.session_state.current_remember_token = token
                             st.session_state.set_remember_token = token
                             try:
