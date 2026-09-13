@@ -300,12 +300,12 @@ def render_extra_phone_inline(phone, name, role, uid):
         cph = "79990000000"
     info = f"{phone} \u2014 {name} ({role})" if name else phone
     components.html(f"""
-    <div class="phone-action-group" style="padding:2px 0;flex-wrap:wrap;">
-        <span style="font-size:0.9rem;color:#3C4A5A;">{info}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Скопировать">\U0001F4CB</button>
-        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Позвонить">\U0001F4DE</a>
+    <div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;">
+        <span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;" title="Скопировать">\U0001F4CB</button>
+        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;" title="Позвонить">\U0001F4DE</a>
     </div>
-    """, height=32)
+    """, height=44)
 
 def render_file_action_buttons(fp, fn, kp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
@@ -977,8 +977,8 @@ if st.session_state.active_tab == "Задачи":
 elif st.session_state.active_tab == "Сделки":
     deals = st.session_state.crm_store.get("deals", [])
     clients = st.session_state.crm_store.get("clients", [])
-    statuses = ["Новый", "В работе", "На согласовании", "Сделка закрыта"]
-    col_widths = [1, 1, 1, 1]
+    statuses = ["Новый", "В работе", "Сделка закрыта"]
+    col_widths = [1, 1, 1]
     kanban_cols = st.columns(col_widths)
 
     for idx, status in enumerate(statuses):
@@ -989,7 +989,7 @@ elif st.session_state.active_tab == "Сделки":
                 client = get_client_by_id(d["client_id"])
                 c_name = client["name"] if client else "Неизвестный клиент"
                 c_phone = client["phone"] if client else ""
-                with st.expander(f"{d.get('title', 'Без названия')}", expanded=False, key=f"deal_exp_{d['id']}"):
+                with st.expander(f"{d.get('title', 'Без названия')}", expanded=(st.session_state.get("open_deal_id") == d["id"]), key=f"deal_exp_{d['id']}"):
                     st.markdown(f"**Клиент:** {c_name}")
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
@@ -1000,7 +1000,7 @@ elif st.session_state.active_tab == "Сделки":
                         for cm in d["deal_comments"]:
                             st.markdown(f"- *{cm.get('time', '')}*: {cm.get('text', '')}")
                     nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
-                    if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
+                    if st.button("Добавить комментарий", key=f"dc_btn_{d['id']}", use_container_width=True):
                         if nc.strip():
                             d.setdefault("deal_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
                             commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
@@ -1300,22 +1300,45 @@ elif st.session_state.active_tab == "Клиенты":
                         st.toast("Сделка создана", icon="\u2705")
                         st.rerun()
                     st.markdown("---")
-                    st.markdown("**Задачи клиента:**")
-                    client_tasks = cl.get("tasks", [])
-                    client_tasks.sort(key=lambda t: (t.get("done", False), get_task_sort_date(t)))
+                    st.markdown("**Активные задачи:**")
+                    client_tasks = [t for t in cl.get("tasks", []) if not t.get("done", False)]
+                    client_tasks.sort(key=lambda t: get_task_sort_date(t))
                     if client_tasks:
-                        for t in client_tasks:
+                        for ti, t in enumerate(client_tasks):
                             deadline = format_date(t.get("deadline", ""))
-                            status_icon = "\u2705" if t.get("done") else ("\u26A0\uFE0F" if is_task_overdue(t) else "\u23F3")
-                            st.markdown(f"{status_icon} **{t.get('type', 'Связаться')}** \u2014 {t.get('text', '')} | Срок: {deadline}")
+                            status_icon = "\u26A0\uFE0F" if is_task_overdue(t) else "\u23F3"
+                            with st.expander(f"{status_icon} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {deadline}", expanded=False, key=f"cli_task_{cl['id']}_{ti}"):
+                                st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
+                                st.markdown(f"**Срок:** {deadline}")
+                                st.markdown(f"**Ответственный:** {t.get('manager', '\u2014')}")
+                                if t.get('products'):
+                                    st.markdown(f"**Товары:** {t['products']}")
+                                if t.get('ship_addr'):
+                                    st.markdown(f"**Адрес:** {t['ship_addr']}")
+                                if t.get('receiver'):
+                                    st.markdown(f"**Получатель:** {t['receiver']} ({t.get('receiver_phone', '')})")
+                                if t.get('ship_pay'):
+                                    st.markdown(f"**Оплата:** {t['ship_pay']}")
+                                if t.get('tk_num'):
+                                    st.markdown(f"**Трек:** `{t['tk_num']}`")
+                                if t.get('order_amount', 0) > 0:
+                                    st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
+                                if t.get('task_comment'):
+                                    st.markdown(f"**Комментарии:** {t['task_comment']}")
+                                if t.get("file_path"):
+                                    st.markdown(f"**Файл:** {t.get('file_name', '')}")
+                                    render_file_action_buttons(t["file_path"], t.get("file_name", ""), f"cli_task_file_{cl['id']}_{ti}")
                     else:
-                        st.caption("Нет задач")
+                        st.caption("Нет активных задач")
                     st.markdown("---")
                     st.markdown("**Сделки клиента:**")
                     cl_deals = [d for d in deals if d["client_id"] == cl["id"]]
                     if cl_deals:
                         for d in cl_deals:
-                            st.markdown(f"- **{d['title']}** ({d['status']}) \u2014 {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                            if st.button(f"{d['title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} руб.".replace(",", " "), key=f"cli_deal_btn_{cl['id']}_{d['id']}", use_container_width=True):
+                                st.session_state.active_tab = "Сделки"
+                                st.session_state.open_deal_id = d["id"]
+                                st.rerun()
                     else:
                         st.caption("Нет сделок")
             if st.session_state.get("last_id"):
