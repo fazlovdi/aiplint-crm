@@ -1048,9 +1048,8 @@ elif st.session_state.active_tab == "Сделки":
                     st.markdown(f"**Клиент:** {c_name}")
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
-                    if deal_name:
-                        st.markdown(f"**Название:** {deal_name}")
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                    st.markdown("---")
 
                     if client:
                         deal_tasks.sort(key=lambda t: (t.get("done", False), get_task_sort_date(t)))
@@ -1224,6 +1223,7 @@ elif st.session_state.active_tab == "Сделки":
                     if st.button("Добавить комментарий", key=f"dc_btn_{d['id']}", use_container_width=True):
                         if nc.strip():
                             d.setdefault("deal_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
+                            st.session_state[f"dc_input_{d['id']}"] = ""
                             commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
                         else:
                             st.warning("Введите текст")
@@ -1320,6 +1320,7 @@ elif st.session_state.active_tab == "Клиенты":
                 if st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True):
                     if ncc.strip():
                         st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
+                        st.session_state[f"new_cc_form_{fv}"] = ""
                         st.toast("Комментарий добавлен", icon="\u2705")
                         st.rerun()
                     else:
@@ -1460,6 +1461,7 @@ elif st.session_state.active_tab == "Клиенты":
                         if st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True):
                             if nci.strip():
                                 cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
+                                st.session_state[f"new_cc_input_{cl['id']}"] = ""
                                 commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
                             else:
                                 st.warning("Введите текст")
