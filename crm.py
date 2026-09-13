@@ -997,15 +997,56 @@ elif st.session_state.active_tab == "Сделки":
                     st.markdown(f"**Статус:** {d.get('status')}")
 
                     if client:
-                        incomplete_tasks = [t for t in client.get("tasks", []) if not t.get("done", False)]
-                        if incomplete_tasks:
-                            st.markdown(f"**Активные задачи ({len(incomplete_tasks)}):**")
-                            for t in incomplete_tasks:
+                        all_client_tasks = client.get("tasks", [])
+                        all_client_tasks.sort(key=lambda t: (t.get("done", False), get_task_sort_date(t)))
+                        if all_client_tasks:
+                            st.markdown(f"**Задачи клиента ({len(all_client_tasks)}):**")
+                            for ti, t in enumerate(all_client_tasks):
                                 dl = format_date(t.get("deadline", ""))
-                                si = "\u26A0\uFE0F" if is_task_overdue(t) else "\u23F3"
-                                st.markdown(f"{si} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}")
+                                t_done = t.get("done", False)
+                                t_overdue = is_task_overdue(t)
+                                if t_done:
+                                    status_icon = "\u2705"
+                                    border_color = "#C9CFD7"
+                                elif t_overdue:
+                                    status_icon = "\u26A0\uFE0F"
+                                    border_color = "#D65757"
+                                else:
+                                    status_icon = "\u23F3"
+                                    border_color = "#4CAF50"
+                                task_exp_key = f"deal_task_{d['id']}_{ti}"
+                                inject_border_css(task_exp_key, border_color)
+                                with st.expander(f"{status_icon} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}", expanded=False, key=task_exp_key):
+                                    st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
+                                    st.markdown(f"**Срок:** {dl}")
+                                    st.markdown(f"**Ответственный:** {t.get('manager', '\u2014')}")
+                                    if t_done:
+                                        st.markdown(f"**Статус:** \u2705 Выполнено")
+                                        if t.get("completion_report"):
+                                            st.markdown(f"**Отчёт:** {t['completion_report']}")
+                                    elif t_overdue:
+                                        st.markdown(f"**Статус:** \u26A0\uFE0F Просрочено")
+                                    else:
+                                        st.markdown(f"**Статус:** \u23F3 В работе")
+                                    if t.get('products'):
+                                        st.markdown(f"**Товары:** {t['products']}")
+                                    if t.get('ship_addr'):
+                                        st.markdown(f"**Адрес:** {t['ship_addr']}")
+                                    if t.get('receiver'):
+                                        st.markdown(f"**Получатель:** {t['receiver']} ({t.get('receiver_phone', '')})")
+                                    if t.get('ship_pay'):
+                                        st.markdown(f"**Оплата:** {t['ship_pay']}")
+                                    if t.get('tk_num'):
+                                        st.markdown(f"**Трек:** `{t['tk_num']}`")
+                                    if t.get('order_amount', 0) > 0:
+                                        st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
+                                    if t.get('task_comment'):
+                                        st.markdown(f"**Комментарии:** {t['task_comment']}")
+                                    if t.get("file_path"):
+                                        st.markdown(f"**Файл:** {t.get('file_name', '')}")
+                                        render_file_action_buttons(t["file_path"], t.get("file_name", ""), f"deal_task_file_{d['id']}_{ti}")
                         else:
-                            st.caption("Нет активных задач")
+                            st.caption("Нет задач")
 
                     if d.get("deal_comments"):
                         st.markdown("**Комментарии:**")
@@ -1027,7 +1068,7 @@ elif st.session_state.active_tab == "Сделки":
                             if st.button("Закрыть сделку", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
                                 close_deal_dialog(d["id"])
                         else:
-                            if st.button(f"Перевести в «{next_status}»", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
+                            if st.button(f"Перевести в \u00ab{next_status}\u00bb", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
                                 d["status"] = next_status
                                 commit_and_rerun(st.session_state.crm_store, "Статус обновлён")
 
