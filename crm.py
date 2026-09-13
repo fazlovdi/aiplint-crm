@@ -995,6 +995,18 @@ elif st.session_state.active_tab == "Сделки":
                         render_phone_inline(c_phone, d["id"])
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
                     st.markdown(f"**Статус:** {d.get('status')}")
+
+                    if client:
+                        incomplete_tasks = [t for t in client.get("tasks", []) if not t.get("done", False)]
+                        if incomplete_tasks:
+                            st.markdown(f"**Активные задачи ({len(incomplete_tasks)}):**")
+                            for t in incomplete_tasks:
+                                dl = format_date(t.get("deadline", ""))
+                                si = "\u26A0\uFE0F" if is_task_overdue(t) else "\u23F3"
+                                st.markdown(f"{si} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}")
+                        else:
+                            st.caption("Нет активных задач")
+
                     if d.get("deal_comments"):
                         st.markdown("**Комментарии:**")
                         for cm in d["deal_comments"]:
@@ -1007,16 +1019,18 @@ elif st.session_state.active_tab == "Сделки":
                         else:
                             st.warning("Введите текст")
                     st.markdown("---")
-                    ns = st.selectbox("Сменить статус:", statuses, index=statuses.index(d.get("status", "Новый")) if d.get("status", "Новый") in statuses else 0, key=f"deal_st_{d['id']}")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("Применить", key=f"deal_apply_{d['id']}", use_container_width=True):
-                            d["status"] = ns
-                            commit_and_rerun(st.session_state.crm_store, "Статус обновлён")
-                    with c2:
-                        if status != "Сделка закрыта":
-                            if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
+
+                    current_status_idx = statuses.index(d.get("status", "Новый")) if d.get("status", "Новый") in statuses else 0
+                    if current_status_idx < len(statuses) - 1:
+                        next_status = statuses[current_status_idx + 1]
+                        if next_status == "Сделка закрыта":
+                            if st.button("Закрыть сделку", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
                                 close_deal_dialog(d["id"])
+                        else:
+                            if st.button(f"Перевести в «{next_status}»", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
+                                d["status"] = next_status
+                                commit_and_rerun(st.session_state.crm_store, "Статус обновлён")
+
                     if st.session_state.user_role == "admin":
                         st.markdown("---")
                         if st.button("Удалить сделку", key=f"deal_del_{d['id']}", use_container_width=True):
