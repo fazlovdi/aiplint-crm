@@ -22,11 +22,13 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(0,0,0,0.03);
         padding: 1rem 1.25rem;
     }
+    /* Expander стилизация под iOS */
     .stExpander {
         border-radius: 14px;
         overflow: hidden;
         border: 1px solid #E8EBEF;
         background-color: #FFFFFF;
+        margin-bottom: 0.5rem; /* Отступ между карточками */
     }
     .stExpander > details { border-radius: 14px; }
     .stExpander > details > summary {
@@ -36,8 +38,10 @@ st.markdown("""
         padding: 0.75rem 1.25rem;
         list-style: none;
         border-radius: 14px;
+        cursor: pointer;
     }
     .stExpander > details > summary:hover { background-color: #F5F6F8; }
+    
     h1, h2, h3, h4 {
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
         font-weight: 700;
@@ -46,8 +50,9 @@ st.markdown("""
     }
     h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
     h2 { font-size: 1.4rem; margin-top: 1rem; }
-    h3 { font-size: 1.1rem; }
     hr { border: 0; height: 1px; background: #E8EBEF; margin: 1rem 0; }
+    
+    /* Кнопки */
     button[kind="primary"], .stButton > button[kind="primary"] {
         background-color: #4F6D9C;
         color: #FFFFFF;
@@ -70,7 +75,8 @@ st.markdown("""
         padding: 0.55rem 1.1rem;
         transition: all 0.15s ease;
     }
-    .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; }
+
+    /* Поля ввода */
     .stTextInput > div > input,
     .stTextArea > div > textarea,
     .stNumberInput > div > div > input {
@@ -81,20 +87,13 @@ st.markdown("""
         color: #2C3E50 !important;
         font-size: 1rem;
     }
-    .stTextInput > div > input:focus,
-    .stTextArea > div > textarea:focus,
-    .stNumberInput > div > div > input:focus,
-    .stSelectbox > div > div:focus-within {
-        outline: none;
-        border-color: #DCE0E5 !important;
-        box-shadow: none !important;
-    }
     .stSelectbox > div > div {
         background-color: #FFFFFF;
         border-radius: 10px;
         border: 1.5px solid #DCE0E5;
         padding: 0.35rem 0.75rem;
     }
+
     [data-testid="stMetric"] {
         background-color: #FFFFFF;
         border-radius: 14px;
@@ -102,43 +101,24 @@ st.markdown("""
         border: 1px solid #E8EBEF;
         box-shadow: 0 2px 6px rgba(0,0,0,0.02);
     }
-    [data-testid="stMetric"] label {
-        font-size: 0.78rem; color: #7F8C9A; text-transform: uppercase;
-        letter-spacing: 0.03em; font-weight: 600;
-    }
-    [data-testid="stMetric"] [data-testid="stMetricValue"] {
-        font-size: 1.5rem; font-weight: 700; color: #2C3E50;
-    }
+
     ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #C9CFD7; border-radius: 4px; }
-    .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
-    .stMarkdown strong { color: #2C3E50; font-weight: 600; }
+
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
-    .stHorizontalBlock .stButton button {
-        border-radius: 12px; font-size: 0.95rem; font-weight: 600; padding: 0.65rem 1rem;
-    }
-    [data-testid="stFileUploader"] {
-        border-radius: 14px; border: 2px dashed #C9CFD7; background-color: #FAFBFC; padding: 0.75rem;
-    }
-    .comments-box {
-        border: 1.5px solid #DCE0E5;
-        border-radius: 12px;
-        padding: 0.75rem 1rem;
-        background-color: #FAFBFC;
-        margin-bottom: 1rem;
-    }
-    .overdue-frame {
+    
+    /* Рамки для просроченных и новых */
+    .overdue-frame-wrapper {
         border: 2px solid #D65757;
         border-radius: 14px;
-        padding: 4px;
-        margin-bottom: 0.5rem;
+        padding: 0;
+        margin-bottom: 1rem;
     }
-    .new-task-frame {
+    .new-task-frame-wrapper {
         border: 2px solid #4CAF50;
         border-radius: 14px;
-        padding: 4px;
-        margin-top: 0.5rem;
+        padding: 0;
+        margin-bottom: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -153,7 +133,6 @@ else:
     YANDEX_TOKEN = ""
 
 # --- Пароли ---
-
 def hash_password(pwd, salt=None):
     if salt is None:
         salt = secrets.token_hex(16)
@@ -161,16 +140,14 @@ def hash_password(pwd, salt=None):
     return f"{salt}:{h}"
 
 def is_hashed(s):
-    if not s:
-        return False
+    if not s: return False
     if ":" in s:
         parts = s.split(":")
         return len(parts) == 2 and len(parts[0]) == 32 and len(parts[1]) == 64 and all(c in "0123456789abcdef" for c in parts[0] + parts[1])
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s)
 
 def verify_password(pwd, stored):
-    if not stored:
-        return False
+    if not stored: return False
     if ":" in stored:
         parts = stored.split(":")
         if len(parts) == 2 and len(parts[0]) == 32:
@@ -181,13 +158,11 @@ def verify_password(pwd, stored):
     return pwd.strip() == stored
 
 # --- Яндекс.Диск ---
-
 def yandex_headers():
     return {"Authorization": f"OAuth {YANDEX_TOKEN}", "Accept": "application/json"}
 
 def check_cloud_status():
-    if not YANDEX_TOKEN:
-        return False
+    if not YANDEX_TOKEN: return False
     try:
         res = requests.get(YANDEX_API_URL, headers=yandex_headers(), timeout=5)
         return res.status_code == 200
@@ -195,17 +170,14 @@ def check_cloud_status():
         return False
 
 def init_yandex_folders():
-    if not YANDEX_TOKEN:
-        return
+    if not YANDEX_TOKEN: return
     for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads"]:
         try:
             requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
-        except Exception:
-            pass
+        except Exception: pass
 
 def download_db_from_yandex():
-    if not YANDEX_TOKEN:
-        return
+    if not YANDEX_TOKEN: return
     try:
         url = f"{YANDEX_API_URL}/download"
         res = requests.get(url, params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}"}, headers=yandex_headers(), timeout=10)
@@ -216,16 +188,15 @@ def download_db_from_yandex():
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     f.write(file_res.text)
                 return
-    except Exception:
-        pass
+    except Exception: pass
+    
     if not os.path.exists(FILE_NAME):
         default_db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2"}
         with open(FILE_NAME, "w", encoding="utf-8") as f:
             json.dump(default_db, f, ensure_ascii=False, indent=2)
 
 def upload_db_to_yandex_async():
-    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME):
-        return
+    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     def _upload():
         try:
             url = f"{YANDEX_API_URL}/upload"
@@ -234,13 +205,11 @@ def upload_db_to_yandex_async():
                 upload_url = res.json().get("href")
                 with open(FILE_NAME, "rb") as f:
                     requests.put(upload_url, data=f, timeout=30)
-        except Exception:
-            pass
+        except Exception: pass
     threading.Thread(target=_upload, daemon=True).start()
 
 def upload_file_to_yandex(file_bytes, remote_name):
-    if not YANDEX_TOKEN:
-        return False
+    if not YANDEX_TOKEN: return False
     try:
         url = f"{YANDEX_API_URL}/upload"
         remote_path = f"disk:/CRM_NE_TROGAT/uploads/{remote_name}"
@@ -249,14 +218,12 @@ def upload_file_to_yandex(file_bytes, remote_name):
             upload_url = res.json().get("href")
             put_res = requests.put(upload_url, data=file_bytes, timeout=30)
             return put_res.status_code in (200, 201)
-    except Exception:
-        pass
+    except Exception: pass
     return False
 
 @st.cache_data(ttl=300, show_spinner=False)
 def download_file_from_yandex(remote_path):
-    if not YANDEX_TOKEN:
-        return None
+    if not YANDEX_TOKEN: return None
     try:
         res = requests.get(f"{YANDEX_API_URL}/download", params={"path": f"disk:/{remote_path}"}, headers=yandex_headers(), timeout=10)
         if res.status_code == 200:
@@ -264,15 +231,12 @@ def download_file_from_yandex(remote_path):
             file_res = requests.get(download_url, timeout=30)
             if file_res.status_code == 200:
                 return file_res.content
-    except Exception:
-        pass
+    except Exception: pass
     return None
 
 # --- Утилиты ---
-
 def format_phone(p_str):
-    if not p_str:
-        return ""
+    if not p_str: return ""
     digits = re.sub(r"\D", "", p_str)
     if len(digits) == 11 and digits[0] in ("7", "8"):
         digits = digits[1:]
@@ -281,8 +245,7 @@ def format_phone(p_str):
     return p_str.strip()
 
 def save_uploaded_file(u_file, c_id, prefix=""):
-    if u_file is None:
-        return None
+    if u_file is None: return None
     unique_name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{u_file.name}"
     file_bytes = u_file.getvalue()
     if YANDEX_TOKEN:
@@ -297,14 +260,10 @@ def save_uploaded_file(u_file, c_id, prefix=""):
     return {"path": local_path, "name": u_file.name}
 
 def normalize_remote_path(f_path):
-    if not f_path:
-        return None
-    if f_path.startswith("CRM_NE_TROGAT"):
-        return f_path
-    elif f_path.startswith("uploads/"):
-        return f"CRM_NE_TROGAT/{f_path}"
-    else:
-        return f"CRM_NE_TROGAT/uploads/{os.path.basename(f_path)}"
+    if not f_path: return None
+    if f_path.startswith("CRM_NE_TROGAT"): return f_path
+    elif f_path.startswith("uploads/"): return f"CRM_NE_TROGAT/{f_path}"
+    else: return f"CRM_NE_TROGAT/uploads/{os.path.basename(f_path)}"
 
 @st.cache_data
 def get_logo_base64():
@@ -323,55 +282,38 @@ def export_clients_csv():
 
 def get_client_by_id(c_id):
     for c in st.session_state.crm_store["clients"]:
-        if c["id"] == c_id:
-            return c
+        if c["id"] == c_id: return c
     return None
 
 def parse_deadline(deadline_str):
-    if not deadline_str:
-        return datetime.now().date()
-    try:
-        return datetime.strptime(deadline_str, "%Y-%m-%d").date()
+    if not deadline_str: return datetime.now().date()
+    try: return datetime.strptime(deadline_str, "%Y-%m-%d").date()
     except Exception:
-        try:
-            return datetime.strptime(deadline_str, "%Y-%m-%d %H:%M").date()
-        except Exception:
-            return datetime.now().date()
+        try: return datetime.strptime(deadline_str, "%Y-%m-%d %H:%M").date()
+        except Exception: return datetime.now().date()
 
 def is_task_overdue(task):
-    if task.get("done"):
-        return False
+    if task.get("done"): return False
     deadline = task.get("deadline", "")
-    if not deadline:
-        return False
-    try:
-        return datetime.strptime(deadline, "%Y-%m-%d").date() < datetime.now().date()
+    if not deadline: return False
+    try: return datetime.strptime(deadline, "%Y-%m-%d").date() < datetime.now().date()
     except Exception:
-        try:
-            return datetime.strptime(deadline, "%Y-%m-%d %H:%M") < datetime.now()
-        except Exception:
-            return False
+        try: return datetime.strptime(deadline, "%Y-%m-%d %H:%M") < datetime.now()
+        except Exception: return False
 
 def get_task_sort_date(task):
     deadline = task.get("deadline", "")
-    try:
-        return datetime.strptime(deadline, "%Y-%m-%d").date()
+    try: return datetime.strptime(deadline, "%Y-%m-%d").date()
     except Exception:
-        try:
-            return datetime.strptime(deadline, "%Y-%m-%d %H:%M").date()
-        except Exception:
-            return datetime.max.date()
+        try: return datetime.strptime(deadline, "%Y-%m-%d %H:%M").date()
+        except Exception: return datetime.max.date()
 
 def format_date(date_str):
-    if not date_str:
-        return ""
-    try:
-        return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d/%m/%Y")
+    if not date_str: return ""
+    try: return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d/%m/%Y")
     except Exception:
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d %H:%M").strftime("%d/%m/%Y")
-        except Exception:
-            return date_str
+        try: return datetime.strptime(date_str, "%Y-%m-%d %H:%M").strftime("%d/%m/%Y")
+        except Exception: return date_str
 
 def get_managers_list():
     users = st.session_state.crm_store.get("users", [])
@@ -417,7 +359,6 @@ def render_file_action_buttons(file_path, file_name, key_prefix):
         st.download_button("Скачать", data=file_bytes, file_name=file_name, key=f"dl_{key_prefix}")
 
 # --- Данные ---
-
 def migrate_data(data):
     default_users = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]
     if "users" not in data:
@@ -493,42 +434,27 @@ def close_deal_dialog(deal_id):
             st.error("Заполните отчёт")
 
 # --- Session state ---
-
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
-if "f_ph" not in st.session_state:
-    st.session_state.f_ph = []
-if "f_em" not in st.session_state:
-    st.session_state.f_em = []
-if "f_ad" not in st.session_state:
-    st.session_state.f_ad = []
-if "last_id" not in st.session_state:
-    st.session_state.last_id = None
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = "Задачи"
-if "client_form_version" not in st.session_state:
-    st.session_state.client_form_version = 0
-if "deal_form_version" not in st.session_state:
-    st.session_state.deal_form_version = 0
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "user_role" not in st.session_state:
-    st.session_state.user_role = None
-if "user_login" not in st.session_state:
-    st.session_state.user_login = None
-if "user_name" not in st.session_state:
-    st.session_state.user_name = None
-if "cloud_ok" not in st.session_state:
-    st.session_state.cloud_ok = check_cloud_status()
-if "open_deal_id" not in st.session_state:
-    st.session_state.open_deal_id = None
+if "f_ph" not in st.session_state: st.session_state.f_ph = []
+if "f_em" not in st.session_state: st.session_state.f_em = []
+if "f_ad" not in st.session_state: st.session_state.f_ad = []
+if "last_id" not in st.session_state: st.session_state.last_id = None
+if "active_tab" not in st.session_state: st.session_state.active_tab = "Задачи"
+if "client_form_version" not in st.session_state: st.session_state.client_form_version = 0
+if "deal_form_version" not in st.session_state: st.session_state.deal_form_version = 0
+if "authenticated" not in st.session_state: st.session_state.authenticated = False
+if "user_role" not in st.session_state: st.session_state.user_role = None
+if "user_login" not in st.session_state: st.session_state.user_login = None
+if "user_name" not in st.session_state: st.session_state.user_name = None
+if "cloud_ok" not in st.session_state: st.session_state.cloud_ok = check_cloud_status()
+if "open_deal_id" not in st.session_state: st.session_state.open_deal_id = None
 if "yandex_folders_ready" not in st.session_state:
     init_yandex_folders()
     st.session_state.yandex_folders_ready = True
 
 # --- Авторизация ---
-
 def check_login(username, password):
     users_list = st.session_state.crm_store.get("users", [])
     for u in users_list:
@@ -594,7 +520,6 @@ with st.sidebar:
         st.rerun()
 
 # --- Навигация ---
-
 col_m1, col_m2, col_m3 = st.columns(3)
 with col_m1:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
@@ -608,7 +533,6 @@ with col_m3:
 st.markdown("---")
 
 # --- Вкладка «Задачи» ---
-
 if st.session_state.active_tab == "Задачи":
     st.header("Задачи")
     now_time = datetime.now()
@@ -634,8 +558,9 @@ if st.session_state.active_tab == "Задачи":
     manager_options = ["Мои задачи", "Все"] + managers
     manager_filter = st.selectbox("Ответственный", manager_options, index=0)
 
-    client_index = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
-    deal_index = {d["client_id"]: d for d in st.session_state.crm_store.get("deals", [])}
+    deal_index = {}
+    for d in st.session_state.crm_store.get("deals", []):
+        deal_index.setdefault(d["client_id"], d)
 
     all_active_tasks = []
     for client in st.session_state.crm_store.get("clients", []):
@@ -669,8 +594,11 @@ if st.session_state.active_tab == "Задачи":
         status_label = "Просрочено" if is_over else ("Сегодня" if t["sort_date"] == now_time.date() else "Срок")
         formatted_date = format_date(t["deadline_str"])
         header_text = f"{formatted_date} — {t['client_name']} — {t['type']}"
+
+        # Красная рамка оборачивает ВЕСЬ expander
         if is_over:
-            st.markdown('<div class="overdue-frame">', unsafe_allow_html=True)
+            st.markdown('<div class="overdue-frame-wrapper">', unsafe_allow_html=True)
+
         with st.expander(header_text, expanded=False):
             st.markdown(f"**{status_label}** — {formatted_date} | {t_type}")
             st.markdown(f"👤 **{t['client_name']}** ({t['client_phone']})")
@@ -755,10 +683,10 @@ if st.session_state.active_tab == "Задачи":
                         new_ex["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"nt_sp_{section_key}_{t['client_id']}_{t['task_idx']}")
                         new_ex["tk_num"] = st.text_input("Трек-номер", key=f"nt_tk_{section_key}_{t['client_id']}_{t['task_idx']}")
                         new_ex["order_amount"] = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, key=f"nt_oa_{section_key}_{t['client_id']}_{t['task_idx']}")
-                        new_ex["task_comment"] = st.text_area("Комментарий", key=f"nt_c_{section_key}_{t['client_id']}_{t['task_idx']}")
+                        new_ex["task_comment"] = st.text_area("Комментарии", key=f"nt_c_{section_key}_{t['client_id']}_{t['task_idx']}")
                     else:
                         new_ex["order_amount"] = 0
-                        new_ex["task_comment"] = st.text_area("Комментарий", key=f"nt_cs_{section_key}_{t['client_id']}_{t['task_idx']}")
+                        new_ex["task_comment"] = st.text_area("Комментарии", key=f"nt_cs_{section_key}_{t['client_id']}_{t['task_idx']}")
                     new_td = st.date_input("Дата новой задачи", format="DD/MM/YYYY", key=f"nt_d_{section_key}_{t['client_id']}_{t['task_idx']}")
                 if st.button("Подтвердить выполнение", key=f"cbtn_{section_key}_{t['client_id']}_{t['task_idx']}", use_container_width=True, type="primary"):
                     if rt.strip():
@@ -786,6 +714,7 @@ if st.session_state.active_tab == "Задачи":
                     if t_type == "Отправить заказ":
                         task["order_amount"] = edit_oa
                     commit_and_rerun(st.session_state.crm_store)
+
         if is_over:
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -808,7 +737,6 @@ if st.session_state.active_tab == "Задачи":
                 st.caption("План на будущие дни пуст.")
 
 # --- Вкладка «Клиенты» ---
-
 elif st.session_state.active_tab == "Клиенты":
     st.header("Клиенты")
     current_user_name = st.session_state.user_name
@@ -862,6 +790,18 @@ elif st.session_state.active_tab == "Клиенты":
         with col_f2:
             c_address = st.text_input("Основной адрес", key=f"ca_{fv}")
             c_category = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], key=f"cc_{fv}")
+        # Комментарии — под категорией
+        st.markdown('<div class="comments-box">', unsafe_allow_html=True)
+        st.markdown("**Комментарии:**")
+        new_cc_form = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
+        if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
+            if new_cc_form.strip():
+                st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": new_cc_form.strip()})
+                st.rerun()
+        if st.session_state.get("pending_client_comments"):
+            for pc in st.session_state["pending_client_comments"]:
+                st.markdown(f"- *{pc['time']}*: {pc['text']}")
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
         col_s1, col_s2, col_s3 = st.columns(3)
         with col_s1:
@@ -888,18 +828,6 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.f_ad[i]["resp_email"] = st.text_input(f"Email #{i+1}", value=ad.get("resp_email", ""), key=f"f_ad_re_{fv}_{i}")
             if st.button("Добавить адрес", key=f"add_ad_btn_{fv}"):
                 st.session_state.f_ad.append({"address":"", "resp_name":"", "resp_role":"", "resp_phone":"", "resp_email":""}); st.rerun()
-        st.markdown("---")
-        st.markdown('<div class="comments-box">', unsafe_allow_html=True)
-        st.markdown("**Комментарии:**")
-        new_cc_form = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
-        if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
-            if new_cc_form.strip():
-                st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": new_cc_form.strip()})
-                st.rerun()
-        if st.session_state.get("pending_client_comments"):
-            for pc in st.session_state["pending_client_comments"]:
-                st.markdown(f"- *{pc['time']}*: {pc['text']}")
-        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
         c_file = st.file_uploader("Прикрепить файл:", key=f"cf_{fv}")
         if st.button("Внести клиента в базу", use_container_width=True, type="primary", key=f"add_client_btn_{fv}"):
@@ -958,164 +886,163 @@ elif st.session_state.active_tab == "Клиенты":
         filtered_clients.append(client)
 
     if all_clients:
-        with st.expander(f"Карточки клиентов ({len(filtered_clients)})", expanded=True):
-            for client in filtered_clients:
-                is_target_card = (st.session_state.last_id == client["id"])
-                with st.expander(f"{client['name']} — ID: {client['id']} [{client.get('category', 'Покупатель')}]", expanded=is_target_card):
-                    col_c1, col_c2 = st.columns(2)
-                    with col_c1:
-                        st.markdown(f"**{client['phone']}** | {client.get('email','')} | {client.get('address','')}")
-                        st.markdown(f"Скидка: **{client.get('discount',0)}%** | Ответственный: **{client.get('manager','—')}**")
-                        clean_phone = re.sub(r"\D", "", client['phone'])
-                        if clean_phone.startswith("8") and len(clean_phone) == 11:
-                            clean_phone = "7" + clean_phone[1:]
-                        elif not clean_phone:
-                            clean_phone = "79990000000"
-                        col_msg1, col_msg2, col_msg3 = st.columns(3)
-                        with col_msg1:
-                            wa_text = urllib.parse.quote("Здравствуйте! По поводу вашего заказа...")
-                            st.link_button("WhatsApp", f"https://wa.me/{clean_phone}?text={wa_text}", use_container_width=True)
-                        with col_msg2:
-                            st.link_button("Telegram", f"https://t.me/+{clean_phone}", use_container_width=True)
-                        with col_msg3:
-                            st.link_button("SMS", f"sms:{clean_phone}", use_container_width=True)
-                        if client.get("extra_phones"):
-                            st.markdown("**Доп. телефоны:**")
-                            for p in client["extra_phones"]:
-                                st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
-                        if client.get("extra_addresses"):
-                            st.markdown("**Доп. адреса:**")
-                            for ea in client["extra_addresses"]:
-                                if isinstance(ea, dict):
-                                    st.markdown(f"- **{ea.get('address', '')}**")
-                                    if ea.get("resp_name"):
-                                        st.markdown(f"  - {ea['resp_name']}, {ea.get('resp_role', '')} — {ea.get('resp_phone', '')}, {ea.get('resp_email', '')}")
-                        st.markdown("---")
-                        st.markdown('<div class="comments-box">', unsafe_allow_html=True)
-                        st.markdown("**Комментарии:**")
-                        if client.get("client_comments"):
-                            for cc in client["client_comments"]:
-                                st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
+        # Кнопка "Карточки клиентов" убрана — рендерим напрямую
+        for client in filtered_clients:
+            is_target_card = (st.session_state.last_id == client["id"])
+            with st.expander(f"{client['name']} — ID: {client['id']} [{client.get('category', 'Покупатель')}]", expanded=is_target_card):
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    st.markdown(f"**{client['phone']}** | {client.get('email','')} | {client.get('address','')}")
+                    st.markdown(f"Скидка: **{client.get('discount',0)}%** | Ответственный: **{client.get('manager','—')}**")
+                    clean_phone = re.sub(r"\D", "", client['phone'])
+                    if clean_phone.startswith("8") and len(clean_phone) == 11:
+                        clean_phone = "7" + clean_phone[1:]
+                    elif not clean_phone:
+                        clean_phone = "79990000000"
+                    col_msg1, col_msg2, col_msg3 = st.columns(3)
+                    with col_msg1:
+                        wa_text = urllib.parse.quote("Здравствуйте! По поводу вашего заказа...")
+                        st.link_button("WhatsApp", f"https://wa.me/{clean_phone}?text={wa_text}", use_container_width=True)
+                    with col_msg2:
+                        st.link_button("Telegram", f"https://t.me/+{clean_phone}", use_container_width=True)
+                    with col_msg3:
+                        st.link_button("SMS", f"sms:{clean_phone}", use_container_width=True)
+                    if client.get("extra_phones"):
+                        st.markdown("**Доп. телефоны:**")
+                        for p in client["extra_phones"]:
+                            st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
+                    if client.get("extra_addresses"):
+                        st.markdown("**Доп. адреса:**")
+                        for ea in client["extra_addresses"]:
+                            if isinstance(ea, dict):
+                                st.markdown(f"- **{ea.get('address', '')}**")
+                                if ea.get("resp_name"):
+                                    st.markdown(f"  - {ea['resp_name']}, {ea.get('resp_role', '')} — {ea.get('resp_phone', '')}, {ea.get('resp_email', '')}")
+                    st.markdown("---")
+                    st.markdown('<div class="comments-box">', unsafe_allow_html=True)
+                    st.markdown("**Комментарии:**")
+                    if client.get("client_comments"):
+                        for cc in client["client_comments"]:
+                            st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
+                    else:
+                        st.caption("Пока нет комментариев")
+                    new_cc_input = st.text_input("Добавить комментарий:", key=f"new_cc_input_{client['id']}", placeholder="Введите комментарий...")
+                    if st.button("Добавить", key=f"cc_btn_{client['id']}", use_container_width=True):
+                        if new_cc_input.strip():
+                            client.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": new_cc_input.strip()})
+                            commit_and_rerun(st.session_state.crm_store)
                         else:
-                            st.caption("Пока нет комментариев")
-                        new_cc_input = st.text_input("Добавить комментарий:", key=f"new_cc_input_{client['id']}", placeholder="Введите комментарий...")
-                        if st.button("Добавить", key=f"cc_btn_{client['id']}", use_container_width=True):
-                            if new_cc_input.strip():
-                                client.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": new_cc_input.strip()})
-                                commit_and_rerun(st.session_state.crm_store)
-                            else:
-                                st.warning("Введите текст")
-                        st.markdown('</div>', unsafe_allow_html=True)
+                            st.warning("Введите текст")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown("---")
+                    st.markdown("**Файлы:**")
+                    if "client_files" not in client:
+                        client["client_files"] = []
+                    for cf_idx, cf in enumerate(client["client_files"]):
+                        st.markdown(f"📄 {cf.get('file_name', '')}")
+                        render_file_action_buttons(cf.get("file_path"), cf.get("file_name", "файл"), f"cli_{client['id']}_{cf_idx}")
+                        if st.button("Удалить файл", key=f"cf_del_{client['id']}_{cf_idx}"):
+                            client["client_files"].pop(cf_idx)
+                            commit_and_rerun(st.session_state.crm_store)
+                    uploaded_cf = st.file_uploader("Загрузить файл:", key=f"cf_up_{client['id']}")
+                    if st.button("Сохранить файл", key=f"cf_btn_{client['id']}", use_container_width=True):
+                        if uploaded_cf is not None:
+                            with st.spinner("Загрузка..."):
+                                f_info = save_uploaded_file(uploaded_cf, client["id"], "profile")
+                                if f_info:
+                                    client["client_files"].append({"file_path": f_info["path"], "file_name": f_info["name"]})
+                                    save_data(st.session_state.crm_store)
+                                    st.toast("Файл сохранён", icon="📁")
+                                    st.rerun()
+                        else:
+                            st.warning("Выберите файл")
+                    with st.expander("Редактировать данные", expanded=False):
+                        en = st.text_input("ФИО", value=client['name'], key=f"en_{client['id']}")
+                        ep = st.text_input("Телефон", value=client['phone'], key=f"ep_{client['id']}")
+                        ee = st.text_input("Email", value=client.get('email',''), key=f"ee_{client['id']}")
+                        ea_val = st.text_input("Адрес", value=client.get('address',''), key=f"ea_{client['id']}")
+                        ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(client.get('discount',0)), key=f"ed_{client['id']}")
+                        ec = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], index=["Дизайнер","Строитель","Дилер","Покупатель"].index(client.get('category','Покупатель')) if client.get('category','Покупатель') in ["Дизайнер","Строитель","Дилер","Покупатель"] else 3, key=f"ec_{client['id']}")
+                        em_mgr = st.selectbox("Ответственный:", managers, index=managers.index(client.get('manager','')) if client.get('manager','') in managers else 0, key=f"em_{client['id']}")
+                        if st.button("Сохранить основные данные", key=f"es_{client['id']}", use_container_width=True):
+                            client['name'], client['phone'], client['email'], client['address'], client['discount'], client['category'], client['manager'] = en, format_phone(ep), ee, ea_val, int(ed), ec, em_mgr
+                            commit_and_rerun(st.session_state.crm_store)
                         st.markdown("---")
-                        st.markdown("**Файлы:**")
-                        if "client_files" not in client:
-                            client["client_files"] = []
-                        for cf_idx, cf in enumerate(client["client_files"]):
-                            st.markdown(f"📄 {cf.get('file_name', '')}")
-                            render_file_action_buttons(cf.get("file_path"), cf.get("file_name", "файл"), f"cli_{client['id']}_{cf_idx}")
-                            if st.button("Удалить файл", key=f"cf_del_{client['id']}_{cf_idx}"):
-                                client["client_files"].pop(cf_idx)
-                                commit_and_rerun(st.session_state.crm_store)
-                        uploaded_cf = st.file_uploader("Загрузить файл:", key=f"cf_up_{client['id']}")
-                        if st.button("Сохранить файл", key=f"cf_btn_{client['id']}", use_container_width=True):
-                            if uploaded_cf is not None:
-                                with st.spinner("Загрузка..."):
-                                    f_info = save_uploaded_file(uploaded_cf, client["id"], "profile")
-                                    if f_info:
-                                        client["client_files"].append({"file_path": f_info["path"], "file_name": f_info["name"]})
-                                        save_data(st.session_state.crm_store)
-                                        st.toast("Файл сохранён", icon="📁")
-                                        st.rerun()
-                            else:
-                                st.warning("Выберите файл")
-                        with st.expander("Редактировать данные", expanded=False):
-                            en = st.text_input("ФИО", value=client['name'], key=f"en_{client['id']}")
-                            ep = st.text_input("Телефон", value=client['phone'], key=f"ep_{client['id']}")
-                            ee = st.text_input("Email", value=client.get('email',''), key=f"ee_{client['id']}")
-                            ea_val = st.text_input("Адрес", value=client.get('address',''), key=f"ea_{client['id']}")
-                            ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(client.get('discount',0)), key=f"ed_{client['id']}")
-                            ec = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], index=["Дизайнер","Строитель","Дилер","Покупатель"].index(client.get('category','Покупатель')) if client.get('category','Покупатель') in ["Дизайнер","Строитель","Дилер","Покупатель"] else 3, key=f"ec_{client['id']}")
-                            em_mgr = st.selectbox("Ответственный:", managers, index=managers.index(client.get('manager','')) if client.get('manager','') in managers else 0, key=f"em_{client['id']}")
-                            if st.button("Сохранить основные данные", key=f"es_{client['id']}", use_container_width=True):
-                                client['name'], client['phone'], client['email'], client['address'], client['discount'], client['category'], client['manager'] = en, format_phone(ep), ee, ea_val, int(ed), ec, em_mgr
-                                commit_and_rerun(st.session_state.crm_store)
+                        with st.expander("Доп. телефоны (редактировать)", expanded=False):
+                            for pi, ph in enumerate(client.get("extra_phones", [])):
+                                e_ph = st.text_input(f"Телефон #{pi+1}", value=ph.get('phone',''), key=f"ep_e_{client['id']}_{pi}")
+                                e_nm = st.text_input(f"ФИО #{pi+1}", value=ph.get('name',''), key=f"ep_n_{client['id']}_{pi}")
+                                e_rl = st.text_input(f"Должность #{pi+1}", value=ph.get('role',''), key=f"ep_r_{client['id']}_{pi}")
+                                if st.button("Удалить", key=f"ep_del_{client['id']}_{pi}"):
+                                    client["extra_phones"].pop(pi)
+                                    commit_and_rerun(st.session_state.crm_store)
+                            new_ph = st.text_input("Новый телефон", key=f"ep_new_ph_{client['id']}")
+                            new_ph_name = st.text_input("Новое ФИО", key=f"ep_new_nm_{client['id']}")
+                            new_ph_role = st.text_input("Новая должность", key=f"ep_new_rl_{client['id']}")
+                            if st.button("Добавить телефон", key=f"ep_add_btn_{client['id']}"):
+                                if new_ph.strip():
+                                    client.setdefault("extra_phones", []).append({"phone": format_phone(new_ph), "name": new_ph_name, "role": new_ph_role})
+                                    commit_and_rerun(st.session_state.crm_store)
+                        with st.expander("Доп. Email (редактировать)", expanded=False):
+                            for ei, em in enumerate(client.get("extra_emails", [])):
+                                e_em = st.text_input(f"Email #{ei+1}", value=em, key=f"ee_e_{client['id']}_{ei}")
+                                if st.button("Удалить", key=f"ee_del_{client['id']}_{ei}"):
+                                    client["extra_emails"].pop(ei)
+                                    commit_and_rerun(st.session_state.crm_store)
+                            new_em = st.text_input("Новый Email", key=f"ee_new_{client['id']}")
+                            if st.button("Добавить Email", key=f"ee_add_btn_{client['id']}"):
+                                if new_em.strip():
+                                    client.setdefault("extra_emails", []).append(new_em.strip())
+                                    commit_and_rerun(st.session_state.crm_store)
+                        with st.expander("Доп. адреса (редактировать)", expanded=False):
+                            for ai, ad in enumerate(client.get("extra_addresses", [])):
+                                e_ad_addr = st.text_input(f"Адрес #{ai+1}", value=ad.get('address',''), key=f"ea_a_{client['id']}_{ai}")
+                                e_ad_rn = st.text_input(f"Ответственный #{ai+1}", value=ad.get('resp_name',''), key=f"ea_rn_{client['id']}_{ai}")
+                                e_ad_rr = st.text_input(f"Должность #{ai+1}", value=ad.get('resp_role',''), key=f"ea_rr_{client['id']}_{ai}")
+                                e_ad_rp = st.text_input(f"Телефон #{ai+1}", value=ad.get('resp_phone',''), key=f"ea_rp_{client['id']}_{ai}")
+                                e_ad_re = st.text_input(f"Email #{ai+1}", value=ad.get('resp_email',''), key=f"ea_re_{client['id']}_{ai}")
+                                if st.button("Удалить адрес", key=f"ea_del_{client['id']}_{ai}"):
+                                    client["extra_addresses"].pop(ai)
+                                    commit_and_rerun(st.session_state.crm_store)
+                            new_ad_addr = st.text_input("Новый адрес", key=f"ea_new_addr_{client['id']}")
+                            new_ad_rn = st.text_input("Ответственный", key=f"ea_new_rn_{client['id']}")
+                            new_ad_rr = st.text_input("Должность", key=f"ea_new_rr_{client['id']}")
+                            new_ad_rp = st.text_input("Телефон", key=f"ea_new_rp_{client['id']}")
+                            new_ad_re = st.text_input("Email", key=f"ea_new_re_{client['id']}")
+                            if st.button("Добавить адрес", key=f"ea_add_btn_{client['id']}"):
+                                if new_ad_addr.strip():
+                                    client.setdefault("extra_addresses", []).append({"address": new_ad_addr.strip(), "resp_name": new_ad_rn.strip(), "resp_role": new_ad_rr.strip(), "resp_phone": new_ad_rp.strip(), "resp_email": new_ad_re.strip()})
+                                    commit_and_rerun(st.session_state.crm_store)
+                        if st.session_state.user_role == "admin":
                             st.markdown("---")
-                            with st.expander("Доп. телефоны (редактировать)", expanded=False):
-                                for pi, ph in enumerate(client.get("extra_phones", [])):
-                                    e_ph = st.text_input(f"Телефон #{pi+1}", value=ph.get('phone',''), key=f"ep_e_{client['id']}_{pi}")
-                                    e_nm = st.text_input(f"ФИО #{pi+1}", value=ph.get('name',''), key=f"ep_n_{client['id']}_{pi}")
-                                    e_rl = st.text_input(f"Должность #{pi+1}", value=ph.get('role',''), key=f"ep_r_{client['id']}_{pi}")
-                                    if st.button("Удалить", key=f"ep_del_{client['id']}_{pi}"):
-                                        client["extra_phones"].pop(pi)
-                                        commit_and_rerun(st.session_state.crm_store)
-                                new_ph = st.text_input("Новый телефон", key=f"ep_new_ph_{client['id']}")
-                                new_ph_name = st.text_input("Новое ФИО", key=f"ep_new_nm_{client['id']}")
-                                new_ph_role = st.text_input("Новая должность", key=f"ep_new_rl_{client['id']}")
-                                if st.button("Добавить телефон", key=f"ep_add_btn_{client['id']}"):
-                                    if new_ph.strip():
-                                        client.setdefault("extra_phones", []).append({"phone": format_phone(new_ph), "name": new_ph_name, "role": new_ph_role})
-                                        commit_and_rerun(st.session_state.crm_store)
-                            with st.expander("Доп. Email (редактировать)", expanded=False):
-                                for ei, em in enumerate(client.get("extra_emails", [])):
-                                    e_em = st.text_input(f"Email #{ei+1}", value=em, key=f"ee_e_{client['id']}_{ei}")
-                                    if st.button("Удалить", key=f"ee_del_{client['id']}_{ei}"):
-                                        client["extra_emails"].pop(ei)
-                                        commit_and_rerun(st.session_state.crm_store)
-                                new_em = st.text_input("Новый Email", key=f"ee_new_{client['id']}")
-                                if st.button("Добавить Email", key=f"ee_add_btn_{client['id']}"):
-                                    if new_em.strip():
-                                        client.setdefault("extra_emails", []).append(new_em.strip())
-                                        commit_and_rerun(st.session_state.crm_store)
-                            with st.expander("Доп. адреса (редактировать)", expanded=False):
-                                for ai, ad in enumerate(client.get("extra_addresses", [])):
-                                    e_ad_addr = st.text_input(f"Адрес #{ai+1}", value=ad.get('address',''), key=f"ea_a_{client['id']}_{ai}")
-                                    e_ad_rn = st.text_input(f"Ответственный #{ai+1}", value=ad.get('resp_name',''), key=f"ea_rn_{client['id']}_{ai}")
-                                    e_ad_rr = st.text_input(f"Должность #{ai+1}", value=ad.get('resp_role',''), key=f"ea_rr_{client['id']}_{ai}")
-                                    e_ad_rp = st.text_input(f"Телефон #{ai+1}", value=ad.get('resp_phone',''), key=f"ea_rp_{client['id']}_{ai}")
-                                    e_ad_re = st.text_input(f"Email #{ai+1}", value=ad.get('resp_email',''), key=f"ea_re_{client['id']}_{ai}")
-                                    if st.button("Удалить адрес", key=f"ea_del_{client['id']}_{ai}"):
-                                        client["extra_addresses"].pop(ai)
-                                        commit_and_rerun(st.session_state.crm_store)
-                                new_ad_addr = st.text_input("Новый адрес", key=f"ea_new_addr_{client['id']}")
-                                new_ad_rn = st.text_input("Ответственный", key=f"ea_new_rn_{client['id']}")
-                                new_ad_rr = st.text_input("Должность", key=f"ea_new_rr_{client['id']}")
-                                new_ad_rp = st.text_input("Телефон", key=f"ea_new_rp_{client['id']}")
-                                new_ad_re = st.text_input("Email", key=f"ea_new_re_{client['id']}")
-                                if st.button("Добавить адрес", key=f"ea_add_btn_{client['id']}"):
-                                    if new_ad_addr.strip():
-                                        client.setdefault("extra_addresses", []).append({"address": new_ad_addr.strip(), "resp_name": new_ad_rn.strip(), "resp_role": new_ad_rr.strip(), "resp_phone": new_ad_rp.strip(), "resp_email": new_ad_re.strip()})
-                                        commit_and_rerun(st.session_state.crm_store)
-                            if st.session_state.user_role == "admin":
-                                st.markdown("---")
-                                st.warning(f"Удаление {client['name']} сотрёт все данные и сделки.")
-                                confirm_del = st.checkbox("Подтверждаю удаление", key=f"confirm_del_cli_{client['id']}")
-                                if confirm_del:
-                                    if st.button("Удалить клиента", key=f"del_cli_btn_{client['id']}", use_container_width=True, type="primary"):
-                                        st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != client["id"]]
-                                        st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != client["id"]]
-                                        st.session_state.last_id = None
-                                        commit_and_rerun(st.session_state.crm_store)
-                    with col_c2:
-                        deals = st.session_state.crm_store["deals"]
-                        auto_title = f"Заказ №{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
-                        st.markdown(f"**Новая сделка:**")
-                        st.info(f"Будет создан: **{auto_title}**")
-                        db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{client['id']}")
-                        if st.button("Создать сделку", key=f"dbn_{client['id']}", use_container_width=True, type="primary"):
-                            max_d_id = max([d['id'] for d in deals]) if deals else 0
-                            new_deal_id = max_d_id + 1
-                            st.session_state.crm_store["deals"].append({"id": new_deal_id, "client_id": client["id"], "title": auto_title, "budget": db, "status": "Новый", "deal_comments": []})
-                            save_data(st.session_state.crm_store)
-                            st.session_state.open_deal_id = new_deal_id
-                            st.session_state.active_tab = "Сделки"
-                            st.rerun()
-            if st.session_state.get("last_id"):
-                st.session_state.last_id = None
+                            st.warning(f"Удаление {client['name']} сотрёт все данные и сделки.")
+                            confirm_del = st.checkbox("Подтверждаю удаление", key=f"confirm_del_cli_{client['id']}")
+                            if confirm_del:
+                                if st.button("Удалить клиента", key=f"del_cli_btn_{client['id']}", use_container_width=True, type="primary"):
+                                    st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != client["id"]]
+                                    st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != client["id"]]
+                                    st.session_state.last_id = None
+                                    commit_and_rerun(st.session_state.crm_store)
+                with col_c2:
+                    deals = st.session_state.crm_store["deals"]
+                    auto_title = f"Заказ №{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
+                    st.markdown(f"**Новая сделка:**")
+                    st.info(f"Будет создан: **{auto_title}**")
+                    db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{client['id']}")
+                    if st.button("Создать сделку", key=f"dbn_{client['id']}", use_container_width=True, type="primary"):
+                        max_d_id = max([d['id'] for d in deals]) if deals else 0
+                        new_deal_id = max_d_id + 1
+                        st.session_state.crm_store["deals"].append({"id": new_deal_id, "client_id": client["id"], "title": auto_title, "budget": db, "status": "Новый", "deal_comments": []})
+                        save_data(st.session_state.crm_store)
+                        st.session_state.open_deal_id = new_deal_id
+                        st.session_state.active_tab = "Сделки"
+                        st.rerun()
+        if st.session_state.get("last_id"):
+            st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
 
 # --- Вкладка «Сделки» ---
-
 elif st.session_state.active_tab == "Сделки":
     st.header("Сделки")
     deal_search = st.text_input("Поиск по сделкам (название, клиент, трек-номер, получатель):", key="deal_search_input", placeholder="Введите текст...").strip().lower()
@@ -1153,8 +1080,9 @@ elif st.session_state.active_tab == "Сделки":
     def draw_deal_card(deal, client):
         is_open = (st.session_state.get("open_deal_id") == deal["id"])
         has_overdue = deal_has_overdue(deal)
+        # Красная рамка оборачивает ВЕСЬ контейнер сделки
         if has_overdue:
-            st.markdown('<div class="overdue-frame">', unsafe_allow_html=True)
+            st.markdown('<div class="overdue-frame-wrapper">', unsafe_allow_html=True)
         with st.container(border=True):
             card_title = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(card_title, expanded=is_open):
@@ -1189,8 +1117,9 @@ elif st.session_state.active_tab == "Сделки":
                             header_t = f"✅ {t_type} — {formatted_dl}"
                         else:
                             header_t = f"{t_type} — {formatted_dl} — {task.get('manager','—')}"
+                        # Красная рамка для просроченной задачи
                         if task_overdue:
-                            st.markdown('<div class="overdue-frame">', unsafe_allow_html=True)
+                            st.markdown('<div class="overdue-frame-wrapper">', unsafe_allow_html=True)
                         with st.expander(header_t, expanded=False):
                             if task.get("done"):
                                 st.markdown(f"~~{task['text']}~~ — выполнено")
@@ -1255,10 +1184,10 @@ elif st.session_state.active_tab == "Сделки":
                                                     new_ex_d["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"nt_sp_d_{deal['id']}_{i}")
                                                     new_ex_d["tk_num"] = st.text_input("Трек", key=f"nt_tk_d_{deal['id']}_{i}")
                                                     new_ex_d["order_amount"] = st.number_input("Сумма", min_value=0.0, step=100.0, key=f"nt_oa_d_{deal['id']}_{i}")
-                                                    new_ex_d["task_comment"] = st.text_area("Коммент.", key=f"nt_c_d_{deal['id']}_{i}")
+                                                    new_ex_d["task_comment"] = st.text_area("Комментарии", key=f"nt_c_d_{deal['id']}_{i}")
                                                 else:
                                                     new_ex_d["order_amount"] = 0
-                                                    new_ex_d["task_comment"] = st.text_area("Коммент.", key=f"nt_cs_d_{deal['id']}_{i}")
+                                                    new_ex_d["task_comment"] = st.text_area("Комментарии", key=f"nt_cs_d_{deal['id']}_{i}")
                                                 new_td_d = st.date_input("Дата", format="DD/MM/YYYY", key=f"nt_d_d_{deal['id']}_{i}")
                                             if st.button("Подтвердить", key=f"cbtn_{deal['id']}_{i}", use_container_width=True, type="primary"):
                                                 if rt.strip():
@@ -1282,7 +1211,8 @@ elif st.session_state.active_tab == "Сделки":
                 else:
                     st.caption("Нет задач.")
                 dfv = f"{st.session_state.deal_form_version}_{deal['id']}"
-                st.markdown('<div class="new-task-frame">', unsafe_allow_html=True)
+                # Зелёная рамка оборачивает блок новой задачи
+                st.markdown('<div class="new-task-frame-wrapper">', unsafe_allow_html=True)
                 with st.expander("Новая задача", expanded=False, key=f"new_task_exp_{dfv}"):
                     task_type = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"t_type_sel_{dfv}")
                     new_task_manager = st.selectbox("Ответственный:", managers, index=managers.index(current_user_name) if current_user_name in managers else 0, key=f"t_mgr_{dfv}")
@@ -1295,10 +1225,10 @@ elif st.session_state.active_tab == "Сделки":
                         ex_data["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"t_sp_{dfv}")
                         ex_data["tk_num"] = st.text_input("Трек-номер", key=f"t_tk_{dfv}")
                         ex_data["order_amount"] = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, key=f"t_oa_{dfv}")
-                        ex_data["task_comment"] = st.text_area("Комментарий", key=f"t_c_{dfv}")
+                        ex_data["task_comment"] = st.text_area("Комментарии", key=f"t_c_{dfv}")
                     else:
                         ex_data["order_amount"] = 0
-                        ex_data["task_comment"] = st.text_area("Комментарий к звонку", key=f"t_cs_{dfv}")
+                        ex_data["task_comment"] = st.text_area("Комментарии", key=f"t_cs_{dfv}")
                     t_uf = st.file_uploader("Прикрепить файл:", key=f"t_f_{dfv}")
                     td = st.date_input("Дата", format="DD/MM/YYYY", key=f"td_{dfv}")
                     if st.button("Поставить задачу", key=f"tsv_{dfv}", use_container_width=True):
