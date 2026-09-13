@@ -248,10 +248,36 @@ def render_file_action_buttons(fp, fn, kp):
         with c1: st.download_button("Скачать", data=fb, file_name=fn, key=f"dl_{kp}")
         with c2:
             b64 = base64.b64encode(fb).decode()
-            mt = f"image/{ext[1:]}"
-            img_html = f"<html><body style='margin:0;text-align:center;'><img src='data:{mt};base64,{b64}' style='max-width:100%;' onload='window.print();'/></body></html>"
-            pu = f"data:text/html;charset=utf-8,{urllib.parse.quote(img_html)}"
-            st.markdown(f"<a href='{pu}' target='_blank'><button style='width:100%;padding:8px;background:#bc1661;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;'>Распечатать</button></a>", unsafe_allow_html=True)
+            mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+            safe_kp = re.sub(r'[^a-zA-Z0-9_]', '_', kp)
+            btn_id = f"img_print_btn_{safe_kp}"
+            js_func = f"doImgPrint_{safe_kp}"
+            var_name = f"_img_{safe_kp}"
+            img_html_json = json.dumps(f"<html><head><meta charset='utf-8'></head><body style='margin:0;text-align:center;'><img src='data:{mt};base64,{b64}' style='max-width:100%;' /></body></html>")
+            components.html(f"""
+            <style>
+            #{btn_id} {{
+                width: 100%; padding: 8px; background: #bc1661; color: white;
+                border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600;
+                transition: background 0.15s;
+            }}
+            #{btn_id}:hover {{ background: #9a1452; }}
+            </style>
+            <button id="{btn_id}" onclick="{js_func}()">Распечатать</button>
+            <script>
+            var {var_name} = {img_html_json};
+            function {js_func}() {{
+                var w = window.open('', '_blank');
+                if (!w) {{ alert('Разрешите всплывающие окна для печати'); return; }}
+                w.document.open();
+                w.document.write({var_name});
+                w.document.close();
+                w.focus();
+                setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500);
+                w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }};
+            }}
+            </script>
+            """, height=45)
     elif ext == ".pdf":
         st.download_button("Открыть / Скачать PDF", data=fb, file_name=fn, mime="application/pdf", key=f"dl_{kp}")
     else:
@@ -395,6 +421,9 @@ def migrate_data(data):
         for t in c.get("tasks", []):
             if "manager" not in t: t["manager"] = c.get("manager", "")
             if "deadline" in t and " " in str(t["deadline"]): t["deadline"] = str(t["deadline"]).split(" ")[0]
+            if "completion_report" not in t: t["completion_report"] = ""
+            if "completion_file_path" not in t: t["completion_file_path"] = None
+            if "completion_file_name" not in t: t["completion_file_name"] = None
     for d in data.get("deals", []):
         if "deal_comments" not in d: d["deal_comments"] = []
         if d.get("status") == "New": d["status"] = "Новый"
@@ -411,6 +440,13 @@ def load_data():
                 data = migrate_data(data)
                 with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=4)
                 upload_db_to_yandex_async()
+            else:
+                # Докидываем новые поля для старых задач
+                for c in data.get("clients", []):
+                    for t in c.get("tasks", []):
+                        if "completion_report" not in t: t["completion_report"] = ""
+                        if "completion_file_path" not in t: t["completion_file_path"] = None
+                        if "completion_file_name" not in t: t["completion_file_name"] = None
             return data
         except: return db
     return db
@@ -733,7 +769,6 @@ if st.session_state.active_tab == "Задачи":
                         commit_and_rerun(st.session_state.crm_store)
             st.markdown("---")
 
-            # --- Печать задачи ---
             render_print_button(task, cl, tp, fd, f"task_{sk}_{t['client_id']}_{t['task_idx']}")
 
             st.markdown("---")
@@ -776,14 +811,18 @@ if st.session_state.active_tab == "Задачи":
                     if rt.strip():
                         with st.spinner("Сохранение..."):
                             task["done"] = True
+                            task["completion_report"] = rt.strip()
                             fi = save_uploaded_file(uf, t["client_id"], "task_report")
+                            if fi:
+                                task["completion_file_path"] = fi["path"]
+                                task["completion_file_name"] = fi["name"]
                             rp = f"Закрыта задача [{tp}] '{task['text']}'. Отчёт: {rt.strip()}"
                             if tp == "Отправить заказ":
                                 rp += f" | Кому: {task.get('receiver', '')} | Трек: {task.get('tk_num', 'нет')}"
                             cl["comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": rp, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None})
                             if cn and ntt:
                                 at = auto_task_title(ntt, t['client_name'], t['deal_title'])
-                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm}
+                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
                                 te.update(ne)
                                 cl.setdefault("tasks", []).append(te)
                             commit_and_rerun(st.session_state.crm_store)
@@ -863,6 +902,19 @@ elif st.session_state.active_tab == "Сделки":
         with st.expander(ct2, expanded=is_open, key=deal_exp_key):
             st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
             st.markdown("---")
+
+            # --- Смена ответственного ---
+            with st.expander("Изменить ответственного", expanded=False):
+                cur_mgr_idx = mgrs.index(client.get('manager', '')) if client.get('manager', '') in mgrs else 0
+                new_mgr = st.selectbox("Ответственный:", mgrs, index=cur_mgr_idx, key=f"dm_{deal['id']}")
+                if st.button("Сохранить", key=f"dm_btn_{deal['id']}", use_container_width=True):
+                    client["manager"] = new_mgr
+                    for t in client.get("tasks", []):
+                        if not t.get("done"):
+                            t["manager"] = new_mgr
+                    commit_and_rerun(st.session_state.crm_store)
+            st.markdown("---")
+
             if deal.get("deal_comments"):
                 for com in deal["deal_comments"]:
                     st.markdown(f"*{com['time']}* — {com['text']}")
@@ -905,7 +957,38 @@ elif st.session_state.active_tab == "Сделки":
 
                     with st.expander(ht2, expanded=False, key=task_exp_key):
                         if task.get("done"):
+                            # --- Полная информация о закрытой задаче ---
                             st.markdown(f"~~{task['text']}~~ — выполнено")
+                            st.markdown("---")
+                            st.markdown(f"**Тип:** {tp2} | **Срок:** {fdl} | **Ответственный:** {task.get('manager','—')}")
+                            if tp2 == "Отправить заказ":
+                                with st.container(border=True):
+                                    st.markdown(f"Товары: {task.get('products', '')}")
+                                    st.markdown(f"Адрес: {task.get('ship_addr', '')}")
+                                    st.markdown(f"Получатель: {task.get('receiver', '')} ({task.get('receiver_phone', '')})")
+                                    st.markdown(f"Оплата: {task.get('ship_pay', '')}")
+                                    if task.get('order_amount', 0) > 0:
+                                        oa = task['order_amount']
+                                        dp = client.get('discount', 0)
+                                        da = oa * dp / 100
+                                        ta = oa - da
+                                        st.markdown(f"Сумма: {oa:,.0f} | Скидка: {dp}% ({da:,.0f}) | **Итого: {ta:,.0f}**".replace(",", " "))
+                                    if task.get('tk_num'):
+                                        st.markdown(f"Трек: `{task['tk_num']}`")
+                            if task.get("file_path"):
+                                st.markdown(f"📄 Вложенный файл: {task.get('file_name', '')}")
+                                render_file_action_buttons(task["file_path"], task.get("file_name", ""), f"dtk_done_{deal['id']}_{orig_i}")
+                            # --- Отчёт о выполнении ---
+                            if task.get("completion_report"):
+                                st.markdown("---")
+                                st.markdown("**Отчёт о выполнении:**")
+                                st.markdown(task["completion_report"])
+                            else:
+                                st.markdown("---")
+                                st.caption("Отчёт не сохранён (задача закрыта в старой версии)")
+                            if task.get("completion_file_path"):
+                                st.markdown(f"📄 Файл отчёта: {task.get('completion_file_name', '')}")
+                                render_file_action_buttons(task["completion_file_path"], task.get("completion_file_name", "файл"), f"dtk_cfile_{deal['id']}_{orig_i}")
                         else:
                             st.markdown(f"**{tp2}** | Срок: {fdl} | Ответственный: {task.get('manager','—')}")
                             if tp2 == "Отправить заказ":
@@ -939,7 +1022,6 @@ elif st.session_state.active_tab == "Сделки":
                                         task["file_name"] = fi["name"]
                                         commit_and_rerun(st.session_state.crm_store)
 
-                            # Печать задачи внутри сделки
                             render_print_button(task, client, tp2, fdl, f"deal_{deal['id']}_{orig_i}")
 
                             with st.expander("Редактировать", expanded=False):
@@ -984,14 +1066,18 @@ elif st.session_state.active_tab == "Сделки":
                                             if rt.strip():
                                                 with st.spinner("Сохранение..."):
                                                     task["done"] = True
+                                                    task["completion_report"] = rt.strip()
                                                     fi = save_uploaded_file(uf, deal['id'], "task_report")
+                                                    if fi:
+                                                        task["completion_file_path"] = fi["path"]
+                                                        task["completion_file_name"] = fi["name"]
                                                     rp = f"Закрыта [{tp2}] '{task['text']}'. Отчёт: {rt.strip()}"
                                                     if tp2 == "Отправить заказ":
                                                         rp += f" | Кому: {task.get('receiver', '')} | Трек: {task.get('tk_num', 'нет')}"
                                                     client["comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": rp, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None})
                                                     if cnd and nttd:
                                                         atd = auto_task_title(nttd, client['name'], deal['title'])
-                                                        ted = {"text": atd, "deadline": ntdd.isoformat(), "done": False, "type": nttd, "file_path": None, "file_name": None, "manager": ntmd}
+                                                        ted = {"text": atd, "deadline": ntdd.isoformat(), "done": False, "type": nttd, "file_path": None, "file_name": None, "manager": ntmd, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
                                                         ted.update(ned)
                                                         client["tasks"].append(ted)
                                                     commit_and_rerun(st.session_state.crm_store)
@@ -1025,7 +1111,7 @@ elif st.session_state.active_tab == "Сделки":
                 if st.button("Поставить задачу", key=f"tsv_{dfv}", use_container_width=True, type="primary"):
                     fi = save_uploaded_file(tuf, deal['id'], "task_init")
                     at = auto_task_title(tt, client['name'], deal['title'])
-                    te = {"text": at, "deadline": td.isoformat(), "done": False, "type": tt, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None, "manager": ntm}
+                    te = {"text": at, "deadline": td.isoformat(), "done": False, "type": tt, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None}
                     te.update(ex)
                     client.setdefault("tasks", []).append(te)
                     if fi:
