@@ -556,7 +556,6 @@ if st.session_state.active_tab == "Задачи":
         header_text = f"{formatted_date} — {t['client_name']} — {t['type']}"
 
         with st.expander(header_text, expanded=False):
-            # Красная рамка ВНУТРИ expander — красит сам expander
             if is_over:
                 color_expander_border("#D65757")
             st.markdown(f"**{status_label}** — {formatted_date} | {t_type}")
@@ -691,6 +690,7 @@ if st.session_state.active_tab == "Задачи":
                     render_task_block(t, "future")
             else:
                 st.caption("План на будущие дни пуст.")
+
 # --- Вкладка «Клиенты» ---
 
 elif st.session_state.active_tab == "Клиенты":
@@ -746,7 +746,6 @@ elif st.session_state.active_tab == "Клиенты":
         with col_f2:
             c_address = st.text_input("Основной адрес", key=f"ca_{fv}")
             c_category = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], key=f"cc_{fv}")
-            # Комментарии — в правой колонке, под категорией
             st.markdown('<div class="comments-box">', unsafe_allow_html=True)
             st.markdown("**Комментарии:**")
             new_cc_form = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
@@ -1027,6 +1026,10 @@ elif st.session_state.active_tab == "Сделки":
                 return True
         return False
 
+    def deal_has_tasks(deal):
+        client = get_client(deal["client_id"])
+        return len(client.get("tasks", [])) > 0
+
     dl = st.session_state.crm_store["deals"]
     t_new = sum(d.get("budget",0) for d in dl if d["status"] == "Новый")
     t_prg = sum(d.get("budget",0) for d in dl if d["status"] == "В работе")
@@ -1036,9 +1039,12 @@ elif st.session_state.active_tab == "Сделки":
     def draw_deal_card(deal, client):
         is_open = (st.session_state.get("open_deal_id") == deal["id"])
         has_overdue = deal_has_overdue(deal)
+        has_tasks = deal_has_tasks(deal)
         with st.container(border=True):
             if has_overdue:
                 color_container_border("#D65757")
+            elif not has_tasks:
+                color_container_border("#4CAF50")
             card_title = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(card_title, expanded=is_open):
                 st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
