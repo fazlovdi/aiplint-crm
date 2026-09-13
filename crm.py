@@ -466,6 +466,8 @@ def migrate_data(data):
             if "deal_id" not in t:
                 t["deal_id"] = first_deal_id
     for d in data.get("deals", []):
+        if "deal_title" not in d:
+            d["deal_title"] = ""
         if "deal_comments" not in d:
             d["deal_comments"] = []
         if "deal_files" not in d:
@@ -507,6 +509,8 @@ def load_data():
                         if "deal_id" not in t:
                             t["deal_id"] = first_deal_id
                 for d in data.get("deals", []):
+                    if "deal_title" not in d:
+                        d["deal_title"] = ""
                     if "deal_files" not in d:
                         d["deal_files"] = []
                     if "close_file_path" not in d:
@@ -1033,10 +1037,17 @@ elif st.session_state.active_tab == "Сделки":
                     deal_border_color = None
                 deal_exp_key = f"deal_exp_{d['id']}"
                 inject_border_css(deal_exp_key, deal_border_color)
-                with st.expander(f"{d.get('title', 'Без названия')}", expanded=(st.session_state.get("open_deal_id") == d["id"]), key=deal_exp_key):
+                deal_title_text = d.get("title", "Без названия")
+                deal_name = d.get("deal_title", "")
+                exp_label = f"{deal_title_text}"
+                if deal_name:
+                    exp_label += f" \u2014 {deal_name}"
+                with st.expander(exp_label, expanded=(st.session_state.get("open_deal_id") == d["id"]), key=deal_exp_key):
                     st.markdown(f"**Клиент:** {c_name}")
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
+                    if deal_name:
+                        st.markdown(f"**Название:** {deal_name}")
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
 
                     if client:
@@ -1132,6 +1143,17 @@ elif st.session_state.active_tab == "Сделки":
                     st.markdown("---")
 
                     if client and d.get("status") != "Архив":
+                        show_edit_deal_key = f"show_edit_deal_{d['id']}"
+                        if st.button("Изменить название", key=f"btn_edit_deal_{d['id']}", use_container_width=True):
+                            st.session_state[show_edit_deal_key] = not st.session_state.get(show_edit_deal_key, False)
+                        if st.session_state.get(show_edit_deal_key, False):
+                            new_deal_title = st.text_input("Название (адрес объекта):", value=d.get("deal_title", ""), key=f"edit_dt_{d['id']}")
+                            if st.button("Сохранить название", key=f"save_dt_{d['id']}", use_container_width=True, type="primary"):
+                                d["deal_title"] = new_deal_title.strip()
+                                st.session_state[show_edit_deal_key] = False
+                                commit_and_rerun(st.session_state.crm_store, "Название обновлено")
+                        st.markdown("---")
+
                         show_ct_key = f"show_ct_{d['id']}"
                         if st.button("Создать задачу", key=f"btn_ct_{d['id']}", type="primary", use_container_width=True):
                             st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
@@ -1240,8 +1262,14 @@ elif st.session_state.active_tab == "Сделки":
             with arch_cols[col_idx]:
                 client = get_client_by_id(d["client_id"])
                 c_name = client["name"] if client else "Неизвестный клиент"
-                with st.expander(f"{d.get('title', 'Без названия')}", expanded=(st.session_state.get("open_deal_id") == d["id"]), key=f"arch_exp_{d['id']}"):
+                arch_label = d.get("title", "Без названия")
+                arch_name = d.get("deal_title", "")
+                if arch_name:
+                    arch_label += f" \u2014 {arch_name}"
+                with st.expander(arch_label, expanded=(st.session_state.get("open_deal_id") == d["id"]), key=f"arch_exp_{d['id']}"):
                     st.markdown(f"**Клиент:** {c_name}")
+                    if arch_name:
+                        st.markdown(f"**Название:** {arch_name}")
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
                     if d.get("closed_date"):
                         st.markdown(f"**Закрыта:** {format_date(d['closed_date'])}")
@@ -1537,10 +1565,11 @@ elif st.session_state.active_tab == "Клиенты":
                     at = f"Заказ \u2116{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
                     st.markdown(f"**Создать сделку:**")
                     st.info(f"Будет создан: **{at}**")
+                    ndt = st.text_input("Название (адрес объекта):", key=f"ndt_{cl['id']}", placeholder="Введите название сделки")
                     db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{cl['id']}")
                     if st.button("Создать сделку", key=f"dbn_{cl['id']}", use_container_width=True, type="primary"):
                         ndi = (max([d['id'] for d in deals]) if deals else 0) + 1
-                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "budget": db, "status": "Новый", "deal_comments": [], "deal_files": [], "close_file_path": None, "close_file_name": None})
+                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "deal_comments": [], "deal_files": [], "close_file_path": None, "close_file_name": None})
                         save_data(st.session_state.crm_store)
                         st.session_state.open_deal_id = ndi
                         st.session_state.active_tab = "Сделки"
@@ -1581,7 +1610,10 @@ elif st.session_state.active_tab == "Клиенты":
                     cl_deals = [d for d in deals if d["client_id"] == cl["id"]]
                     if cl_deals:
                         for d in cl_deals:
-                            if st.button(f"{d['title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} руб.".replace(",", " "), key=f"cli_deal_btn_{cl['id']}_{d['id']}", use_container_width=True):
+                            deal_btn_label = f"{d['title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} руб.".replace(",", " ")
+                            if d.get("deal_title"):
+                                deal_btn_label = f"{d['title']} \u2014 {d['deal_title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} руб.".replace(",", " ")
+                            if st.button(deal_btn_label, key=f"cli_deal_btn_{cl['id']}_{d['id']}", use_container_width=True):
                                 st.session_state.active_tab = "Сделки"
                                 st.session_state.open_deal_id = d["id"]
                                 st.rerun()
