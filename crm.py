@@ -256,6 +256,71 @@ def render_file_action_buttons(fp, fn, kp):
     else:
         st.download_button("Скачать", data=fb, file_name=fn, key=f"dl_{kp}")
 
+def build_task_print_html(task, cl, tp, fd):
+    """Собирает HTML-бланк задачи для печати."""
+    cp2 = task.get('products', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    ca2 = task.get('ship_addr', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    cr2 = task.get('receiver', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    ct2 = task.get('tk_num', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    client_name = cl['name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    client_phone = cl['phone'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    receiver_phone = task.get('receiver_phone', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    ship_pay = task.get('ship_pay', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    manager = task.get('manager', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    tp_safe = tp.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    oav = task.get('order_amount', 0)
+    dpc = cl.get('discount', 0)
+    dam = oav * dpc / 100
+    tam = oav - dam
+    ch = ""
+    if oav > 0:
+        ch = f"<div>Сумма: {oav:,.0f} руб.</div><div>Скидка: {dpc}% ({dam:,.0f} руб.)</div><div style='font-size:18px;font-weight:bold;'>Итого: {tam:,.0f} руб.</div>".replace(",", " ")
+
+    file_reminder = ""
+    if task.get("file_path"):
+        file_reminder = "<div style='color:#D65757;font-weight:bold;margin:12px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенный файл!</div>"
+
+    lb = get_logo_base64()
+    if lb:
+        lt = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left; margin-right:20px;'/>"
+    else:
+        lt = "<div style='font-size:24px; font-weight:bold; float:left; margin-right:20px;'>АЙПЛИНТ</div>"
+
+    html = f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Бланк задачи</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 40px; }}
+.h {{ text-align: center; border-bottom: 2px solid #000; padding: 10px; clear: both; }}
+.s {{ margin: 8px 0; }}
+</style>
+</head>
+<body>
+{lt}
+<div class="h"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div>
+<div class="s"><b>Клиент:</b> {client_name} ({client_phone})</div>
+<div class="s"><b>Тип:</b> {tp_safe}</div>
+<div class="s"><b>Срок:</b> {fd}</div>
+<div class="s"><b>Ответственный:</b> {manager}</div>
+<hr>
+<div class="s"><b>Товары:</b><br>{cp2}</div>
+<div class="s"><b>Адрес:</b> {ca2}</div>
+<div class="s"><b>Получатель:</b> {cr2} ({receiver_phone})</div>
+<div class="s"><b>Оплата:</b> {ship_pay}</div>
+<div class="s"><b>Трек:</b> {ct2}</div>
+{ch}
+{file_reminder}
+<br><br>
+<p>Отпустил: _____________</p>
+<p>Получил: _____________</p>
+<script>window.onload = function() {{ window.print(); }};</script>
+</body>
+</html>"""
+    return html
+
 # --- Данные ---
 
 def migrate_data(data):
@@ -304,6 +369,24 @@ def commit_and_rerun(data=None):
 
 @st.dialog("Завершить сделку", width="medium")
 def close_deal_dialog(deal_id):
+    deal = None
+    for d in st.session_state.crm_store["deals"]:
+        if d["id"] == deal_id:
+            deal = d
+            break
+    if not deal:
+        st.error("Сделка не найдена")
+        return
+    client = get_client_by_id(deal["client_id"])
+    incomplete = [t for t in (client.get("tasks", []) if client else []) if not t.get("done")]
+    if incomplete:
+        st.warning(f"Нельзя завершить сделку: {len(incomplete)} невыполненных задач(и).")
+        st.markdown("**Невыполненные задачи:**")
+        for t in incomplete:
+            st.markdown(f"- {t.get('type', 'Связаться')} — {format_date(t.get('deadline', ''))} — {t.get('text', '')}")
+        if st.button("Понятно", use_container_width=True):
+            st.rerun()
+        return
     st.markdown("Заполните отчёт о выполнении сделки:")
     report = st.text_area("Отчёт (обязательно):", key=f"close_deal_report_{deal_id}")
     if st.button("Завершить сделку", type="primary", use_container_width=True):
@@ -339,6 +422,7 @@ if "yandex_folders_ready" not in st.session_state:
     init_yandex_folders(); st.session_state.yandex_folders_ready = True
 if "current_remember_token" not in st.session_state: st.session_state.current_remember_token = None
 if "set_remember_token" not in st.session_state: st.session_state.set_remember_token = None
+if "deal_note_ver" not in st.session_state: st.session_state.deal_note_ver = {}
 
 # --- Авторизация ---
 
@@ -590,50 +674,14 @@ if st.session_state.active_tab == "Задачи":
             st.markdown("---")
 
             # --- Кнопка печати задачи ---
-            cp2 = task.get('products', '').replace('\n', '<br>').replace("'", "`")
-            ca2 = task.get('ship_addr', '').replace("'", "`")
-            cr2 = task.get('receiver', '').replace("'", "`")
-            ct2 = task.get('tk_num', '')
-            oav = task.get('order_amount', 0)
-            dpc = cl.get('discount', 0)
-            dam = oav * dpc / 100
-            tam = oav - dam
-            lb = get_logo_base64()
-            lt = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left; margin-right:20px;'/>" if lb else "<div style='font-size:24px; font-weight:bold; float:left; margin-right:20px;'>АЙПЛИНТ</div>"
-            ch = f"<div>Сумма: {oav:,.0f} руб.</div><div>Скидка: {dpc}% ({dam:,.0f} руб.)</div><div style='font-size:18px;font-weight:bold;'>Итого: {tam:,.0f} руб.</div>".replace(",", " ") if oav > 0 else ""
-            file_reminder = ""
-            if task.get("file_path"):
-                file_reminder = "<div style='color:#D65757;font-weight:bold;margin:12px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>⚠ Не забудь распечатать вложенный файл!</div>"
-
-            print_html = (
-                f"<html><head><title>Задача</title>"
-                f"<style>body{{font-family:Arial;margin:40px;}}"
-                f".h{{text-align:center;border-bottom:2px solid #000;padding:10px;clear:both;}}"
-                f".s{{margin:8px 0;}}</style></head><body>"
-                f"{lt}"
-                f"<div class='h'><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div>"
-                f"<div class='s'><b>Клиент:</b> {cl['name']} ({cl['phone']})</div>"
-                f"<div class='s'><b>Тип:</b> {tp}</div>"
-                f"<div class='s'><b>Срок:</b> {fd}</div>"
-                f"<div class='s'><b>Ответственный:</b> {task.get('manager','')}</div>"
-                f"<hr>"
-                f"<div class='s'><b>Товары:</b><br>{cp2}</div>"
-                f"<div class='s'><b>Адрес:</b> {ca2}</div>"
-                f"<div class='s'><b>Получатель:</b> {cr2} ({task.get('receiver_phone', '')})</div>"
-                f"<div class='s'><b>Оплата:</b> {task.get('ship_pay', '')}</div>"
-                f"<div class='s'><b>Трек:</b> {ct2}</div>"
-                f"{ch}"
-                f"{file_reminder}"
-                f"<br><br><p>Отпустил: _____________</p><p>Получил: _____________</p>"
-                f"<script>window.print();</script></body></html>"
-            )
-            encoded_html = urllib.parse.quote(print_html)
-            st.markdown(
-                f'<a href="data:text/html;charset=utf-8,{encoded_html}" target="_blank" style="text-decoration:none;">'
-                f'<button style="width:100%;padding:10px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;">'
-                f'Распечатать задачу</button></a>',
-                unsafe_allow_html=True
-            )
+            print_html = build_task_print_html(task, cl, tp, fd)
+            print_b64 = base64.b64encode(print_html.encode("utf-8")).decode("utf-8")
+            print_btn_id = f"print_task_{sk}_{t['client_id']}_{t['task_idx']}"
+            st.markdown(f"""
+            <a href="data:text/html;base64,{print_b64}" target="_blank" rel="noopener" style="text-decoration:none;display:block;">
+                <button id="{print_btn_id}" style="width:100%;padding:10px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;">Распечатать задачу</button>
+            </a>
+            """, unsafe_allow_html=True)
 
             st.markdown("---")
             cd2 = parse_deadline(task.get("deadline", ""))
@@ -765,15 +813,18 @@ elif st.session_state.active_tab == "Сделки":
             if deal.get("deal_comments"):
                 for com in deal["deal_comments"]:
                     st.markdown(f"*{com['time']}* — {com['text']}")
-            ik = f"ndc_val_{deal['id']}"
+
+            # --- Заметка к заказу (с очисткой поля через версию) ---
+            note_ver = st.session_state.deal_note_ver.get(deal['id'], 0)
+            ik = f"ndc_val_{deal['id']}_{note_ver}"
             ndc = st.text_input("Заметка к заказу:", key=ik, placeholder="Например: Согласовали доставку")
             if st.button("Сохранить заметку", key=f"ndcb_{deal['id']}", use_container_width=True):
                 if ndc.strip():
                     deal["deal_comments"].append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ndc.strip()})
                     save_data(st.session_state.crm_store)
-                    if ik in st.session_state:
-                        del st.session_state[ik]
+                    st.session_state.deal_note_ver[deal['id']] = note_ver + 1
                     st.rerun()
+
             st.markdown("---")
             if client.get("comments"):
                 with st.expander("Отчёты по задачам"):
@@ -936,8 +987,12 @@ elif st.session_state.active_tab == "Сделки":
                 if b1.button("Назад", key=f"wb_{deal['id']}", use_container_width=True):
                     deal['status'] = "Новый"
                     commit_and_rerun(st.session_state.crm_store)
-                if b2.button("Завершить сделку", key=f"wc_{deal['id']}", use_container_width=True, type="primary"):
-                    close_deal_dialog(deal['id'])
+                incomplete_count = sum(1 for t in client.get("tasks", []) if not t.get("done"))
+                if incomplete_count > 0:
+                    b2.warning(f"Есть невыполненные задачи ({incomplete_count})")
+                else:
+                    if b2.button("Завершить сделку", key=f"wc_{deal['id']}", use_container_width=True, type="primary"):
+                        close_deal_dialog(deal['id'])
             elif deal['status'] == "Сделка закрыта":
                 if b1.button("Возобновить", key=f"wr_{deal['id']}", use_container_width=True):
                     deal['status'] = "В работе"
