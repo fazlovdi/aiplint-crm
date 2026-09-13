@@ -468,6 +468,12 @@ def migrate_data(data):
     for d in data.get("deals", []):
         if "deal_comments" not in d:
             d["deal_comments"] = []
+        if "deal_files" not in d:
+            d["deal_files"] = []
+        if "close_file_path" not in d:
+            d["close_file_path"] = None
+        if "close_file_name" not in d:
+            d["close_file_name"] = None
         if d.get("status") == "New":
             d["status"] = "Новый"
         if d.get("status") == "На согласовании":
@@ -501,6 +507,12 @@ def load_data():
                         if "deal_id" not in t:
                             t["deal_id"] = first_deal_id
                 for d in data.get("deals", []):
+                    if "deal_files" not in d:
+                        d["deal_files"] = []
+                    if "close_file_path" not in d:
+                        d["close_file_path"] = None
+                    if "close_file_name" not in d:
+                        d["close_file_name"] = None
                     if d.get("status") == "На согласовании":
                         d["status"] = "В работе"
             return data
@@ -545,6 +557,7 @@ def close_deal_dialog(deal_id):
         return
     st.markdown("Заполните отчёт о выполнении сделки:")
     report = st.text_area("Отчёт (обязательно):", key=f"close_deal_report_{deal_id}")
+    close_file = st.file_uploader("Файл закрытия сделки:", key=f"close_deal_file_{deal_id}")
     if st.button("Завершить сделку", type="primary", use_container_width=True):
         if report.strip():
             for d in st.session_state.crm_store["deals"]:
@@ -552,6 +565,11 @@ def close_deal_dialog(deal_id):
                     d['status'] = "Сделка закрыта"
                     d['closed_date'] = datetime.now().strftime("%Y-%m-%d")
                     d['close_report'] = report.strip()
+                    if close_file:
+                        fi = save_uploaded_file(close_file, d["client_id"], "deal_close")
+                        if fi:
+                            d["close_file_path"] = fi["path"]
+                            d["close_file_name"] = fi["name"]
                     break
             save_data(st.session_state.crm_store)
             st.toast("Сделка завершена", icon="\u2705")
@@ -992,8 +1010,8 @@ elif st.session_state.active_tab == "Сделки":
     clients = st.session_state.crm_store.get("clients", [])
     cu = st.session_state.user_name
     mgrs = get_managers_list()
-    statuses = ["Новый", "В работе", "Сделка закрыта", "Архив"]
-    col_widths = [1, 1, 1, 1]
+    statuses = ["Новый", "В работе", "Сделка закрыта"]
+    col_widths = [1, 1, 1]
     kanban_cols = st.columns(col_widths)
 
     for idx, status in enumerate(statuses):
@@ -1031,28 +1049,19 @@ elif st.session_state.active_tab == "Сделки":
                                 t_done = t.get("done", False)
                                 t_overdue = is_task_overdue(t)
                                 if t_done:
-                                    status_icon = "\u2705"
                                     border_color = "#C9CFD7"
                                 elif t_overdue:
-                                    status_icon = "\u26A0\uFE0F"
                                     border_color = "#D65757"
                                 else:
-                                    status_icon = "\u23F3"
                                     border_color = "#4CAF50"
                                 task_exp_key = f"deal_task_{d['id']}_{ti}"
                                 inject_border_css(task_exp_key, border_color)
-                                with st.expander(f"{status_icon} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}", expanded=False, key=task_exp_key):
+                                with st.expander(f"{t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}", expanded=False, key=task_exp_key):
                                     st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                                     st.markdown(f"**Срок:** {dl}")
                                     st.markdown(f"**Ответственный:** {t.get('manager', '\u2014')}")
-                                    if t_done:
-                                        st.markdown(f"**Статус:** \u2705 Выполнено")
-                                        if t.get("completion_report"):
-                                            st.markdown(f"**Отчёт:** {t['completion_report']}")
-                                    elif t_overdue:
-                                        st.markdown(f"**Статус:** \u26A0\uFE0F Просрочено")
-                                    else:
-                                        st.markdown(f"**Статус:** \u23F3 В работе")
+                                    if t_done and t.get("completion_report"):
+                                        st.markdown(f"**Отчёт:** {t['completion_report']}")
                                     if t.get('products'):
                                         st.markdown(f"**Товары:** {t['products']}")
                                     if t.get('ship_addr'):
@@ -1091,12 +1100,42 @@ elif st.session_state.active_tab == "Сделки":
                             else:
                                 ne["order_amount"] = 0
                                 ne["task_comment"] = st.text_area("Комментарии", key=f"ct_cs_{d['id']}")
+                            ntf = st.file_uploader("Файл задачи:", key=f"ct_file_{d['id']}")
                             if st.button("Создать задачу", key=f"ct_btn_{d['id']}", use_container_width=True, type="primary"):
                                 at = auto_task_title(ntt, c_name, d.get("title", ""))
-                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": None, "file_name": None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None, "deal_id": d["id"]}
+                                tfi = save_uploaded_file(ntf, d["client_id"], "task_file") if ntf else None
+                                te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": tfi["path"] if tfi else None, "file_name": tfi["name"] if tfi else None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None, "deal_id": d["id"]}
                                 te.update(ne)
                                 client.setdefault("tasks", []).append(te)
                                 commit_and_rerun(st.session_state.crm_store, "Задача создана")
+
+                    st.markdown("---")
+                    st.markdown("**Файлы сделки:**")
+                    if "deal_files" not in d:
+                        d["deal_files"] = []
+                    for dfi, dff in enumerate(d["deal_files"]):
+                        st.markdown(f"\U0001F4C4 {dff.get('file_name', '')}")
+                        render_file_action_buttons(dff.get("file_path"), dff.get("file_name", "файл"), f"deal_file_{d['id']}_{dfi}")
+                        if st.session_state.user_role == "admin":
+                            if st.button("Удалить файл", key=f"df_del_{d['id']}_{dfi}"):
+                                d["deal_files"].pop(dfi)
+                                commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+                    if d.get("close_file_path"):
+                        st.markdown(f"\U0001F4C4 Файл закрытия: {d.get('close_file_name', '')}")
+                        render_file_action_buttons(d["close_file_path"], d.get("close_file_name", "файл"), f"deal_close_file_{d['id']}")
+                    udf = st.file_uploader("Загрузить файл сделки:", key=f"df_up_{d['id']}")
+                    if st.button("Сохранить файл сделки", key=f"df_btn_{d['id']}", use_container_width=True):
+                        if udf:
+                            with st.spinner("Загрузка..."):
+                                fi = save_uploaded_file(udf, d["client_id"], "deal_file")
+                                if fi:
+                                    d["deal_files"].append({"file_path": fi["path"], "file_name": fi["name"]})
+                                    save_data(st.session_state.crm_store)
+                                    st.toast("Файл сохранён", icon="\U0001F4C1")
+                                    st.rerun()
+                        else:
+                            st.warning("Выберите файл")
+                    st.markdown("---")
 
                     if d.get("deal_comments"):
                         st.markdown("**Комментарии:**")
@@ -1137,6 +1176,49 @@ elif st.session_state.active_tab == "Сделки":
                             commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
             if not filtered:
                 st.caption("Нет сделок")
+
+    st.markdown("---")
+    st.subheader("Архив")
+    archived = [d for d in deals if d.get("status") == "Архив"]
+    if archived:
+        arch_cols = st.columns(4)
+        for ai, d in enumerate(archived):
+            col_idx = ai % 4
+            with arch_cols[col_idx]:
+                client = get_client_by_id(d["client_id"])
+                c_name = client["name"] if client else "Неизвестный клиент"
+                with st.expander(f"{d.get('title', 'Без названия')}", expanded=(st.session_state.get("open_deal_id") == d["id"]), key=f"arch_exp_{d['id']}"):
+                    st.markdown(f"**Клиент:** {c_name}")
+                    st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                    st.markdown(f"**Статус:** {d.get('status')}")
+                    if d.get("closed_date"):
+                        st.markdown(f"**Закрыта:** {format_date(d['closed_date'])}")
+                    if d.get("close_report"):
+                        st.markdown(f"**Отчёт:** {d['close_report']}")
+                    if d.get("close_file_path"):
+                        st.markdown(f"\U0001F4C4 {d.get('close_file_name', '')}")
+                        render_file_action_buttons(d["close_file_path"], d.get("close_file_name", "файл"), f"arch_close_file_{d['id']}")
+                    if "deal_files" in d and d["deal_files"]:
+                        st.markdown("**Файлы:**")
+                        for dfi, dff in enumerate(d["deal_files"]):
+                            st.markdown(f"\U0001F4C4 {dff.get('file_name', '')}")
+                            render_file_action_buttons(dff.get("file_path"), dff.get("file_name", "файл"), f"arch_file_{d['id']}_{dfi}")
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        if st.button("Вернуть в работу", key=f"arch_reopen_{d['id']}", use_container_width=True):
+                            d["status"] = "В работе"
+                            commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в работу")
+                    with b2:
+                        if st.button("В закрытые", key=f"arch_toclosed_{d['id']}", use_container_width=True, type="primary"):
+                            d["status"] = "Сделка закрыта"
+                            commit_and_rerun(st.session_state.crm_store, "Сделка возвращена в закрытые")
+                    if st.session_state.user_role == "admin":
+                        st.markdown("---")
+                        if st.button("Удалить сделку", key=f"arch_del_{d['id']}", use_container_width=True):
+                            st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != d["id"]]
+                            commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
+    else:
+        st.caption("Архив пуст")
 
 elif st.session_state.active_tab == "Клиенты":
     cu = st.session_state.user_name
@@ -1406,7 +1488,7 @@ elif st.session_state.active_tab == "Клиенты":
                     db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{cl['id']}")
                     if st.button("Создать сделку", key=f"dbn_{cl['id']}", use_container_width=True, type="primary"):
                         ndi = (max([d['id'] for d in deals]) if deals else 0) + 1
-                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "budget": db, "status": "Новый", "deal_comments": []})
+                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "budget": db, "status": "Новый", "deal_comments": [], "deal_files": [], "close_file_path": None, "close_file_name": None})
                         save_data(st.session_state.crm_store)
                         st.session_state.open_deal_id = ndi
                         st.session_state.active_tab = "Сделки"
@@ -1419,8 +1501,7 @@ elif st.session_state.active_tab == "Клиенты":
                     if client_tasks:
                         for ti, t in enumerate(client_tasks):
                             deadline = format_date(t.get("deadline", ""))
-                            status_icon = "\u26A0\uFE0F" if is_task_overdue(t) else "\u23F3"
-                            with st.expander(f"{status_icon} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {deadline}", expanded=False, key=f"cli_task_{cl['id']}_{ti}"):
+                            with st.expander(f"{t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {deadline}", expanded=False, key=f"cli_task_{cl['id']}_{ti}"):
                                 st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                                 st.markdown(f"**Срок:** {deadline}")
                                 st.markdown(f"**Ответственный:** {t.get('manager', '\u2014')}")
