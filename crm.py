@@ -48,11 +48,12 @@ else:
 
 def inject_border_css(key, color):
     """Инъекция CSS для окраски рамки экспандера через класс .st-key-<key>.
+    Целимся в details — сам видимый бокс экспандера, а не во внешний контейнер.
     Вызывать ДО создания st.expander(..., key=key)."""
     if color:
         st.markdown(f"""
         <style>
-            .st-key-{key} {{
+            .st-key-{key} details {{
                 border: 2px solid {color} !important;
                 border-radius: 14px !important;
             }}
@@ -670,7 +671,20 @@ elif st.session_state.active_tab == "Клиенты":
     if all_clients:
         for cl in fcl:
             itc = (st.session_state.last_id == cl["id"])
-            with st.expander(f"{cl['name']} — ID: {cl['id']} [{cl.get('category', 'Покупатель')}]", expanded=itc):
+
+            # --- Цвет рамки карточки клиента ---
+            cl_has_overdue = any(not t.get("done") and is_task_overdue(t) for t in cl.get("tasks", []))
+            cl_has_incomplete = any(not t.get("done") for t in cl.get("tasks", []))
+            cl_border_color = None
+            if cl_has_overdue:
+                cl_border_color = "#D65757"
+            elif cl_has_incomplete:
+                cl_border_color = "#4CAF50"
+
+            client_exp_key = f"client_card_{cl['id']}"
+            inject_border_css(client_exp_key, cl_border_color)
+
+            with st.expander(f"{cl['name']} — ID: {cl['id']} [{cl.get('category', 'Покупатель')}]", expanded=itc, key=client_exp_key):
                 with st.columns(2)[0]:
                     st.markdown(f"**{cl['phone']}** | {cl.get('email','')} | {cl.get('address','')}")
                     st.markdown(f"Скидка: **{cl.get('discount',0)}%** | Ответственный: **{cl.get('manager','—')}**")
@@ -840,13 +854,16 @@ elif st.session_state.active_tab == "Сделки":
                         if com.get("file_path"): render_file_action_buttons(com["file_path"], com.get("file_name", "файл"), f"dcom_{deal['id']}_{com['time'].replace(':','_')}")
             st.markdown("**Задачи:**")
             if client.get("tasks"):
-                for i, task in enumerate(client["tasks"]):
+                # Сортируем: невыполненные задачи вверху, выполненные внизу
+                indexed_tasks = list(enumerate(client["tasks"]))
+                sorted_indexed = sorted(indexed_tasks, key=lambda x: x[1].get("done", False))
+                for orig_i, task in sorted_indexed:
                     tp2 = task.get("type", "Связаться")
                     to2 = is_task_overdue(task)
                     fdl = format_date(task.get("deadline", ""))
                     ht2 = f"✅ {tp2} — {fdl}" if task.get("done") else f"{tp2} — {fdl} — {task.get('manager','—')}"
 
-                    task_exp_key = f"dt_{deal['id']}_{i}"
+                    task_exp_key = f"dt_{deal['id']}_{orig_i}"
                     inject_border_css(task_exp_key, "#D65757" if to2 else None)
 
                     with st.expander(ht2, expanded=False, key=task_exp_key):
@@ -865,44 +882,44 @@ elif st.session_state.active_tab == "Сделки":
                                     if task.get('tk_num'): st.markdown(f"Трек: `{task['tk_num']}`")
                             if task.get("file_path"):
                                 st.markdown(f"📄 {task.get('file_name', '')}")
-                                render_file_action_buttons(task["file_path"], task.get("file_name", ""), f"dtk_{deal['id']}_{i}")
-                            ntf = st.file_uploader("Добавить файл:", key=f"ntf_d_{deal['id']}_{i}")
-                            if st.button("Сохранить файл", key=f"stf_d_{deal['id']}_{i}"):
+                                render_file_action_buttons(task["file_path"], task.get("file_name", ""), f"dtk_{deal['id']}_{orig_i}")
+                            ntf = st.file_uploader("Добавить файл:", key=f"ntf_d_{deal['id']}_{orig_i}")
+                            if st.button("Сохранить файл", key=f"stf_d_{deal['id']}_{orig_i}"):
                                 if ntf:
                                     fi = save_uploaded_file(ntf, deal['id'], "task_file")
                                     if fi: task["file_path"] = fi["path"]; task["file_name"] = fi["name"]; commit_and_rerun(st.session_state.crm_store)
                             with st.expander("Редактировать", expanded=False):
-                                nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_d_{deal['id']}_{i}")
+                                nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_d_{deal['id']}_{orig_i}")
                                 if tp2 == "Отправить заказ":
-                                    eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_d_{deal['id']}_{i}")
-                                edl = st.date_input("Срок", value=parse_deadline(task.get("deadline", "")), format="DD/MM/YYYY", key=f"ed_dl_d_{deal['id']}_{i}")
-                                if st.button("Сохранить", key=f"ed_t_btn_d_{deal['id']}_{i}", use_container_width=True):
+                                    eoa = st.number_input("Сумма (руб.)", min_value=0.0, step=100.0, value=float(task.get("order_amount", 0)), key=f"ed_oa_d_{deal['id']}_{orig_i}")
+                                edl = st.date_input("Срок", value=parse_deadline(task.get("deadline", "")), format="DD/MM/YYYY", key=f"ed_dl_d_{deal['id']}_{orig_i}")
+                                if st.button("Сохранить", key=f"ed_t_btn_d_{deal['id']}_{orig_i}", use_container_width=True):
                                     task["manager"] = nm; task["deadline"] = edl.isoformat()
                                     if tp2 == "Отправить заказ": task["order_amount"] = eoa
                                     commit_and_rerun(st.session_state.crm_store)
                             if not task.get("done"):
-                                if st.checkbox("Выполнить", key=f"tsk_{deal['id']}_{i}"):
+                                if st.checkbox("Выполнить", key=f"tsk_{deal['id']}_{orig_i}"):
                                     with st.container(border=True):
-                                        rt = st.text_input("Отчёт:", key=f"rt_{deal['id']}_{i}")
-                                        uf = st.file_uploader("Файл/фото отчёта:", key=f"uf_{deal['id']}_{i}")
-                                        cnd = st.checkbox("Создать следующую задачу", key=f"cn_{deal['id']}_{i}")
+                                        rt = st.text_input("Отчёт:", key=f"rt_{deal['id']}_{orig_i}")
+                                        uf = st.file_uploader("Файл/фото отчёта:", key=f"uf_{deal['id']}_{orig_i}")
+                                        cnd = st.checkbox("Создать следующую задачу", key=f"cn_{deal['id']}_{orig_i}")
                                         ned = {}; ntdd = None; nttd = None; ntmd = None
                                         if cnd:
                                             st.markdown("---")
-                                            nttd = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"nt_type_d_{deal['id']}_{i}")
-                                            ntmd = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"nt_mgr_d_{deal['id']}_{i}")
+                                            nttd = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"nt_type_d_{deal['id']}_{orig_i}")
+                                            ntmd = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"nt_mgr_d_{deal['id']}_{orig_i}")
                                             if nttd == "Отправить заказ":
-                                                ned["products"] = st.text_area("Товары", key=f"nt_p_d_{deal['id']}_{i}")
-                                                ned["ship_addr"] = st.text_input("Адрес", key=f"nt_a_d_{deal['id']}_{i}")
-                                                ned["receiver"] = st.text_input("Получатель", key=f"nt_r_d_{deal['id']}_{i}")
-                                                ned["receiver_phone"] = format_phone(st.text_input("Тел.", key=f"nt_rp_d_{deal['id']}_{i}"))
-                                                ned["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"nt_sp_d_{deal['id']}_{i}")
-                                                ned["tk_num"] = st.text_input("Трек", key=f"nt_tk_d_{deal['id']}_{i}")
-                                                ned["order_amount"] = st.number_input("Сумма", min_value=0.0, step=100.0, key=f"nt_oa_d_{deal['id']}_{i}")
-                                                ned["task_comment"] = st.text_area("Комментарии", key=f"nt_c_d_{deal['id']}_{i}")
-                                            else: ned["order_amount"] = 0; ned["task_comment"] = st.text_area("Комментарии", key=f"nt_cs_d_{deal['id']}_{i}")
-                                            ntdd = st.date_input("Дата", format="DD/MM/YYYY", key=f"nt_d_d_{deal['id']}_{i}")
-                                        if st.button("Подтвердить", key=f"cbtn_{deal['id']}_{i}", use_container_width=True, type="primary"):
+                                                ned["products"] = st.text_area("Товары", key=f"nt_p_d_{deal['id']}_{orig_i}")
+                                                ned["ship_addr"] = st.text_input("Адрес", key=f"nt_a_d_{deal['id']}_{orig_i}")
+                                                ned["receiver"] = st.text_input("Получатель", key=f"nt_r_d_{deal['id']}_{orig_i}")
+                                                ned["receiver_phone"] = format_phone(st.text_input("Тел.", key=f"nt_rp_d_{deal['id']}_{orig_i}"))
+                                                ned["ship_pay"] = st.selectbox("Оплата", ["Включено в счёт", "Оплата при получении"], key=f"nt_sp_d_{deal['id']}_{orig_i}")
+                                                ned["tk_num"] = st.text_input("Трек", key=f"nt_tk_d_{deal['id']}_{orig_i}")
+                                                ned["order_amount"] = st.number_input("Сумма", min_value=0.0, step=100.0, key=f"nt_oa_d_{deal['id']}_{orig_i}")
+                                                ned["task_comment"] = st.text_area("Комментарии", key=f"nt_c_d_{deal['id']}_{orig_i}")
+                                            else: ned["order_amount"] = 0; ned["task_comment"] = st.text_area("Комментарии", key=f"nt_cs_d_{deal['id']}_{orig_i}")
+                                            ntdd = st.date_input("Дата", format="DD/MM/YYYY", key=f"nt_d_d_{deal['id']}_{orig_i}")
+                                        if st.button("Подтвердить", key=f"cbtn_{deal['id']}_{orig_i}", use_container_width=True, type="primary"):
                                             if rt.strip():
                                                 with st.spinner("Сохранение..."):
                                                     task["done"] = True
