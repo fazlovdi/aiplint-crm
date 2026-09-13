@@ -287,8 +287,8 @@ def render_phone_inline(phone, uid):
     components.html(f"""
     <div class="phone-action-group" style="padding:4px 0;">
         <span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\uD83D\uDCCB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\uD83D\uDCCB</button>
-        <a href="tel:+{cph}" class="phone-btn" style="text-decoration:none;" title="Позвонить">\uD83D\uDCDE</a>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\U0001F4CB</button>
+        <a href="tel:+{cph}" class="phone-btn" style="text-decoration:none;" title="Позвонить">\U0001F4DE</a>
     </div>
     """, height=40)
 
@@ -302,8 +302,8 @@ def render_extra_phone_inline(phone, name, role, uid):
     components.html(f"""
     <div class="phone-action-group" style="padding:2px 0;flex-wrap:wrap;">
         <span style="font-size:0.9rem;color:#3C4A5A;">{info}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\uD83D\uDCCB';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Скопировать">\uD83D\uDCCB</button>
-        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Позвонить">\uD83D\uDCDE</a>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Скопировать">\U0001F4CB</button>
+        <a href="tel:+{cph}" style="background:#EEF0F3;border:1px solid #DCE0E5;border-radius:6px;padding:4px 8px;text-decoration:none;font-size:0.8rem;color:#5A6B7D;min-width:36px;height:28px;display:inline-flex;align-items:center;justify-content:center;" title="Позвонить">\U0001F4DE</a>
     </div>
     """, height=32)
 
