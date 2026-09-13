@@ -1041,26 +1041,21 @@ elif st.session_state.active_tab == "Сделки":
 
                     if client:
                         deal_tasks.sort(key=lambda t: (t.get("done", False), get_task_sort_date(t)))
-                        if deal_tasks:
-                            st.markdown(f"**Задачи сделки ({len(deal_tasks)}):**")
-                            for ti, t in enumerate(deal_tasks):
+                        active_items = [(ti, t) for ti, t in enumerate(deal_tasks) if not t.get("done", False)]
+                        done_items = [(ti, t) for ti, t in enumerate(deal_tasks) if t.get("done", False)]
+
+                        if active_items:
+                            st.markdown(f"**Задачи сделки ({len(active_items)}):**")
+                            for ti, t in active_items:
                                 dl = format_date(t.get("deadline", ""))
-                                t_done = t.get("done", False)
                                 t_overdue = is_task_overdue(t)
-                                if t_done:
-                                    border_color = "#C9CFD7"
-                                elif t_overdue:
-                                    border_color = "#D65757"
-                                else:
-                                    border_color = "#4CAF50"
+                                border_color = "#D65757" if t_overdue else "#4CAF50"
                                 task_exp_key = f"deal_task_{d['id']}_{ti}"
                                 inject_border_css(task_exp_key, border_color)
                                 with st.expander(f"{t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}", expanded=False, key=task_exp_key):
                                     st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                                     st.markdown(f"**Срок:** {dl}")
                                     st.markdown(f"**Ответственный:** {t.get('manager', '\u2014')}")
-                                    if t_done and t.get("completion_report"):
-                                        st.markdown(f"**Отчёт:** {t['completion_report']}")
                                     if t.get('products'):
                                         st.markdown(f"**Товары:** {t['products']}")
                                     if t.get('ship_addr'):
@@ -1078,31 +1073,69 @@ elif st.session_state.active_tab == "Сделки":
                                     if t.get("file_path"):
                                         st.markdown(f"**Файл:** {t.get('file_name', '')}")
                                         render_file_action_buttons(t["file_path"], t.get("file_name", ""), f"deal_task_file_{d['id']}_{ti}")
+                                    st.markdown("---")
+                                    show_key = f"show_dt_complete_{d['id']}_{ti}"
+                                    if st.button("Выполнить задачу", key=f"btn_dt_complete_{d['id']}_{ti}", type="primary", use_container_width=True):
+                                        st.session_state[show_key] = not st.session_state.get(show_key, False)
+                                    if st.session_state.get(show_key, False):
+                                        rt = st.text_input("Отчёт (обязательно):", key=f"dt_rt_{d['id']}_{ti}")
+                                        uf = st.file_uploader("Файл/фото отчёта:", key=f"dt_uf_{d['id']}_{ti}")
+                                        if st.button("Подтвердить выполнение", key=f"dt_cbtn_{d['id']}_{ti}", use_container_width=True, type="primary"):
+                                            if rt.strip():
+                                                with st.spinner("Сохранение..."):
+                                                    t["done"] = True
+                                                    t["completion_report"] = rt.strip()
+                                                    fi = save_uploaded_file(uf, d["client_id"], "task_report")
+                                                    if fi:
+                                                        t["completion_file_path"] = fi["path"]
+                                                        t["completion_file_name"] = fi["name"]
+                                                    st.session_state[show_key] = False
+                                                    commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
+                                            else:
+                                                st.warning("Введите отчёт")
+
+                        if done_items:
+                            st.markdown("---")
+                            st.markdown(f"**Завершённые задачи сделки ({len(done_items)}):**")
+                            for ti, t in done_items:
+                                dl = format_date(t.get("deadline", ""))
+                                task_exp_key = f"deal_dtask_{d['id']}_{ti}"
+                                inject_border_css(task_exp_key, "#C9CFD7")
+                                with st.expander(f"{t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | Срок: {dl}", expanded=False, key=task_exp_key):
+                                    st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
+                                    st.markdown(f"**Срок:** {dl}")
+                                    st.markdown(f"**Ответственный:** {t.get('manager', '\u2014')}")
+                                    if t.get("completion_report"):
+                                        st.markdown(f"**Отчёт:** {t['completion_report']}")
+                                    if t.get('products'):
+                                        st.markdown(f"**Товары:** {t['products']}")
+                                    if t.get('ship_addr'):
+                                        st.markdown(f"**Адрес:** {t['ship_addr']}")
+                                    if t.get('receiver'):
+                                        st.markdown(f"**Получатель:** {t['receiver']} ({t.get('receiver_phone', '')})")
+                                    if t.get('ship_pay'):
+                                        st.markdown(f"**Оплата:** {t['ship_pay']}")
+                                    if t.get('tk_num'):
+                                        st.markdown(f"**Трек:** `{t['tk_num']}`")
+                                    if t.get('order_amount', 0) > 0:
+                                        st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
+                                    if t.get("file_path"):
+                                        st.markdown(f"**Файл:** {t.get('file_name', '')}")
+                                        render_file_action_buttons(t["file_path"], t.get("file_name", ""), f"deal_dtask_file_{d['id']}_{ti}")
                                     if t.get("completion_file_path"):
                                         st.markdown(f"**Файл отчёта:** {t.get('completion_file_name', '')}")
-                                        render_file_action_buttons(t["completion_file_path"], t.get("completion_file_name", ""), f"deal_task_cfile_{d['id']}_{ti}")
-                                    if not t_done:
-                                        st.markdown("---")
-                                        with st.expander("Завершить задачу", expanded=False, key=f"dt_complete_{d['id']}_{ti}"):
-                                            rt = st.text_input("Отчёт (обязательно):", key=f"dt_rt_{d['id']}_{ti}")
-                                            uf = st.file_uploader("Файл/фото отчёта:", key=f"dt_uf_{d['id']}_{ti}")
-                                            if st.button("Подтвердить выполнение", key=f"dt_cbtn_{d['id']}_{ti}", use_container_width=True, type="primary"):
-                                                if rt.strip():
-                                                    with st.spinner("Сохранение..."):
-                                                        t["done"] = True
-                                                        t["completion_report"] = rt.strip()
-                                                        fi = save_uploaded_file(uf, d["client_id"], "task_report")
-                                                        if fi:
-                                                            t["completion_file_path"] = fi["path"]
-                                                            t["completion_file_name"] = fi["name"]
-                                                        commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
-                                                else:
-                                                    st.warning("Введите отчёт")
-                        else:
+                                        render_file_action_buttons(t["completion_file_path"], t.get("completion_file_name", ""), f"deal_dtask_cfile_{d['id']}_{ti}")
+
+                        if not active_items and not done_items:
                             st.caption("Нет задач")
 
+                    st.markdown("---")
+
                     if client and d.get("status") != "Архив":
-                        with st.expander("Создать задачу", expanded=False, key=f"deal_new_task_{d['id']}"):
+                        show_ct_key = f"show_ct_{d['id']}"
+                        if st.button("Создать задачу", key=f"btn_ct_{d['id']}", type="primary", use_container_width=True):
+                            st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
+                        if st.session_state.get(show_ct_key, False):
                             ntt = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"ct_type_{d['id']}")
                             ntm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(cu) if cu in mgrs else 0, key=f"ct_mgr_{d['id']}")
                             ntd = st.date_input("Срок:", format="DD/MM/YYYY", key=f"ct_d_{d['id']}")
@@ -1126,9 +1159,10 @@ elif st.session_state.active_tab == "Сделки":
                                 te = {"text": at, "deadline": ntd.isoformat(), "done": False, "type": ntt, "file_path": tfi["path"] if tfi else None, "file_name": tfi["name"] if tfi else None, "manager": ntm, "completion_report": "", "completion_file_path": None, "completion_file_name": None, "deal_id": d["id"]}
                                 te.update(ne)
                                 client.setdefault("tasks", []).append(te)
+                                st.session_state[show_ct_key] = False
                                 commit_and_rerun(st.session_state.crm_store, "Задача создана")
+                        st.markdown("---")
 
-                    st.markdown("---")
                     st.markdown("**Файлы сделки:**")
                     if "deal_files" not in d:
                         d["deal_files"] = []
