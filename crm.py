@@ -47,15 +47,16 @@ else:
 # --- Цветные рамки ---
 
 def inject_border_css(key, color):
-    """Инъекция CSS для окраски рамки экспандера через класс .st-key-<key>.
-    Целимся в details — сам видимый бокс экспандера, а не во внешний контейнер.
-    Вызывать ДО создания st.expander(..., key=key)."""
+    """Инъекция CSS для окраски рамки ТОЛЬКО внешнего экспандера.
+    Используем > (direct child) чтобы не задевать вложенные экспандеры.
+    box-sizing: border-box чтобы рамка не меняла размеры布局."""
     if color:
         st.markdown(f"""
         <style>
-            .st-key-{key} details {{
+            .st-key-{key} > details {{
                 border: 2px solid {color} !important;
                 border-radius: 14px !important;
+                box-sizing: border-box !important;
             }}
         </style>
         """, unsafe_allow_html=True)
