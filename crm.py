@@ -61,95 +61,93 @@ else:
 
 def color_expander_border(color):
     """Красит рамку stExpander, внутри которого вызван."""
+    uid = f"exp_{uuid.uuid4().hex[:8]}"
+    st.markdown(f"""
+    <style>
+        [data-testid="stExpander"]:has(#{uid}) {{
+            border-color: {color} !important;
+            border-width: 2px !important;
+            border-style: solid !important;
+            border-radius: 14px !important;
+        }}
+    </style>
+    <div id="{uid}" style="width:0;height:0;overflow:hidden;"></div>
+    """, unsafe_allow_html=True)
     components.html(f"""
     <script>
         (function() {{
             function apply() {{
-                const iframe = window.frameElement;
-                if (!iframe) return;
-                let p = iframe.parentElement;
-                while (p) {{
-                    if (p.getAttribute('data-testid') === 'stExpander') {{
-                        p.style.borderColor = '{color}';
-                        p.style.borderWidth = '2px';
-                        p.style.borderRadius = '14px';
-                        return;
+                const doc = window.parent ? window.parent.document : document;
+                const marker = doc.getElementById('{uid}');
+                if (!marker) return false;
+                let el = marker.parentElement;
+                while (el && el !== doc.body) {{
+                    if (el.getAttribute('data-testid') === 'stExpander') {{
+                        el.style.borderColor = '{color}';
+                        el.style.borderWidth = '2px';
+                        el.style.borderStyle = 'solid';
+                        el.style.borderRadius = '14px';
+                        return true;
                     }}
-                    p = p.parentElement;
+                    el = el.parentElement;
                 }}
+                return false;
             }}
-            apply();
-            setTimeout(apply, 50);
+            if (!apply()) {{
+                let n = 0;
+                const t = setInterval(function() {{
+                    if (apply() || n >= 30) clearInterval(t);
+                    n++;
+                }}, 100);
+            }}
         }})();
     </script>
     """, height=0)
 
 def color_container_border(color):
     """Красит рамку st.container(border=True), внутри которого вызван."""
+    uid = f"cnt_{uuid.uuid4().hex[:8]}"
+    st.markdown(f"""
+    <style>
+        [data-testid="stVerticalBlockBorderWrapper"]:has(#{uid}) {{
+            border-color: {color} !important;
+            border-width: 2px !important;
+            border-style: solid !important;
+            border-radius: 14px !important;
+        }}
+    </style>
+    <div id="{uid}" style="width:0;height:0;overflow:hidden;"></div>
+    """, unsafe_allow_html=True)
     components.html(f"""
     <script>
         (function() {{
             function apply() {{
-                try {{
-                    const iframe = window.frameElement;
-                    if (!iframe) return false;
-                    const doc = window.parent ? window.parent.document : document;
-
-                    // Способ 1: ищем все элементы с 'border' в data-testid
-                    const all = doc.querySelectorAll('[data-testid]');
-                    for (const el of all) {{
-                        const t = (el.getAttribute('data-testid') || '').toLowerCase();
-                        if (t.includes('border') && el.contains(iframe)) {{
-                            el.style.borderColor = '{color}';
-                            el.style.borderWidth = '2px';
-                            el.style.borderStyle = 'solid';
-                            el.style.borderRadius = '14px';
-                            return true;
-                        }}
+                const doc = window.parent ? window.parent.document : document;
+                const marker = doc.getElementById('{uid}');
+                if (!marker) return false;
+                let el = marker.parentElement;
+                while (el && el !== doc.body) {{
+                    const t = el.getAttribute('data-testid') || '';
+                    if (t === 'stVerticalBlockBorderWrapper' ||
+                        t === 'stVerticalBlockBorderContainer' ||
+                        t.toLowerCase().includes('borderwrapper')) {{
+                        el.style.borderColor = '{color}';
+                        el.style.borderWidth = '2px';
+                        el.style.borderStyle = 'solid';
+                        el.style.borderRadius = '14px';
+                        return true;
                     }}
-
-                    // Способ 2: traverse из iframe наверх
-                    let p = iframe.parentElement;
-                    while (p && p !== doc.body) {{
-                        const t = (p.getAttribute('data-testid') || '').toLowerCase();
-                        if (t.includes('border')) {{
-                            p.style.borderColor = '{color}';
-                            p.style.borderWidth = '2px';
-                            p.style.borderStyle = 'solid';
-                            p.style.borderRadius = '14px';
-                            return true;
-                        }}
-                        p = p.parentElement;
-                    }}
-
-                    // Способ 3: ищем элемент с ненулевой рамкой через computed style
-                    p = iframe.parentElement;
-                    while (p && p !== doc.body) {{
-                        try {{
-                            const cs = (window.parent || window).getComputedStyle(p);
-                            const bw = parseFloat(cs.borderTopWidth) || 0;
-                            if (bw > 0 && cs.borderTopStyle !== 'none') {{
-                                p.style.borderColor = '{color}';
-                                p.style.borderWidth = '2px';
-                                p.style.borderStyle = 'solid';
-                                p.style.borderRadius = '14px';
-                                return true;
-                            }}
-                        }} catch(e) {{}}
-                        p = p.parentElement;
-                    }}
-                    return false;
-                }} catch(e) {{
-                    console.error('color_container_border:', e);
-                    return false;
+                    el = el.parentElement;
                 }}
+                return false;
             }}
-            let n = 0;
-            const tick = () => {{
-                if (apply() || n >= 20) return;
-                n++; setTimeout(tick, 100);
-            }};
-            tick();
+            if (!apply()) {{
+                let n = 0;
+                const t = setInterval(function() {{
+                    if (apply() || n >= 30) clearInterval(t);
+                    n++;
+                }}, 100);
+            }}
         }})();
     </script>
     """, height=0)
