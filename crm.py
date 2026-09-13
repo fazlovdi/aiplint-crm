@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
 from datetime import datetime
+from fpdf import FPDF
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 
@@ -34,6 +35,7 @@ st.markdown("""
     [data-testid="stFileUploader"] { border-radius: 14px; border: 2px dashed #C9CFD7; background-color: #FAFBFC; padding: 0.75rem; }
     .deal-col-header h4 { margin: 0; font-size: 1.1rem; }
     .deal-col-header p { margin: 0.2rem 0 0.8rem 0; color: #7F8C9A; font-size: 0.85rem; }
+    .greeting-block { margin-bottom: 1.5rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -256,70 +258,82 @@ def render_file_action_buttons(fp, fn, kp):
     else:
         st.download_button("Скачать", data=fb, file_name=fn, key=f"dl_{kp}")
 
-def build_task_print_html(task, cl, tp, fd):
-    """Собирает HTML-бланк задачи для печати."""
-    cp2 = task.get('products', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
-    ca2 = task.get('ship_addr', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    cr2 = task.get('receiver', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    ct2 = task.get('tk_num', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    client_name = cl['name'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    client_phone = cl['phone'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    receiver_phone = task.get('receiver_phone', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    ship_pay = task.get('ship_pay', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    manager = task.get('manager', '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    tp_safe = tp.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+# --- Генерация PDF для задачи ---
 
-    oav = task.get('order_amount', 0)
-    dpc = cl.get('discount', 0)
-    dam = oav * dpc / 100
-    tam = oav - dam
-    ch = ""
-    if oav > 0:
-        ch = f"<div>Сумма: {oav:,.0f} руб.</div><div>Скидка: {dpc}% ({dam:,.0f} руб.)</div><div style='font-size:18px;font-weight:bold;'>Итого: {tam:,.0f} руб.</div>".replace(",", " ")
+def generate_task_pdf(task, cl, tp, fd):
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.add_page()
 
-    file_reminder = ""
-    if task.get("file_path"):
-        file_reminder = "<div style='color:#D65757;font-weight:bold;margin:12px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенный файл!</div>"
-
+    # Логотип или текст
     lb = get_logo_base64()
-    if lb:
-        lt = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left; margin-right:20px;'/>"
-    else:
-        lt = "<div style='font-size:24px; font-weight:bold; float:left; margin-right:20px;'>АЙПЛИНТ</div>"
+    if lb and os.path.exists("logo.png"):
+        try: pdf.image("logo.png", x=15, y=15, w=45)
+        except: pass
 
-    html = f"""<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<title>Бланк задачи</title>
-<style>
-body {{ font-family: Arial, sans-serif; margin: 40px; }}
-.h {{ text-align: center; border-bottom: 2px solid #000; padding: 10px; clear: both; }}
-.s {{ margin: 8px 0; }}
-</style>
-</head>
-<body>
-{lt}
-<div class="h"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div>
-<div class="s"><b>Клиент:</b> {client_name} ({client_phone})</div>
-<div class="s"><b>Тип:</b> {tp_safe}</div>
-<div class="s"><b>Срок:</b> {fd}</div>
-<div class="s"><b>Ответственный:</b> {manager}</div>
-<hr>
-<div class="s"><b>Товары:</b><br>{cp2}</div>
-<div class="s"><b>Адрес:</b> {ca2}</div>
-<div class="s"><b>Получатель:</b> {cr2} ({receiver_phone})</div>
-<div class="s"><b>Оплата:</b> {ship_pay}</div>
-<div class="s"><b>Трек:</b> {ct2}</div>
-{ch}
-{file_reminder}
-<br><br>
-<p>Отпустил: _____________</p>
-<p>Получил: _____________</p>
-<script>window.onload = function() {{ window.print(); }};</script>
-</body>
-</html>"""
-    return html
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 15, "БЛАНК ЗАДАЧИ", new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, datetime.now().strftime("%d/%m/%Y"), new_x="LMARGIN", new_y="NEXT", align="C")
+    pdf.ln(4)
+    pdf.set_draw_color(0, 0, 0)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(5)
+
+    def safe(text):
+        return str(text if text else "").replace("\n", ", ")
+
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, f"Клиент: {safe(cl['name'])} ({safe(cl['phone'])})", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Тип: {safe(tp)}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Срок: {safe(fd)}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Ответственный: {safe(task.get('manager', ''))}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(3)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
+    pdf.ln(4)
+
+    if tp == "Отправить заказ":
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 7, "Товары:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        products_text = safe(task.get("products", ""))
+        for line in str(products_text).split("\n"):
+            pdf.multi_cell(0, 6, line)
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(0, 7, f"Адрес: {safe(task.get('ship_addr', ''))}", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 7, f"Получатель: {safe(task.get('receiver', ''))} ({safe(task.get('receiver_phone', ''))})", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 7, f"Оплата: {safe(task.get('ship_pay', ''))}", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 7, f"Трек: {safe(task.get('tk_num', ''))}", new_x="LMARGIN", new_y="NEXT")
+
+        oav = task.get("order_amount", 0)
+        if oav and oav > 0:
+            dp = cl.get("discount", 0)
+            da = oav * dp / 100
+            ta = oav - da
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "", 11)
+            pdf.cell(0, 7, f"Сумма: {oav:,.0f} руб.".replace(",", " "), new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 7, f"Скидка: {dp}% ({da:,.0f} руб.)".replace(",", " "), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.cell(0, 8, f"Итого: {ta:,.0f} руб.".replace(",", " "), new_x="LMARGIN", new_y="NEXT")
+
+    if task.get("file_path"):
+        pdf.ln(5)
+        pdf.set_fill_color(214, 87, 87)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 10, "  ! Не забудь распечатать вложенный файл!", new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.set_text_color(0, 0, 0)
+
+    pdf.ln(12)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 10, "Отпустил: _____________", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 10, "Получил:  _____________", new_x="LMARGIN", new_y="NEXT")
+
+    buf = io.BytesIO()
+    pdf.output(buf)
+    buf.seek(0)
+    return buf
 
 # --- Данные ---
 
@@ -531,11 +545,13 @@ if not st.session_state.authenticated:
                         st.error("Неверный логин или пароль.")
         st.stop()
 
-# --- Заголовок по центру + приветствие ---
+# --- Заголовок по центру + приветствие (увеличен отступ) ---
 
 st.markdown(f"""
+<div class="greeting-block">
 <h1 style='text-align: center; margin-bottom: 0.1rem;'>Айплинт CRM</h1>
-<p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0;'>Продуктивного тебе дня, {st.session_state.user_name} 😊</p>
+<p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0;'>Продуктивного тебе дня, {st.session_state.user_name} 😊</p>
+</div>
 """, unsafe_allow_html=True)
 
 if st.session_state.get("set_remember_token"):
@@ -570,7 +586,7 @@ with st.sidebar:
         st.session_state.current_remember_token = None
         st.rerun()
 
-# --- Навигация (Клиенты → Задачи → Сделки, по умолчанию Задачи) ---
+# --- Навигация ---
 
 nc1, nc2, nc3 = st.columns(3)
 with nc1:
@@ -673,15 +689,17 @@ if st.session_state.active_tab == "Задачи":
                         commit_and_rerun(st.session_state.crm_store)
             st.markdown("---")
 
-            # --- Кнопка печати задачи ---
-            print_html = build_task_print_html(task, cl, tp, fd)
-            print_b64 = base64.b64encode(print_html.encode("utf-8")).decode("utf-8")
-            print_btn_id = f"print_task_{sk}_{t['client_id']}_{t['task_idx']}"
-            st.markdown(f"""
-            <a href="data:text/html;base64,{print_b64}" target="_blank" rel="noopener" style="text-decoration:none;display:block;">
-                <button id="{print_btn_id}" style="width:100%;padding:10px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;">Распечатать задачу</button>
-            </a>
-            """, unsafe_allow_html=True)
+            # --- PDF-печать задачи ---
+            pdf_buf = generate_task_pdf(task, cl, tp, fd)
+            st.download_button(
+                "Распечатать задачу (PDF)",
+                data=pdf_buf,
+                file_name=f"task_{cl['name']}_{fd.replace('/', '.')}.pdf",
+                mime="application/pdf",
+                key=f"print_pdf_{sk}_{t['client_id']}_{t['task_idx']}",
+                use_container_width=True,
+                type="primary"
+            )
 
             st.markdown("---")
             cd2 = parse_deadline(task.get("deadline", ""))
@@ -814,7 +832,7 @@ elif st.session_state.active_tab == "Сделки":
                 for com in deal["deal_comments"]:
                     st.markdown(f"*{com['time']}* — {com['text']}")
 
-            # --- Заметка к заказу (с очисткой поля через версию) ---
+            # --- Заметка к заказу (с очисткой поля) ---
             note_ver = st.session_state.deal_note_ver.get(deal['id'], 0)
             ik = f"ndc_val_{deal['id']}_{note_ver}"
             ndc = st.text_input("Заметка к заказу:", key=ik, placeholder="Например: Согласовали доставку")
@@ -885,6 +903,20 @@ elif st.session_state.active_tab == "Сделки":
                                         task["file_path"] = fi["path"]
                                         task["file_name"] = fi["name"]
                                         commit_and_rerun(st.session_state.crm_store)
+
+                            # PDF-печать задачи внутри сделки
+                            fd_pdf = format_date(task.get("deadline", ""))
+                            pdf_buf = generate_task_pdf(task, client, tp2, fd_pdf)
+                            st.download_button(
+                                "Распечатать задачу (PDF)",
+                                data=pdf_buf,
+                                file_name=f"task_{client['name']}_{fd_pdf.replace('/', '.')}.pdf",
+                                mime="application/pdf",
+                                key=f"print_pdf_d_{deal['id']}_{orig_i}",
+                                use_container_width=True,
+                                type="primary"
+                            )
+
                             with st.expander("Редактировать", expanded=False):
                                 nm = st.selectbox("Ответственный:", mgrs, index=mgrs.index(task.get("manager", cu)) if task.get("manager", cu) in mgrs else 0, key=f"ed_mgr_d_{deal['id']}_{orig_i}")
                                 if tp2 == "Отправить заказ":
@@ -965,7 +997,7 @@ elif st.session_state.active_tab == "Сделки":
                     ex["task_comment"] = st.text_area("Комментарии", key=f"t_cs_{dfv}")
                 tuf = st.file_uploader("Прикрепить файл:", key=f"t_f_{dfv}")
                 td = st.date_input("Дата", format="DD/MM/YYYY", key=f"td_{dfv}")
-                if st.button("Поставить задачу", key=f"tsv_{dfv}", use_container_width=True):
+                if st.button("Поставить задачу", key=f"tsv_{dfv}", use_container_width=True, type="primary"):
                     fi = save_uploaded_file(tuf, deal['id'], "task_init")
                     at = auto_task_title(tt, client['name'], deal['title'])
                     te = {"text": at, "deadline": td.isoformat(), "done": False, "type": tt, "file_path": fi["path"] if fi else None, "file_name": fi["name"] if fi else None, "manager": ntm}
