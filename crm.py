@@ -1,5 +1,5 @@
 import streamlit as st
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading
+import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
 from datetime import datetime
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
@@ -15,111 +15,35 @@ st.markdown("""
         background-color: #EEF0F3;
         border-right: 1px solid #DCE0E5;
     }
-    .stContainer {
-        border-radius: 14px;
-        background-color: #FFFFFF;
-        border: 1px solid #E8EBEF;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.03);
-        padding: 1rem 1.25rem;
-    }
-    /* Expander стилизация под iOS */
-    .stExpander {
-        border-radius: 14px;
-        overflow: hidden;
-        border: 1px solid #E8EBEF;
-        background-color: #FFFFFF;
-        margin-bottom: 0.5rem; /* Отступ между карточками */
-    }
+    .stContainer { border-radius: 14px; background-color: #FFFFFF; border: 1px solid #E8EBEF; box-shadow: 0 2px 8px rgba(0,0,0,0.03); padding: 1rem 1.25rem; }
+    .stExpander { border-radius: 14px; overflow: hidden; border: 1px solid #E8EBEF; background-color: #FFFFFF; margin-bottom: 0.5rem; }
     .stExpander > details { border-radius: 14px; }
-    .stExpander > details > summary {
-        font-weight: 600;
-        font-size: 1rem;
-        color: #2C3E50;
-        padding: 0.75rem 1.25rem;
-        list-style: none;
-        border-radius: 14px;
-        cursor: pointer;
-    }
+    .stExpander > details > summary { font-weight: 600; font-size: 1rem; color: #2C3E50; padding: 0.75rem 1.25rem; list-style: none; border-radius: 14px; cursor: pointer; }
     .stExpander > details > summary:hover { background-color: #F5F6F8; }
-    
-    h1, h2, h3, h4 {
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-        font-weight: 700;
-        color: #2C3E50 !important;
-        letter-spacing: -0.02em;
-    }
+    h1, h2, h3, h4 { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; font-weight: 700; color: #2C3E50 !important; letter-spacing: -0.02em; }
     h1 { font-size: 1.75rem; margin-bottom: 0.5rem; }
     h2 { font-size: 1.4rem; margin-top: 1rem; }
+    h3 { font-size: 1.1rem; }
     hr { border: 0; height: 1px; background: #E8EBEF; margin: 1rem 0; }
-    
-    /* Кнопки */
-    button[kind="primary"], .stButton > button[kind="primary"] {
-        background-color: #4F6D9C;
-        color: #FFFFFF;
-        border-radius: 10px;
-        font-weight: 600;
-        font-size: 0.95rem;
-        padding: 0.55rem 1.1rem;
-        border: none;
-        box-shadow: 0 2px 6px rgba(79,109,156,0.2);
-        transition: all 0.15s ease;
-    }
+    button[kind="primary"], .stButton > button[kind="primary"] { background-color: #4F6D9C; color: #FFFFFF; border-radius: 10px; font-weight: 600; font-size: 0.95rem; padding: 0.55rem 1.1rem; border: none; box-shadow: 0 2px 6px rgba(79,109,156,0.2); transition: all 0.15s ease; }
     button[kind="primary"]:hover { background-color: #3F5A82; box-shadow: 0 3px 10px rgba(79,109,156,0.25); }
-    button[kind="secondary"], .stButton > button[kind="secondary"] {
-        background-color: transparent;
-        color: #4F6D9C;
-        border: 1px solid #C9CFD7;
-        border-radius: 10px;
-        font-weight: 500;
-        font-size: 0.95rem;
-        padding: 0.55rem 1.1rem;
-        transition: all 0.15s ease;
-    }
-
-    /* Поля ввода */
-    .stTextInput > div > input,
-    .stTextArea > div > textarea,
-    .stNumberInput > div > div > input {
-        background-color: #FFFFFF !important;
-        border-radius: 10px !important;
-        border: 1.5px solid #DCE0E5 !important;
-        padding: 0.55rem 0.8rem !important;
-        color: #2C3E50 !important;
-        font-size: 1rem;
-    }
-    .stSelectbox > div > div {
-        background-color: #FFFFFF;
-        border-radius: 10px;
-        border: 1.5px solid #DCE0E5;
-        padding: 0.35rem 0.75rem;
-    }
-
-    [data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        border-radius: 14px;
-        padding: 1rem 1.25rem;
-        border: 1px solid #E8EBEF;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.02);
-    }
-
+    button[kind="secondary"], .stButton > button[kind="secondary"] { background-color: transparent; color: #4F6D9C; border: 1px solid #C9CFD7; border-radius: 10px; font-weight: 500; font-size: 0.95rem; padding: 0.55rem 1.1rem; transition: all 0.15s ease; }
+    .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; }
+    .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
+    .stTextInput > div > input:focus, .stTextArea > div > textarea:focus, .stNumberInput > div > div > input:focus, .stSelectbox > div > div:focus-within { outline: none; border-color: #DCE0E5 !important; box-shadow: none !important; }
+    .stSelectbox > div > div { background-color: #FFFFFF; border-radius: 10px; border: 1.5px solid #DCE0E5; padding: 0.35rem 0.75rem; }
+    [data-testid="stMetric"] { background-color: #FFFFFF; border-radius: 14px; padding: 1rem 1.25rem; border: 1px solid #E8EBEF; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+    [data-testid="stMetric"] label { font-size: 0.78rem; color: #7F8C9A; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600; }
+    [data-testid="stMetric"] [data-testid="stMetricValue"] { font-size: 1.5rem; font-weight: 700; color: #2C3E50; }
     ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #C9CFD7; border-radius: 4px; }
-
+    .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
+    .stMarkdown strong { color: #2C3E50; font-weight: 600; }
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
-    
-    /* Рамки для просроченных и новых */
-    .overdue-frame-wrapper {
-        border: 2px solid #D65757;
-        border-radius: 14px;
-        padding: 0;
-        margin-bottom: 1rem;
-    }
-    .new-task-frame-wrapper {
-        border: 2px solid #4CAF50;
-        border-radius: 14px;
-        padding: 0;
-        margin-bottom: 1rem;
-    }
+    .stHorizontalBlock .stButton button { border-radius: 12px; font-size: 0.95rem; font-weight: 600; padding: 0.65rem 1rem; }
+    [data-testid="stFileUploader"] { border-radius: 14px; border: 2px dashed #C9CFD7; background-color: #FAFBFC; padding: 0.75rem; }
+    .comments-box { border: 1.5px solid #DCE0E5; border-radius: 12px; padding: 0.75rem 1rem; background-color: #FAFBFC; margin-bottom: 1rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -132,7 +56,37 @@ if isinstance(raw_token, str):
 else:
     YANDEX_TOKEN = ""
 
+# --- Цветные рамки через CSS :has() ---
+
+def color_expander_border(color):
+    """Красит рамку stExpander, внутри которого вызван."""
+    uid = f"exp_{uuid.uuid4().hex[:8]}"
+    st.markdown(f"""
+    <style>
+        div[data-testid="stExpander"]:has(#{uid}) {{
+            border: 2px solid {color} !important;
+            border-radius: 14px !important;
+        }}
+    </style>
+    <span id="{uid}" style="display:none"></span>
+    """, unsafe_allow_html=True)
+
+def color_container_border(color):
+    """Красит рамку st.container(border=True), внутри которого вызван."""
+    uid = f"cnt_{uuid.uuid4().hex[:8]}"
+    st.markdown(f"""
+    <style>
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(#{uid}) {{
+            border-color: {color} !important;
+            border-width: 2px !important;
+            border-radius: 14px !important;
+        }}
+    </style>
+    <span id="{uid}" style="display:none"></span>
+    """, unsafe_allow_html=True)
+
 # --- Пароли ---
+
 def hash_password(pwd, salt=None):
     if salt is None:
         salt = secrets.token_hex(16)
@@ -158,6 +112,7 @@ def verify_password(pwd, stored):
     return pwd.strip() == stored
 
 # --- Яндекс.Диск ---
+
 def yandex_headers():
     return {"Authorization": f"OAuth {YANDEX_TOKEN}", "Accept": "application/json"}
 
@@ -189,7 +144,6 @@ def download_db_from_yandex():
                     f.write(file_res.text)
                 return
     except Exception: pass
-    
     if not os.path.exists(FILE_NAME):
         default_db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2"}
         with open(FILE_NAME, "w", encoding="utf-8") as f:
@@ -235,6 +189,7 @@ def download_file_from_yandex(remote_path):
     return None
 
 # --- Утилиты ---
+
 def format_phone(p_str):
     if not p_str: return ""
     digits = re.sub(r"\D", "", p_str)
@@ -359,6 +314,7 @@ def render_file_action_buttons(file_path, file_name, key_prefix):
         st.download_button("Скачать", data=file_bytes, file_name=file_name, key=f"dl_{key_prefix}")
 
 # --- Данные ---
+
 def migrate_data(data):
     default_users = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]
     if "users" not in data:
@@ -434,6 +390,7 @@ def close_deal_dialog(deal_id):
             st.error("Заполните отчёт")
 
 # --- Session state ---
+
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
@@ -455,6 +412,7 @@ if "yandex_folders_ready" not in st.session_state:
     st.session_state.yandex_folders_ready = True
 
 # --- Авторизация ---
+
 def check_login(username, password):
     users_list = st.session_state.crm_store.get("users", [])
     for u in users_list:
@@ -520,6 +478,7 @@ with st.sidebar:
         st.rerun()
 
 # --- Навигация ---
+
 col_m1, col_m2, col_m3 = st.columns(3)
 with col_m1:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
@@ -533,6 +492,7 @@ with col_m3:
 st.markdown("---")
 
 # --- Вкладка «Задачи» ---
+
 if st.session_state.active_tab == "Задачи":
     st.header("Задачи")
     now_time = datetime.now()
@@ -595,11 +555,10 @@ if st.session_state.active_tab == "Задачи":
         formatted_date = format_date(t["deadline_str"])
         header_text = f"{formatted_date} — {t['client_name']} — {t['type']}"
 
-        # Красная рамка оборачивает ВЕСЬ expander
-        if is_over:
-            st.markdown('<div class="overdue-frame-wrapper">', unsafe_allow_html=True)
-
         with st.expander(header_text, expanded=False):
+            # Красная рамка ВНУТРИ expander — красит сам expander
+            if is_over:
+                color_expander_border("#D65757")
             st.markdown(f"**{status_label}** — {formatted_date} | {t_type}")
             st.markdown(f"👤 **{t['client_name']}** ({t['client_phone']})")
             if t_type == "Отправить заказ":
@@ -715,9 +674,6 @@ if st.session_state.active_tab == "Задачи":
                         task["order_amount"] = edit_oa
                     commit_and_rerun(st.session_state.crm_store)
 
-        if is_over:
-            st.markdown('</div>', unsafe_allow_html=True)
-
     col_t1, col_t2 = st.columns(2)
     with col_t1:
         with st.container(border=True):
@@ -735,8 +691,8 @@ if st.session_state.active_tab == "Задачи":
                     render_task_block(t, "future")
             else:
                 st.caption("План на будущие дни пуст.")
-
 # --- Вкладка «Клиенты» ---
+
 elif st.session_state.active_tab == "Клиенты":
     st.header("Клиенты")
     current_user_name = st.session_state.user_name
@@ -790,18 +746,18 @@ elif st.session_state.active_tab == "Клиенты":
         with col_f2:
             c_address = st.text_input("Основной адрес", key=f"ca_{fv}")
             c_category = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], key=f"cc_{fv}")
-        # Комментарии — под категорией
-        st.markdown('<div class="comments-box">', unsafe_allow_html=True)
-        st.markdown("**Комментарии:**")
-        new_cc_form = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
-        if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
-            if new_cc_form.strip():
-                st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": new_cc_form.strip()})
-                st.rerun()
-        if st.session_state.get("pending_client_comments"):
-            for pc in st.session_state["pending_client_comments"]:
-                st.markdown(f"- *{pc['time']}*: {pc['text']}")
-        st.markdown('</div>', unsafe_allow_html=True)
+            # Комментарии — в правой колонке, под категорией
+            st.markdown('<div class="comments-box">', unsafe_allow_html=True)
+            st.markdown("**Комментарии:**")
+            new_cc_form = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
+            if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
+                if new_cc_form.strip():
+                    st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": new_cc_form.strip()})
+                    st.rerun()
+            if st.session_state.get("pending_client_comments"):
+                for pc in st.session_state["pending_client_comments"]:
+                    st.markdown(f"- *{pc['time']}*: {pc['text']}")
+            st.markdown('</div>', unsafe_allow_html=True)
         st.markdown("---")
         col_s1, col_s2, col_s3 = st.columns(3)
         with col_s1:
@@ -886,7 +842,6 @@ elif st.session_state.active_tab == "Клиенты":
         filtered_clients.append(client)
 
     if all_clients:
-        # Кнопка "Карточки клиентов" убрана — рендерим напрямую
         for client in filtered_clients:
             is_target_card = (st.session_state.last_id == client["id"])
             with st.expander(f"{client['name']} — ID: {client['id']} [{client.get('category', 'Покупатель')}]", expanded=is_target_card):
@@ -1037,12 +992,13 @@ elif st.session_state.active_tab == "Клиенты":
                         st.session_state.open_deal_id = new_deal_id
                         st.session_state.active_tab = "Сделки"
                         st.rerun()
-        if st.session_state.get("last_id"):
-            st.session_state.last_id = None
+            if st.session_state.get("last_id"):
+                st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
 
 # --- Вкладка «Сделки» ---
+
 elif st.session_state.active_tab == "Сделки":
     st.header("Сделки")
     deal_search = st.text_input("Поиск по сделкам (название, клиент, трек-номер, получатель):", key="deal_search_input", placeholder="Введите текст...").strip().lower()
@@ -1080,10 +1036,9 @@ elif st.session_state.active_tab == "Сделки":
     def draw_deal_card(deal, client):
         is_open = (st.session_state.get("open_deal_id") == deal["id"])
         has_overdue = deal_has_overdue(deal)
-        # Красная рамка оборачивает ВЕСЬ контейнер сделки
-        if has_overdue:
-            st.markdown('<div class="overdue-frame-wrapper">', unsafe_allow_html=True)
         with st.container(border=True):
+            if has_overdue:
+                color_container_border("#D65757")
             card_title = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(card_title, expanded=is_open):
                 st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
@@ -1117,10 +1072,9 @@ elif st.session_state.active_tab == "Сделки":
                             header_t = f"✅ {t_type} — {formatted_dl}"
                         else:
                             header_t = f"{t_type} — {formatted_dl} — {task.get('manager','—')}"
-                        # Красная рамка для просроченной задачи
-                        if task_overdue:
-                            st.markdown('<div class="overdue-frame-wrapper">', unsafe_allow_html=True)
                         with st.expander(header_t, expanded=False):
+                            if task_overdue:
+                                color_expander_border("#D65757")
                             if task.get("done"):
                                 st.markdown(f"~~{task['text']}~~ — выполнено")
                             else:
@@ -1206,14 +1160,11 @@ elif st.session_state.active_tab == "Сделки":
                                                         commit_and_rerun(st.session_state.crm_store)
                                                 else:
                                                     st.warning("Введите отчёт")
-                        if task_overdue:
-                            st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.caption("Нет задач.")
                 dfv = f"{st.session_state.deal_form_version}_{deal['id']}"
-                # Зелёная рамка оборачивает блок новой задачи
-                st.markdown('<div class="new-task-frame-wrapper">', unsafe_allow_html=True)
                 with st.expander("Новая задача", expanded=False, key=f"new_task_exp_{dfv}"):
+                    color_expander_border("#4CAF50")
                     task_type = st.selectbox("Тип:", ["Связаться", "Отправить заказ"], key=f"t_type_sel_{dfv}")
                     new_task_manager = st.selectbox("Ответственный:", managers, index=managers.index(current_user_name) if current_user_name in managers else 0, key=f"t_mgr_{dfv}")
                     ex_data = {}
@@ -1243,7 +1194,6 @@ elif st.session_state.active_tab == "Сделки":
                         st.session_state.deal_form_version += 1
                         st.toast("Задача добавлена", icon="✅")
                         st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
                 st.markdown("---")
                 cb1, cb2 = st.columns(2)
                 if deal['status'] == "Новый":
@@ -1267,8 +1217,6 @@ elif st.session_state.active_tab == "Сделки":
                     if cb1.button("Возобновить", key=f"ura_{deal['id']}", use_container_width=True):
                         deal['status'] = "В работе"
                         commit_and_rerun(st.session_state.crm_store)
-        if has_overdue:
-            st.markdown('</div>', unsafe_allow_html=True)
 
     with st_new:
         st.markdown(f"#### Новые  \n`{t_new:,.0f} руб.`")
@@ -1286,7 +1234,6 @@ elif st.session_state.active_tab == "Сделки":
             if d["status"] == "Сделка закрыта" and deal_matches_search(d, deal_search):
                 draw_deal_card(d, get_client(d["client_id"]))
 
-    # Сбрасываем open_deal_id после рендера всех колонок
     if st.session_state.get("open_deal_id") is not None:
         st.session_state.open_deal_id = None
 
