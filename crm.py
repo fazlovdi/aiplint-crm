@@ -1086,6 +1086,8 @@ elif st.session_state.active_tab == "Сделки":
                                         st.markdown(f"**Файл:** {t.get('file_name', '')}")
                                         render_file_action_buttons(t["file_path"], t.get("file_name", ""), f"deal_task_file_{d['id']}_{ti}")
                                     st.markdown("---")
+                                    render_print_button(t, client, t.get('type', 'Связаться'), dl, f"deal_task_{d['id']}_{ti}")
+                                    st.markdown("---")
                                     show_key = f"show_dt_complete_{d['id']}_{ti}"
                                     if st.button("Выполнить задачу", key=f"btn_dt_complete_{d['id']}_{ti}", type="primary", use_container_width=True):
                                         st.session_state[show_key] = not st.session_state.get(show_key, False)
