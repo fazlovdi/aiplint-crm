@@ -1219,11 +1219,15 @@ elif st.session_state.active_tab == "Сделки":
                         st.markdown("**Комментарии:**")
                         for cm in d["deal_comments"]:
                             st.markdown(f"- *{cm.get('time', '')}*: {cm.get('text', '')}")
+                    dc_clr_key = f"clr_dc_{d['id']}"
+                    if st.session_state.get(dc_clr_key):
+                        st.session_state[f"dc_input_{d['id']}"] = ""
+                        st.session_state[dc_clr_key] = False
                     nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
                     if st.button("Добавить комментарий", key=f"dc_btn_{d['id']}", use_container_width=True):
                         if nc.strip():
                             d.setdefault("deal_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
-                            st.session_state[f"dc_input_{d['id']}"] = ""
+                            st.session_state[dc_clr_key] = True
                             commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
                         else:
                             st.warning("Введите текст")
@@ -1316,12 +1320,15 @@ elif st.session_state.active_tab == "Клиенты":
             cc = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], key=f"cc_{fv}")
             with st.container(border=True):
                 st.markdown("**Комментарии:**")
+                cc_form_clr = f"clr_cc_form_{fv}"
+                if st.session_state.get(cc_form_clr):
+                    st.session_state[f"new_cc_form_{fv}"] = ""
+                    st.session_state[cc_form_clr] = False
                 ncc = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
                 if st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True):
                     if ncc.strip():
                         st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
-                        st.session_state[f"new_cc_form_{fv}"] = ""
-                        st.toast("Комментарий добавлен", icon="\u2705")
+                        st.session_state[cc_form_clr] = True
                         st.rerun()
                     else:
                         st.warning("Введите текст")
@@ -1457,11 +1464,15 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
                         else:
                             st.caption("Пока нет комментариев")
+                        cc_clr_key = f"clr_cc_{cl['id']}"
+                        if st.session_state.get(cc_clr_key):
+                            st.session_state[f"new_cc_input_{cl['id']}"] = ""
+                            st.session_state[cc_clr_key] = False
                         nci = st.text_input("Добавить комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите комментарий...")
                         if st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True):
                             if nci.strip():
                                 cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
-                                st.session_state[f"new_cc_input_{cl['id']}"] = ""
+                                st.session_state[cc_clr_key] = True
                                 commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
                             else:
                                 st.warning("Введите текст")
