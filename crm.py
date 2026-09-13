@@ -64,21 +64,28 @@ def upload_db_to_yandex():
     except Exception as e:
         st.sidebar.error(f"🔴 Исключение при синхронизации: {e}")
 
-def upload_file_to_yandex(local_path, remote_name):
-    if not YANDEX_TOKEN or not os.path.exists(local_path): return
+def upload_file_to_yandex(file_bytes, remote_name):
+    """Отправка бинарного потока напрямую из оперативной памяти в облако"""
+    if not YANDEX_TOKEN: return False
     try:
         safe_remote_name = urllib.parse.quote(remote_name)
         url = f"{YANDEX_API_URL}/upload"
-        # Путь строго скорректирован под вашу рабочую папку CRM_НЕ_ТРОГАТЬ
         remote_path = f"disk:/CRM_НЕ_ТРОГАТЬ/uploads/{safe_remote_name}"
+        
         res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
         if res.status_code == 200:
             upload_url = res.json().get("href")
-            # Используем ваш 100% рабочий метод отправки через форму files=
-            with open(local_path, "rb") as f:
-                requests.put(upload_url, files={"file": f})
+            # Исправлено: чистая multipart отправка байтов из памяти
+            put_res = requests.put(upload_url, files={"file": (remote_name, file_bytes)})
+            if put_res.status_code == 200 or put_res.status_code == 201:
+                return True
+            else:
+                st.sidebar.error(f"🔴 Ошибка Яндекса: {put_res.status_code}")
+        else:
+            st.sidebar.error(f"🔴 Яндекс не дал ссылку. Код: {res.status_code}")
     except Exception as e:
-        st.sidebar.warning(f"⚠️ Ошибка загрузки файла {remote_name}: {e}")
+        st.sidebar.warning(f"⚠️ Ошибка сети Яндекса: {e}")
+    return False
 
 def format_phone(p_str):
     if not p_str: return ""
@@ -92,14 +99,18 @@ def save_uploaded_file(u_file, c_id, prefix=""):
         s_name = u_file.name
         unique_name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{s_name}"
         s_path = os.path.join(UPLOAD_DIR, unique_name)
-        with open(s_path, "wb") as f: f.write(u_file.getbuffer())
-        upload_file_to_yandex(s_path, unique_name)
-        return {"path": s_path, "name": s_name}
+        file_bytes = u_file.getvalue()
+        
+        with open(s_path, "wb") as f: 
+            f.write(file_bytes)
+            
+        if upload_file_to_yandex(file_bytes, unique_name):
+            return {"path": s_path, "name": s_name}
     return None
 
 def display_file_or_image(f_path, f_name, key_unique):
     if f_path and isinstance(f_path, str) and os.path.exists(f_path):
-        file_ext = os.path.splitext(f_path)[1].lower()
+        file_ext = os.path.splitext(f_path).lower()
         if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]: 
             st.image(f_path, caption=f_name, width=250)
         else:
