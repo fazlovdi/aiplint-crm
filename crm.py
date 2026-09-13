@@ -1019,17 +1019,6 @@ elif st.session_state.active_tab == "Сделки":
             searchable += f" {t.get('tk_num', '')} {t.get('receiver', '')}"
         return search in searchable
 
-    def deal_has_overdue(deal):
-        client = get_client(deal["client_id"])
-        for t in client.get("tasks", []):
-            if not t.get("done") and is_task_overdue(t):
-                return True
-        return False
-
-    def deal_has_tasks(deal):
-        client = get_client(deal["client_id"])
-        return len(client.get("tasks", [])) > 0
-
     dl = st.session_state.crm_store["deals"]
     t_new = sum(d.get("budget",0) for d in dl if d["status"] == "Новый")
     t_prg = sum(d.get("budget",0) for d in dl if d["status"] == "В работе")
@@ -1038,8 +1027,12 @@ elif st.session_state.active_tab == "Сделки":
 
     def draw_deal_card(deal, client):
         is_open = (st.session_state.get("open_deal_id") == deal["id"])
-        has_overdue = deal_has_overdue(deal)
-        has_tasks = deal_has_tasks(deal)
+        has_tasks = len(client.get("tasks", [])) > 0
+        has_overdue = False
+        for t in client.get("tasks", []):
+            if not t.get("done") and is_task_overdue(t):
+                has_overdue = True
+                break
         with st.container(border=True):
             if has_overdue:
                 color_container_border("#D65757")
