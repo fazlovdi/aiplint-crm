@@ -1,5 +1,5 @@
 import streamlit as st
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io
+import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading
 from datetime import datetime
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
@@ -152,16 +152,35 @@ if isinstance(raw_token, str):
 else:
     YANDEX_TOKEN = ""
 
-def hash_password(pwd):
-    return hashlib.sha256(pwd.strip().encode()).hexdigest()
+# --- Пароли ---
+
+def hash_password(pwd, salt=None):
+    if salt is None:
+        salt = secrets.token_hex(16)
+    h = hashlib.sha256((salt + pwd.strip()).encode()).hexdigest()
+    return f"{salt}:{h}"
 
 def is_hashed(s):
+    if not s:
+        return False
+    if ":" in s:
+        parts = s.split(":")
+        return len(parts) == 2 and len(parts[0]) == 32 and len(parts[1]) == 64 and all(c in "0123456789abcdef" for c in parts[0] + parts[1])
     return len(s) == 64 and all(c in "0123456789abcdef" for c in s)
 
 def verify_password(pwd, stored):
-    if is_hashed(stored):
-        return hash_password(pwd) == stored
+    if not stored:
+        return False
+    if ":" in stored:
+        parts = stored.split(":")
+        if len(parts) == 2 and len(parts[0]) == 32:
+            salt, h = parts
+            return hashlib.sha256((salt + pwd.strip()).encode()).hexdigest() == h
+    if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
+        return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
     return pwd.strip() == stored
+
+# --- Яндекс.Диск ---
 
 def yandex_headers():
     return {"Authorization": f"OAuth {YANDEX_TOKEN}", "Accept": "application/json"}
@@ -180,7 +199,7 @@ def init_yandex_folders():
         return
     for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads"]:
         try:
-            requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers())
+            requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except Exception:
             pass
 
@@ -188,35 +207,36 @@ def download_db_from_yandex():
     if not YANDEX_TOKEN:
         return
     try:
-        if not os.path.exists(FILE_NAME):
-            url = f"{YANDEX_API_URL}/download"
-            res = requests.get(url, params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}"}, headers=yandex_headers())
-            if res.status_code == 200:
-                download_url = res.json().get("href")
-                file_res = requests.get(download_url)
-                if file_res.status_code == 200:
-                    with open(FILE_NAME, "w", encoding="utf-8") as f:
-                        f.write(file_res.text)
-            else:
+        url = f"{YANDEX_API_URL}/download"
+        res = requests.get(url, params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}"}, headers=yandex_headers(), timeout=10)
+        if res.status_code == 200:
+            download_url = res.json().get("href")
+            file_res = requests.get(download_url, timeout=30)
+            if file_res.status_code == 200:
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
-                    json.dump({"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]}, f)
-    except Exception as e:
-        st.sidebar.error(f"Ошибка загрузки базы: {e}")
+                    f.write(file_res.text)
+                return
+    except Exception:
+        pass
+    if not os.path.exists(FILE_NAME):
+        default_db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2"}
+        with open(FILE_NAME, "w", encoding="utf-8") as f:
+            json.dump(default_db, f, ensure_ascii=False, indent=2)
 
-def upload_db_to_yandex():
+def upload_db_to_yandex_async():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME):
         return
-    try:
-        url = f"{YANDEX_API_URL}/upload"
-        res = requests.get(url, params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers())
-        if res.status_code == 200:
-            upload_url = res.json().get("href")
-            with open(FILE_NAME, "rb") as f:
-                put_res = requests.put(upload_url, data=f)
-                if put_res.status_code in (200, 201):
-                    st.toast("База отправлена на Диск", icon="☁️")
-    except Exception as e:
-        st.sidebar.error(f"Ошибка синхронизации: {e}")
+    def _upload():
+        try:
+            url = f"{YANDEX_API_URL}/upload"
+            res = requests.get(url, params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=10)
+            if res.status_code == 200:
+                upload_url = res.json().get("href")
+                with open(FILE_NAME, "rb") as f:
+                    requests.put(upload_url, data=f, timeout=30)
+        except Exception:
+            pass
+    threading.Thread(target=_upload, daemon=True).start()
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN:
@@ -224,10 +244,10 @@ def upload_file_to_yandex(file_bytes, remote_name):
     try:
         url = f"{YANDEX_API_URL}/upload"
         remote_path = f"disk:/CRM_NE_TROGAT/uploads/{remote_name}"
-        res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers())
+        res = requests.get(url, params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers(), timeout=10)
         if res.status_code == 200:
             upload_url = res.json().get("href")
-            put_res = requests.put(upload_url, data=file_bytes)
+            put_res = requests.put(upload_url, data=file_bytes, timeout=30)
             return put_res.status_code in (200, 201)
     except Exception:
         pass
@@ -248,6 +268,8 @@ def download_file_from_yandex(remote_path):
         pass
     return None
 
+# --- Утилиты ---
+
 def format_phone(p_str):
     if not p_str:
         return ""
@@ -259,13 +281,20 @@ def format_phone(p_str):
     return p_str.strip()
 
 def save_uploaded_file(u_file, c_id, prefix=""):
-    if u_file is not None:
-        unique_name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{u_file.name}"
-        file_bytes = u_file.getvalue()
+    if u_file is None:
+        return None
+    unique_name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{u_file.name}"
+    file_bytes = u_file.getvalue()
+    if YANDEX_TOKEN:
         remote_path = f"CRM_NE_TROGAT/uploads/{unique_name}"
         if upload_file_to_yandex(file_bytes, unique_name):
             return {"path": remote_path, "name": u_file.name}
-    return None
+        st.warning("Не удалось загрузить на Диск, файл сохранён локально")
+    os.makedirs("uploads", exist_ok=True)
+    local_path = f"uploads/{unique_name}"
+    with open(local_path, "wb") as f:
+        f.write(file_bytes)
+    return {"path": local_path, "name": u_file.name}
 
 def normalize_remote_path(f_path):
     if not f_path:
@@ -277,6 +306,7 @@ def normalize_remote_path(f_path):
     else:
         return f"CRM_NE_TROGAT/uploads/{os.path.basename(f_path)}"
 
+@st.cache_data
 def get_logo_base64():
     if os.path.exists("logo.png"):
         with open("logo.png", "rb") as f:
@@ -354,68 +384,89 @@ def auto_task_title(task_type, client_name, deal_title):
         return f"Связаться: {client_name}"
 
 def render_file_action_buttons(file_path, file_name, key_prefix):
-    remote_path = normalize_remote_path(file_path)
-    file_bytes = download_file_from_yandex(remote_path) if remote_path else None
+    if file_path and not file_path.startswith("CRM_NE_TROGAT") and os.path.exists(file_path):
+        try:
+            with open(file_path, "rb") as f:
+                file_bytes = f.read()
+        except Exception:
+            file_bytes = None
+    else:
+        remote_path = normalize_remote_path(file_path)
+        file_bytes = download_file_from_yandex(remote_path) if remote_path else None
     if not file_bytes:
         st.caption("Файл недоступен")
         return
     file_ext = os.path.splitext(file_name)[1].lower()
-    b64_data = base64.b64encode(file_bytes).decode()
-    btn_style = "width:100%;padding:8px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;text-decoration:none;display:inline-block;text-align:center;"
     if file_ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
-        open_url = f"data:image/{file_ext[1:]};base64,{b64_data}"
-        print_html = f"<html><head><title>{file_name}</title></head><body style='margin:0;text-align:center;'><img src='data:image/{file_ext[1:]};base64,{b64_data}' style='max-width:100%;max-height:100vh;' onload='window.print();'/></body></html>"
-        print_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(print_html)}"
+        try:
+            st.image(file_bytes, caption=file_name)
+        except Exception:
+            pass
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"<a href='{open_url}' target='_blank'><button style='{btn_style}'>Открыть</button></a>", unsafe_allow_html=True)
+            st.download_button("Скачать", data=file_bytes, file_name=file_name, key=f"dl_{key_prefix}")
         with col2:
-            st.markdown(f"<a href='{print_url}' target='_blank'><button style='{btn_style}'>Распечатать</button></a>", unsafe_allow_html=True)
+            b64 = base64.b64encode(file_bytes).decode()
+            mime_type = f"image/{file_ext[1:]}"
+            print_html = f"<html><body style='margin:0;text-align:center;'><img src='data:{mime_type};base64,{b64}' style='max-width:100%;' onload='window.print();'/></body></html>"
+            print_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(print_html)}"
+            st.markdown(f"<a href='{print_url}' target='_blank'><button style='width:100%;padding:8px;background:#4F6D9C;color:white;border:none;border-radius:10px;cursor:pointer;font-size:14px;'>Распечатать</button></a>", unsafe_allow_html=True)
     elif file_ext == ".pdf":
-        open_url = f"data:application/pdf;base64,{b64_data}"
-        st.markdown(f"<a href='{open_url}' target='_blank'><button style='{btn_style}'>Открыть</button></a>", unsafe_allow_html=True)
+        st.download_button("Открыть / Скачать PDF", data=file_bytes, file_name=file_name, mime="application/pdf", key=f"dl_{key_prefix}")
     else:
-        st.markdown(f"<a href='data:application/octet-stream;base64,{b64_data}' download='{file_name}'><button style='{btn_style}'>Скачать</button></a>", unsafe_allow_html=True)
+        st.download_button("Скачать", data=file_bytes, file_name=file_name, key=f"dl_{key_prefix}")
+
+# --- Данные ---
+
+def migrate_data(data):
+    default_users = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]
+    if "users" not in data:
+        data["users"] = default_users
+    for u in data["users"]:
+        if not is_hashed(u.get("password", "")):
+            u["password"] = hash_password(u["password"])
+    for c in data.get("clients", []):
+        for k, val in [("email", ""), ("address", ""), ("base_comment", ""), ("category", "Покупатель"), ("discount", 0), ("extra_phones", []), ("extra_emails", []), ("extra_addresses", []), ("client_files", []), ("client_comments", []), ("manager", ""), ("comments", []), ("tasks", [])]:
+            if k not in c or c[k] == "-":
+                c[k] = val
+        for ea in c.get("extra_addresses", []):
+            if isinstance(ea, str):
+                c["extra_addresses"][c["extra_addresses"].index(ea)] = {"address": ea, "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""}
+        for t in c.get("tasks", []):
+            if "manager" not in t:
+                t["manager"] = c.get("manager", "")
+            if "deadline" in t and " " in str(t["deadline"]):
+                t["deadline"] = str(t["deadline"]).split(" ")[0]
+    for d in data.get("deals", []):
+        if "deal_comments" not in d:
+            d["deal_comments"] = []
+        if d.get("status") == "New":
+            d["status"] = "Новый"
+    data["_migrated"] = "v2"
+    return data
 
 def load_data():
     download_db_from_yandex()
-    default_users = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]
+    default_db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2"}
     if os.path.exists(FILE_NAME):
         try:
             with open(FILE_NAME, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if "users" not in data:
-                    data["users"] = default_users
-                for u in data["users"]:
-                    if not is_hashed(u.get("password", "")):
-                        u["password"] = hash_password(u["password"])
-                for c in data.get("clients", []):
-                    for k, val in [("email", ""), ("address", ""), ("base_comment", ""), ("category", "Покупатель"), ("discount", 0), ("extra_phones", []), ("extra_emails", []), ("extra_addresses", []), ("client_files", []), ("client_comments", []), ("manager", ""), ("comments", []), ("tasks", [])]:
-                        if k not in c or c[k] == "-":
-                            c[k] = val
-                    for ea in c.get("extra_addresses", []):
-                        if isinstance(ea, str):
-                            c["extra_addresses"][c["extra_addresses"].index(ea)] = {"address": ea, "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""}
-                    for t in c.get("tasks", []):
-                        if "manager" not in t:
-                            t["manager"] = c.get("manager", "")
-                        if "deadline" in t and " " in str(t["deadline"]):
-                            t["deadline"] = str(t["deadline"]).split(" ")[0]
-                for d in data.get("deals", []):
-                    if "deal_comments" not in d:
-                        d["deal_comments"] = []
-                    if d.get("status") == "New":
-                        d["status"] = "Новый"
-                return data
+            if data.get("_migrated") != "v2":
+                data = migrate_data(data)
+                with open(FILE_NAME, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                upload_db_to_yandex_async()
+            return data
         except Exception:
-            return {"clients": [], "deals": [], "users": default_users}
-    return {"clients": [], "deals": [], "users": default_users}
+            return default_db
+    return default_db
 
 def save_data(data):
     try:
         with open(FILE_NAME, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        upload_db_to_yandex()
+        upload_db_to_yandex_async()
     except Exception as e:
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
@@ -441,8 +492,11 @@ def close_deal_dialog(deal_id):
         else:
             st.error("Заполните отчёт")
 
+# --- Session state ---
+
 if "crm_store" not in st.session_state:
-    st.session_state.crm_store = load_data()
+    with st.spinner("Загрузка данных..."):
+        st.session_state.crm_store = load_data()
 if "f_ph" not in st.session_state:
     st.session_state.f_ph = []
 if "f_em" not in st.session_state:
@@ -469,8 +523,11 @@ if "cloud_ok" not in st.session_state:
     st.session_state.cloud_ok = check_cloud_status()
 if "open_deal_id" not in st.session_state:
     st.session_state.open_deal_id = None
+if "yandex_folders_ready" not in st.session_state:
+    init_yandex_folders()
+    st.session_state.yandex_folders_ready = True
 
-init_yandex_folders()
+# --- Авторизация ---
 
 def check_login(username, password):
     users_list = st.session_state.crm_store.get("users", [])
@@ -536,6 +593,8 @@ with st.sidebar:
         st.session_state.user_name = None
         st.rerun()
 
+# --- Навигация ---
+
 col_m1, col_m2, col_m3 = st.columns(3)
 with col_m1:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
@@ -547,6 +606,9 @@ with col_m3:
     if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"; st.rerun()
 st.markdown("---")
+
+# --- Вкладка «Задачи» ---
+
 if st.session_state.active_tab == "Задачи":
     st.header("Задачи")
     now_time = datetime.now()
@@ -572,10 +634,13 @@ if st.session_state.active_tab == "Задачи":
     manager_options = ["Мои задачи", "Все"] + managers
     manager_filter = st.selectbox("Ответственный", manager_options, index=0)
 
+    client_index = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
+    deal_index = {d["client_id"]: d for d in st.session_state.crm_store.get("deals", [])}
+
     all_active_tasks = []
     for client in st.session_state.crm_store.get("clients", []):
-        client_deals = [d for d in st.session_state.crm_store.get("deals", []) if d["client_id"] == client["id"]]
-        main_deal_title = client_deals[0]["title"] if client_deals else ""
+        client_deal = deal_index.get(client["id"])
+        main_deal_title = client_deal["title"] if client_deal else ""
         for ti, task in enumerate(client.get("tasks", [])):
             if not task.get("done", False):
                 task_manager = task.get("manager", "")
@@ -741,6 +806,8 @@ if st.session_state.active_tab == "Задачи":
                     render_task_block(t, "future")
             else:
                 st.caption("План на будущие дни пуст.")
+
+# --- Вкладка «Клиенты» ---
 
 elif st.session_state.active_tab == "Клиенты":
     st.header("Клиенты")
@@ -1042,19 +1109,24 @@ elif st.session_state.active_tab == "Клиенты":
                             st.session_state.open_deal_id = new_deal_id
                             st.session_state.active_tab = "Сделки"
                             st.rerun()
+            if st.session_state.get("last_id"):
+                st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
+
+# --- Вкладка «Сделки» ---
+
 elif st.session_state.active_tab == "Сделки":
     st.header("Сделки")
     deal_search = st.text_input("Поиск по сделкам (название, клиент, трек-номер, получатель):", key="deal_search_input", placeholder="Введите текст...").strip().lower()
     current_user_name = st.session_state.user_name
     managers = get_managers_list()
 
+    client_index = {c["id"]: c for c in st.session_state.crm_store["clients"]}
+    _default_client = {"name": "Неизвестно", "phone": "-", "comments": [], "tasks": [], "category": "Покупатель", "discount": 0, "manager": ""}
+
     def get_client(c_id):
-        for c in st.session_state.crm_store["clients"]:
-            if c["id"] == c_id:
-                return c
-        return {"name": "Неизвестно", "phone": "-", "comments": [], "tasks": [], "category": "Покупатель", "discount": 0, "manager": ""}
+        return client_index.get(c_id, _default_client)
 
     def deal_matches_search(deal, search):
         if not search:
@@ -1086,7 +1158,6 @@ elif st.session_state.active_tab == "Сделки":
         with st.container(border=True):
             card_title = f"{deal['title']} | {client['name']} ({deal.get('budget', 0):,.0f} руб.)".replace(",", " ")
             with st.expander(card_title, expanded=is_open):
-                st.session_state.open_deal_id = None
                 st.caption(f"Категория: [{client.get('category','Покупатель')}] | Скидка: {client.get('discount',0)}% | {client['phone']} | Ответственный: {client.get('manager','—')}")
                 st.markdown("---")
                 if deal.get("deal_comments"):
@@ -1284,6 +1355,10 @@ elif st.session_state.active_tab == "Сделки":
         for d in dl:
             if d["status"] == "Сделка закрыта" and deal_matches_search(d, deal_search):
                 draw_deal_card(d, get_client(d["client_id"]))
+
+    # Сбрасываем open_deal_id после рендера всех колонок
+    if st.session_state.get("open_deal_id") is not None:
+        st.session_state.open_deal_id = None
 
     archived_deals = [d for d in dl if d["status"] == "Архив" and deal_matches_search(d, deal_search)]
     if archived_deals:
