@@ -31,7 +31,6 @@ st.markdown("""
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
     .stHorizontalBlock .stButton button { border-radius: 12px; font-size: 0.95rem; font-weight: 600; padding: 0.65rem 1rem; }
     [data-testid="stFileUploader"] { border-radius: 14px; border: 2px dashed #C9CFD7; background-color: #FAFBFC; padding: 0.75rem; }
-    .comments-box { border: 1.5px solid #DCE0E5; border-radius: 12px; padding: 0.75rem 1rem; background-color: #FAFBFC; margin-bottom: 1rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -228,7 +227,7 @@ def auto_task_title(tt, cn, dt):
     if tt == "Отправить заказ": return f"Отправка по {dt}" if dt else f"Отправка: {cn}"
     return f"Связаться: {cn}"
 
-def render_file_action_buttons(fp, fn, kp, allow_delete=False):
+def render_file_action_buttons(fp, fn, kp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
         try:
             with open(fp, "rb") as f: fb = f.read()
@@ -385,21 +384,20 @@ with st.sidebar:
     if st.button("Выйти", use_container_width=True):
         st.session_state.authenticated = False; st.session_state.user_role = None; st.session_state.user_login = None; st.session_state.user_name = None; st.rerun()
 
-# --- Навигация (Задачи → Сделки → Клиенты) ---
+# --- Навигация (Клиенты → Задачи → Сделки, по умолчанию Задачи) ---
 
 nc1, nc2, nc3 = st.columns(3)
 with nc1:
-    if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"): st.session_state.active_tab = "Задачи"; st.rerun()
-with nc2:
-    if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"): st.session_state.active_tab = "Сделки"; st.rerun()
-with nc3:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"): st.session_state.active_tab = "Клиенты"; st.rerun()
+with nc2:
+    if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"): st.session_state.active_tab = "Задачи"; st.rerun()
+with nc3:
+    if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"): st.session_state.active_tab = "Сделки"; st.rerun()
 st.markdown("---")
 
 # --- Вкладка «Задачи» ---
 
 if st.session_state.active_tab == "Задачи":
-    st.header("Задачи")
     now_time = datetime.now()
     all_deals = st.session_state.crm_store["deals"]
     active_deals = [d for d in all_deals if d["status"] in ("Новый", "В работе")]
@@ -558,7 +556,6 @@ if st.session_state.active_tab == "Задачи":
 # --- Вкладка «Сделки» ---
 
 elif st.session_state.active_tab == "Сделки":
-    st.header("Сделки")
     ds = st.text_input("Поиск по сделкам (название, клиент, трек-номер, получатель):", key="deal_search_input", placeholder="Введите текст...").strip().lower()
     cu = st.session_state.user_name; mgrs = get_managers_list()
 
@@ -575,7 +572,6 @@ elif st.session_state.active_tab == "Сделки":
     tn = sum(d.get("budget",0) for d in dl if d["status"] == "Новый")
     tp = sum(d.get("budget",0) for d in dl if d["status"] == "В работе")
     tc = sum(d.get("budget",0) for d in dl if d["status"] == "Сделка закрыта")
-    sc1, sc2, sc3 = st.columns(3)
 
     def draw_deal_card(deal, client):
         is_open = (st.session_state.get("open_deal_id") == deal["id"])
@@ -744,16 +740,20 @@ elif st.session_state.active_tab == "Сделки":
             elif deal['status'] == "Архив":
                 if b1.button("Возобновить", key=f"ura_{deal['id']}", use_container_width=True): deal['status'] = "В работе"; commit_and_rerun(st.session_state.crm_store)
 
+    sc1, sc2, sc3 = st.columns(3)
     with sc1:
-        st.markdown(f"#### Новые  \n`{tn:,.0f} руб.`")
+        st.subheader("Новые")
+        st.caption(f"{tn:,.0f} руб.".replace(",", " "))
         for d in dl:
             if d["status"] == "Новый" and dms(d, ds): draw_deal_card(d, gc(d["client_id"]))
     with sc2:
-        st.markdown(f"#### В работе  \n`{tp:,.0f} руб.`")
+        st.subheader("В работе")
+        st.caption(f"{tp:,.0f} руб.".replace(",", " "))
         for d in dl:
             if d["status"] == "В работе" and dms(d, ds): draw_deal_card(d, gc(d["client_id"]))
     with sc3:
-        st.markdown(f"#### Закрыты  \n`{tc:,.0f} руб.`")
+        st.subheader("Закрыты")
+        st.caption(f"{tc:,.0f} руб.".replace(",", " "))
         for d in dl:
             if d["status"] == "Сделка закрыта" and dms(d, ds): draw_deal_card(d, gc(d["client_id"]))
 
@@ -769,7 +769,6 @@ elif st.session_state.active_tab == "Сделки":
 # --- Вкладка «Клиенты» ---
 
 elif st.session_state.active_tab == "Клиенты":
-    st.header("Клиенты")
     cu = st.session_state.user_name; mgrs = get_managers_list()
 
     if st.session_state.user_role == "admin":
@@ -812,14 +811,13 @@ elif st.session_state.active_tab == "Клиенты":
         with acr:
             ca = st.text_input("Основной адрес", key=f"ca_{fv}")
             cc = st.selectbox("Категория", ["Дизайнер", "Строитель", "Дилер", "Покупатель"], key=f"cc_{fv}")
-            st.markdown('<div class="comments-box">', unsafe_allow_html=True)
-            st.markdown("**Комментарии:**")
-            ncc = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
-            if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
-                if ncc.strip(): st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()}); st.rerun()
-            if st.session_state.get("pending_client_comments"):
-                for pc in st.session_state["pending_client_comments"]: st.markdown(f"- *{pc['time']}*: {pc['text']}")
-            st.markdown('</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("**Комментарии:**")
+                ncc = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
+                if st.button("Добавить", key=f"cc_form_btn_{fv}", use_container_width=True):
+                    if ncc.strip(): st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()}); st.rerun()
+                if st.session_state.get("pending_client_comments"):
+                    for pc in st.session_state["pending_client_comments"]: st.markdown(f"- *{pc['time']}*: {pc['text']}")
         st.markdown("---")
         ac_ph, ac_em, ac_ad = st.columns(3)
         with ac_ph:
@@ -920,16 +918,15 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.markdown(f"- **{ea.get('address', '')}**")
                                 if ea.get("resp_name"): st.markdown(f"  - {ea['resp_name']}, {ea.get('resp_role', '')} — {ea.get('resp_phone', '')}, {ea.get('resp_email', '')}")
                     st.markdown("---")
-                    st.markdown('<div class="comments-box">', unsafe_allow_html=True)
-                    st.markdown("**Комментарии:**")
-                    if cl.get("client_comments"):
-                        for cc in cl["client_comments"]: st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
-                    else: st.caption("Пока нет комментариев")
-                    nci = st.text_input("Добавить комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите комментарий...")
-                    if st.button("Добавить", key=f"cc_btn_{cl['id']}", use_container_width=True):
-                        if nci.strip(): cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()}); commit_and_rerun(st.session_state.crm_store)
-                        else: st.warning("Введите текст")
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    with st.container(border=True):
+                        st.markdown("**Комментарии:**")
+                        if cl.get("client_comments"):
+                            for cc in cl["client_comments"]: st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
+                        else: st.caption("Пока нет комментариев")
+                        nci = st.text_input("Добавить комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите комментарий...")
+                        if st.button("Добавить", key=f"cc_btn_{cl['id']}", use_container_width=True):
+                            if nci.strip(): cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()}); commit_and_rerun(st.session_state.crm_store)
+                            else: st.warning("Введите текст")
                     st.markdown("---")
                     st.markdown("**Файлы:**")
                     if "client_files" not in cl: cl["client_files"] = []
