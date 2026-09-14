@@ -1551,6 +1551,23 @@ elif st.session_state.active_tab == "Клиенты":
                     mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
                     mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
                     mc3.link_button("Написать в MAX", MAX_URL, use_container_width=True, help=f"Ваш номер в MAX: {MAX_NUMBER}. Найдите клиента по номеру {cl['phone']}.")
+
+                    with st.container(border=True):
+                        st.markdown("**Создать сделку:**")
+                        deals = st.session_state.crm_store["deals"]
+                        at = f"Заказ \u2116{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
+                        st.info(f"Будет создан: **{at}**")
+                        ndt = st.text_input("Название (адрес объекта):", key=f"ndt_{cl['id']}", placeholder="Введите название сделки")
+                        db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{cl['id']}")
+                        if st.button("Создать сделку", key=f"dbn_{cl['id']}", use_container_width=True, type="primary"):
+                            ndi = (max([d['id'] for d in deals]) if deals else 0) + 1
+                            st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "payment_status": "Не оплачено", "manager": "", "deal_comments": [], "deal_files": [], "close_files": []})
+                            save_data(st.session_state.crm_store)
+                            st.session_state.open_deal_id = ndi
+                            st.session_state.active_tab = "Сделки"
+                            st.toast("Сделка создана", icon="\u2705")
+                            st.rerun()
+
                     if cl.get("extra_phones"):
                         st.markdown("**Доп. телефоны:**")
                         for pi, p in enumerate(cl["extra_phones"]):
@@ -1678,21 +1695,6 @@ elif st.session_state.active_tab == "Клиенты":
                                 st.session_state.last_id = None
                                 commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
                 with cl_r:
-                    deals = st.session_state.crm_store["deals"]
-                    at = f"Заказ \u2116{datetime.now().strftime('%y')}-{(len(deals) + 1):05d}"
-                    st.markdown(f"**Создать сделку:**")
-                    st.info(f"Будет создан: **{at}**")
-                    ndt = st.text_input("Название (адрес объекта):", key=f"ndt_{cl['id']}", placeholder="Введите название сделки")
-                    db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{cl['id']}")
-                    if st.button("Создать сделку", key=f"dbn_{cl['id']}", use_container_width=True, type="primary"):
-                        ndi = (max([d['id'] for d in deals]) if deals else 0) + 1
-                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "payment_status": "Не оплачено", "manager": "", "deal_comments": [], "deal_files": [], "close_files": []})
-                        save_data(st.session_state.crm_store)
-                        st.session_state.open_deal_id = ndi
-                        st.session_state.active_tab = "Сделки"
-                        st.toast("Сделка создана", icon="\u2705")
-                        st.rerun()
-                    st.markdown("---")
                     st.markdown("**Активные задачи:**")
                     client_tasks = [t for t in cl.get("tasks", []) if not t.get("done", False)]
                     client_tasks.sort(key=lambda t: get_task_sort_date(t))
@@ -1729,7 +1731,7 @@ elif st.session_state.active_tab == "Клиенты":
                         st.caption("Нет активных задач")
                     st.markdown("---")
                     st.markdown("**Сделки клиента:**")
-                    cl_deals = [d for d in deals if d["client_id"] == cl["id"]]
+                    cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl["id"]]
                     if cl_deals:
                         for d in cl_deals:
                             deal_btn_label = f"{d['title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} руб.".replace(",", " ")
