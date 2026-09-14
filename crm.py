@@ -1715,4 +1715,3 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
-```
