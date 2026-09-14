@@ -75,22 +75,20 @@ def inject_border_css(key, color):
         </style>
         """, unsafe_allow_html=True)
 
-def inject_payment_selectbox_css(deal_id, status):
+def inject_payment_container_css(deal_id, status):
     if status == "Оплачено":
-        color = "#2E7D32"
+        border_color = "#2E7D32"
         bg_color = "#E8F5E9"
     else:
-        color = "#C62828"
+        border_color = "#C62828"
         bg_color = "#FFEBEE"
     st.markdown(f"""
     <style>
-        .st-key-ps_{deal_id} [data-baseweb="select"] {{
-            border: 2px solid {color} !important;
+        div[data-testid="stVerticalBlockBorderWrapper"] .st-key-ps_wrap_{deal_id} {{
+            border: 2px solid {border_color} !important;
             border-radius: 10px !important;
             background-color: {bg_color} !important;
-        }}
-        .st-key-ps_{deal_id} [data-baseweb="select"] > div {{
-            background-color: {bg_color} !important;
+            padding: 8px 12px !important;
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -560,6 +558,8 @@ def migrate_data(data):
             d["deal_files"] = []
         if "payment_status" not in d:
             d["payment_status"] = "Не оплачено"
+        if "manager" not in d:
+            d["manager"] = ""
         if "close_files" not in d:
             d["close_files"] = []
             if d.get("close_file_path"):
@@ -600,6 +600,8 @@ def load_data():
                         d["deal_files"] = []
                     if "payment_status" not in d:
                         d["payment_status"] = "Не оплачено"
+                    if "manager" not in d:
+                        d["manager"] = ""
                     if "close_files" not in d:
                         d["close_files"] = []
                         if d.get("close_file_path"):
@@ -1139,11 +1141,15 @@ elif st.session_state.active_tab == "Сделки":
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                    deal_mgr = d.get("manager", "")
+                    if deal_mgr:
+                        st.markdown(f"**Ответственный:** {deal_mgr}")
                     st.markdown("---")
 
                     ps = d.get("payment_status", "Не оплачено")
-                    inject_payment_selectbox_css(d["id"], ps)
-                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"ps_{d['id']}")
+                    inject_payment_container_css(d["id"], ps)
+                    with st.container(key=f"ps_wrap_{d['id']}"):
+                        new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"ps_{d['id']}")
                     if new_ps != ps:
                         d["payment_status"] = new_ps
                         commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
@@ -1328,9 +1334,10 @@ elif st.session_state.active_tab == "Сделки":
 
                     current_status = d.get("status", "Новый")
                     if current_status == "Новый":
-                        if st.button("Перевести в \u00abВ работе\u00bb", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
+                        if st.button("Взять в работу", key=f"deal_next_{d['id']}", use_container_width=True, type="primary"):
                             d["status"] = "В работе"
-                            commit_and_rerun(st.session_state.crm_store, "Статус обновлён")
+                            d["manager"] = st.session_state.user_name
+                            commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
                     elif current_status == "В работе":
                         if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
                             close_deal_dialog(d["id"])
@@ -1369,6 +1376,9 @@ elif st.session_state.active_tab == "Сделки":
                     if arch_name:
                         st.markdown(f"**Название:** {arch_name}")
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                    arch_mgr = d.get("manager", "")
+                    if arch_mgr:
+                        st.markdown(f"**Ответственный:** {arch_mgr}")
                     ps = d.get("payment_status", "Не оплачено")
                     render_payment_status_badge(ps)
                     if d.get("closed_date"):
@@ -1676,7 +1686,7 @@ elif st.session_state.active_tab == "Клиенты":
                     db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{cl['id']}")
                     if st.button("Создать сделку", key=f"dbn_{cl['id']}", use_container_width=True, type="primary"):
                         ndi = (max([d['id'] for d in deals]) if deals else 0) + 1
-                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "payment_status": "Не оплачено", "deal_comments": [], "deal_files": [], "close_files": []})
+                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "payment_status": "Не оплачено", "manager": "", "deal_comments": [], "deal_files": [], "close_files": []})
                         save_data(st.session_state.crm_store)
                         st.session_state.open_deal_id = ndi
                         st.session_state.active_tab = "Сделки"
