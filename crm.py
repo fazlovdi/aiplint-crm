@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
@@ -36,9 +37,20 @@ st.markdown("""
     .deal-col-header h4 { margin: 0; font-size: 1.1rem; }
     .deal-col-header p { margin: 0.2rem 0 0.8rem 0; color: #7F8C9A; font-size: 0.85rem; }
     .greeting-block { margin-bottom: 1.5rem !important; }
-    .phone-action-group { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-    .phone-btn { background: #EEF0F3 !important; border: 1px solid #DCE0E5 !important; border-radius: 8px !important; padding: 6px 10px !important; font-size: 0.85rem !important; color: #5A6B7D !important; cursor: pointer !important; min-width: 44px !important; height: 32px !important; display: inline-flex; align-items: center; justify-content: center; }
+
+    .phone-action-group { display: flex; align-items: center; gap: 6px; white-space: nowrap; min-height: 32px; }
+    @media (max-width: 768px) {
+        .phone-action-group { flex-direction: column; align-items: stretch; white-space: normal; gap: 4px; }
+        .phone-action-group > span { order: 1; text-align: left; width: 100%; }
+        .phone-action-group > button, .phone-action-group > a { order: 2; width: 100%; justify-content: center; }
+    }
+
+    .phone-btn { background: #EEF0F3 !important; border: 1px solid #DCE0E5 !important; border-radius: 8px !important; padding: 6px 10px !important; font-size: 0.85rem !important; color: #5A6B7D !important; cursor: pointer !important; min-width: 44px !important; height: auto; min-height: 32px !important; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
     .phone-btn:hover { background: #DCE0E5 !important; }
+
+    .payment-status-badge { padding: 4px 10px; border-radius: 99px; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; }
+    .payment-status-paid { background-color: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
+    .payment-status-unpaid { background-color: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -327,9 +339,9 @@ def render_phone_inline(phone, uid):
     <div class="phone-action-group" style="padding:4px 0;">
         <span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span>
         <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\U0001F4CB</button>
-        <a href="tel:+{cph}" class="phone-btn" style="text-decoration:none;" title="Позвонить">\U0001F4DE</a>
+        <a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a>
     </div>
-    """, height=40)
+    """, height=48)
 
 def render_extra_phone_inline(phone, name, role, uid):
     cph = re.sub(r"\D", "", phone)
@@ -342,9 +354,16 @@ def render_extra_phone_inline(phone, name, role, uid):
     <div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;">
         <span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span>
         <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\U0001F4CB</button>
-        <a href="tel:+{cph}" class="phone-btn" style="text-decoration:none;" title="Позвонить">\U0001F4DE</a>
+        <a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a>
     </div>
-    """, height=44)
+    """, height=56)
+
+def render_payment_status_badge(status):
+    if status == "Оплачено":
+        cls = "payment-status-paid"
+    else:
+        cls = "payment-status-unpaid"
+    components.html(f'<span class="payment-status-badge {cls}">{status}</span>', height=30)
 
 def render_file_action_buttons(fp, fn, kp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
@@ -520,6 +539,8 @@ def migrate_data(data):
             d["deal_comments"] = []
         if "deal_files" not in d:
             d["deal_files"] = []
+        if "payment_status" not in d:
+            d["payment_status"] = "Не оплачено"
         if "close_files" not in d:
             d["close_files"] = []
             if d.get("close_file_path"):
@@ -558,6 +579,8 @@ def load_data():
                         d["deal_title"] = ""
                     if "deal_files" not in d:
                         d["deal_files"] = []
+                    if "payment_status" not in d:
+                        d["payment_status"] = "Не оплачено"
                     if "close_files" not in d:
                         d["close_files"] = []
                         if d.get("close_file_path"):
@@ -1097,6 +1120,15 @@ elif st.session_state.active_tab == "Сделки":
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+
+                    ps = d.get("payment_status", "Не оплачено")
+                    st.markdown("**Оплата:**")
+                    render_payment_status_badge(ps)
+                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"ps_{d['id']}")
+                    if new_ps != ps:
+                        d["payment_status"] = new_ps
+                        commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
+
                     st.markdown("---")
 
                     if client:
@@ -1318,6 +1350,8 @@ elif st.session_state.active_tab == "Сделки":
                     if arch_name:
                         st.markdown(f"**Название:** {arch_name}")
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                    ps = d.get("payment_status", "Не оплачено")
+                    render_payment_status_badge(ps)
                     if d.get("closed_date"):
                         st.markdown(f"**Закрыта:** {format_date(d['closed_date'])}")
                     if d.get("close_report"):
@@ -1623,7 +1657,7 @@ elif st.session_state.active_tab == "Клиенты":
                     db = st.number_input("Бюджет (руб.)", min_value=0.0, step=5000.0, key=f"db_{cl['id']}")
                     if st.button("Создать сделку", key=f"dbn_{cl['id']}", use_container_width=True, type="primary"):
                         ndi = (max([d['id'] for d in deals]) if deals else 0) + 1
-                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "deal_comments": [], "deal_files": [], "close_files": []})
+                        st.session_state.crm_store["deals"].append({"id": ndi, "client_id": cl["id"], "title": at, "deal_title": ndt.strip(), "budget": db, "status": "Новый", "payment_status": "Не оплачено", "deal_comments": [], "deal_files": [], "close_files": []})
                         save_data(st.session_state.crm_store)
                         st.session_state.open_deal_id = ndi
                         st.session_state.active_tab = "Сделки"
@@ -1682,3 +1716,4 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
+```
