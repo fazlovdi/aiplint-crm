@@ -56,120 +56,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-components.html("""
-<script>
-(function() {
-    var w = window;
-    try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
-    var doc = w.document;
-
-    var label = doc.getElementById('sticky-tab-label');
-    if (!label) {
-        label = doc.createElement('div');
-        label.id = 'sticky-tab-label';
-        doc.body.appendChild(label);
-    }
-
-    var lastText = '';
-    var lastVisible = null;
-
-    function updateTabLabel() {
-        var buttons = doc.querySelectorAll('button');
-        var activeText = 'CRM';
-        for (var i = 0; i < buttons.length; i++) {
-            var btn = buttons[i];
-            var txt = (btn.innerText || btn.textContent || '').trim();
-            if (txt === '\u041a\u043b\u0438\u0435\u043d\u0442\u044b' || txt === '\u0417\u0430\u0434\u0430\u0447\u0438' || txt === '\u0421\u0434\u0435\u043b\u043a\u0438') {
-                var kind = btn.getAttribute('kind');
-                if (kind === 'primary') {
-                    activeText = txt;
-                    break;
-                }
-            }
-        }
-        if (activeText !== lastText) {
-            label.textContent = activeText;
-            lastText = activeText;
-        }
-    }
-
-    function getScrollTop() {
-        var top = w.scrollY || w.pageYOffset || 0;
-        if (top > 0) return top;
-        var selectors = [
-            'section[data-testid="stMain"]',
-            'section.main',
-            '[data-testid="stAppViewContainer"]',
-            '[data-testid="stScrollContent"]',
-            '.stApp',
-            'main',
-            '#root'
-        ];
-        for (var i = 0; i < selectors.length; i++) {
-            var el = doc.querySelector(selectors[i]);
-            if (el && el.scrollTop > 0) return el.scrollTop;
-        }
-        return 0;
-    }
-
-    function checkScroll() {
-        var scrollTop = getScrollTop();
-        var shouldShow = scrollTop > 80;
-        if (shouldShow !== lastVisible) {
-            if (shouldShow) {
-                label.classList.add('visible');
-            } else {
-                label.classList.remove('visible');
-            }
-            lastVisible = shouldShow;
-        }
-    }
-
-    function attachListeners() {
-        var selectors = [
-            'section[data-testid="stMain"]',
-            'section.main',
-            '[data-testid="stAppViewContainer"]',
-            '[data-testid="stScrollContent"]',
-            '.stApp',
-            'main',
-            '#root'
-        ];
-        for (var i = 0; i < selectors.length; i++) {
-            var el = doc.querySelector(selectors[i]);
-            if (el) el.addEventListener('scroll', checkScroll);
-        }
-    }
-
-    w.addEventListener('scroll', checkScroll, true);
-
-    var observer = new MutationObserver(function() {
-        observer.disconnect();
-        updateTabLabel();
-        attachListeners();
-        checkScroll();
-        observer.observe(doc.body, { childList: true, subtree: true });
-    });
-    observer.observe(doc.body, { childList: true, subtree: true });
-
-    setTimeout(function() {
-        attachListeners();
-        updateTabLabel();
-        checkScroll();
-    }, 500);
-
-    var count = 0;
-    var interval = setInterval(function() {
-        attachListeners();
-        updateTabLabel();
-        checkScroll();
-        count++;
-        if (count > 20) clearInterval(interval);
-    }, 500);
-})();
-</script>
-""", height=0)
-
 FILE_NAME = "web_crm_database_v2.json"
 YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
 MAX_URL = "https://max.ru"
@@ -1046,6 +932,102 @@ with nc3:
         st.rerun()
 st.markdown("---")
 
+_active_tab_name = st.session_state.active_tab
+_sticky_js = """
+<script>
+(function() {
+    var w = window;
+    try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
+    var doc = w.document;
+
+    var label = doc.getElementById('sticky-tab-label');
+    if (!label) {
+        label = doc.createElement('div');
+        label.id = 'sticky-tab-label';
+        doc.body.appendChild(label);
+    }
+
+    var activeTab = '__ACTIVE_TAB__';
+    label.textContent = activeTab;
+
+    var lastVisible = null;
+
+    function getScrollTop() {
+        var top = w.scrollY || w.pageYOffset || 0;
+        if (top > 0) return top;
+        var selectors = [
+            'section[data-testid="stMain"]',
+            'section.main',
+            '[data-testid="stAppViewContainer"]',
+            '[data-testid="stScrollContent"]',
+            '.stApp',
+            'main',
+            '#root'
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = doc.querySelector(selectors[i]);
+            if (el && el.scrollTop > 0) return el.scrollTop;
+        }
+        return 0;
+    }
+
+    function checkScroll() {
+        var scrollTop = getScrollTop();
+        var shouldShow = scrollTop > 80;
+        if (shouldShow !== lastVisible) {
+            if (shouldShow) {
+                label.classList.add('visible');
+            } else {
+                label.classList.remove('visible');
+            }
+            lastVisible = shouldShow;
+        }
+    }
+
+    var scrollTimeout = null;
+    function onScroll() {
+        if (scrollTimeout) clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(checkScroll, 100);
+    }
+
+    w.addEventListener('scroll', onScroll, true);
+
+    function attachScrollListeners() {
+        var selectors = [
+            'section[data-testid="stMain"]',
+            'section.main',
+            '[data-testid="stAppViewContainer"]',
+            '[data-testid="stScrollContent"]',
+            '.stApp',
+            'main',
+            '#root'
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = doc.querySelector(selectors[i]);
+            if (el) el.addEventListener('scroll', onScroll);
+        }
+    }
+
+    attachScrollListeners();
+    checkScroll();
+
+    var observer = new MutationObserver(function() {
+        observer.disconnect();
+        attachScrollListeners();
+        checkScroll();
+        observer.observe(doc.body, { childList: true, subtree: true });
+    });
+    observer.observe(doc.body, { childList: true, subtree: true });
+
+    setTimeout(function() { attachScrollListeners(); checkScroll(); }, 500);
+    setTimeout(function() { attachScrollListeners(); checkScroll(); }, 1500);
+    setTimeout(function() { attachScrollListeners(); checkScroll(); }, 3000);
+})();
+</script>
+""".replace("__ACTIVE_TAB__", _active_tab_name)
+
+components.html(_sticky_js, height=0)
+
 if st.session_state.active_tab == "Задачи":
     now_time = datetime.now()
     all_deals = st.session_state.crm_store["deals"]
@@ -1884,4 +1866,3 @@ elif st.session_state.active_tab == "Клиенты":
                 st.session_state.last_id = None
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
-            
