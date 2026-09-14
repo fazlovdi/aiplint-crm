@@ -75,6 +75,26 @@ def inject_border_css(key, color):
         </style>
         """, unsafe_allow_html=True)
 
+def inject_payment_selectbox_css(deal_id, status):
+    if status == "Оплачено":
+        color = "#2E7D32"
+        bg_color = "#E8F5E9"
+    else:
+        color = "#C62828"
+        bg_color = "#FFEBEE"
+    st.markdown(f"""
+    <style>
+        .st-key-ps_{deal_id} [data-baseweb="select"] {{
+            border: 2px solid {color} !important;
+            border-radius: 10px !important;
+            background-color: {bg_color} !important;
+        }}
+        .st-key-ps_{deal_id} [data-baseweb="select"] > div {{
+            background-color: {bg_color} !important;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
+
 def hash_password(pwd, salt=None):
     if salt is None:
         salt = secrets.token_hex(16)
@@ -1119,10 +1139,10 @@ elif st.session_state.active_tab == "Сделки":
                     if c_phone:
                         render_phone_inline(c_phone, d["id"])
                     st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                    st.markdown("---")
 
                     ps = d.get("payment_status", "Не оплачено")
-                    st.markdown("**Оплата:**")
-                    render_payment_status_badge(ps)
+                    inject_payment_selectbox_css(d["id"], ps)
                     new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"ps_{d['id']}")
                     if new_ps != ps:
                         d["payment_status"] = new_ps
