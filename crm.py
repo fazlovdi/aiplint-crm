@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
