@@ -53,6 +53,12 @@ st.markdown("""
     .payment-status-unpaid { background-color: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
     #sticky-tab-label { position: fixed; top: 12px; right: 16px; z-index: 99999; background: rgba(245, 246, 248, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(220, 224, 229, 0.6); border-radius: 9px; padding: 6px 12px; font-size: 0.85rem; font-weight: 600; color: #2C3E50; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: none; pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #sticky-tab-label.visible { display: block !important; }
+    .stHtml { display: none !important; }
+    iframe[srcdoc] { display: none !important; }
+    .custom-print-btn { width: 100%; padding: 10px; background: #bc1661; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; transition: background 0.15s; }
+    .custom-print-btn:hover { background: #9a1452; }
+    .custom-img-print-btn { width: 100%; padding: 8px; background: #bc1661; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s; }
+    .custom-img-print-btn:hover { background: #9a1452; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -355,13 +361,14 @@ def render_phone_inline(phone, uid):
         cph = "7" + cph[1:]
     elif not cph:
         cph = "79990000000"
-    components.html(f"""
+    btn_id = f"ph_btn_{uid}_{secrets.token_hex(4)}"
+    st.markdown(f"""
     <div class="phone-action-group" style="padding:4px 0;">
         <span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\U0001F4CB</button>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=document.getElementById('{btn_id}');b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}});" class="phone-btn" id="{btn_id}" title="Скопировать">\U0001F4CB</button>
         <a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a>
     </div>
-    """, height=48)
+    """, unsafe_allow_html=True)
 
 def render_extra_phone_inline(phone, name, role, uid):
     cph = re.sub(r"\D", "", phone)
@@ -370,20 +377,21 @@ def render_extra_phone_inline(phone, name, role, uid):
     elif not cph:
         cph = "79990000000"
     info = f"{phone} \u2014 {name} ({role})" if name else phone
-    components.html(f"""
+    btn_id = f"ep_btn_{uid}_{secrets.token_hex(4)}"
+    st.markdown(f"""
     <div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;">
         <span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span>
-        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=this;b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}}.bind(this));" class="phone-btn" title="Скопировать">\U0001F4CB</button>
+        <button onclick="navigator.clipboard.writeText('{phone}').then(function(){{var b=document.getElementById('{btn_id}');b.textContent='\u2713';setTimeout(function(){{b.textContent='\U0001F4CB';}},1500);}});" class="phone-btn" id="{btn_id}" title="Скопировать">\U0001F4CB</button>
         <a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a>
     </div>
-    """, height=56)
+    """, unsafe_allow_html=True)
 
 def render_payment_status_badge(status):
     if status == "Оплачено":
         cls = "payment-status-paid"
     else:
         cls = "payment-status-unpaid"
-    components.html(f'<span class="payment-status-badge {cls}">{status}</span>', height=30)
+    st.markdown(f'<span class="payment-status-badge {cls}">{status}</span>', unsafe_allow_html=True)
 
 def render_file_action_buttons(fp, fn, kp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
@@ -412,26 +420,25 @@ def render_file_action_buttons(fp, fn, kp):
             mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
             safe_kp = re.sub(r'[^a-zA-Z0-9_]', '_', kp)
             btn_id = f"img_print_btn_{safe_kp}"
-            js_func = f"doImgPrint_{safe_kp}"
-            var_name = f"_img_{safe_kp}"
-            img_html_json = json.dumps(f"<html><head><meta charset='utf-8'></head><body style='margin:0;text-align:center;'><img src='data:{mt};base64,{b64}' style='max-width:100%;' /></body></html>")
-            components.html(f"""
-            <style>
-            #{btn_id} {{ width: 100%; padding: 8px; background: #bc1661; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s; }}
-            #{btn_id}:hover {{ background: #9a1452; }}
-            </style>
-            <button id="{btn_id}" onclick="{js_func}()">Распечатать</button>
+            st.markdown(f"""
+            <button class="custom-img-print-btn" id="{btn_id}">Распечатать</button>
+            """, unsafe_allow_html=True)
+            st.components.v1.html(f"""
             <script>
-            var {var_name} = {img_html_json};
-            function {js_func}() {{
-                var w = window.open('', '_blank');
-                if (!w) {{ alert('Разрешите всплывающие окна для печати'); return; }}
-                w.document.open(); w.document.write({var_name}); w.document.close(); w.focus();
-                setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500);
-                w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }};
-            }}
+            (function() {{
+                var btn = window.parent.document.getElementById('{btn_id}');
+                if (!btn) return;
+                var html = '<html><head><meta charset="utf-8"></head><body style="margin:0;text-align:center;"><img src="data:{mt};base64,{b64}" style="max-width:100%;" /></body></html>';
+                btn.addEventListener('click', function() {{
+                    var w = window.open('', '_blank');
+                    if (!w) {{ alert('Разрешите всплывающие окна для печати'); return; }}
+                    w.document.open(); w.document.write(html); w.document.close(); w.focus();
+                    setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500);
+                    w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }};
+                }});
+            }})();
             </script>
-            """, height=45)
+            """, height=0)
     elif ext == ".pdf":
         st.download_button("Открыть / Скачать PDF", data=fb, file_name=fn, mime="application/pdf", key=f"dl_{kp}")
     else:
@@ -483,26 +490,25 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     html_json = json.dumps(html_content).replace('<', '\\u003c')
     safe_key = key_suffix.replace('-', '_').replace('.', '_')
     btn_id = f"print_btn_{safe_key}"
-    js_func = f"doPrint_{safe_key}"
-    var_name = f"_pd_{safe_key}"
-    components.html(f"""
-    <style>
-    #{btn_id} {{ width: 100%; padding: 10px; background: #bc1661; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; transition: background 0.15s; }}
-    #{btn_id}:hover {{ background: #9a1452; }}
-    </style>
-    <button id="{btn_id}" onclick="{js_func}()">Распечатать задачу</button>
+    st.markdown(f"""
+    <button class="custom-print-btn" id="{btn_id}">Распечатать задачу</button>
+    """, unsafe_allow_html=True)
+    st.components.v1.html(f"""
     <script>
-    var {var_name} = {html_json};
-    function {js_func}() {{
-        var html = {var_name};
-        var w = window.open('', '_blank');
-        if (!w) {{ alert('Разрешите всплывающие окна для печати'); return; }}
-        w.document.open(); w.document.write(html); w.document.close(); w.focus();
-        setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500);
-        w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }};
-    }}
+    (function() {{
+        var btn = window.parent.document.getElementById('{btn_id}');
+        if (!btn) return;
+        var html = {html_json};
+        btn.addEventListener('click', function() {{
+            var w = window.open('', '_blank');
+            if (!w) {{ alert('Разрешите всплывающие окна для печати'); return; }}
+            w.document.open(); w.document.write(html); w.document.close(); w.focus();
+            setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500);
+            w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }};
+        }});
+    }})();
     </script>
-    """, height=45)
+    """, height=0)
 
 def render_deal_files_in_task(deal, task_key_prefix):
     if not deal:
@@ -733,12 +739,12 @@ def check_login(username, password):
     return False
 
 def clear_remember_token():
-    components.html("""
+    st.components.v1.html("""
     <script>
     try { localStorage.removeItem('crm_remember_token'); } catch(e) {}
     try { document.cookie = 'crm_remember_token=; path=/; max-age=0; SameSite=Lax'; } catch(e) {}
     </script>
-    """, height=1)
+    """, height=0)
     try:
         del st.query_params["remember_token"]
     except Exception:
@@ -765,14 +771,14 @@ if not st.session_state.authenticated:
                 del st.query_params["remember_token"]
             except Exception:
                 pass
-            components.html("""
+            st.components.v1.html("""
             <script>
             try { localStorage.removeItem('crm_remember_token'); } catch(e) {}
             try { document.cookie = 'crm_remember_token=; path=/; max-age=0; SameSite=Lax'; } catch(e) {}
             </script>
-            """, height=1)
+            """, height=0)
     if not st.session_state.authenticated:
-        components.html("""
+        st.components.v1.html("""
         <script>
         function getCookie(name) {
             var nameEQ = name + "=";
@@ -798,9 +804,9 @@ if not st.session_state.authenticated:
             catch(e2) { try { redirect(new URL(window.location.href)); } catch(e3) {} } }
         }
         </script>
-        """, height=1)
+        """, height=0)
     if not st.session_state.authenticated:
-        components.html("""
+        st.components.v1.html("""
         <script>
         setTimeout(function() {
             function addAC(doc) {
@@ -812,7 +818,7 @@ if not st.session_state.authenticated:
             try { addAC(window.parent.document); } catch(e) { try { addAC(document); } catch(e2) {} }
         }, 1000);
         </script>
-        """, height=1)
+        """, height=0)
         st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Авторизуйтесь для входа в систему</p>", unsafe_allow_html=True)
         lc, mc, rc = st.columns([1, 2, 1])
@@ -847,7 +853,7 @@ st.markdown(f"""
 
 if st.session_state.get("set_remember_token"):
     _tok = st.session_state.pop("set_remember_token")
-    components.html(f"""
+    st.components.v1.html(f"""
     <script>
     try {{ localStorage.setItem('crm_remember_token','{_tok}'); }} catch(e) {{}}
     try {{
@@ -857,7 +863,7 @@ if st.session_state.get("set_remember_token"):
         document.cookie = cs;
     }} catch(e) {{}}
     </script>
-    """, height=1)
+    """, height=0)
 
 with st.sidebar:
     if st.session_state.cloud_ok:
@@ -936,44 +942,76 @@ _active_tab_name = st.session_state.active_tab
 _sticky_js = """
 <script>
 (function() {
-    var w = window;
-    try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
-    var doc = w.document;
-
-    var label = doc.getElementById('sticky-tab-label');
-    if (!label) {
-        label = doc.createElement('div');
-        label.id = 'sticky-tab-label';
-        doc.body.appendChild(label);
+    var w, doc;
+    try {
+        if (window.parent && window.parent !== window && window.parent.document) {
+            w = window.parent;
+            doc = w.document;
+        } else {
+            w = window;
+            doc = document;
+        }
+    } catch(e) {
+        w = window;
+        doc = document;
     }
 
     var activeTab = '__ACTIVE_TAB__';
-    label.textContent = activeTab;
-
+    var label = null;
+    var scrollEl = null;
     var lastVisible = null;
+    var observer = null;
 
-    function getScrollTop() {
-        var top = w.scrollY || w.pageYOffset || 0;
-        if (top > 0) return top;
-        var selectors = [
+    function ensureLabel() {
+        label = doc.getElementById('sticky-tab-label');
+        if (!label) {
+            label = doc.createElement('div');
+            label.id = 'sticky-tab-label';
+            doc.body.appendChild(label);
+        }
+        if (label.textContent !== activeTab) {
+            label.textContent = activeTab;
+        }
+    }
+
+    function findScrollEl() {
+        var sels = [
             'section[data-testid="stMain"]',
-            'section.main',
-            '[data-testid="stAppViewContainer"]',
+            '[data-testid="stAppViewContainer"] > div',
             '[data-testid="stScrollContent"]',
+            'section.main',
             '.stApp',
             'main',
             '#root'
         ];
-        for (var i = 0; i < selectors.length; i++) {
-            var el = doc.querySelector(selectors[i]);
-            if (el && el.scrollTop > 0) return el.scrollTop;
+        for (var i = 0; i < sels.length; i++) {
+            var el = doc.querySelector(sels[i]);
+            if (el && el.scrollHeight > el.clientHeight && el.clientHeight > 50) {
+                return el;
+            }
         }
-        return 0;
+        var divs = doc.querySelectorAll('div');
+        var best = null;
+        var bestH = 0;
+        for (var i = 0; i < divs.length; i++) {
+            var d = divs[i];
+            if (d.scrollHeight > d.clientHeight && d.clientHeight > bestH) {
+                bestH = d.clientHeight;
+                best = d;
+            }
+        }
+        return best;
     }
 
     function checkScroll() {
-        var scrollTop = getScrollTop();
-        var shouldShow = scrollTop > 80;
+        ensureLabel();
+        var st = 0;
+        if (scrollEl) {
+            st = scrollEl.scrollTop;
+        } else {
+            st = w.scrollY || w.pageYOffset || 0;
+        }
+        var shouldShow = st > 80;
         if (shouldShow !== lastVisible) {
             if (shouldShow) {
                 label.classList.add('visible');
@@ -984,49 +1022,46 @@ _sticky_js = """
         }
     }
 
-    var scrollTimeout = null;
     function onScroll() {
-        if (scrollTimeout) clearTimeout(scrollTimeout);
-        scrollTimeout = setTimeout(checkScroll, 100);
-    }
-
-    w.addEventListener('scroll', onScroll, true);
-
-    function attachScrollListeners() {
-        var selectors = [
-            'section[data-testid="stMain"]',
-            'section.main',
-            '[data-testid="stAppViewContainer"]',
-            '[data-testid="stScrollContent"]',
-            '.stApp',
-            'main',
-            '#root'
-        ];
-        for (var i = 0; i < selectors.length; i++) {
-            var el = doc.querySelector(selectors[i]);
-            if (el) el.addEventListener('scroll', onScroll);
-        }
-    }
-
-    attachScrollListeners();
-    checkScroll();
-
-    var observer = new MutationObserver(function() {
-        observer.disconnect();
-        attachScrollListeners();
         checkScroll();
-        observer.observe(doc.body, { childList: true, subtree: true });
+    }
+
+    function setup() {
+        ensureLabel();
+        var newEl = findScrollEl();
+        if (newEl && newEl !== scrollEl) {
+            if (scrollEl) {
+                scrollEl.removeEventListener('scroll', onScroll);
+            }
+            scrollEl = newEl;
+            scrollEl.addEventListener('scroll', onScroll, { passive: true });
+        }
+        if (!scrollEl) {
+            w.removeEventListener('scroll', onScroll);
+            w.addEventListener('scroll', onScroll, { passive: true });
+        }
+        checkScroll();
+    }
+
+    setup();
+
+    var count = 0;
+    var interval = setInterval(function() {
+        setup();
+        count++;
+        if (count > 120) clearInterval(interval);
+    }, 500);
+
+    if (observer) observer.disconnect();
+    observer = new MutationObserver(function() {
+        setup();
     });
     observer.observe(doc.body, { childList: true, subtree: true });
-
-    setTimeout(function() { attachScrollListeners(); checkScroll(); }, 500);
-    setTimeout(function() { attachScrollListeners(); checkScroll(); }, 1500);
-    setTimeout(function() { attachScrollListeners(); checkScroll(); }, 3000);
 })();
 </script>
 """.replace("__ACTIVE_TAB__", _active_tab_name)
 
-components.html(_sticky_js, height=0)
+st.components.v1.html(_sticky_js, height=0)
 
 if st.session_state.active_tab == "Задачи":
     now_time = datetime.now()
