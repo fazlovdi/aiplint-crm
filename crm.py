@@ -6,8 +6,6 @@ from collections import defaultdict
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 
-st.markdown('<div id="sticky-tab-label">Загрузка...</div>', unsafe_allow_html=True)
-
 st.markdown("""
 <style>
     .stApp { background-color: #F5F6F8; color: #2C3E50; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
@@ -53,40 +51,119 @@ st.markdown("""
     .payment-status-badge { padding: 4px 10px; border-radius: 99px; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; }
     .payment-status-paid { background-color: #E8F5E9; color: #2E7D32; border: 1px solid #C8E6C9; }
     .payment-status-unpaid { background-color: #FFEBEE; color: #C62828; border: 1px solid #FFCDD2; }
-    #sticky-tab-label { position: fixed; top: 12px; right: 16px; z-index: 9999; background: rgba(245, 246, 248, 0.92); backdrop-filter: blur(8px); border: 1px solid rgba(220, 224, 229, 0.6); border-radius: 9px; padding: 6px 12px; font-size: 0.85rem; font-weight: 600; color: #2C3E50; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: none; pointer-events: none; }
-    #sticky-tab-label.visible { display: block; }
+    #sticky-tab-label { position: fixed; top: 12px; right: 16px; z-index: 99999; background: rgba(245, 246, 248, 0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(220, 224, 229, 0.6); border-radius: 9px; padding: 6px 12px; font-size: 0.85rem; font-weight: 600; color: #2C3E50; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: none; pointer-events: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    #sticky-tab-label.visible { display: block !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
+components.html("""
 <script>
 (function() {
-    var label = document.getElementById('sticky-tab-label');
-    if (!label) return;
+    var w = window;
+    try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
+    var doc = w.document;
+
+    var label = doc.getElementById('sticky-tab-label');
+    if (!label) {
+        label = doc.createElement('div');
+        label.id = 'sticky-tab-label';
+        doc.body.appendChild(label);
+    }
+
     function updateTabLabel() {
-        var buttons = Array.from(document.querySelectorAll('.stButton button'));
+        var buttons = doc.querySelectorAll('button');
         var activeText = 'CRM';
         for (var i = 0; i < buttons.length; i++) {
             var btn = buttons[i];
-            var txt = btn.innerText.trim();
-            if (txt === 'Клиенты' || txt === 'Задачи' || txt === 'Сделки') {
+            var txt = (btn.innerText || btn.textContent || '').trim();
+            if (txt === '\u041a\u043b\u0438\u0435\u043d\u0442\u044b' || txt === '\u0417\u0430\u0434\u0430\u0447\u0438' || txt === '\u0421\u0434\u0435\u043b\u043a\u0438') {
                 var kind = btn.getAttribute('kind');
-                if (kind === 'primary') { activeText = txt; break; }
+                if (kind === 'primary') {
+                    activeText = txt;
+                    break;
+                }
             }
         }
         label.textContent = activeText;
     }
-    window.addEventListener('scroll', function() {
-        var scrollY = window.scrollY || window.pageYOffset;
-        if (scrollY > 80) { label.classList.add('visible'); }
-        else { label.classList.remove('visible'); }
+
+    function getScrollTop() {
+        var top = w.scrollY || w.pageYOffset || 0;
+        if (top > 0) return top;
+        var selectors = [
+            'section[data-testid="stMain"]',
+            'section.main',
+            '[data-testid="stAppViewContainer"]',
+            '[data-testid="stScrollContent"]',
+            '.stApp',
+            'main',
+            '#root',
+            'div.element-container'
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = doc.querySelector(selectors[i]);
+            if (el && el.scrollTop > 0) return el.scrollTop;
+        }
+        var allDivs = doc.querySelectorAll('div');
+        for (var i = 0; i < allDivs.length; i++) {
+            if (allDivs[i].scrollTop > 0 && allDivs[i].scrollHeight > allDivs[i].clientHeight) {
+                return allDivs[i].scrollTop;
+            }
+        }
+        return 0;
+    }
+
+    function checkScroll() {
+        var scrollTop = getScrollTop();
+        if (scrollTop > 80) {
+            label.classList.add('visible');
+        } else {
+            label.classList.remove('visible');
+        }
+    }
+
+    function attachListeners() {
+        var selectors = [
+            'section[data-testid="stMain"]',
+            'section.main',
+            '[data-testid="stAppViewContainer"]',
+            '[data-testid="stScrollContent"]',
+            '.stApp',
+            'main',
+            '#root'
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = doc.querySelector(selectors[i]);
+            if (el) el.addEventListener('scroll', checkScroll);
+        }
+    }
+
+    w.addEventListener('scroll', checkScroll, true);
+
+    var observer = new MutationObserver(function() {
+        updateTabLabel();
+        attachListeners();
+        checkScroll();
     });
-    var observer = new MutationObserver(function() { updateTabLabel(); });
-    observer.observe(document.body, { childList: true, subtree: true });
-    updateTabLabel();
+    observer.observe(doc.body, { childList: true, subtree: true });
+
+    setTimeout(function() {
+        attachListeners();
+        updateTabLabel();
+        checkScroll();
+    }, 500);
+
+    var count = 0;
+    var interval = setInterval(function() {
+        attachListeners();
+        updateTabLabel();
+        checkScroll();
+        count++;
+        if (count > 40) clearInterval(interval);
+    }, 250);
 })();
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 FILE_NAME = "web_crm_database_v2.json"
 YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
