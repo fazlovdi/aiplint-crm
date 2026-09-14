@@ -257,6 +257,12 @@ def get_client_by_id(c_id):
             return c
     return None
 
+def get_deal_by_id(d_id):
+    for d in st.session_state.crm_store.get("deals", []):
+        if d["id"] == d_id:
+            return d
+    return None
+
 def parse_deadline(ds):
     if not ds:
         return datetime.now().date()
@@ -397,16 +403,9 @@ def build_print_html(task, cl, tp, fd):
         return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     products_html = esc(task.get('products', '')).replace('\n', '<br>')
     oav = task.get('order_amount', 0)
-    dpc = cl.get('discount', 0)
-    dam = oav * dpc / 100
-    tam = oav - dam
     cost_html = ""
     if oav and oav > 0:
-        cost_html = (
-            f"<div style='margin-top:6px;'>Сумма: {oav:,.0f} руб.</div>"
-            f"<div>Скидка: {dpc}% ({dam:,.0f} руб.)</div>"
-            f"<div style='font-size:16px;font-weight:bold;'>Итого: {tam:,.0f} руб.</div>"
-        ).replace(",", " ")
+        cost_html = f"<div style='margin-top:6px;font-size:16px;font-weight:bold;'>Сумма: {oav:,.0f} руб.</div>".replace(",", " ")
     file_reminder = ""
     if task.get("task_files"):
         file_reminder = (
@@ -465,6 +464,17 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     }}
     </script>
     """, height=45)
+
+def render_deal_files_in_task(deal, task_key_prefix):
+    if not deal:
+        return
+    deal_files = deal.get("deal_files", [])
+    if not deal_files:
+        return
+    st.markdown("**Файлы сделки:**")
+    for dfi, dff in enumerate(deal_files):
+        st.markdown(f"\U0001F4C4 {dff.get('file_name', dff.get('name', 'файл'))}")
+        render_file_action_buttons(dff.get("file_path", dff.get("path")), dff.get("file_name", dff.get("name", "файл")), f"{task_key_prefix}_dealfile_{dfi}")
 
 def migrate_task_files(t):
     if "task_files" not in t:
@@ -918,19 +928,17 @@ if st.session_state.active_tab == "Задачи":
                 st.markdown(f"Получатель: {task.get('receiver', '')} ({task.get('receiver_phone', '')})")
                 st.markdown(f"Оплата: {task.get('ship_pay', '')}")
                 if task.get('order_amount', 0) > 0:
-                    oa = task['order_amount']
-                    dp = cl.get('discount', 0)
-                    da = oa * dp / 100
-                    ta = oa - da
-                    st.markdown(f"Сумма: {oa:,.0f} | Скидка: {dp}% ({da:,.0f}) | **Итого: {ta:,.0f}**".replace(",", " "))
+                    st.markdown(f"Сумма: {task['order_amount']:,.0f} руб.".replace(",", " "))
                 if task.get('tk_num'):
                     st.markdown(f"Трек: `{task['tk_num']}`")
+                task_deal = di.get(task.get("deal_id"))
+                render_deal_files_in_task(task_deal, f"task_{sk}_{t['client_id']}_{t['task_idx']}")
             if task.get('task_comment'):
                 st.markdown(f"**Комментарии:** {task['task_comment']}")
             st.markdown("---")
             st.markdown(f"**Ответственный:** {task.get('manager', '\u2014')}")
             st.markdown("---")
-            st.markdown("**Файлы:**")
+            st.markdown("**Файлы задачи:**")
             if task.get("task_files"):
                 for tfi, tf in enumerate(task["task_files"]):
                     st.markdown(f"\U0001F4C4 {tf.get('name', '')}")
@@ -1123,9 +1131,12 @@ elif st.session_state.active_tab == "Сделки":
                                     if t.get('task_comment'):
                                         st.markdown(f"**Комментарии:** {t['task_comment']}")
                                     if t.get("task_files"):
+                                        st.markdown("**Файлы задачи:**")
                                         for tfi, tf in enumerate(t["task_files"]):
                                             st.markdown(f"\U0001F4C4 {tf.get('name', '')}")
                                             render_file_action_buttons(tf.get("path"), tf.get("name", "файл"), f"deal_task_file_{d['id']}_{ti}_{tfi}")
+                                    if t.get('type', 'Связаться') == "Отправить заказ":
+                                        render_deal_files_in_task(d, f"deal_task_{d['id']}_{ti}")
                                     st.markdown("---")
                                     render_print_button(t, client, t.get('type', 'Связаться'), dl, f"deal_task_{d['id']}_{ti}")
                                     st.markdown("---")
@@ -1172,6 +1183,8 @@ elif st.session_state.active_tab == "Сделки":
                                         for tfi, tf in enumerate(t["task_files"]):
                                             st.caption(f"\U0001F4C4 {tf.get('name', '')}")
                                             render_file_action_buttons(tf.get("path"), tf.get("name", "файл"), f"deal_dtask_file_{d['id']}_{ti}_{tfi}")
+                                    if t.get('type', 'Связаться') == "Отправить заказ":
+                                        render_deal_files_in_task(d, f"deal_dtask_{d['id']}_{ti}")
                                     if t.get("completion_files"):
                                         for cfi, cf in enumerate(t["completion_files"]):
                                             st.caption(f"\U0001F4C4 {cf.get('name', '')}")
@@ -1405,7 +1418,7 @@ elif st.session_state.active_tab == "Клиенты":
                     "category": cc, "discount": int(cd), "base_comment": "", "manager": cm,
                     "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()],
                     "extra_emails": [e for e in st.session_state.f_em if e.strip()],
-                                        "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()],
+                    "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()],
                     "client_files": [], "client_comments": [], "comments": [], "tasks": []
                 }
                 if cf:
@@ -1642,9 +1655,13 @@ elif st.session_state.active_tab == "Клиенты":
                                 if t.get('task_comment'):
                                     st.markdown(f"**Комментарии:** {t['task_comment']}")
                                 if t.get("task_files"):
+                                    st.markdown("**Файлы задачи:**")
                                     for tfi, tf in enumerate(t["task_files"]):
                                         st.markdown(f"\U0001F4C4 {tf.get('name', '')}")
                                         render_file_action_buttons(tf.get("path"), tf.get("name", "файл"), f"cli_task_file_{cl['id']}_{ti}_{tfi}")
+                                if t.get('type', 'Связаться') == "Отправить заказ":
+                                    task_deal = get_deal_by_id(t.get("deal_id"))
+                                    render_deal_files_in_task(task_deal, f"cli_task_{cl['id']}_{ti}")
                     else:
                         st.caption("Нет активных задач")
                     st.markdown("---")
