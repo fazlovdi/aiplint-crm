@@ -1820,7 +1820,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
             qa_cat = st.text_input("\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f:", key="qa_cat", placeholder="\u041d\u0430\u043f\u0440: \u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430, \u041e\u043f\u043b\u0430\u0442\u0430, \u041f\u0440\u043e\u0434\u0443\u043a\u0446\u0438\u044f...")
             if st.button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", key="qa_add", use_container_width=True, type="primary"):
                 if qa_q.strip() and qa_a.strip():
-                    st.session_state.crm_store.setdefault("qa_entries", []).append({"id": str(uuid.uuid4())[:8], "question": qa_q.strip(), "answer": qa_a.strip(), "category": qa_cat.strip() or "\u041e\u0431\u0449\u0435\u0435", "created_by": cu, "created_at": datetime.now().strftime("%Y-%m-%d")})
+                st.session_state.crm_store.setdefault("qa_entries", []).append({"id": str(uuid.uuid4())[:8], "question": qa_q.strip(), "answer": qa_a.strip(), "category": qa_cat.strip() or "\u041e\u0431\u0449\u0435\u0435", "created_by": cu, "created_at": datetime.now().strftime("%Y-%m-%d")})
                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u043f\u0438\u0441\u044c \u0434\u
                     st.session_state.crm_store.setdefault("qa_entries", []).append({"id": str(uuid.uuid4())[:8], "question": qa_q.strip(), "answer": qa_a.strip(), "category": qa_cat.strip() or "\u041e\u0431\u0449\u0435\u0435", "created_by": cu, "created_at": datetime.now().strftime("%Y-%m-%d")})
                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u043f\u0438\u0441\u044c \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0430")
