@@ -10,7 +10,7 @@ st.markdown("""
 <style>
     .stApp { background-color: #F5F6F8; color: #2C3E50; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
     section[data-testid="stSidebar"] { background-color: #EEF0F3; border-right: 1px solid #DCE0E5; }
-    .stExpander { border-radius: 14px; overflow: hidden; background-color: #FFFFFF; margin-bottom: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .stExpander { border-radius: 14px; overflow: hidden; background-color: #FFFFFF; margin-bottom: 0.3rem !important; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
     .stExpander > details { border-radius: 14px; }
     .stExpander > details > summary { font-weight: 600; font-size: 1rem; color: #2C3E50; padding: 0.75rem 1.25rem; list-style: none; border-radius: 14px; cursor: pointer; }
     .stExpander > details > summary:hover { background-color: #F5F6F8; }
@@ -22,7 +22,7 @@ st.markdown("""
     button[kind="primary"], .stButton > button[kind="primary"] { background-color: #bc1661; color: #FFFFFF; border-radius: 10px; font-weight: 600; font-size: 0.95rem; padding: 0.55rem 1.1rem; border: none; box-shadow: 0 2px 6px rgba(188,22,97,0.2); transition: all 0.15s ease; }
     button[kind="primary"]:hover { background-color: #9a1452; box-shadow: 0 3px 10px rgba(188,22,97,0.25); }
     button[kind="secondary"], .stButton > button[kind="secondary"] { background-color: transparent; color: #bc1661; border: 1px solid #C9CFD7; border-radius: 10px; font-weight: 500; font-size: 0.95rem; padding: 0.55rem 1.1rem; transition: all 0.15s ease; }
-    .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; }
+    .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
     .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
     .stTextInput > div > input:focus, .stTextArea > div > textarea:focus, .stNumberInput > div > div > input:focus, .stSelectbox > div > div:focus-within { outline: none; border-color: #DCE0E5 !important; box-shadow: none !important; }
     .stSelectbox > div > div { background-color: #FFFFFF; border-radius: 10px; border: 1.5px solid #DCE0E5; padding: 0.35rem 0.75rem; }
@@ -34,10 +34,14 @@ st.markdown("""
     ::-webkit-scrollbar-thumb { background: #C9CFD7; border-radius: 4px; }
     .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
     .stMarkdown strong { color: #2C3E50; font-weight: 600; }
+    .stMarkdown { margin-top: 0.15rem !important; margin-bottom: 0.15rem !important; }
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
     .stHorizontalBlock .stButton button { border-radius: 12px; font-size: 0.95rem; font-weight: 600; padding: 0.65rem 1rem; }
+    .stHorizontalBlock { gap: 0.4rem !important; }
     [data-testid="stFileUploader"] { border-radius: 14px; border: 2px dashed #C9CFD7; background-color: #FAFBFC; padding: 0.75rem; }
     .greeting-block { margin-bottom: 1.5rem !important; }
+    [data-testid="stVerticalBlock"] { gap: 0.35rem !important; }
+    .stContainer { margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
     .phone-action-group { display: flex; align-items: center; gap: 6px; white-space: nowrap; min-height: 32px; }
     .phone-btn { background: #EEF0F3 !important; border: 1px solid #DCE0E5 !important; border-radius: 8px !important; padding: 6px 10px !important; font-size: 0.85rem !important; color: #5A6B7D !important; cursor: pointer !important; min-width: 44px !important; min-height: 32px !important; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
     .phone-btn:hover { background: #DCE0E5 !important; }
@@ -61,7 +65,6 @@ st.markdown("""
     .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .arrow-btn-col button { font-size: 1.6rem !important; font-weight: bold !important; padding: 0.05rem 0.25rem !important; min-height: 36px !important; color: #bc1661 !important; background-color: transparent !important; border: none !important; transition: all 0.15s ease !important; line-height: 1 !important; }
     .arrow-btn-col button:hover { color: #9a1452 !important; background-color: #FCE4EC !important; border-radius: 8px !important; }
-    .tree-btn button { font-size: 0.9rem !important; font-weight: 600 !important; padding: 0.4rem 0.8rem !important; text-align: left !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -114,16 +117,13 @@ def generate_task_number(prefix):
         for t in c.get("tasks", []):
             tn = t.get("task_number", "")
             if tn.startswith(f"{prefix}{year}-"):
-                try:
-                    max_num = max(max_num, int(tn.split("-")[1]))
-                except:
-                    pass
+                try: max_num = max(max_num, int(tn.split("-")[1]))
+                except: pass
     return f"{prefix}{year}-{max_num + 1}"
 
 def assign_task_numbers(data):
     year = datetime.now().strftime("%y")
-    zk_max = 0
-    zs_max = 0
+    zk_max, zs_max = 0, 0
     for c in data.get("clients", []):
         for t in c.get("tasks", []):
             tn = t.get("task_number", "")
@@ -182,8 +182,7 @@ def yandex_headers():
 def check_cloud_status():
     if not YANDEX_TOKEN: return False
     try:
-        res = requests.get(YANDEX_API_URL, headers=yandex_headers(), timeout=5)
-        return res.status_code == 200
+        return requests.get(YANDEX_API_URL, headers=yandex_headers(), timeout=5).status_code == 200
     except: return False
 
 def init_yandex_folders():
@@ -244,21 +243,44 @@ def format_phone(p_str):
 
 def save_uploaded_file(u_file, c_id, prefix=""):
     if u_file is None: return None
-    name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{u_file.name}"
     b = u_file.getvalue()
+    file_hash = hashlib.sha256(b).hexdigest()
+    for c in st.session_state.crm_store.get("clients", []):
+        for f in c.get("client_files", []):
+            if f.get("file_hash") == file_hash and file_hash:
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+        for t in c.get("tasks", []):
+            for f in t.get("task_files", []):
+                if f.get("file_hash") == file_hash and file_hash:
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+            for f in t.get("completion_files", []):
+                if f.get("file_hash") == file_hash and file_hash:
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+    for d in st.session_state.crm_store.get("deals", []):
+        for f in d.get("deal_files", []):
+            if f.get("file_hash") == file_hash and file_hash:
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+        for f in d.get("close_files", []):
+            if f.get("file_hash") == file_hash and file_hash:
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+    name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{u_file.name}"
     if YANDEX_TOKEN:
         rp = f"CRM_NE_TROGAT/uploads/{name}"
-        if upload_file_to_yandex(b, name): return {"path": rp, "name": u_file.name}
+        if upload_file_to_yandex(b, name):
+            return {"path": rp, "name": u_file.name, "file_hash": file_hash}
         st.warning("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u043d\u0430 \u0414\u0438\u0441\u043a, \u0444\u0430\u0439\u043b \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e")
     os.makedirs("uploads", exist_ok=True)
     lp = f"uploads/{name}"
     with open(lp, "wb") as f: f.write(b)
-    return {"path": lp, "name": u_file.name}
+    return {"path": lp, "name": u_file.name, "file_hash": file_hash}
 
 def save_uploaded_files(files, c_id, prefix=""):
     if files is None: return []
     if not isinstance(files, list): files = [files]
     return [fi for fi in (save_uploaded_file(f, c_id, prefix) for f in files) if fi]
+
+def normalize_file_list(fi_list):
+    return [{"file_path": fi["path"], "file_name": fi["name"], "file_hash": fi.get("file_hash", "")} for fi in fi_list]
 
 def normalize_remote_path(fp):
     if not fp: return None
@@ -454,6 +476,18 @@ def render_task_detail(t, cl, d, key_prefix):
         if t.get("task_files"):
             st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
             render_file_thumbs(t["task_files"], f"{key_prefix}_files")
+        st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
+        ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}", accept_multiple_files=True, label_visibility="collapsed")
+        if st.button("\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
+            if ntf_existing:
+                fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
+                if fi_list:
+                    t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
+                    t["last_modified"] = now_str()
+                    cl["last_modified"] = now_str()
+                    if d: d["last_modified"] = now_str()
+                    commit_and_rerun(st.session_state.crm_store, "\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b")
+            else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
         st.markdown("---")
         tk_done = t.get("done", False)
         if not tk_done:
@@ -472,7 +506,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         t["completion_report"] = rt.strip()
                         t["last_modified"] = now_str()
                         fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
-                        if fi_list: t["completion_files"] = fi_list
+                        if fi_list: t["completion_files"] = normalize_file_list(fi_list)
                         cl["last_modified"] = now_str()
                         if d: d["last_modified"] = now_str()
                         st.session_state[show_key] = False
@@ -525,10 +559,10 @@ def tree_col(level):
 def migrate_task_files(t):
     if "task_files" not in t:
         t["task_files"] = []
-        if t.get("file_path"): t["task_files"].append({"path": t["file_path"], "name": t.get("file_name", "\u0444\u0430\u0439\u043b")})
+        if t.get("file_path"): t["task_files"].append({"file_path": t["file_path"], "file_name": t.get("file_name", "\u0444\u0430\u0439\u043b"), "file_hash": ""})
     if "completion_files" not in t:
         t["completion_files"] = []
-        if t.get("completion_file_path"): t["completion_files"].append({"path": t["completion_file_path"], "name": t.get("completion_file_name", "\u0444\u0430\u0439\u043b")})
+        if t.get("completion_file_path"): t["completion_files"].append({"file_path": t["completion_file_path"], "file_name": t.get("completion_file_name", "\u0444\u0430\u0439\u043b"), "file_hash": ""})
 
 def migrate_data(data):
     du = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}]
@@ -560,7 +594,7 @@ def migrate_data(data):
         if "manager" not in d: d["manager"] = ""
         if "close_files" not in d:
             d["close_files"] = []
-            if d.get("close_file_path"): d["close_files"].append({"path": d["close_file_path"], "name": d.get("close_file_name", "\u0444\u0430\u0439\u043b")})
+            if d.get("close_file_path"): d["close_files"].append({"file_path": d["close_file_path"], "file_name": d.get("close_file_name", "\u0444\u0430\u0439\u043b"), "file_hash": ""})
         if "last_modified" not in d: d["last_modified"] = "1970-01-01 00:00:00"
         if "deal_chat" not in d: d["deal_chat"] = []
         if d.get("status") == "New": d["status"] = "\u041d\u043e\u0432\u044b\u0439"
@@ -602,7 +636,7 @@ def load_data():
                     if "manager" not in d: d["manager"] = ""
                     if "close_files" not in d:
                         d["close_files"] = []
-                        if d.get("close_file_path"): d["close_files"].append({"path": d["close_file_path"], "name": d.get("close_file_name", "\u0444\u0430\u0439\u043b")})
+                        if d.get("close_file_path"): d["close_files"].append({"file_path": d["close_file_path"], "file_name": d.get("close_file_name", "\u0444\u0430\u0439\u043b"), "file_hash": ""})
                     if "last_modified" not in d: d["last_modified"] = "1970-01-01 00:00:00"
                     if "deal_chat" not in d: d["deal_chat"] = []
                     if d.get("status") == "\u041d\u0430 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0438": d["status"] = "\u0412 \u0440\u0430\u0431\u043e\u0442\u0435"
@@ -659,7 +693,7 @@ def close_deal_dialog(deal_id):
                     d['status'] = "\u0421\u0434\u0435\u043b\u043a\u0430 \u0437\u0430\u043a\u0440\u044b\u0442\u0430"
                     d['closed_date'] = datetime.now().strftime("%Y-%m-%d")
                     d['close_report'] = report.strip()
-                    d['close_files'] = save_uploaded_files(close_files, d["client_id"], "deal_close") if close_files else []
+                    d['close_files'] = normalize_file_list(save_uploaded_files(close_files, d["client_id"], "deal_close")) if close_files else []
                     d["last_modified"] = now_str()
                     break
             save_data(st.session_state.crm_store)
@@ -821,7 +855,7 @@ def render_deal_card_expanded(d, cl):
                     else:
                         tfi_list = save_uploaded_files(ntf, d["client_id"], "task_file") if ntf else []
                         tn = generate_task_number("\u0417\u0421")
-                        te = {"text": ntopic.strip(), "deadline": ntd.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f", "task_files": tfi_list, "manager": ntm, "completion_report": "", "completion_files": [], "deal_id": d["id"], "task_comment": ncomment.strip(), "order_amount": 0, "last_modified": now_str(), "task_number": tn}
+                        te = {"text": ntopic.strip(), "deadline": ntd.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f", "task_files": normalize_file_list(tfi_list), "manager": ntm, "completion_report": "", "completion_files": [], "deal_id": d["id"], "task_comment": ncomment.strip(), "order_amount": 0, "last_modified": now_str(), "task_number": tn}
                         cl.setdefault("tasks", []).append(te)
                         d["last_modified"] = now_str()
                         cl["last_modified"] = now_str()
@@ -840,7 +874,7 @@ def render_deal_card_expanded(d, cl):
                 if udf:
                     fi_list = save_uploaded_files(udf, d["client_id"], "deal_file")
                     if fi_list:
-                        d.setdefault("deal_files", []).extend([{"file_path": fi["path"], "file_name": fi["name"]} for fi in fi_list])
+                        d.setdefault("deal_files", []).extend(normalize_file_list(fi_list))
                         d["last_modified"] = now_str()
                         st.session_state.deal_file_uploader_ver[d["id"]] = df_ver + 1
                         save_data(st.session_state.crm_store)
@@ -923,7 +957,7 @@ def render_deal_in_tree(d, cl):
         render_deal_card_expanded(d, cl)
     if dl_tasks:
         with tree_col(2):
-            tasks_label = f"{'\u25BE' if is_dl_tasks_exp else '\u25B8'} \u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0434\u0435\u043b\u043a\u0438 ({len(dl_tasks)})"
+            tasks_label = f"{ARROW_OPEN if is_dl_tasks_exp else ARROW_CLOSED} \u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0434\u0435\u043b\u043a\u0438 ({len(dl_tasks)})"
             if st.button(tasks_label, key=f"dl_tasks_toggle_{d['id']}", use_container_width=True, type="secondary"):
                 st.session_state.expanded_deal_tasks_id = None if is_dl_tasks_exp else d["id"]
                 st.rerun()
@@ -987,7 +1021,7 @@ def render_client_card_expanded(cl):
                 if ucf:
                     fi_list = save_uploaded_files(ucf, cl["id"], "profile")
                     if fi_list:
-                        cl.setdefault("client_files", []).extend([{"file_path": fi["path"], "file_name": fi["name"]} for fi in fi_list])
+                        cl.setdefault("client_files", []).extend(normalize_file_list(fi_list))
                         cl["last_modified"] = now_str()
                         save_data(st.session_state.crm_store)
                         st.toast("\u0424\u0430\u0439\u043b\u044b \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b", icon="\U0001F4C1")
@@ -1011,7 +1045,7 @@ def render_client_card_expanded(cl):
                     else:
                         tfi_list = save_uploaded_files(ntf, cl["id"], "task_file") if ntf else []
                         tn = generate_task_number("\u0417\u041a")
-                        te = {"text": ntopic.strip(), "deadline": ntd.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f", "task_files": tfi_list, "manager": ntm, "completion_report": "", "completion_files": [], "deal_id": None, "task_comment": ncomment.strip(), "order_amount": 0, "last_modified": now_str(), "task_number": tn}
+                        te = {"text": ntopic.strip(), "deadline": ntd.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f", "task_files": normalize_file_list(tfi_list), "manager": ntm, "completion_report": "", "completion_files": [], "deal_id": None, "task_comment": ncomment.strip(), "order_amount": 0, "last_modified": now_str(), "task_number": tn}
                         cl.setdefault("tasks", []).append(te)
                         cl["last_modified"] = now_str()
                         st.session_state[show_ct_key] = False
@@ -1078,7 +1112,7 @@ def render_client_in_tree(cl):
         client_only_tasks = [t for t in cl_tasks_all if not t.get("deal_id")]
         if client_only_tasks:
             with tree_col(1):
-                tasks_label = f"{'\u25BE' if is_cl_tasks_exp else '\u25B8'} \u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(client_only_tasks)})"
+                tasks_label = f"{ARROW_OPEN if is_cl_tasks_exp else ARROW_CLOSED} \u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(client_only_tasks)})"
                 if st.button(tasks_label, key=f"cl_tasks_toggle_{cl['id']}", use_container_width=True, type="secondary"):
                     st.session_state.expanded_client_tasks_id = None if is_cl_tasks_exp else cl["id"]
                     st.rerun()
@@ -1089,7 +1123,6 @@ def render_client_in_tree(cl):
                             task_key = f"cl_{cl['id']}_{ti}"
                             render_task_row(t, cl, None, task_key, f"cl_{cl['id']}_{ti}")
         with tree_col(1):
-            deals_label = f"{'\u25BE' if is_cl_deals_exp else '\u25B8'} \u0421\u0434\u0435\u043b\u043a\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 ({len(cl_deals)})"
             st.markdown(f"**\u0421\u0434\u0435\u043b\u043a\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 ({len(cl_deals)}):**")
             if cl_deals:
                 cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
@@ -1167,7 +1200,7 @@ def render_client_form(fv):
                     nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "discount": int(cd), "base_comment": "", "manager": cm, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "client_chat": []}
                     if cf:
                         fi_list = save_uploaded_files(cf, nid, "profile")
-                        if fi_list: nc["client_files"].extend([{"file_path": fi["path"], "file_name": fi["name"]} for fi in fi_list])
+                        if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
                     if st.session_state.get("pending_client_comments"):
                         nc["client_comments"] = list(st.session_state["pending_client_comments"])
                         st.session_state["pending_client_comments"] = []
@@ -1206,7 +1239,12 @@ if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u
     if all_clients:
         fcl.sort(key=lambda c: get_sort_key(c), reverse=True)
         for cl in fcl:
-            if st.session_state.expanded_client_id is not None and cl["id"] != st.session_state.expanded_client_id:
+            active_ids = set()
+            if st.session_state.expanded_client_id is not None:
+                active_ids.add(st.session_state.expanded_client_id)
+            if st.session_state.expanded_tree_id is not None:
+                active_ids.add(st.session_state.expanded_tree_id)
+            if active_ids and cl["id"] not in active_ids:
                 continue
             render_client_in_tree(cl)
     else:
@@ -1286,7 +1324,7 @@ elif st.session_state.active_tab == "\u0417\u0430\u0434\u0430\u0447\u0438":
                             task["completion_report"] = rt.strip()
                             task["last_modified"] = now_str()
                             fi_list = save_uploaded_files(uf, t["client_id"], "task_report")
-                            if fi_list: task["completion_files"] = fi_list
+                            if fi_list: task["completion_files"] = normalize_file_list(fi_list)
                             if cn and ntopic2:
                                 prefix = "\u0417\u0421" if task.get("deal_id") else "\u0417\u041a"
                                 tn = generate_task_number(prefix)
