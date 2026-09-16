@@ -1035,7 +1035,7 @@ if st.session_state.active_tab == "Клиенты и сделки":
                                 st.session_state.expanded_task_list_id = None if is_dl_list else d["id"]
                                 st.rerun()
                     with dbc:
-                        with st.container(key=f"dl_btn_wrap_{d['id']}"):
+                        with st.container(key=f"dl_btn_wrap2_{d['id']}"):
                             if st.button(dl_label, key=f"dl_card_{d['id']}", use_container_width=True, type="primary" if is_dl_exp else "secondary"):
                                 if is_dl_exp:
                                     st.session_state.expanded_deal_id = None
@@ -1063,8 +1063,8 @@ if st.session_state.active_tab == "Клиенты и сделки":
                                     tk_bc = "#4CAF50"
                                 tk_status = "\u2705" if tk_done else ("\u26A0" if tk_overdue else "\u23F3")
                                 tk_label = f"{tk_status} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-                                st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border-left-color: {tk_bc} !important; }}</style>", unsafe_allow_html=True)
-                                with st.container(key=f"tk_btn_wrap_{task_key}"):
+                                st.markdown(f"<style>.st-key-tk_btn_wrap2_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border-left-color: {tk_bc} !important; }}</style>", unsafe_allow_html=True)
+                                with st.container(key=f"tk_btn_wrap2_{task_key}"):
                                     if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
                                         st.session_state.expanded_task_key = None if is_tk_exp else task_key
                                         st.rerun()
@@ -1208,7 +1208,7 @@ if st.session_state.active_tab == "Клиенты и сделки":
                                 tk_bc = "#4CAF50"
                             tk_status = "\u2705" if tk_done else ("\u23F3" if not tk_overdue else "\u26A0")
                             tk_label = f"{tk_status} {t.get('type', 'Связаться')} \u2014 {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-                            st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border-left-color: {tk_bc} !important; }}</style>", unsafe_allow_html=True)
+                            st.markdown(f"<style>.st-key-tk_btn_wrap2_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border-left-color: {tk_bc} !important; }}</style>", unsafe_allow_html=True)
                             with st.container(key=f"tk_btn_wrap_{task_key}"):
                                 if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
                                     st.session_state.expanded_task_key = None if is_tk_exp else task_key
