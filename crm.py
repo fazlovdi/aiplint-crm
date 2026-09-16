@@ -1822,3 +1822,99 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                 if qa_q.strip() and qa_a.strip():
                     st.session_state.crm_store.setdefault("qa_entries", []).append({"id": str(uuid.uuid4())[:8], "question": qa_q.strip(), "answer": qa_a.strip(), "category": qa_cat.strip() or "\u041e\u0431\u0449\u0435\u0435", "created_by": cu, "created_at": datetime.now().strftime("%Y-%m-%d")})
                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u043f\u0438\u0441\u044c \u0434\u
+                    st.session_state.crm_store.setdefault("qa_entries", []).append({"id": str(uuid.uuid4())[:8], "question": qa_q.strip(), "answer": qa_a.strip(), "category": qa_cat.strip() or "\u041e\u0431\u0449\u0435\u0435", "created_by": cu, "created_at": datetime.now().strftime("%Y-%m-%d")})
+                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u043f\u0438\u0441\u044c \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0430")
+                else: st.warning("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0432\u043e\u043f\u0440\u043e\u0441 \u0438 \u043e\u0442\u0432\u0435\u0442")
+        filtered_qa = []
+        for qa in qa_entries:
+            if qa_search:
+                ct = f"{qa.get('question', '')} {qa.get('answer', '')} {qa.get('category', '')}".lower()
+                if qa_search not in ct: continue
+            filtered_qa.append(qa)
+        qa_cats = sorted(set(qa.get("category", "\u041e\u0431\u0449\u0435\u0435") for qa in filtered_qa))
+        for cat in qa_cats:
+            st.markdown(f"**{cat}**")
+            for qa in [q for q in filtered_qa if q.get("category", "\u041e\u0431\u0449\u0435\u0435") == cat]:
+                with st.container(border=True):
+                    st.markdown(f"<div class='qa-card'><b>Q: {qa.get('question', '')}</b><br><br>{qa.get('answer', '')}</div>", unsafe_allow_html=True)
+                    qa_copy_btn_id = f"qa_copy_{qa['id']}"
+                    qa_answer_text = qa.get('answer', '').replace("'", "\\'").replace('"', '&quot;')
+                    st.markdown(f"<button onclick=\"navigator.clipboard.writeText('{qa_answer_text}').then(function(){{var b=document.getElementById('{qa_copy_btn_id}');b.textContent='\u2713 \u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u043e';setTimeout(function(){{b.textContent='\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c';}},1500);}});\" class=\"phone-btn\" id=\"{qa_copy_btn_id}\" style=\"margin-top:6px;\">\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c</button>", unsafe_allow_html=True)
+                    show_qa_edit = st.session_state.get(f"show_qa_edit_{qa['id']}", False)
+                    if st.button("\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c" if not show_qa_edit else "\u0421\u043a\u0440\u044b\u0442\u044c", key=f"qa_edit_{qa['id']}"):
+                        st.session_state[f"show_qa_edit_{qa['id']}"] = not show_qa_edit
+                        st.rerun()
+                    if show_qa_edit:
+                        with st.container(border=True):
+                            eq_q = st.text_input("\u0412\u043e\u043f\u0440\u043e\u0441:", value=qa.get("question", ""), key=f"qa_eq_{qa['id']}")
+                            eq_a = st.text_area("\u041e\u0442\u0432\u0435\u0442:", value=qa.get("answer", ""), key=f"qa_ea_{qa['id']}")
+                            eq_cat = st.text_input("\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f:", value=qa.get("category", ""), key=f"qa_ec_{qa['id']}")
+                            if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"qa_es_{qa['id']}", use_container_width=True, type="primary"):
+                                qa["question"] = eq_q.strip()
+                                qa["answer"] = eq_a.strip()
+                                qa["category"] = eq_cat.strip() or "\u041e\u0431\u0449\u0435\u0435"
+                                st.session_state[f"show_qa_edit_{qa['id']}"] = False
+                                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u043f\u0438\u0441\u044c \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
+                    if st.button("\u0423\u0434\u0430\u043b\u0438\u0442\u044c", key=f"qa_del_{qa['id']}", use_container_width=True):
+                        st.session_state.crm_store["qa_entries"] = [x for x in qa_entries if x["id"] != qa["id"]]
+                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u043f\u0438\u0441\u044c \u0443\u0434\u0430\u043b\u0435\u043d\u0430")
+        if not filtered_qa: st.caption("\u0417\u0430\u043f\u0438\u0441\u0435\u0439 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e")
+
+elif st.session_state.active_tab == "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438":
+    st.markdown("### \u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438")
+    suppliers = st.session_state.crm_store.get("suppliers", [])
+    with st.expander("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0430", expanded=False):
+        sl, sr = st.columns(2)
+        with sl:
+            sn = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435:", key="sup_name")
+            sp = st.text_input("\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u043d\u043e\u0435 \u043b\u0438\u0446\u043e:", key="sup_person")
+            sph = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d:", key="sup_phone")
+        with sr:
+            se = st.text_input("Email:", key="sup_email")
+            sa = st.text_input("\u0410\u0434\u0440\u0435\u0441:", key="sup_address")
+            sc = st.text_input("\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f \u0442\u043e\u0432\u0430\u0440\u0430:", key="sup_category")
+        snote = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key="sup_note")
+        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key="sup_add_btn", use_container_width=True, type="primary"):
+            if sn.strip():
+                sid = (max([s.get("id", 0) for s in suppliers]) if suppliers else 0) + 1
+                st.session_state.crm_store.setdefault("suppliers", []).append({"id": sid, "name": sn.strip(), "person": sp.strip(), "phone": format_phone(sph), "email": se.strip(), "address": sa.strip(), "category": sc.strip(), "note": snote.strip(), "created_at": now_str(), "last_modified": now_str()})
+                commit_and_rerun(st.session_state.crm_store, "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
+            else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435")
+    if suppliers:
+        for s in sorted(suppliers, key=lambda x: x.get("last_modified", ""), reverse=True):
+            with st.expander(f"{s['name']} \u2014 {s.get('phone', '')} | {s.get('category', '')}"):
+                st.markdown(format_created_date(s), unsafe_allow_html=True)
+                cl1, cl2 = st.columns(2)
+                with cl1:
+                    st.markdown(f"**\u041a\u043e\u043d\u0442\u0430\u043a\u0442:** {s.get('person', '\u2014')}")
+                    st.markdown(f"**\u0422\u0435\u043b\u0435\u0444\u043e\u043d:** {s.get('phone', '\u2014')}")
+                    st.markdown(f"**Email:** {s.get('email', '\u2014')}")
+                with cl2:
+                    st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {s.get('address', '\u2014')}")
+                    st.markdown(f"**\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f:** {s.get('category', '\u2014')}")
+                    if s.get("note"): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:** {s['note']}")
+                show_sup_edit = st.session_state.get(f"show_sup_edit_{s['id']}", False)
+                if st.button("\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c" if not show_sup_edit else "\u0421\u043a\u0440\u044b\u0442\u044c", key=f"sup_edit_{s['id']}", use_container_width=True):
+                    st.session_state[f"show_sup_edit_{s['id']}"] = not show_sup_edit
+                    st.rerun()
+                if show_sup_edit:
+                    with st.container(border=True):
+                        en = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435:", value=s["name"], key=f"sup_en_{s['id']}")
+                        ep = st.text_input("\u041a\u043e\u043d\u0442\u0430\u043a\u0442:", value=s.get("person", ""), key=f"sup_ep_{s['id']}")
+                        eph = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d:", value=s.get("phone", ""), key=f"sup_eph_{s['id']}")
+                        ee = st.text_input("Email:", value=s.get("email", ""), key=f"sup_ee_{s['id']}")
+                        ea = st.text_input("\u0410\u0434\u0440\u0435\u0441:", value=s.get("address", ""), key=f"sup_ea_{s['id']}")
+                        ec = st.text_input("\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f:", value=s.get("category", ""), key=f"sup_ec_{s['id']}")
+                        enote = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", value=s.get("note", ""), key=f"sup_enote_{s['id']}")
+                        if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"sup_save_{s['id']}", use_container_width=True, type="primary"):
+                            s["name"], s["person"], s["phone"], s["email"], s["address"], s["category"], s["note"] = en, ep, format_phone(eph), ee, ea, ec, enote
+                            s["last_modified"] = now_str()
+                            st.session_state[f"show_sup_edit_{s['id']}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d")
+                if st.session_state.user_role == "admin":
+                    st.markdown("---")
+                    if st.button("\u0423\u0434\u0430\u043b\u0438\u0442\u044c", key=f"sup_del_{s['id']}", use_container_width=True):
+                        st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
+                        commit_and_rerun(st.session_state.crm_store, "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
+    else:
+        st.info("\u0411\u0430\u0437\u0430 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432 \u043f\u0443\u0441\u0442\u0430. \u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u043f\u0435\u0440\u0432\u043e\u0433\u043e \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0430.")
