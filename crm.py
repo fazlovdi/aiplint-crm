@@ -1276,7 +1276,7 @@ if st.session_state.active_tab == "Клиенты и сделки":
                         for d in cl_deals:
                             is_dl_exp = st.session_state.expanded_deal_id == d["id"]
                             dl_tasks = [t for t in cl.get("tasks", []) if t.get("deal_id") == d["id"]]
-                            dl_overdue = any(not t.get("done") и is_task_overdue(t) for t in dl_tasks)
+                            dl_overdue = any(not t.get("done") and is_task_overdue(t) for t in dl_tasks)
                             dl_active = any(not t.get("done") for t in dl_tasks)
                             if dl_overdue:
                                 dl_bg = "#FFEBEE"
