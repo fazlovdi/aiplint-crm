@@ -1861,7 +1861,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                 ct = f"{qa.get('question', '')} {qa.get('answer', '')} {qa.get('category', '')}".lower()
                 if qa_search not in ct: continue
             filtered_qa.append(qa)
-                qa_cats = sorted(set(qa.get("category", "\u041e\u0431\u0449\u0435\u0435") for qa in filtered_qa))
+        qa_cats = sorted(set(qa.get("category", "\u041e\u0431\u0449\u0435\u0435") for qa in filtered_qa))
         for cat in qa_cats:
             st.markdown(f"**{cat}**")
             for qa in [q for q in filtered_qa if q.get("category", "\u041e\u0431\u0449\u0435\u0435") == cat]:
