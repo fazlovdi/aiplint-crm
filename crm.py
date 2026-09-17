@@ -1147,10 +1147,11 @@ def render_centered_title(title):
     st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
 
 def render_centered_button(label, key, btn_type="primary"):
-    cl1, cl2, cl3 = st.columns([1, 2, 1])
-    with cl2:
-        if st.button(label, key=key, type=btn_type, use_container_width=True):
-            return True
+    with st.container(key=f"cb_wrap_{key}"):
+        cl1, cl2, cl3 = st.columns([1, 2, 1], gap="small")
+        with cl2:
+            if st.button(label, key=key, type=btn_type, use_container_width=True):
+                return True
     return False
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"):
