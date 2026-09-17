@@ -68,12 +68,8 @@ st.markdown("""
     .track-copy-btn { background: #EEF0F3 !important; border: 1px solid #DCE0E5 !important; border-radius: 6px !important; padding: 2px 8px !important; font-size: 0.8rem !important; color: #5A6B7D !important; cursor: pointer !important; display: inline-flex !important; align-items: center !important; }
     .track-copy-btn:hover { background: #DCE0E5 !important; }
     .stTextArea > div > textarea { resize: vertical; }
-    .ios-toggle { position: relative; display: inline-block; width: 44px; height: 26px; vertical-align: middle; }
-    .ios-toggle input { opacity: 0; width: 0; height: 0; }
-    .ios-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 26px; transition: 0.3s; }
-    .ios-toggle-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-    .ios-toggle input:checked + .ios-toggle-slider { background-color: #bc1661; }
-    .ios-toggle input:checked + .ios-toggle-slider:before { transform: translateX(18px); }
+    .copy-btn-crm { background: #EEF0F3; border: 1px solid #DCE0E5; border-radius: 8px; padding: 6px 12px; font-size: 0.85rem; color: #5A6B7D; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: background 0.15s; }
+    .copy-btn-crm:hover { background: #DCE0E5; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,11 +94,30 @@ st.components.v1.html("""
         o.querySelector('img').src = src;
         o.style.display = 'flex';
     };
-    w.crmCopyTrack = function(text, btnId) {
-        navigator.clipboard.writeText(text).then(function() {
-            var b = document.getElementById(btnId);
-            if (b) { b.textContent = '\\u2713'; setTimeout(function() { b.textContent = '\\u2398'; }, 1500); }
-        });
+    w.crmCopy = function(text, btnId) {
+        var btn = document.getElementById(btnId);
+        if (!btn && w.document) btn = w.document.getElementById(btnId);
+        if (!btn) return;
+        var oldText = btn.textContent;
+        function success() { btn.textContent = '\\u2713 \u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u043e'; setTimeout(function() { btn.textContent = oldText; }, 1500); }
+        function fail() { btn.textContent = '\u041e\u0448\u0438\u0431\u043a\u0430'; setTimeout(function() { btn.textContent = oldText; }, 1500); }
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(success).catch(function() {
+                    var ta = document.createElement('textarea');
+                    ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
+                    document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); success(); } catch(e) { fail(); }
+                    document.body.removeChild(ta);
+                });
+            } else {
+                var ta = document.createElement('textarea');
+                ta.value = text; ta.style.position='fixed'; ta.style.left='-9999px';
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); success(); } catch(e) { fail(); }
+                document.body.removeChild(ta);
+            }
+        } catch(e) { fail(); }
     };
 })();
 </script>
@@ -213,11 +228,6 @@ def verify_password(pwd, stored):
     if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
         return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
     return pwd.strip() == stored
-
-def find_user_by_login(login):
-    for u in st.session_state.crm_store.get("users", []):
-        if u["login"] == login: return u
-    return None
 
 def yandex_headers():
     return {"Authorization": f"OAuth {YANDEX_TOKEN}", "Accept": "application/json"}
@@ -403,12 +413,16 @@ def format_created_date(entity):
 def get_managers_list():
     return [u.get("name", u["login"]) for u in st.session_state.crm_store.get("users", []) if u.get("role") != "admin"]
 
+def render_copy_button(text, btn_id, label="\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
+    safe_text = text.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", "\\n")
+    st.markdown(f'<button class="copy-btn-crm" id="{btn_id}" onclick="window.crmCopy(\'{safe_text}\',\'{btn_id}\')">{label}</button>', unsafe_allow_html=True)
+
 def render_phone_inline(phone, uid):
     cph = re.sub(r"\D", "", phone)
     if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
     elif not cph: cph = "79990000000"
     btn_id = f"ph_btn_{uid}_{secrets.token_hex(4)}"
-    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;"><span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span><button onclick="navigator.clipboard.writeText(\'{phone}\').then(function(){{var b=document.getElementById(\'{btn_id}\');b.textContent=\'\u2713\';setTimeout(function(){{b.textContent=\'\U0001F4CB\';}},1500);}});" class="phone-btn" id="{btn_id}" title="\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c">\U0001F4CB</button><a href="tel:+{cph}" class="phone-btn" title="\u041f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c">\U0001F4DE</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;"><span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span><button onclick="window.crmCopy(\'{phone}\',\'{btn_id}\')" class="phone-btn" id="{btn_id}" title="\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c">\U0001F4CB</button><a href="tel:+{cph}" class="phone-btn" title="\u041f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c">\U0001F4DE</a></div>', unsafe_allow_html=True)
 
 def render_extra_phone_inline(phone, name, role, uid):
     cph = re.sub(r"\D", "", phone)
@@ -416,11 +430,11 @@ def render_extra_phone_inline(phone, name, role, uid):
     elif not cph: cph = "79990000000"
     info = f"{phone} \u2014 {name} ({role})" if name else phone
     btn_id = f"ep_btn_{uid}_{secrets.token_hex(4)}"
-    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;"><span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span><button onclick="navigator.clipboard.writeText(\'{phone}\').then(function(){{var b=document.getElementById(\'{btn_id}\');b.textContent=\'\u2713\';setTimeout(function(){{b.textContent=\'\U0001F4CB\';}},1500);}});" class="phone-btn" id="{btn_id}" title="\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c">\U0001F4CB</button><a href="tel:+{cph}" class="phone-btn" title="\u041f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c">\U0001F4DE</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;"><span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span><button onclick="window.crmCopy(\'{phone}\',\'{btn_id}\')" class="phone-btn" id="{btn_id}" title="\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c">\U0001F4CB</button><a href="tel:+{cph}" class="phone-btn" title="\u041f\u043e\u0437\u0432\u043e\u043d\u0438\u0442\u044c">\U0001F4DE</a></div>', unsafe_allow_html=True)
 
 def render_track_inline(track_num, uid):
     btn_id = f"trk_btn_{uid}_{secrets.token_hex(4)}"
-    st.markdown(f'<div style="display:flex;align-items:center;gap:8px;"><code>{track_num}</code><button onclick="window.crmCopyTrack(\'{track_num}\',\'{btn_id}\');" class="track-copy-btn" id="{btn_id}" title="\u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c">\u2398</button></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="display:flex;align-items:center;gap:8px;"><code>{track_num}</code><button onclick="window.crmCopy(\'{track_num}\',\'{btn_id}\')" class="track-copy-btn" id="{btn_id}" title="\u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c">\u2398</button></div>', unsafe_allow_html=True)
 
 def get_file_bytes(fp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
@@ -960,6 +974,8 @@ if "expanded_task_key" not in st.session_state: st.session_state.expanded_task_k
 if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id = None
 if "expanded_client_tasks_id" not in st.session_state: st.session_state.expanded_client_tasks_id = None
 if "expanded_deal_tasks_id" not in st.session_state: st.session_state.expanded_deal_tasks_id = None
+if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
+if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
@@ -1090,6 +1106,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044
         nreceiver_phone = ""
         nship_pay = ""
         norder_amount = ""
+        ntk_num = ""
         ncomment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
@@ -1112,7 +1129,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044
                 "task_comments": [], "flagged": False,
                 "products": nproducts, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
-                "ship_pay": nship_pay
+                "ship_pay": nship_pay, "tk_num": ntk_num.strip()
             }
             cl = get_client_by_id(cl_id)
             if cl:
@@ -1246,13 +1263,14 @@ def render_deal_card_expanded(d, cl):
                 commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0443\u0434\u0430\u043b\u0435\u043d\u0430")
 
 def render_deal_in_tree(d, cl):
-    is_dl_exp = st.session_state.expanded_deal_id == d["id"]
+    is_dl_exp = st.session_state.expanded_deal_id == d["id"] or st.session_state.auto_expand_deal_id == d["id"]
     dl_tasks = [t for t in cl.get("tasks", []) if t.get("deal_id") == d["id"]]
     dl_bg, dl_bc = get_entity_border(dl_tasks)
     dl_label = f"{d.get('deal_number', d.get('title', ''))} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} \u0440\u0443\u0431. | \u0417\u0430\u0434\u0430\u0447: {len(dl_tasks)}"
     if d.get("deal_title"):
         dl_label = f"{d.get('deal_number', d.get('title', ''))} \u2014 {d['deal_title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} \u0440\u0443\u0431. | \u0417\u0430\u0434\u0430\u0447: {len(dl_tasks)}"
     st.markdown(f"<style>.st-key-dl_btn_wrap_{d['id']} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {dl_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
+    anchor_id = f"deal_anchor_{d['id']}"
     with st.container(key=f"dl_btn_wrap_{d['id']}"):
         if st.button(dl_label, key=f"dl_card_{d['id']}", use_container_width=True, type="primary" if is_dl_exp else "secondary"):
             if is_dl_exp:
@@ -1261,7 +1279,15 @@ def render_deal_in_tree(d, cl):
                 st.session_state.expanded_deal_id = d["id"]
                 st.session_state.expanded_task_key = None
             st.rerun()
-    if is_dl_exp:
+    if st.session_state.auto_expand_deal_id == d["id"]:
+        st.session_state.auto_expand_deal_id = None
+        st.session_state.expanded_deal_id = d["id"]
+        st.session_state.scroll_to_deal = anchor_id
+    if st.session_state.scroll_to_deal == anchor_id:
+        st.markdown(f'<div id="{anchor_id}"></div>', unsafe_allow_html=True)
+        st.components.v1.html(f"""<script>setTimeout(function(){{var el=window.parent.document.getElementById('{anchor_id}');if(el)el.scrollIntoView({{behavior:'smooth',block:'center'}});}},300);</script>""", height=0)
+        st.session_state.scroll_to_deal = None
+    if st.session_state.expanded_deal_id == d["id"]:
         render_deal_card_expanded(d, cl)
     if dl_tasks:
         with tree_col(2):
@@ -1363,6 +1389,8 @@ def render_client_card_expanded(cl):
                         st.session_state.crm_store.setdefault("deals", []).append(new_deal)
                         cl["last_modified"] = now_str()
                         st.session_state[show_cd_key] = False
+                        st.session_state.auto_expand_deal_id = did
+                        st.session_state.expanded_tree_id = cl["id"]
                         commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
         st.markdown("---")
         render_entity_chat(cl, "client", cl["id"])
@@ -1658,7 +1686,6 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
                         render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
         else:
             st.caption("\u0410\u0440\u0445\u0438\u0432 \u043f\u0443\u0441\u0442.")
-
 elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438":
     sub1, sub2, sub3 = st.tabs(["\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430\u043c", "\u0427\u0430\u0442", "\u0428\u043f\u0430\u0440\u0433\u0430\u043b\u043a\u0430"])
     with sub1:
@@ -1837,8 +1864,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                 with st.container(border=True):
                     st.markdown(f"<div class='qa-card'><b>Q: {qa.get('question', '')}</b><br><br>{qa.get('answer', '')}</div>", unsafe_allow_html=True)
                     qa_copy_btn_id = f"qa_copy_{qa['id']}"
-                    qa_answer_text = qa.get('answer', '').replace("'", "\\'").replace('"', '&quot;')
-                    st.markdown(f"<button onclick=\"navigator.clipboard.writeText('{qa_answer_text}').then(function(){{var b=document.getElementById('{qa_copy_btn_id}');b.textContent='\u2713 \u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u043e';setTimeout(function(){{b.textContent='\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c';}},1500);}});\" class=\"phone-btn\" id=\"{qa_copy_btn_id}\" style=\"margin-top:6px;\">\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c</button>", unsafe_allow_html=True)
+                    render_copy_button(qa.get('answer', ''), qa_copy_btn_id, "\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c")
                     show_qa_edit = st.session_state.get(f"show_qa_edit_{qa['id']}", False)
                     if st.button("\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c" if not show_qa_edit else "\u0421\u043a\u0440\u044b\u0442\u044c", key=f"qa_edit_{qa['id']}"):
                         st.session_state[f"show_qa_edit_{qa['id']}"] = not show_qa_edit
