@@ -417,6 +417,13 @@ def render_copy_button(text, btn_id, label="\U0001F4CB \u041a\u043e\u043f\u0438\
     safe_text = text.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", "\\n")
     st.markdown(f'<button class="copy-btn-crm" id="{btn_id}" onclick="window.crmCopy(\'{safe_text}\',\'{btn_id}\')">{label}</button>', unsafe_allow_html=True)
 
+def render_scroll_restore(key):
+    st.components.v1.html(f"""<script>(function(){{var k='crm_scroll_'+window.location.pathname;try{{var s=window.parent.sessionStorage.getItem(k);if(s){{window.parent.scrollTo(0,parseInt(s));window.parent.sessionStorage.removeItem(k);}}}}catch(e){{}}}})();</script>""", height=0)
+
+def save_scroll_and_rerun(key=None):
+    st.components.v1.html("""<script>(function(){try{window.parent.sessionStorage.setItem('crm_scroll_'+window.parent.location.pathname,window.parent.scrollY);}catch(e){}})();</script>""", height=0)
+    st.rerun()
+
 def render_phone_inline(phone, uid):
     cph = re.sub(r"\D", "", phone)
     if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
@@ -516,18 +523,22 @@ def render_print_button(task, cl, tp, fd, key_suffix):
 
 def render_print_file_button(files, key_suffix):
     if not files: return
-    img_files = [f for f in files if os.path.splitext(f.get("file_name", f.get("name", "")))[1].lower() in [".png", ".jpg", ".jpeg", ".gif", ".webp"]]
-    for i, ff in enumerate(img_files):
+    printable = [f for f in files if os.path.splitext(f.get("file_name", f.get("name", "")))[1].lower() in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"]]
+    for i, ff in enumerate(printable):
         fp = ff.get("file_path", ff.get("path"))
         fn = ff.get("file_name", ff.get("name", "\u0444\u0430\u0439\u043b"))
         fb = get_file_bytes(fp)
         if fb:
-            btn_id = f"printfile_{key_suffix}_{i}"
-            st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="background:#5A6B7D;">\U0001F5A8\uFE0F {fn}</button>', unsafe_allow_html=True)
-            b64 = base64.b64encode(fb).decode()
             ext = os.path.splitext(fn)[1].lower()
-            mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
-            st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{btn_id}');if(!b)return;b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0;text-align:center"><img src="data:{mt};base64,{b64}" style="max-width:100%;max-height:100%" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"/></body></html>');w.document.close();}});}})();</script>""", height=0)
+            btn_id = f"printfile_{key_suffix}_{i}"
+            b64 = base64.b64encode(fb).decode()
+            if ext == ".pdf":
+                st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="background:#5A6B7D;margin-top:4px;">\U0001F5A8\uFE0F {fn}</button>', unsafe_allow_html=True)
+                st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{btn_id}');if(!b)return;b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0"><iframe src="data:application/pdf;base64,{b64}" style="width:100vw;height:100vh;border:0" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"></iframe></body></html>');w.document.close();}});}})();</script>""", height=0)
+            else:
+                mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+                st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="background:#5A6B7D;margin-top:4px;">\U0001F5A8\uFE0F {fn}</button>', unsafe_allow_html=True)
+                st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{btn_id}');if(!b)return;b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0;text-align:center"><img src="data:{mt};base64,{b64}" style="max-width:100%;max-height:100%" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"/></body></html>');w.document.close();}});}})();</script>""", height=0)
 
 def render_entity_chat(entity, entity_type, entity_id):
     chat_key = f"{entity_type}_chat"
@@ -742,11 +753,19 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     tk_label = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')} \u2014 {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
     if t.get('in_work') and not tk_done: tk_label += ' | \u0412 \u0440\u0430\u0431\u043e\u0442\u0435'
     if t.get('ready_to_ship') and not tk_done: tk_label += ' | \u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435'
-    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
+    tk_selected = is_tk_exp
+    tk_border = "#2196F3" if tk_selected else tk_bc
+    tk_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tk_selected else ""
+    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }}</style>", unsafe_allow_html=True)
     with st.container(key=f"tk_btn_wrap_{task_key}"):
         if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
-            st.session_state.expanded_task_key = None if is_tk_exp else task_key
-            st.rerun()
+            if is_tk_exp:
+                save_scroll_and_rerun()
+            else:
+                st.session_state.expanded_task_key = task_key
+                st.rerun()
+        if not is_tk_exp:
+            render_scroll_restore(f"tk_{task_key}")
     if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
 
 def get_entity_border(tasks_list):
@@ -977,6 +996,19 @@ if "expanded_deal_tasks_id" not in st.session_state: st.session_state.expanded_d
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
+_auth_token = st.query_params.get("auth_token")
+if _auth_token and not st.session_state.authenticated:
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("auth_token") == _auth_token:
+            st.session_state.authenticated = True
+            st.session_state.user_role = u["role"]
+            st.session_state.user_login = u["login"]
+            st.session_state.user_name = u.get("name", u["login"])
+            break
+    if not st.session_state.authenticated:
+        if "auth_token" in st.query_params:
+            del st.query_params["auth_token"]
+
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
 st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
@@ -1001,6 +1033,13 @@ if not st.session_state.authenticated:
             ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c")
             if st.button("\u0412\u043e\u0439\u0442\u0438", use_container_width=True, type="primary"):
                 if check_login(iu, ip):
+                    _token = secrets.token_hex(16)
+                    for u in st.session_state.crm_store["users"]:
+                        if u["login"] == iu.strip():
+                            u["auth_token"] = _token
+                            break
+                    save_data(st.session_state.crm_store)
+                    st.query_params["auth_token"] = _token
                     st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
                     st.rerun()
                 else:
@@ -1021,10 +1060,15 @@ with st.sidebar:
         cp = st.text_input("\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c:", type="password", key="self_conf_pwd")
         if st.button("\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c", key="btn_save_self_pwd", use_container_width=True):
             if np and np == cp:
+                _new_token = secrets.token_hex(16)
                 for u in st.session_state.crm_store["users"]:
                     if u["login"] == cul:
                         u["password"] = hash_password(np)
-                        commit_and_rerun(st.session_state.crm_store, "\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d")
+                        u["auth_token"] = _new_token
+                save_data(st.session_state.crm_store)
+                st.query_params["auth_token"] = _new_token
+                st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
+                st.rerun()
             else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
     if st.session_state.user_role == "admin":
         with st.expander("\u042d\u043a\u0441\u043f\u043e\u0440\u0442 \u0431\u0430\u0437\u044b"):
@@ -1053,6 +1097,14 @@ with st.sidebar:
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
     st.markdown("---")
     if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
+        _tok = st.query_params.get("auth_token")
+        if _tok:
+            for u in st.session_state.crm_store.get("users", []):
+                if u.get("auth_token") == _tok:
+                    u.pop("auth_token", None)
+            save_data(st.session_state.crm_store)
+            if "auth_token" in st.query_params:
+                del st.query_params["auth_token"]
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -1157,15 +1209,6 @@ def render_deal_card_expanded(d, cl):
             commit_and_rerun(st.session_state.crm_store, "\u0421\u0442\u0430\u0442\u0443\u0441 \u043e\u043f\u043b\u0430\u0442\u044b \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d")
         if d.get("manager"): st.markdown(f"**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:** {d.get('manager')}")
         st.markdown("---")
-        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"ct_btn_{d['id']}", use_container_width=True, type="primary"):
-            st.session_state[f"show_ct_{d['id']}"] = not st.session_state.get(f"show_ct_{d['id']}", False)
-            st.rerun()
-        if st.session_state.get(f"show_ct_{d['id']}", False):
-            with st.container(border=True):
-                if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
-                    st.session_state[f"show_ct_{d['id']}"] = False
-                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-        st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
             st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0441\u0434\u0435\u043b\u043a\u0438:**")
@@ -1269,16 +1312,21 @@ def render_deal_in_tree(d, cl):
     dl_label = f"{d.get('deal_number', d.get('title', ''))} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} \u0440\u0443\u0431. | \u0417\u0430\u0434\u0430\u0447: {len(dl_tasks)}"
     if d.get("deal_title"):
         dl_label = f"{d.get('deal_number', d.get('title', ''))} \u2014 {d['deal_title']} ({d['status']}) \u2014 {d.get('budget', 0):,.0f} \u0440\u0443\u0431. | \u0417\u0430\u0434\u0430\u0447: {len(dl_tasks)}"
-    st.markdown(f"<style>.st-key-dl_btn_wrap_{d['id']} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {dl_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
+    dl_selected = is_dl_exp
+    dl_border = "#2196F3" if dl_selected else dl_bc
+    dl_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if dl_selected else ""
+    st.markdown(f"<style>.st-key-dl_btn_wrap_{d['id']} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {dl_border} !important; border-radius: 10px !important; {dl_shadow} }}</style>", unsafe_allow_html=True)
     anchor_id = f"deal_anchor_{d['id']}"
     with st.container(key=f"dl_btn_wrap_{d['id']}"):
         if st.button(dl_label, key=f"dl_card_{d['id']}", use_container_width=True, type="primary" if is_dl_exp else "secondary"):
             if is_dl_exp:
-                st.session_state.expanded_deal_id = None
+                save_scroll_and_rerun()
             else:
                 st.session_state.expanded_deal_id = d["id"]
                 st.session_state.expanded_task_key = None
-            st.rerun()
+                st.rerun()
+        if not is_dl_exp:
+            render_scroll_restore(f"dl_{d['id']}")
     if st.session_state.auto_expand_deal_id == d["id"]:
         st.session_state.auto_expand_deal_id = None
         st.session_state.expanded_deal_id = d["id"]
@@ -1297,6 +1345,16 @@ def render_deal_in_tree(d, cl):
                 for ti, t in enumerate(dl_tasks):
                     task_key = f"dl_{d['id']}_{ti}"
                     render_task_row(t, cl, d, task_key, f"dl_{d['id']}_{ti}")
+    with tree_col(2):
+        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"ct_btn_{d['id']}", use_container_width=True, type="primary"):
+            st.session_state[f"show_ct_{d['id']}"] = not st.session_state.get(f"show_ct_{d['id']}", False)
+            st.rerun()
+        if st.session_state.get(f"show_ct_{d['id']}", False):
+            with tree_col(3):
+                with st.container(border=True):
+                    if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
+                        st.session_state[f"show_ct_{d['id']}"] = False
+                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
 def render_client_card_expanded(cl):
     with st.container(border=True):
@@ -1369,30 +1427,6 @@ def render_client_card_expanded(cl):
                     st.session_state[show_ct_key] = False
                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
         st.markdown("---")
-        show_cd_key = f"show_cd_cl_{cl['id']}"
-        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}", type="primary", use_container_width=True):
-            st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
-            st.rerun()
-        if st.session_state.get(show_cd_key, False):
-            with st.container(border=True):
-                cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
-                cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
-                cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
-                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
-                    if not cd_mgr:
-                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
-                    else:
-                        deals = st.session_state.crm_store.get("deals", [])
-                        did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
-                        dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
-                        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
-                        cl["last_modified"] = now_str()
-                        st.session_state[show_cd_key] = False
-                        st.session_state.auto_expand_deal_id = did
-                        st.session_state.expanded_tree_id = cl["id"]
-                        commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-        st.markdown("---")
         render_entity_chat(cl, "client", cl["id"])
         st.markdown("---")
         show_edit = st.session_state.get(f"show_edit_{cl['id']}", False)
@@ -1431,23 +1465,33 @@ def render_client_in_tree(cl):
     all_tasks_for_border = cl_tasks_all + [t for d in cl_deals for t in cl.get("tasks", []) if t.get("deal_id") == d["id"]]
     cl_bg, cl_bc = get_entity_border(all_tasks_for_border)
     cl_label = f"{cl['name']} \u2014 {cl['phone']} [{cl.get('category', '\u041d\u0435 \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0451\u043d')}] | \u0421\u0434\u0435\u043b\u043e\u043a: {len(cl_deals)} | \u0417\u0430\u0434\u0430\u0447: {len(cl_tasks_all)}"
-    st.markdown(f"<style>.st-key-cl_btn_wrap_{cl['id']} button {{ background-color: {cl_bg} !important; color: #2C3E50 !important; border: 2px solid {cl_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
+    cl_selected = is_cl_exp or is_cl_deals_exp
+    cl_border = "#2196F3" if cl_selected else cl_bc
+    cl_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if cl_selected else ""
+    st.markdown(f"<style>.st-key-cl_btn_wrap_{cl['id']} button {{ background-color: {cl_bg} !important; color: #2C3E50 !important; border: 2px solid {cl_border} !important; border-radius: 10px !important; {cl_shadow} }}</style>", unsafe_allow_html=True)
     ac, bc = st.columns([1, 30])
     with ac:
         with st.container(key=f"arr_cl_{cl['id']}"):
             if st.button("\u25BE" if is_cl_deals_exp else "\u25B8", key=f"cl_arrow_{cl['id']}", use_container_width=True):
-                st.session_state.expanded_tree_id = None if is_cl_deals_exp else cl["id"]
-                st.rerun()
+                if is_cl_deals_exp:
+                    save_scroll_and_rerun()
+                else:
+                    st.session_state.expanded_tree_id = cl["id"]
+                    st.rerun()
+            if not is_cl_deals_exp:
+                render_scroll_restore(f"arr_{cl['id']}")
     with bc:
         with st.container(key=f"cl_btn_wrap_{cl['id']}"):
             if st.button(cl_label, key=f"cl_card_{cl['id']}", use_container_width=True, type="primary" if is_cl_exp else "secondary"):
                 if is_cl_exp:
-                    st.session_state.expanded_client_id = None
+                    save_scroll_and_rerun()
                 else:
                     st.session_state.expanded_client_id = cl["id"]
                     st.session_state.expanded_deal_id = None
                     st.session_state.expanded_task_key = None
-                st.rerun()
+                    st.rerun()
+            if not is_cl_exp:
+                render_scroll_restore(f"cl_{cl['id']}")
     if is_cl_exp:
         render_client_card_expanded(cl)
     if is_cl_deals_exp:
@@ -1469,6 +1513,29 @@ def render_client_in_tree(cl):
                         render_deal_in_tree(d, cl)
             else:
                 st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
+            with tree_col(1):
+                show_cd_key = f"show_cd_cl_{cl['id']}"
+                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}", type="primary", use_container_width=True):
+                    st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
+                    st.rerun()
+                if st.session_state.get(show_cd_key, False):
+                    with st.container(border=True):
+                        cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
+                        cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
+                        cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
+                            if not cd_mgr:
+                                st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                            else:
+                                deals = st.session_state.crm_store.get("deals", [])
+                                did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
+                                dn = generate_deal_number()
+                                new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
+                                st.session_state.crm_store.setdefault("deals", []).append(new_deal)
+                                cl["last_modified"] = now_str()
+                                st.session_state[show_cd_key] = False
+                                st.session_state.auto_expand_deal_id = did
+                                commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
 def render_client_form(fv):
     with st.expander("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0430", expanded=False, key=f"add_client_form_{fv}"):
@@ -1634,7 +1701,6 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             cl = t["client_obj"]
             tp = task.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")
             io_ = is_task_overdue(task)
-            sl = "\u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e" if io_ else ("\u0421\u0435\u0433\u043e\u0434\u043d\u044f" if t["sort_date"] == now_time.date() else "\u0421\u0440\u043e\u043a")
             fd = format_date(t["deadline_str"])
             task_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
             is_tk_exp = st.session_state.expanded_task_key == task_key
@@ -1644,11 +1710,19 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             exp_label = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{task.get('task_number', '')} {fd} \u2014 {t['client_name']} \u2014 {t['text']}"
             if task.get('in_work'): exp_label += ' | \u0412 \u0440\u0430\u0431\u043e\u0442\u0435'
             if task.get('ready_to_ship'): exp_label += ' | \u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435'
-            st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
+            tb_selected = is_tk_exp
+            tb_border = "#2196F3" if tb_selected else tk_bc
+            tb_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tb_selected else ""
+            st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tb_border} !important; border-radius: 10px !important; {tb_shadow} }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
-                    st.session_state.expanded_task_key = None if is_tk_exp else task_key
-                    st.rerun()
+                    if is_tk_exp:
+                        save_scroll_and_rerun()
+                    else:
+                        st.session_state.expanded_task_key = task_key
+                        st.rerun()
+                if not is_tk_exp:
+                    render_scroll_restore(f"tb_{task_key}")
             if is_tk_exp:
                 render_task_detail(task, cl, di.get(task.get("deal_id")), f"tb_{sk}_{t['client_id']}_{t['task_idx']}")
         task_l, task_r = st.columns(2)
@@ -1680,8 +1754,11 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
                 exp_label = f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u2116{task.get('task_number', '')} \u2014 {at['client_name']} \u2014 {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
                 with st.container(key=f"arch_wrap_{task_key}"):
                     if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
-                        st.session_state.expanded_task_key = None if is_tk_exp else task_key
-                        st.rerun()
+                        if is_tk_exp:
+                            save_scroll_and_rerun()
+                        else:
+                            st.session_state.expanded_task_key = task_key
+                            st.rerun()
                     if is_tk_exp:
                         render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
         else:
@@ -1735,11 +1812,19 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
             else: it_bg, it_bc = "#FFFFFF", "#DCE0E5"
             it_label = f"{t['title']} \u2014 {t.get('assigned_to', '')} | {format_date(t.get('deadline', ''))}"
             if it_overdue and not t.get("done"): it_label += " | \u041f\u0440\u043e\u0441\u0440\u043e\u0447\u0435\u043d\u043e"
-            st.markdown(f"<style>.st-key-itask_wrap_{t['id']} button {{ background-color: {it_bg} !important; color: #2C3E50 !important; border: 2px solid {it_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
+            it_selected = is_it_exp
+            it_border = "#2196F3" if it_selected else it_bc
+            it_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if it_selected else ""
+            st.markdown(f"<style>.st-key-itask_wrap_{t['id']} button {{ background-color: {it_bg} !important; color: #2C3E50 !important; border: 2px solid {it_border} !important; border-radius: 10px !important; {it_shadow} }}</style>", unsafe_allow_html=True)
             with st.container(key=f"itask_wrap_{t['id']}"):
                 if st.button(it_label, key=f"itask_btn_{t['id']}", use_container_width=True, type="primary" if is_it_exp else "secondary"):
-                    st.session_state.expanded_task_key = None if is_it_exp else itask_key
-                    st.rerun()
+                    if is_it_exp:
+                        save_scroll_and_rerun()
+                    else:
+                        st.session_state.expanded_task_key = itask_key
+                        st.rerun()
+                if not is_it_exp:
+                    render_scroll_restore(f"it_{t['id']}")
             if is_it_exp:
                 with st.container(border=True):
                     st.markdown(f"**\u041e\u0442:** {t.get('created_by', '')} \u2192 **\u041a\u043e\u043c\u0443:** {t.get('assigned_to', '')}")
