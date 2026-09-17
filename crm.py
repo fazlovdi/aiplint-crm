@@ -1523,10 +1523,13 @@ def render_client_in_tree(cl):
         render_separator()
 
         render_centered_title(f"\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)})")
-        if cl_deals:
+                if cl_deals:
             cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
-            for d in cl_deals:
+            for di, d in enumerate(cl_deals):
                 render_deal_in_tree(d, cl)
+                if di < len(cl_deals) - 1:
+                    render_separator()
+
         else:
             with indented(0.03):
                 st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
