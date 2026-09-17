@@ -606,7 +606,6 @@ def render_task_edit_form(t, cl, d, key_prefix):
                 if d: d["last_modified"] = now_str()
                 st.session_state[f"show_edit_task_{key_prefix}"] = False
                 commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
-
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True):
         st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}**")
@@ -773,12 +772,26 @@ def get_entity_border(tasks_list):
     elif has_active: return "#E8F5E9", "#4CAF50"
     else: return "#FFFFFF", "#DCE0E5"
 
-def tree_col(level):
-    indents = {1: 0.02, 2: 0.035, 3: 0.055}
-    indent = indents.get(level, 0)
-    if indent == 0: return st.container()
-    cols = st.columns([indent, 1 - indent], gap="small")
+def indented(margin=0.03):
+    if margin <= 0:
+        return st.container()
+    cols = st.columns([margin, 1 - margin], gap="small")
     return cols[1]
+
+def render_separator():
+    st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
+
+def render_centered_title(title):
+    st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
+
+def render_centered_button(label, key=None, btn_type="primary"):
+    lbl_hash = hashlib.md5(label.encode()).hexdigest()[:6]
+    btn_key = f"cb_{lbl_hash}_{key}" if key else f"cb_{lbl_hash}"
+    cl1, cl2, cl3 = st.columns([1, 2, 1], gap="small")
+    with cl2:
+        if st.button(label, key=btn_key, type=btn_type, use_container_width=True):
+            return True
+    return False
 
 def migrate_task_files(t):
     if "task_files" not in t:
@@ -849,6 +862,7 @@ def migrate_data(data):
     if "suppliers" not in data: data["suppliers"] = []
     data["_migrated"] = "v2"
     return data
+
 def load_data():
     download_db_from_yandex()
     db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": []}
@@ -1132,34 +1146,6 @@ st.markdown("---")
 
 cu = st.session_state.user_name
 
-import itertools as _itertools
-_section_counter = _itertools.count()
-
-def render_section_border(border_color, bg_color, key_suffix=None):
-    idx = next(_section_counter)
-    st.markdown(f"""<style>
-    [data-testid="stVerticalBlock"] > .st-key-sec_wrap_{idx} {{
-        border: 2px solid {border_color} !important;
-        border-radius: 12px !important;
-        background-color: {bg_color} !important;
-        padding: 8px 12px !important;
-        margin-bottom: 0.4rem !important;
-    }}
-    </style>""", unsafe_allow_html=True)
-    return f"sec_wrap_{idx}"
-
-def render_centered_title(title):
-    st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
-
-def render_centered_button(label, key=None, btn_type="primary"):
-    lbl_hash = hashlib.md5(label.encode()).hexdigest()[:6]
-    btn_key = f"cb_{lbl_hash}_{key}" if key else f"cb_{lbl_hash}"
-    cl1, cl2, cl3 = st.columns([1, 2, 1], gap="small")
-    with cl2:
-        if st.button(label, key=btn_key, type=btn_type, use_container_width=True):
-            return True
-    return False
-
 def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"):
     ntype = st.selectbox("\u0422\u0438\u043f \u0437\u0430\u0434\u0430\u0447\u0438:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
     ntopic = st.text_input("\u0422\u0435\u043c\u0430 \u0437\u0430\u0434\u0430\u0447\u0438:", key=f"nt_topic_{key_suffix}")
@@ -1340,11 +1326,7 @@ def render_deal_in_tree(d, cl):
     dl_border = "#2196F3" if dl_selected else dl_bc
     dl_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if dl_selected else ""
 
-    # --- ОБЩАЯ РАМКА: сделка + задачи ---
-    container_key = render_section_border(dl_bc, dl_bg)
-    with st.container(key=container_key):
-
-        # Кнопка сделки
+    with indented(0.03):
         st.markdown(f"<style>.st-key-dl_btn_wrap_{d['id']} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {dl_border} !important; border-radius: 10px !important; {dl_shadow} }}</style>", unsafe_allow_html=True)
         anchor_id = f"deal_anchor_{d['id']}"
         with st.container(key=f"dl_btn_wrap_{d['id']}"):
@@ -1366,27 +1348,25 @@ def render_deal_in_tree(d, cl):
             st.markdown(f'<div id="{anchor_id}"></div>', unsafe_allow_html=True)
             st.components.v1.html(f"""<script>setTimeout(function(){{var el=window.parent.document.getElementById('{anchor_id}');if(el)el.scrollIntoView({{behavior:'smooth',block:'center'}});}},300);</script>""", height=0)
             st.session_state.scroll_to_deal = None
-        # Карточка сделки (если раскрыта)
         if st.session_state.expanded_deal_id == d["id"]:
             render_deal_card_expanded(d, cl)
 
-        # --- Заголовок "Задачи по сделке" + список задач + кнопка ---
         render_centered_title(f"\u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 ({len(dl_tasks)})")
-        if dl_tasks:
-            dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
-            for ti, t in enumerate(dl_tasks):
-                task_key = f"dl_{d['id']}_{ti}"
-                render_task_row(t, cl, d, task_key, f"dl_{d['id']}_{ti}")
-        show_ct_key = f"show_ct_{d['id']}"
-        if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435", key=f"btn_ct_dl_{d['id']}"):
-            st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
-            st.rerun()
-    # --- Форма создания задачи — вне рамки ---
-    if st.session_state.get(show_ct_key, False):
-        with st.container(border=True):
-            if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
-                st.session_state[show_ct_key] = False
-                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+        with indented(0.03):
+            if dl_tasks:
+                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
+                for ti, t in enumerate(dl_tasks):
+                    task_key = f"dl_{d['id']}_{ti}"
+                    render_task_row(t, cl, d, task_key, f"dl_{d['id']}_{ti}")
+            show_ct_key = f"show_ct_{d['id']}"
+            if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435", key=f"btn_ct_dl_{d['id']}"):
+                st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
+                st.rerun()
+        if st.session_state.get(show_ct_key, False):
+            with st.container(border=True):
+                if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
+                    st.session_state[show_ct_key] = False
+                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
 def render_client_card_expanded(cl):
     with st.container(border=True):
@@ -1523,9 +1503,7 @@ def render_client_in_tree(cl):
 
     if is_cl_deals_exp:
         client_only_tasks = [t for t in cl_tasks_all if not t.get("deal_id")]
-        cl_tasks_bg, cl_tasks_bc = get_entity_border(client_only_tasks)
-        container_key = render_section_border(cl_tasks_bc, cl_tasks_bg)
-        with st.container(key=container_key):
+        with indented(0.06):
             render_centered_title(f"\u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(client_only_tasks)})")
             if client_only_tasks:
                 client_only_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
@@ -1542,81 +1520,19 @@ def render_client_in_tree(cl):
                     st.session_state[show_ct_key] = False
                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
+        render_separator()
+
         render_centered_title(f"\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)})")
         if cl_deals:
             cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
             for d in cl_deals:
                 render_deal_in_tree(d, cl)
         else:
-            st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
+            with indented(0.03):
+                st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
 
-        show_cd_key = f"show_cd_cl_{cl['id']}"
-        if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}"):
-            st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
-            st.rerun()
-        if st.session_state.get(show_cd_key, False):
-            with st.container(border=True):
-                cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
-                cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
-                cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
-                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
-                    if not cd_mgr:
-                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
-                    else:
-                        deals = st.session_state.crm_store.get("deals", [])
-                        did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
-                        dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
-                        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
-                        cl["last_modified"] = now_str()
-                        st.session_state[show_cd_key] = False
-                        st.session_state.auto_expand_deal_id = did
-                        commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+        render_separator()
 
-        # --- Заголовок "Сделки по клиенту" ---
-        render_centered_title(f"\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)})")
-        if cl_deals:
-            cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
-            for d in cl_deals:
-                render_deal_in_tree(d, cl)
-        else:
-            st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
-
-        # --- Кнопка "Создать новую сделку" вне рамок ---
-        show_cd_key = f"show_cd_cl_{cl['id']}"
-        if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}"):
-            st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
-            st.rerun()
-        if st.session_state.get(show_cd_key, False):
-            with st.container(border=True):
-                cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
-                cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
-                cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
-                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
-                    if not cd_mgr:
-                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
-                    else:
-                        deals = st.session_state.crm_store.get("deals", [])
-                        did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
-                        dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
-                        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
-                        cl["last_modified"] = now_str()
-                        st.session_state[show_cd_key] = False
-                        st.session_state.auto_expand_deal_id = did
-                        commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-
-
-        # --- Заголовок "Сделки по клиенту" ---
-        render_centered_title(f"\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)})")
-        if cl_deals:
-            cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
-            for d in cl_deals:
-                render_deal_in_tree(d, cl)
-        else:
-            st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
-
-        # --- Кнопка "Создать новую сделку" вне рамок ---
         show_cd_key = f"show_cd_cl_{cl['id']}"
         if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}"):
             st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
@@ -1722,7 +1638,6 @@ def render_client_form(fv):
                     st.toast(f"\u041a\u043b\u0438\u0435\u043d\u0442 {cn} \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d", icon="\u2705")
                     st.rerun()
             else: st.error("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0424\u0418\u041e \u0438 \u0442\u0435\u043b\u0435\u0444\u043e\u043d")
-
 if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438":
     fv = st.session_state.client_form_version
     render_client_form(fv)
@@ -1868,264 +1783,246 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
                         render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
         else:
             st.caption("\u0410\u0440\u0445\u0438\u0432 \u043f\u0443\u0441\u0442.")
-# --- ЧАСТЬ 3: интерфейс, карточки, вкладки, планировщик ---
 
-def render_client_card(client, deal_count=0, task_count=0):
-    """Карточка клиента: краткая сводка и быстрые действия."""
-    with st.container(border=True):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.subheader(client.get("name", "Без имени"), anchor=None)
-            st.caption(f"ИНН: {client.get('inn', '—')} | Телефон: {client.get('phone', '—')}")
-            st.markdown(f"**Сделок:** {deal_count} | **Задач:** {task_count}")
-            if client.get("last_modified"):
-                st.caption(f"Обновлено: {client['last_modified'][:10]}")
-        with col2:
-            if st.button("👤 Профиль", key=f"client_profile_{client['id']}", use_container_width=True):
-                st.session_state.expanded_client_id = client["id"]
-                st.rerun()
+elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438":
+    st.markdown("### \u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438")
+    internal_tasks = st.session_state.crm_store.setdefault("internal_tasks", [])
 
-
-def render_task_row(task, deal_title=""):
-    """Строка задачи в списке: статус, дедлайн, текст, тип, быстрые кнопки."""
-    cols = st.columns([1, 3, 2, 2, 1])
-    with cols[0]:
-        icon = "✅" if task.get("done") else "⏳"
-        st.write(icon)
-    with cols[1]:
-        t_type = task.get("type", "Задача")
-        st.markdown(f"**{t_type}**: {task.get('text', '')[:60]}{'...' if len(task.get('text', '')) > 60 else ''}")
-        if deal_title:
-            st.caption(f"Сделка: {deal_title}")
-    with cols[2]:
-        deadline = task.get("deadline")
-        if deadline:
-            st.caption(deadline[:10])
-        else:
-            st.caption("Без срока")
-    with cols[3]:
-        if not task.get("done"):
-            if st.button("✔️ Готово", key=f"task_done_{task['id']}", type="secondary", use_container_width=True):
-                for c in st.session_state.crm_store["clients"]:
-                    for t in c.get("tasks", []):
-                        if t["id"] == task["id"]:
-                            t["done"] = True
-                            t["last_modified"] = now_str()
-                            break
-                commit_and_rerun(st.session_state.crm_store, "Задача отмечена как выполненная")
-        else:
-            st.write("Выполнено")
-    with cols[4]:
-        if st.button("✏️", key=f"task_edit_{task['id']}", type="tertiary", use_container_width=True):
-            # Тут можно открыть модалку редактирования — пока заглушка
-            st.info("Режим редактирования задачи (планируется)")
-
-
-def render_deal_card(deal, client_name=""):
-    """Карточка сделки: статус, номер, сумма (если есть), менеджер, быстрые действия."""
-    status_color = {
-        "В работе": "blue",
-        "На согласовании": "orange",
-        "Закрыта": "green",
-        "Отменена": "red"
-    }.get(deal.get("status", "В работе"), "gray")
-    status_emoji = {"В работе": "🔵", "На согласовании": "🟡", "Закрыта": "🟢", "Отменена": "🔴"}.get(deal.get("status", ""), "⚪️")
-
-    with st.container(border=True):
-        c1, c2, c3 = st.columns([3, 4, 2])
-        with c1:
-            st.subheader(deal.get("deal_number", f"#{deal['id']}"), anchor=None)
-        with c2:
-            title = deal.get("title", deal.get("deal_title", ""))
-            st.markdown(f"**{title}**")
-            st.caption(f"{client_name}")
-        with c3:
-            st.markdown(f"<span style='color: {status_color}; font-weight: bold;'>{status_emoji} {deal.get('status', 'Статус')}</span>", unsafe_allow_html=True)
-
-        row = st.columns([2, 2, 2, 2])
-        row[0].caption(f"Сумма: {deal.get('amount', '—')}")
-        row[1].caption(f"Менеджер: {deal.get('manager', '—')}")
-        row[2].caption(f"Дата: {deal.get('created_at', '')[:10]}")
-        row[3].caption(f"Файлы: {len(deal.get('deal_files', []))}")
-
-        if deal.get("status") != "Закрыта":
-            if st.button("🏁 Завершить сделку", key=f"close_deal_{deal['id']}", type="primary", use_container_width=True):
-                close_deal_dialog(deal["id"])
-        else:
-            st.success("Сделка закрыта")
-
-
-def tab_clients():
-    """Вкладка «Клиенты»: поиск, фильтр, список карточек, создание нового."""
-    st.subheader("Клиенты")
-    search = st.text_input("Поиск по названию, ИНН, телефону:", key="client_search")
-
-    clients = st.session_state.crm_store.get("clients", [])
-    if search:
-        s = search.lower()
-        clients = [c for c in clients if s in c.get("name", "").lower() or s in str(c.get("inn", "")).lower() or s in c.get("phone", "").lower()]
-
-    c_new, c_filter = st.columns([3, 1])
-    with c_new:
-        if st.button("+ Новый клиент", type="primary"):
-            with st.expander("Создание клиента", expanded=True):
-                name = st.text_input("Название / ФИО")
-                inn = st.text_input("ИНН")
-                phone = st.text_input("Телефон")
-                if st.button("Сохранить", type="primary", use_container_width=True):
-                    if name:
-                        new_id = st.session_state.last_id + 1 if st.session_state.last_id else 1
-                        st.session_state.last_id = new_id
-                        st.session_state.crm_store["clients"].append({
-                            "id": new_id,
-                            "name": name,
-                            "inn": inn,
-                            "phone": phone,
-                            "tasks": [],
-                            "client_chat": [],
-                            "last_modified": now_str(),
-                            "created_at": now_str()
-                        })
-                        commit_and_rerun(st.session_state.crm_store, "Клиент создан")
-                    else:
-                        st.error("Введите название клиента")
-
-    for c in clients:
-        deals = [d for d in st.session_state.crm_store.get("deals", []) if d.get("client_id") == c["id"]]
-        tasks = [t for t in (c.get("tasks") or [])]
-        render_client_card(c, deal_count=len(deals), task_count=len(tasks))
-
-
-def tab_deals():
-    """Вкладка «Сделки»: фильтр по статусу, карточки сделок, создание новой."""
-    st.subheader("Сделки")
-    deals = st.session_state.crm_store.get("deals", [])
-
-    statuses = ["Все", "В работе", "На согласовании", "Закрыта", "Отменена"]
-    selected_status = st.selectbox("Статус", statuses, index=0, key="deal_status_filter")
-
-    if selected_status != "Все":
-        deals = [d for d in deals if d.get("status") == selected_status]
-
-    if st.button("+ Новая сделка", type="primary"):
-        with st.expander("Создать сделку", expanded=True):
-            client_options = [(c["name"], c["id"]) for c in st.session_state.crm_store.get("clients", [])]
-            if not client_options:
-                st.warning("Сначала добавьте хотя бы одного клиента")
-            else:
-                c_name, c_id = st.selectbox("Клиент", client_options, format_func=lambda x: x[0])
-                title = st.text_input("Тема сделки")
-                amount = st.number_input("Сумма, ₽", value=0)
-                manager = st.text_input("Менеджер")
-                status = st.selectbox("Статус", ["В работе", "На согласовании"], index=0)
-                if st.button("Создать", type="primary", use_container_width=True):
-                    new_id = st.session_state.last_id + 1 if st.session_state.last_id else 1
-                    st.session_state.last_id = new_id
-                    st.session_state.crm_store["deals"].append({
-                        "id": new_id,
-                        "client_id": c_id,
-                        "title": title,
-                        "deal_title": title,
-                        "amount": amount,
-                        "manager": manager,
-                        "status": status,
-                        "deal_number": f"D{new_id}",
-                        "deal_files": [],
-                        "close_files": [],
-                        "payment_status": "Не оплачено",
-                        "last_modified": now_str(),
+    show_it_key = "show_it_form"
+    if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u044e\u044e \u0437\u0430\u0434\u0430\u0447\u0443", key="btn_new_it"):
+        st.session_state[show_it_key] = not st.session_state.get(show_it_key, False)
+        st.rerun()
+    if st.session_state.get(show_it_key, False):
+        with st.container(border=True):
+            it_topic = st.text_input("\u0422\u0435\u043c\u0430 \u0437\u0430\u0434\u0430\u0447\u0438:", key="it_topic")
+            it_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key="it_mgr", placeholder=MGR_PLACEHOLDER)
+            it_dl = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key="it_dl")
+            it_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", key="it_comment")
+            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key="it_go", use_container_width=True, type="primary"):
+                if not it_topic.strip():
+                    st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443 \u0437\u0430\u0434\u0430\u0447\u0438")
+                elif not it_mgr:
+                    st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                else:
+                    new_it = {
+                        "id": (max([t.get("id", 0) for t in internal_tasks], default=0)) + 1,
+                        "text": it_topic.strip(),
+                        "deadline": it_dl.isoformat(),
+                        "done": False,
+                        "manager": it_mgr,
+                        "comment": it_comment.strip(),
                         "created_at": now_str(),
-                        "deal_chat": []
-                    })
-                    commit_and_rerun(st.session_state.crm_store, "Сделка создана")
+                        "last_modified": now_str(),
+                        "completed_report": ""
+                    }
+                    internal_tasks.append(new_it)
+                    st.session_state[show_it_key] = False
+                    commit_and_rerun(st.session_state.crm_store, "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u044f\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
-    for d in deals:
-        client = get_client_by_id(d.get("client_id"))
-        client_name = client.get("name") if client else "—"
-        render_deal_card(d, client_name=client_name)
+    st.markdown("---")
+    it_filter = st.radio("\u0424\u0438\u043b\u044c\u0442\u0440:", ["\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435", "\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435", "\u0412\u0441\u0435"], index=0, key="it_filter", horizontal=True)
 
+    filtered_it = []
+    for it in internal_tasks:
+        if it_filter == "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435" and it.get("done"): continue
+        if it_filter == "\u0412\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u044b\u0435" and not it.get("done"): continue
+        filtered_it.append(it)
+    filtered_it.sort(key=lambda t: t.get("deadline", ""), reverse=False)
 
-def tab_tasks():
-    """Вкладка «Задачи»: список задач с фильтрами и группировкой по сделкам/клиентам."""
-    st.subheader("Задачи")
-    tasks = []
-    for c in st.session_state.crm_store.get("clients", []):
-        for t in c.get("tasks", []):
-            tasks.append((c, t))
+    if filtered_it:
+        for it in filtered_it:
+            it_key = f"it_{it['id']}"
+            it_exp = st.session_state.expanded_task_key == it_key
+            it_done = it.get("done", False)
+            it_overdue = False
+            if not it_done and it.get("deadline"):
+                try:
+                    dl = datetime.strptime(it["deadline"][:10], "%Y-%m-%d").replace(hour=23, minute=59)
+                    if dl < datetime.now(): it_overdue = True
+                except: pass
+            if it_done: it_bg, it_bc = "#F5F6F8", "#C9CFD7"
+            elif it_overdue: it_bg, it_bc = "#FFEBEE", "#C62828"
+            else: it_bg, it_bc = "#E8F5E9", "#4CAF50"
+            it_label = f"{'\u2705' if it_done else '\u23f3'} \u0417\u0430\u0434\u0430\u0447\u0430 \u2116{it['id']} \u2014 {it.get('text', '')} | {format_date(it.get('deadline', ''))} | {it.get('manager', '\u2014')}"
+            it_selected = it_exp
+            it_border = "#2196F3" if it_selected else it_bc
+            it_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if it_selected else ""
+            st.markdown(f"<style>.st-key-it_wrap_{it['id']} button {{ background-color: {it_bg} !important; color: #2C3E50 !important; border: 2px solid {it_border} !important; border-radius: 10px !important; {it_shadow} }}</style>", unsafe_allow_html=True)
+            with st.container(key=f"it_wrap_{it['id']}"):
+                if st.button(it_label, key=f"it_card_{it['id']}", use_container_width=True, type="primary" if it_exp else "secondary"):
+                    if it_exp:
+                        st.session_state.expanded_task_key = None
+                        save_scroll_and_rerun()
+                    else:
+                        st.session_state.expanded_task_key = it_key
+                        st.rerun()
+                if not it_exp:
+                    render_scroll_restore(f"it_{it['id']}")
+            if it_exp:
+                with st.container(border=True):
+                    st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{it['id']}**")
+                    st.markdown(f"**\u0422\u0435\u043c\u0430:** {it.get('text', '')}")
+                    st.markdown(f"**\u0421\u0440\u043e\u043a:** {format_date(it.get('deadline', ''))}")
+                    st.markdown(f"**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:** {it.get('manager', '\u2014')}")
+                    if it.get("comment"): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:** {it['comment']}")
+                    if it.get("completed_report"): st.markdown(f"**\u041e\u0442\u0447\u0451\u0442:** {it['completed_report']}")
+                    st.markdown("---")
+                    if not it_done:
+                        show_it_complete = f"show_it_complete_{it['id']}"
+                        if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c", key=f"it_complete_btn_{it['id']}", type="primary", use_container_width=True):
+                            st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
+                            st.rerun()
+                        if st.session_state.get(show_it_complete, False):
+                            it_report = st.text_input("\u041e\u0442\u0447\u0451\u0442:", key=f"it_report_{it['id']}")
+                            if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
+                                if it_report.strip():
+                                    it["done"] = True
+                                    it["completed_report"] = it_report.strip()
+                                    it["last_modified"] = now_str()
+                                    st.session_state[show_it_complete] = False
+                                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
+                                else:
+                                    st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
+                        st.markdown("---")
+                        show_it_edit = f"show_it_edit_{it['id']}"
+                        if st.button("\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c", key=f"it_edit_btn_{it['id']}", use_container_width=True):
+                            st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
+                            st.rerun()
+                        if st.session_state.get(show_it_edit, False):
+                            with st.container(border=True):
+                                eit_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
+                                eit_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
+                                eit_dl = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
+                                eit_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
+                                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
+                                    if not eit_mgr:
+                                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                                    else:
+                                        it["text"] = eit_topic
+                                        it["manager"] = eit_mgr
+                                        it["deadline"] = eit_dl.isoformat()
+                                        it["comment"] = eit_comment
+                                        it["last_modified"] = now_str()
+                                        st.session_state[show_it_edit] = False
+                                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
+                    if st.session_state.user_role == "admin":
+                        st.markdown("---")
+                        if st.button("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"it_del_{it['id']}", use_container_width=True):
+                            st.session_state.crm_store["internal_tasks"] = [x for x in internal_tasks if x["id"] != it["id"]]
+                            st.session_state.expanded_task_key = None
+                            commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0443\u0434\u0430\u043b\u0435\u043d\u0430")
+    else:
+        st.info("\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0445 \u0437\u0430\u0434\u0430\u0447 \u043d\u0435\u0442.")
 
-    # Простой фильтр
-    filter_status = st.radio("Фильтр", ["Все", "Активные", "Выполненные"], index=0, key="task_filter")
-    if filter_status == "Активные":
-        tasks = [(c, t) for c, t in tasks if not t.get("done")]
-    elif filter_status == "Выполненные":
-        tasks = [(c, t) for c, t in tasks if t.get("done")]
+elif st.session_state.active_tab == "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438":
+    st.markdown("### \u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438")
+    suppliers = st.session_state.crm_store.setdefault("suppliers", [])
 
-    st.divider()
-    for client, t in tasks:
-        deal = None
-        for d in st.session_state.crm_store.get("deals", []):
-            if d.get("client_id") == client["id"] and d.get("id") == t.get("deal_id"):
-                deal = d
-                break
-        deal_title = deal["title"] if deal else "Без сделки"
-        render_task_row(t, deal_title=deal_title)
+    show_sup_key = "show_sup_form"
+    if render_centered_button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0430", key="btn_new_sup"):
+        st.session_state[show_sup_key] = not st.session_state.get(show_sup_key, False)
+        st.rerun()
+    if st.session_state.get(show_sup_key, False):
+        with st.container(border=True):
+            sup_name = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 / \u0418\u043c\u044f:", key="sup_name")
+            sup_phone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d:", key="sup_phone")
+            sup_email = st.text_input("Email:", key="sup_email")
+            sup_address = st.text_input("\u0410\u0434\u0440\u0435\u0441:", key="sup_address")
+            sup_category = st.text_input("\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f \u0442\u043e\u0432\u0430\u0440\u043e\u0432:", key="sup_category", placeholder="\u0427\u0442\u043e \u043f\u043e\u0441\u0442\u0430\u0432\u043b\u044f\u0435\u0442")
+            sup_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", key="sup_comment")
+            if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key="sup_go", use_container_width=True, type="primary"):
+                if not sup_name.strip():
+                    st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u0435")
+                else:
+                    new_sup = {
+                        "id": (max([s.get("id", 0) for s in suppliers], default=0)) + 1,
+                        "name": sup_name.strip(),
+                        "phone": format_phone(sup_phone) if sup_phone else "",
+                        "email": sup_email.strip(),
+                        "address": sup_address.strip(),
+                        "category": sup_category.strip(),
+                        "comment": sup_comment.strip(),
+                        "created_at": now_str(),
+                        "last_modified": now_str()
+                    }
+                    suppliers.append(new_sup)
+                    st.session_state[show_sup_key] = False
+                    commit_and_rerun(st.session_state.crm_store, "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
 
+    st.markdown("---")
+    sup_search = st.text_input("\u041f\u043e\u0438\u0441\u043a \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0430:", key="sup_search", placeholder="\u041f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e, \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0443, \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438...").strip().lower()
 
-def tab_planner():
-    """Планировщик: календарь по неделям (упрощённо), задачи по дням."""
-    st.subheader("Планировщик")
-    today = datetime.now()
-    start_of_week = today - timedelta(days=today.weekday())
-    week_days = [start_of_week + timedelta(days=i) for i in range(7)]
+    filtered_sup = []
+    for s in suppliers:
+        if sup_search:
+            st_text = f"{s.get('name', '')} {s.get('phone', '')} {s.get('email', '')} {s.get('category', '')} {s.get('comment', '')}".lower()
+            if sup_search not in st_text: continue
+        filtered_sup.append(s)
+    filtered_sup.sort(key=lambda s: s.get("name", "").lower())
 
-    tasks_by_day = {d.strftime("%Y-%m-%d"): [] for d in week_days}
-    for c in st.session_state.crm_store.get("clients", []):
-        for t in c.get("tasks", []):
-            deadline = t.get("deadline", "")
-            if deadline and len(deadline) >= 10:
-                d_key = deadline[:10]
-                if d_key in tasks_by_day:
-                    tasks_by_day[d_key].append((c, t))
-
-    for day in week_days:
-        d_key = day.strftime("%Y-%m-%d")
-        day_name = day.strftime("%A, %d.%m")
-        tasks_today = tasks_by_day.get(d_key, [])
-        with st.expander(day_name, expanded=len(tasks_today) > 0):
-            if not tasks_today:
-                st.caption("Нет задач на этот день")
-            for client, t in tasks_today:
-                render_task_row(t)
-
-
-# Основной блок вкладок
-def main_tabs():
-    tab_names = ["Клиенты", "Сделки", "Задачи", "Планировщик"]
-    tabs = st.tabs(tab_names)
-    active_tab = st.session_state.active_tab
-
-    # Синхронизация активной вкладки
-    for i, name in enumerate(tab_names):
-        if tabs[i] or (name == active_tab):
-            with tabs[i]:
-                st.session_state.active_tab = name
-                if name == "Клиенты":
-                    tab_clients()
-                elif name == "Сделки":
-                    tab_deals()
-                elif name == "Задачи":
-                    tab_tasks()
-                elif name == "Планировщик":
-                    tab_planner()
-                break
-
-
-# Вспомогательные функции (если их ещё нет в предыдущих частях)
-def get_client_by_id(client_id):
-    for c in st.session_state.crm_store.get("clients", []):
-        if c["id"] == client_id:
-            return c
-    return None
-
-def now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if filtered_sup:
+        for s in filtered_sup:
+            sup_key = f"sup_{s['id']}"
+            sup_exp = st.session_state.expanded_task_key == sup_key
+            sup_label = f"{s.get('name', '\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f')} \u2014 {s.get('phone', '\u2014')} | {s.get('category', '\u2014')}"
+            sup_selected = sup_exp
+            sup_border = "#2196F3" if sup_selected else "#DCE0E5"
+            sup_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if sup_selected else ""
+            st.markdown(f"<style>.st-key-sup_wrap_{s['id']} button {{ background-color: #FFFFFF !important; color: #2C3E50 !important; border: 2px solid {sup_border} !important; border-radius: 10px !important; {sup_shadow} }}</style>", unsafe_allow_html=True)
+            with st.container(key=f"sup_wrap_{s['id']}"):
+                if st.button(sup_label, key=f"sup_card_{s['id']}", use_container_width=True, type="primary" if sup_exp else "secondary"):
+                    if sup_exp:
+                        st.session_state.expanded_task_key = None
+                        save_scroll_and_rerun()
+                    else:
+                        st.session_state.expanded_task_key = sup_key
+                        st.rerun()
+                if not sup_exp:
+                    render_scroll_restore(f"sup_{s['id']}")
+            if sup_exp:
+                with st.container(border=True):
+                    st.markdown(f"**{s.get('name', '')}**")
+                    st.markdown(format_created_date(s), unsafe_allow_html=True)
+                    if s.get("phone"):
+                        render_phone_inline(s["phone"], f"sup_{s['id']}")
+                    info_c, comm_c = st.columns(2)
+                    with info_c:
+                        st.markdown(f"**Email:** {s.get('email', '\u2014')}")
+                        st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {s.get('address', '\u2014')}")
+                        st.markdown(f"**\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f:** {s.get('category', '\u2014')}")
+                    with comm_c:
+                        if s.get("comment"):
+                            st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:** {s['comment']}")
+                        else:
+                            st.caption("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432 \u043d\u0435\u0442")
+                    st.markdown("---")
+                    show_sup_edit = f"show_sup_edit_{s['id']}"
+                    if st.button("\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c" if not st.session_state.get(show_sup_edit, False) else "\u0421\u043a\u0440\u044b\u0442\u044c", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
+                        st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
+                        st.rerun()
+                    if st.session_state.get(show_sup_edit, False):
+                        with st.container(border=True):
+                            esn = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435:", value=s.get("name", ""), key=f"esn_{s['id']}")
+                            esp = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d:", value=s.get("phone", ""), key=f"esp_{s['id']}")
+                            ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
+                            esa = st.text_input("\u0410\u0434\u0440\u0435\u0441:", value=s.get("address", ""), key=f"esa_{s['id']}")
+                            esc = st.text_input("\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f:", value=s.get("category", ""), key=f"esc_{s['id']}")
+                            escom = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", value=s.get("comment", ""), key=f"escom_{s['id']}")
+                            if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
+                                s["name"] = esn.strip()
+                                s["phone"] = format_phone(esp) if esp else ""
+                                s["email"] = ese.strip()
+                                s["address"] = esa.strip()
+                                s["category"] = esc.strip()
+                                s["comment"] = escom.strip()
+                                s["last_modified"] = now_str()
+                                st.session_state[show_sup_edit] = False
+                                commit_and_rerun(st.session_state.crm_store, "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d")
+                    if st.session_state.user_role == "admin":
+                        st.markdown("---")
+                        if st.button("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0430", key=f"sup_del_{s['id']}", use_container_width=True):
+                            st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
+                            st.session_state.expanded_task_key = None
+                            commit_and_rerun(st.session_state.crm_store, "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
+    else:
+        st.info("\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432 \u043d\u0435\u0442. \u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u043f\u0435\u0440\u0432\u043e\u0433\u043e.")
