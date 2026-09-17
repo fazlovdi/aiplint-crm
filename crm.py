@@ -1147,9 +1147,11 @@ def render_centered_title(title):
     st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
 
 def render_centered_button(label, key=None, btn_type="primary"):
+    lbl_hash = hashlib.md5(label.encode()).hexdigest()[:6]
+    btn_key = f"cb_{lbl_hash}_{key}" if key else f"cb_{lbl_hash}"
     cl1, cl2, cl3 = st.columns([1, 2, 1], gap="small")
     with cl2:
-        if st.button(label, type=btn_type, use_container_width=True):
+        if st.button(label, key=btn_key, type=btn_type, use_container_width=True):
             return True
     return False
 
