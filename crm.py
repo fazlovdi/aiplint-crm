@@ -70,6 +70,7 @@ st.markdown("""
     .stTextArea > div > textarea { resize: vertical; }
     .copy-btn-crm { background: #EEF0F3; border: 1px solid #DCE0E5; border-radius: 8px; padding: 6px 12px; font-size: 0.85rem; color: #5A6B7D; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: background 0.15s; }
     .copy-btn-crm:hover { background: #DCE0E5; }
+    .compact-btn-wrap { max-width: 280px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -497,11 +498,6 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 if st.button("\U0001F5D1 \u0423\u0434\u0430\u043b\u0438\u0442\u044c", key=f"del_{prefix}_o_{i}"):
                     files.pop(len(img_files) + i)
                     commit_and_rerun(st.session_state.crm_store, "\u0424\u0430\u0439\u043b \u0443\u0434\u0430\u043b\u0451\u043d")
-
-def render_deal_files_in_task(deal, task_key_prefix):
-    if not deal or not deal.get("deal_files"): return
-    st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0441\u0434\u0435\u043b\u043a\u0438:**")
-    render_file_thumbs(deal["deal_files"], f"{task_key_prefix}_dealfile")
 
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -1320,6 +1316,7 @@ def render_deal_in_tree(d, cl):
     with st.container(key=f"dl_btn_wrap_{d['id']}"):
         if st.button(dl_label, key=f"dl_card_{d['id']}", use_container_width=True, type="primary" if is_dl_exp else "secondary"):
             if is_dl_exp:
+                st.session_state.expanded_deal_id = None
                 save_scroll_and_rerun()
             else:
                 st.session_state.expanded_deal_id = d["id"]
@@ -1337,24 +1334,28 @@ def render_deal_in_tree(d, cl):
         st.session_state.scroll_to_deal = None
     if st.session_state.expanded_deal_id == d["id"]:
         render_deal_card_expanded(d, cl)
+    # --- Список задач по сделке ---
     if dl_tasks:
         with tree_col(2):
-            st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0434\u0435\u043b\u043a\u0438 ({len(dl_tasks)}):**")
+            st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 ({len(dl_tasks)}):**")
             with tree_col(3):
                 dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
                 for ti, t in enumerate(dl_tasks):
                     task_key = f"dl_{d['id']}_{ti}"
                     render_task_row(t, cl, d, task_key, f"dl_{d['id']}_{ti}")
+    # --- Создать задачу по сделке (компактная кнопка) ---
+    show_ct_key = f"show_ct_{d['id']}"
     with tree_col(2):
-        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"ct_btn_{d['id']}", use_container_width=True, type="primary"):
-            st.session_state[f"show_ct_{d['id']}"] = not st.session_state.get(f"show_ct_{d['id']}", False)
-            st.rerun()
-        if st.session_state.get(f"show_ct_{d['id']}", False):
-            with tree_col(3):
-                with st.container(border=True):
-                    if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
-                        st.session_state[f"show_ct_{d['id']}"] = False
-                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+        cc1, cc2 = st.columns([1, 4])
+        with cc1:
+            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_ct_dl_{d['id']}", type="primary", use_container_width=True):
+                st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
+                st.rerun()
+    if st.session_state.get(show_ct_key, False):
+        with st.container(border=True):
+            if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
+                st.session_state[show_ct_key] = False
+                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
 def render_client_card_expanded(cl):
     with st.container(border=True):
@@ -1417,16 +1418,6 @@ def render_client_card_expanded(cl):
                         st.rerun()
                 else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
         st.markdown("---")
-        show_ct_key = f"show_ct_cl_{cl['id']}"
-        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443", key=f"btn_ct_cl_{cl['id']}", type="primary", use_container_width=True):
-            st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
-            st.rerun()
-        if st.session_state.get(show_ct_key, False):
-            with st.container(border=True):
-                if render_task_form(None, cl["id"], f"cl_{cl['id']}"):
-                    st.session_state[show_ct_key] = False
-                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-        st.markdown("---")
         render_entity_chat(cl, "client", cl["id"])
         st.markdown("---")
         show_edit = st.session_state.get(f"show_edit_{cl['id']}", False)
@@ -1474,6 +1465,7 @@ def render_client_in_tree(cl):
         with st.container(key=f"arr_cl_{cl['id']}"):
             if st.button("\u25BE" if is_cl_deals_exp else "\u25B8", key=f"cl_arrow_{cl['id']}", use_container_width=True):
                 if is_cl_deals_exp:
+                    st.session_state.expanded_tree_id = None
                     save_scroll_and_rerun()
                 else:
                     st.session_state.expanded_tree_id = cl["id"]
@@ -1484,6 +1476,7 @@ def render_client_in_tree(cl):
         with st.container(key=f"cl_btn_wrap_{cl['id']}"):
             if st.button(cl_label, key=f"cl_card_{cl['id']}", use_container_width=True, type="primary" if is_cl_exp else "secondary"):
                 if is_cl_exp:
+                    st.session_state.expanded_client_id = None
                     save_scroll_and_rerun()
                 else:
                     st.session_state.expanded_client_id = cl["id"]
@@ -1492,50 +1485,73 @@ def render_client_in_tree(cl):
                     st.rerun()
             if not is_cl_exp:
                 render_scroll_restore(f"cl_{cl['id']}")
+    
+    # --- Карточка клиента ---
     if is_cl_exp:
         render_client_card_expanded(cl)
+    
     if is_cl_deals_exp:
+        # --- Список задач по клиенту ---
         client_only_tasks = [t for t in cl_tasks_all if not t.get("deal_id")]
         if client_only_tasks:
-            with tree_col(2):
+            with tree_col(1):
                 st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(client_only_tasks)}):**")
-                with tree_col(3):
+                with tree_col(2):
                     client_only_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
                     for ti, t in enumerate(client_only_tasks):
                         task_key = f"cl_{cl['id']}_{ti}"
                         render_task_row(t, cl, None, task_key, f"cl_{cl['id']}_{ti}")
+        
+        # --- Создать задачу по клиенту (компактная кнопка) ---
+        show_ct_key = f"show_ct_cl_{cl['id']}"
         with tree_col(1):
-            st.markdown(f"**\u0421\u0434\u0435\u043b\u043a\u0438 \u043a\u043b\u0438\u0435\u043d\u0442\u0430 ({len(cl_deals)}):**")
+            cc1, cc2 = st.columns([1, 4])
+            with cc1:
+                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_ct_cl_{cl['id']}", type="primary", use_container_width=True):
+                    st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
+                    st.rerun()
+        if st.session_state.get(show_ct_key, False):
+            with st.container(border=True):
+                if render_task_form(None, cl["id"], f"cl_{cl['id']}"):
+                    st.session_state[show_ct_key] = False
+                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+        
+        # --- Список сделок по клиенту ---
+        with tree_col(1):
+            st.markdown(f"**\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)}):**")
             if cl_deals:
                 cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
                 for d in cl_deals:
-                    with tree_col(2):
-                        render_deal_in_tree(d, cl)
+                    render_deal_in_tree(d, cl)
             else:
                 st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
-            with tree_col(1):
-                show_cd_key = f"show_cd_cl_{cl['id']}"
+        
+        # --- Создать сделку по клиенту (компактная кнопка) ---
+        show_cd_key = f"show_cd_cl_{cl['id']}"
+        with tree_col(1):
+            cc1, cc2 = st.columns([1, 4])
+            with cc1:
                 if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}", type="primary", use_container_width=True):
                     st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
                     st.rerun()
-                if st.session_state.get(show_cd_key, False):
-                    with st.container(border=True):
-                        cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
-                        cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
-                        cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
-                        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
-                            if not cd_mgr:
-                                st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
-                            else:
-                                deals = st.session_state.crm_store.get("deals", [])
-                                did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
-                                dn = generate_deal_number()
-                                new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
-                                st.session_state.crm_store.setdefault("deals", []).append(new_deal)
-                                cl["last_modified"] = now_str()
-                                st.session_state[show_cd_key] = False
-                                st.session_state.auto_expand_deal_id = did
-                                commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+        if st.session_state.get(show_cd_key, False):
+            with st.container(border=True):
+                cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
+                cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
+                cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
+                    if not cd_mgr:
+                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                    else:
+                        deals = st.session_state.crm_store.get("deals", [])
+                        did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
+                        dn = generate_deal_number()
+                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
+                        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
+                        cl["last_modified"] = now_str()
+                        st.session_state[show_cd_key] = False
+                        st.session_state.auto_expand_deal_id = did
+                        commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
 def render_client_form(fv):
     with st.expander("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043b\u0438\u0435\u043d\u0442\u0430", expanded=False, key=f"add_client_form_{fv}"):
@@ -1717,6 +1733,7 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
                     if is_tk_exp:
+                        st.session_state.expanded_task_key = None
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = task_key
@@ -1755,6 +1772,7 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
                 with st.container(key=f"arch_wrap_{task_key}"):
                     if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
                         if is_tk_exp:
+                            st.session_state.expanded_task_key = None
                             save_scroll_and_rerun()
                         else:
                             st.session_state.expanded_task_key = task_key
@@ -1819,6 +1837,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
             with st.container(key=f"itask_wrap_{t['id']}"):
                 if st.button(it_label, key=f"itask_btn_{t['id']}", use_container_width=True, type="primary" if is_it_exp else "secondary"):
                     if is_it_exp:
+                        st.session_state.expanded_task_key = None
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = itask_key
