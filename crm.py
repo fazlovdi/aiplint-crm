@@ -1080,6 +1080,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044
         nreceiver_phone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
         norder_amount = st.text_input("\u0421\u0443\u043c\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u0430 (\u0440\u0443\u0431.):", value="", key=f"nt_amount_{key_suffix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
+        ntk_num = st.text_input("\u0422\u0440\u0435\u043a:", key=f"nt_tk_{key_suffix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0440\u0435\u043a-\u043d\u043e\u043c\u0435\u0440")
         ncomment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     else:
