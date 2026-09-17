@@ -1132,9 +1132,13 @@ st.markdown("---")
 
 cu = st.session_state.user_name
 
-def render_section_border(border_color, bg_color, key_suffix):
+import itertools as _itertools
+_section_counter = _itertools.count()
+
+def render_section_border(border_color, bg_color, key_suffix=None):
+    idx = next(_section_counter)
     st.markdown(f"""<style>
-    [data-testid="stVerticalBlock"] > .st-key-sec_wrap_{key_suffix} {{
+    [data-testid="stVerticalBlock"] > .st-key-sec_wrap_{idx} {{
         border: 2px solid {border_color} !important;
         border-radius: 12px !important;
         background-color: {bg_color} !important;
@@ -1142,6 +1146,7 @@ def render_section_border(border_color, bg_color, key_suffix):
         margin-bottom: 0.4rem !important;
     }}
     </style>""", unsafe_allow_html=True)
+    return f"sec_wrap_{idx}"
 
 def render_centered_title(title):
     st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
@@ -1336,9 +1341,9 @@ def render_deal_in_tree(d, cl):
     dl_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if dl_selected else ""
 
     # --- ОБЩАЯ РАМКА: сделка + задачи ---
-    sec_key = f"dl_wrap_{d['id']}"
-    render_section_border(dl_bc, dl_bg, sec_key)
-    with st.container(key=f"sec_wrap_{sec_key}"):
+    container_key = render_section_border(dl_bc, dl_bg)
+    with st.container(key=container_key):
+
         # Кнопка сделки
         st.markdown(f"<style>.st-key-dl_btn_wrap_{d['id']} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {dl_border} !important; border-radius: 10px !important; {dl_shadow} }}</style>", unsafe_allow_html=True)
         anchor_id = f"deal_anchor_{d['id']}"
@@ -1522,10 +1527,9 @@ def render_client_in_tree(cl):
     if is_cl_deals_exp:
         client_only_tasks = [t for t in cl_tasks_all if not t.get("deal_id")]
         # --- Рамка "Задачи по клиенту" ---
-        sec_key = f"cl_tasks_{cl['id']}"
-        cl_tasks_bg, cl_tasks_bc = get_entity_border(client_only_tasks)
-        render_section_border(cl_tasks_bc, cl_tasks_bg, sec_key)
-        with st.container(key=f"sec_wrap_{sec_key}"):
+        container_key = render_section_border(cl_tasks_bc, cl_tasks_bg)
+        with st.container(key=container_key):
+
             render_centered_title(f"\u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(client_only_tasks)})")
             if client_only_tasks:
                 client_only_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
