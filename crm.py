@@ -1492,7 +1492,6 @@ def render_client_in_tree(cl):
     cl_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if cl_selected else ""
     st.markdown(f"<style>.st-key-cl_btn_wrap_{cl['id']} button {{ background-color: {cl_bg} !important; color: #2C3E50 !important; border: 2px solid {cl_border} !important; border-radius: 10px !important; {cl_shadow} }}</style>", unsafe_allow_html=True)
 
-    # --- Стрелка слева, карточка справа ---
     ac, bc = st.columns([1, 30])
     with ac:
         with st.container(key=f"arr_cl_{cl['id']}"):
@@ -1519,17 +1518,14 @@ def render_client_in_tree(cl):
             if not is_cl_exp:
                 render_scroll_restore(f"cl_{cl['id']}")
 
-    # --- Карточка клиента ---
     if is_cl_exp:
         render_client_card_expanded(cl)
 
-    # --- Развернутый список (задачи + сделки) ---
     if is_cl_deals_exp:
         client_only_tasks = [t for t in cl_tasks_all if not t.get("deal_id")]
-        # --- Рамка "Задачи по клиенту" ---
+        cl_tasks_bg, cl_tasks_bc = get_entity_border(client_only_tasks)
         container_key = render_section_border(cl_tasks_bc, cl_tasks_bg)
         with st.container(key=container_key):
-
             render_centered_title(f"\u0417\u0430\u0434\u0430\u0447\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(client_only_tasks)})")
             if client_only_tasks:
                 client_only_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
@@ -1545,6 +1541,37 @@ def render_client_in_tree(cl):
                 if render_task_form(None, cl["id"], f"cl_{cl['id']}"):
                     st.session_state[show_ct_key] = False
                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+
+        render_centered_title(f"\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)})")
+        if cl_deals:
+            cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
+            for d in cl_deals:
+                render_deal_in_tree(d, cl)
+        else:
+            st.caption("\u0421\u0434\u0435\u043b\u043e\u043a \u043d\u0435\u0442")
+
+        show_cd_key = f"show_cd_cl_{cl['id']}"
+        if render_centered_button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0441\u0434\u0435\u043b\u043a\u0443", key=f"btn_cd_cl_{cl['id']}"):
+            st.session_state[show_cd_key] = not st.session_state.get(show_cd_key, False)
+            st.rerun()
+        if st.session_state.get(show_cd_key, False):
+            with st.container(border=True):
+                cd_title = st.text_input("\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438:", key=f"cd_title_{cl['id']}")
+                cd_budget = st.text_input("\u0411\u044e\u0434\u0436\u0435\u0442 (\u0440\u0443\u0431.):", value="", key=f"cd_budget_{cl['id']}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
+                cd_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
+                    if not cd_mgr:
+                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                    else:
+                        deals = st.session_state.crm_store.get("deals", [])
+                        did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
+                        dn = generate_deal_number()
+                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "\u041d\u043e\u0432\u044b\u0439", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "\u041d\u0435 \u043e\u043f\u043b\u0430\u0447\u0435\u043d\u043e", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
+                        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
+                        cl["last_modified"] = now_str()
+                        st.session_state[show_cd_key] = False
+                        st.session_state.auto_expand_deal_id = did
+                        commit_and_rerun(st.session_state.crm_store, "\u0421\u0434\u0435\u043b\u043a\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
         # --- Заголовок "Сделки по клиенту" ---
         render_centered_title(f"\u0421\u0434\u0435\u043b\u043a\u0438 \u043f\u043e \u043a\u043b\u0438\u0435\u043d\u0442\u0443 ({len(cl_deals)})")
