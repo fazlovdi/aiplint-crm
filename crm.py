@@ -1196,6 +1196,7 @@ if st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0
     all_tasks = []
     for c in st.session_state.crm_store["clients"]:
         for t in c.get("tasks", []):
+            if not t.get("id"): t["id"] = str(uuid.uuid4())[:8]
             all_tasks.append((t, c, t.get("deal_id")))
     active_tasks = [(t, c, d_id) for t, c, d_id in all_tasks if not t.get("done")]
     done_tasks = [(t, c, d_id) for t, c, d_id in all_tasks if t.get("done")]
@@ -1267,9 +1268,9 @@ if st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0
     if st.session_state.get("show_new_task_form", False) and not st.session_state.get("_task_form_shown"):
         st.session_state._task_form_shown = True
     render_centered_title("\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u0437\u0430\u0434\u0430\u0447\u0438")
-    for task, cl, d_id in filtered_active:
-        task_key = f"plan_{task['id']}"
-        key_prefix = f"plan_{task['id']}"
+    for task, cl, d_id in filtered_done:
+        task_key = f"done_{task.get('id', '')}"
+        key_prefix = f"done_{task.get('id', '')}"
         render_task_row(task, cl, get_deal_by_id(d_id) if d_id else None, task_key, key_prefix)
     if filtered_done:
         with st.expander(f"\u0410\u0440\u0445\u0438\u0432 \u0437\u0430\u0434\u0430\u0447 ({len(filtered_done)})", expanded=False):
@@ -1549,8 +1550,8 @@ elif st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b 
                                 if deal_tasks:
                                     st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0438 \u0441\u0434\u0435\u043b\u043a\u0438 ({len(deal_tasks)}):**")
                                     for t in sorted(deal_tasks, key=lambda x: (x.get("done", False), x.get("deadline", ""))):
-                                        task_key = f"deal_{t['id']}"
-                                        key_prefix = f"deal_{t['id']}"
+                                        task_key = f"deal_{t.get('id', '')}"
+                                        key_prefix = f"deal_{t.get('id', '')}"
                                         render_task_row(t, c, d, task_key, key_prefix)
                                 add_task_col, _ = st.columns([1, 3])
                                 with add_task_col:
