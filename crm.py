@@ -1022,6 +1022,22 @@ if not st.session_state.get("authenticated") and not st.query_params.get("auth_t
     })();
     </script>
     """, height=0)
+    
+if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
+    st.components.v1.html("""
+    <script>
+    (function() {
+        try {
+            var token = window.parent.localStorage.getItem('crm_auth_token');
+            if (token) {
+                var url = new URL(window.parent.location.href);
+                url.searchParams.set('auth_token', token);
+                window.parent.location.replace(url.toString());
+            }
+        } catch(e) {}
+    })();
+    </script>
+    """, height=0)
 
 _auth_token = st.query_params.get("auth_token")
 if _auth_token and not st.session_state.authenticated:
@@ -1068,6 +1084,7 @@ if not st.session_state.authenticated:
                             break
                     save_data(st.session_state.crm_store)
                     st.query_params["auth_token"] = _token
+                    st.components.v1.html(f"<script>try{{window.parent.localStorage.setItem('crm_auth_token','{_token}');}}catch(e){{}}</script>", height=0)
                     st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
                     st.rerun()
                 else:
@@ -1095,6 +1112,7 @@ with st.sidebar:
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
                 st.query_params["auth_token"] = _new_token
+                st.components.v1.html(f"<script>try{{window.parent.localStorage.setItem('crm_auth_token','{_new_token}');}}catch(e){{}}</script>", height=0)
                 st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
                 st.rerun()
             else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
@@ -1134,6 +1152,7 @@ with st.sidebar:
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
         st.components.v1.html("<script>localStorage.removeItem('crm_auth_token');</script>", height=0)
+        st.components.v1.html("<script>try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>", height=0)        
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
