@@ -1006,6 +1006,23 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
+# Авто-вход из localStorage
+if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
+    st.components.v1.html("""
+    <script>
+    (function() {
+        try {
+            var token = localStorage.getItem('crm_auth_token');
+            if (token) {
+                var url = new URL(window.parent.location.href);
+                url.searchParams.set('auth_token', token);
+                window.parent.location.replace(url.toString());
+            }
+        } catch(e) {}
+    })();
+    </script>
+    """, height=0)
+
 _auth_token = st.query_params.get("auth_token")
 if _auth_token and not st.session_state.authenticated:
     for u in st.session_state.crm_store.get("users", []):
@@ -1018,6 +1035,7 @@ if _auth_token and not st.session_state.authenticated:
     if not st.session_state.authenticated:
         if "auth_token" in st.query_params:
             del st.query_params["auth_token"]
+        st.components.v1.html("<script>localStorage.removeItem('crm_auth_token');</script>", height=0)
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
@@ -1105,8 +1123,7 @@ with st.sidebar:
                         if st.button("X", key=f"del_u_{u['login']}", help="\u0423\u0434\u0430\u043b\u0438\u0442\u044c"):
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
-    st.markdown("---")
-    if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
+        if st.button("Выйти", use_container_width=True):
         _tok = st.query_params.get("auth_token")
         if _tok:
             for u in st.session_state.crm_store.get("users", []):
@@ -1115,11 +1132,13 @@ with st.sidebar:
             save_data(st.session_state.crm_store)
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
+        st.components.v1.html("<script>localStorage.removeItem('crm_auth_token');</script>", height=0)
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
         st.session_state.user_name = None
         st.rerun()
+
 
 nc1, nc2, nc3, nc4 = st.columns(4)
 with nc1:
