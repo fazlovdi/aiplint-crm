@@ -1027,17 +1027,25 @@ if not st.session_state.get("authenticated") and not st.query_params.get("auth_t
     st.components.v1.html("""
     <script>
     (function() {
-        try {
-            var token = window.parent.localStorage.getItem('crm_auth_token');
-            if (token) {
+        var token = null;
+        try { token = window.parent.localStorage.getItem('crm_auth_token'); } catch(e) {}
+        if (!token) { try { token = localStorage.getItem('crm_auth_token'); } catch(e) {} }
+        if (!token) { try { var m = window.parent.document.cookie.match(/crm_auth_token=([^;]+)/); if (m) token = m[1]; } catch(e) {} }
+        if (!token) { try { var m = document.cookie.match(/crm_auth_token=([^;]+)/); if (m) token = m[1]; } catch(e) {} }
+        if (token) {
+            try {
                 var url = new URL(window.parent.location.href);
                 url.searchParams.set('auth_token', token);
                 window.parent.location.replace(url.toString());
+            } catch(e) {
+                var url = new URL(window.location.href);
+                url.searchParams.set('auth_token', token);
+                window.location.replace(url.toString());
             }
-        } catch(e) {}
+        }
     })();
     </script>
-    """, height=0)
+    """, height=1)
 
 _auth_token = st.query_params.get("auth_token")
 if _auth_token and not st.session_state.authenticated:
@@ -1084,6 +1092,18 @@ if not st.session_state.authenticated:
                             break
                     save_data(st.session_state.crm_store)
                     st.query_params["auth_token"] = _token
+                    st.components.v1.html(f"""
+                    <script>
+                    (function() {{
+                        var t = '{_token}';
+                        try {{ window.parent.localStorage.setItem('crm_auth_token', t); }} catch(e) {{}}
+                        try {{ localStorage.setItem('crm_auth_token', t); }} catch(e) {{}}
+                        try {{ window.parent.document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=Lax'; }} catch(e) {{}}
+                        try {{ document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=Lax'; }} catch(e) {{}}
+                    }})();
+                    </script>
+                    """, height=1)
+
                     st.components.v1.html(f"<script>try{{window.parent.localStorage.setItem('crm_auth_token','{_token}');}}catch(e){{}}</script>", height=0)
                     st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
                     st.rerun()
@@ -1112,6 +1132,18 @@ with st.sidebar:
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
                 st.query_params["auth_token"] = _new_token
+                st.components.v1.html(f"""
+                <script>
+                (function() {{
+                    var t = '{_new_token}';
+                    try {{ window.parent.localStorage.setItem('crm_auth_token', t); }} catch(e) {{}}
+                    try {{ localStorage.setItem('crm_auth_token', t); }} catch(e) {{}}
+                    try {{ window.parent.document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=Lax'; }} catch(e) {{}}
+                    try {{ document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=Lax'; }} catch(e) {{}}
+                }})();
+                </script>
+                """, height=1)
+
                 st.components.v1.html(f"<script>try{{window.parent.localStorage.setItem('crm_auth_token','{_new_token}');}}catch(e){{}}</script>", height=0)
                 st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
                 st.rerun()
@@ -1152,7 +1184,18 @@ with st.sidebar:
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
         st.components.v1.html("<script>localStorage.removeItem('crm_auth_token');</script>", height=0)
-        st.components.v1.html("<script>try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>", height=0)        
+        st.components.v1.html("<script>try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>", height=0)     
+        st.components.v1.html("""
+        <script>
+        (function() {
+            try { window.parent.localStorage.removeItem('crm_auth_token'); } catch(e) {}
+            try { localStorage.removeItem('crm_auth_token'); } catch(e) {}
+            try { window.parent.document.cookie = 'crm_auth_token=; path=/; max-age=0; SameSite=Lax'; } catch(e) {}
+            try { document.cookie = 'crm_auth_token=; path=/; max-age=0; SameSite=Lax'; } catch(e) {}
+        })();
+        </script>
+        """, height=1)
+
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
