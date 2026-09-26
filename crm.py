@@ -237,7 +237,7 @@ def yandex_headers():
 def check_cloud_status():
     if not YANDEX_TOKEN: return False
     try:
-        return requests.get(YANDEX_API_URL, headers=yandex_headers(), timeout=5).status_code == 200
+        return requests.get(YANDEX_API_URL, headers=yandex_headers(), timeout=10).status_code == 200
     except: return False
 
 def init_yandex_folders():
