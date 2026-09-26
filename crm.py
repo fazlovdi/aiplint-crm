@@ -1123,6 +1123,7 @@ with st.sidebar:
                         if st.button("X", key=f"del_u_{u['login']}", help="\u0423\u0434\u0430\u043b\u0438\u0442\u044c"):
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
+                            
     if st.button("Выйти", use_container_width=True):
         _tok = st.query_params.get("auth_token")
         if _tok:
@@ -1138,7 +1139,6 @@ with st.sidebar:
         st.session_state.user_login = None
         st.session_state.user_name = None
         st.rerun()
-
 
 nc1, nc2, nc3, nc4 = st.columns(4)
 with nc1:
