@@ -1015,7 +1015,17 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# Запуск экрана авторизации из модуля auth.py
+# === Авто-вход через localStorage ===
+# Шаг 1: если есть отложенный токен для сохранения — сохраняем в localStorage через JS
+if st.session_state.get("pending_save_token"):
+    _pst = st.session_state.pop("pending_save_token")
+    st.components.v1.html(f"""
+    <script>
+    try {{ localStorage.setItem('crm_auth_token', '{_pst}'); }} catch(e) {{}}
+    </script>
+    """, height=0)
+
+# Шаг 2: если нужно очистить localStorage
 if not st.session_state.get("authenticated"):
     auth.render_auth_screen(save_data)
 
@@ -1039,10 +1049,12 @@ with st.sidebar:
                         u["password"] = hash_password(np)
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
-                # Обновляем токен в localStorage браузера
                 st.components.v1.html(f"""
                 <script>
-                try {{ localStorage.setItem('crm_token_v5', '{_new_token}'); }} catch(e) {{}}
+                try {{
+                    localStorage.setItem('crm_token_v5', '{_new_token}');
+                    localStorage.setItem('crm_user_v5', '{cul}');
+                }} catch(e) {{}}
                 </script>
                 """, height=0)
                 st.toast("Пароль изменён", icon="✅")
@@ -1093,21 +1105,16 @@ with st.sidebar:
             del current_user_obj["auth_token"]
         save_data(st.session_state.crm_store)
         
-        # Очищаем localStorage браузера
         st.components.v1.html("""
         <script>
         try {
             localStorage.removeItem('crm_token_v5');
             localStorage.removeItem('crm_user_v5');
         } catch(e) {}
+        window.parent.location.href = window.parent.location.pathname;
         </script>
         """, height=0)
-        
-        st.session_state.authenticated = False
-        st.session_state.user_role = None
-        st.session_state.user_login = None
-        st.session_state.user_name = None
-        st.rerun()
+        st.stop()
 
 nc1, nc2, nc3, nc4 = st.columns(4)
 with nc1:
