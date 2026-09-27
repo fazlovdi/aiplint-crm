@@ -1009,9 +1009,18 @@ if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = N
 
 cookie_manager = stx.CookieManager()
 cookies = cookie_manager.get_all()
-if cookies is None:
-    st.stop()
 
+# Ждём загрузки cookie-компонента (при первом рендере get_all() возвращает {})
+if "cookies_ready" not in st.session_state:
+    st.session_state.cookies_ready = False
+
+if not st.session_state.cookies_ready:
+    st.session_state.cookies_ready = True
+    # Компонент уже отрендерен выше, ждём пока JS прочтёт куки и вернёт их
+    with st.spinner("Загрузка..."):
+        st.stop()
+
+# При повторном рендере cookies уже содержат реальные значения из браузера
 if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
     stored_token = cookies.get("auth_token")
     if stored_token:
@@ -1132,6 +1141,7 @@ with st.sidebar:
                 del st.query_params["auth_token"]
         cookie_manager.delete("auth_token")
         st.session_state.authenticated = False
+        st.session_state.pop("cookies_ready", None)
         st.session_state.user_role = None
         st.session_state.user_login = None
         st.session_state.user_name = None
