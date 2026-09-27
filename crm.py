@@ -1015,30 +1015,7 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# === Авто-вход через localStorage ===
-# Шаг 1: если есть отложенный токен для сохранения — сохраняем в localStorage через JS
-if st.session_state.get("pending_save_token"):
-    _pst = st.session_state.pop("pending_save_token")
-    st.components.v1.html(f"""
-    <script>
-    try {{ localStorage.setItem('crm_auth_token', '{_pst}'); }} catch(e) {{}}
-    </script>
-    """, height=0)
-
-# Шаг 2: если нужно очистить localStorage
-_just_cleared = False
-if st.session_state.get("pending_clear_token"):
-    st.session_state.pop("pending_clear_token", None)
-    st.components.v1.html("""
-    <script>
-    try { localStorage.removeItem('crm_auth_token'); } catch(e) {}
-    </script>
-    """, height=0)
-    _just_cleared = True
-
-# Шаг 3: если не авторизован и нет токена в URL — проверяем localStorage через JS
-# (пропускаем если только что очистили — чтобы не было цикла)
-# Запуск нового умного экрана PIN-авторизации из модуля auth.py
+# Запуск экрана авторизации из модуля auth.py
 if not st.session_state.get("authenticated"):
     auth.render_auth_screen(save_data)
 
@@ -1062,9 +1039,11 @@ with st.sidebar:
                         u["password"] = hash_password(np)
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
-                # Используем правильный менеджер кук из модуля auth
-                c_mgr = auth.get_cookie_manager()
-                c_mgr.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31).date())
+                st.components.v1.html(f"""
+                <script>
+                try {{ localStorage.setItem('crm_token_v5', '{_new_token}'); }} catch(e) {{}}
+                </script>
+                """, height=0)
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else:
@@ -1113,15 +1092,16 @@ with st.sidebar:
             del current_user_obj["auth_token"]
         save_data(st.session_state.crm_store)
         
-        c_mgr = auth.get_cookie_manager()
-        c_mgr.delete("crm_auth_token")
-        c_mgr.delete("crm_saved_login")
-        
-        st.session_state.authenticated = False
-        st.session_state.user_role = None
-        st.session_state.user_login = None
-        st.session_state.user_name = None
-        st.rerun()
+        st.components.v1.html("""
+        <script>
+        try {
+            localStorage.removeItem('crm_token_v5');
+            localStorage.removeItem('crm_user_v5');
+        } catch(e) {}
+        window.parent.location.href = window.parent.location.pathname;
+        </script>
+        """, height=0)
+        st.stop()
 
 nc1, nc2, nc3, nc4 = st.columns(4)
 with nc1:
