@@ -1,14 +1,6 @@
 import streamlit as st
-import extra_streamlit_components as stx
 import hashlib
 import secrets
-import time
-from datetime import datetime, timedelta
-
-def get_cookie_manager():
-    if "cookie_manager" not in st.session_state:
-        st.session_state.cookie_manager = stx.CookieManager(key="crm_cookie_v10")
-    return st.session_state.cookie_manager
 
 def hash_password(pwd, salt=None):
     if not pwd: return ""
@@ -28,122 +20,103 @@ def verify_password(pwd, stored):
     return pwd.strip() == stored
 
 def check_auto_login():
-    """Проверяет состояние сессии и защищает от вылетов при обновлении страницы (F5)."""
-    # Если в текущей сессии мы уже авторизованы, сразу пропускаем
+    """Мгновенный авто-вход без CookieManager."""
     if st.session_state.get("authenticated"):
         return True
-        
-    c_mgr = get_cookie_manager()
-    stored_token = c_mgr.get("crm_auth_token")
     
-    # Даем браузеру микропаузу для отдачи кук, если страница только что обновилась
-    if not stored_token:
-        time.sleep(0.08)
-        stored_token = c_mgr.get("crm_auth_token")
-        
-    if stored_token:
+    # Считываем токен, переданный из локального хранилища браузера
+    if "local_auth_token" in st.query_params:
+        token = st.query_params["local_auth_token"]
         for u in st.session_state.crm_store.get("users", []):
-            if u.get("auth_token") == stored_token:
+            if u.get("auth_token") == token:
                 st.session_state.authenticated = True
                 st.session_state.user_role = u["role"]
                 st.session_state.user_login = u["login"]
                 st.session_state.user_name = u.get("name", u["login"])
                 return True
     return False
-def render_auth_screen(save_data_func):
-    c_mgr = get_cookie_manager()
-    saved_login = c_mgr.get("crm_saved_login")
-    if not saved_login:
-        time.sleep(0.08)
-        saved_login = c_mgr.get("crm_saved_login") or ""
 
+def render_auth_screen(save_data_func):
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     
-    # Плиточная структура интерфейса
+    # JS-мост для чтения вечной сессии из памяти телефона
+    if not st.session_state.get("authenticated") and "local_auth_token" not in st.query_params and "local_user" not in st.query_params:
+        st.html("""
+        <script>
+            var token = localStorage.getItem('crm_token_v5');
+            var user = localStorage.getItem('crm_user_v5');
+            if (token) {
+                window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + token;
+            } else if (user) {
+                window.parent.location.href = window.parent.location.pathname + "?local_user=" + user;
+            }
+        </script>
+        """)
+        st.stop()
+
+    saved_login = st.query_params.get("local_user", "")
+
     col1, col2, col3 = st.columns(3)
     with col2:
         with st.container(border=True):
             if saved_login:
-                # Отработка отложенной записи токена («Запомнить меня») во втором цикле
-                if st.session_state.get("auth_pending_token") and st.session_state.get("auth_pending_user"):
-                    user_obj = st.session_state["auth_pending_user"]
-                    _token = secrets.token_hex(32)
-                    user_obj["auth_token"] = _token
-                    save_data_func(st.session_state.crm_store)
-                    
-                    exp_token = (datetime.now() + timedelta(days=90)).date()
-                    c_mgr.set("crm_auth_token", _token, expires_at=exp_token)
-                    
-                    st.session_state.authenticated = True
-                    st.session_state.user_role = user_obj["role"]
-                    st.session_state.user_login = user_obj["login"]
-                    st.session_state.user_name = user_obj.get("name", user_obj["login"])
-                    
-                    st.session_state.pop("auth_pending_token", None)
-                    st.session_state.pop("auth_pending_user", None)
-                    st.toast("Вы успешно вошли!", icon="🔓")
-                    st.rerun()
-
                 st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Вход для аккаунта: <b>{saved_login}</b></p>", unsafe_allow_html=True)
                 
-                # Использование st.form для мгновенного входа по кнопке Ввод (Enter)
-                with st.form("pin_login_form", clear_on_submit=False):
-                    # Поле ввода PIN с нативным вызовом цифровой клавиатуры через inputmode
-                    ip = st.text_input(
-                        "Введите 4-значный PIN-код:", 
-                        type="password", 
-                        max_chars=4, 
-                        placeholder="••••",
-                        help=None
-                    )
+                # HTML+JS форма для ввода PIN-кода. Решает все ваши проблемы с клавиатурой, шрифтом и кнопкой Enter
+                pin_html = f"""
+                <div style="text-align:center;">
+                    <input type="password" id="numeric_pin" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="••••" 
+                           style="width:100%; max-width:200px; text-align:center; font-size:1rem; padding:10px; border:1.5px solid #DCE0E5; border-radius:10px; margin-bottom:15px; font-family:inherit;">
+                    <br>
+                    <button id="sub_btn" style="width:48%; padding:10px; background:#bc1661; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">Войти</button>
+                    <button id="chg_btn" style="width:48%; padding:10px; background:transparent; color:#bc1661; border:1px solid #C9CFD7; border-radius:10px; cursor:pointer;">Сменить</button>
+                </div>
+                <script>
+                    var input = document.getElementById('numeric_pin');
+                    input.focus();
                     
-                    # Инъекция атрибутов для стандартного шрифта и выравнивания
-                    st.markdown("""
-                    <style>
-                        .stTextInput input[type="password"] { text-align: center !important; font-size: 1rem !important; letter-spacing: normal !important; }
-                    </style>
-                    <script>
-                        setTimeout(function() {
-                            var inputs = window.parent.document.querySelectorAll('input[type="password"]');
-                            inputs.forEach(function(i) {
-                                i.setAttribute('inputmode', 'numeric');
-                                i.setAttribute('pattern', '[0-9]*');
-                            });
-                        }, 100);
-                    </script>
-                    """, unsafe_allow_html=True)
+                    // Вход по нажатию Enter (Ввод)
+                    input.onkeydown = function(e) {{
+                        if (e.key === 'Enter' || e.keyCode === 13) {{
+                            e.preventDefault();
+                            document.getElementById('sub_btn').click();
+                        }}
+                    }};
                     
-                    btn_col, change_col = st.columns(2)
-                    with btn_col:
-                        submit_pin = st.form_submit_button("Войти", use_container_width=True, type="primary")
-                    with change_col:
-                        change_acc = st.form_submit_button("Сменить аккаунт", use_container_width=True)
-                        
-                    if submit_pin:
-                        if match_and_authorize(saved_login, ip, c_mgr, save_data_func, True):
-                            st.rerun()
-                            
-                    if change_acc:
-                        c_mgr.delete("crm_saved_login")
-                        c_mgr.delete("crm_auth_token")
+                    document.getElementById('sub_btn').onclick = function() {{
+                        window.parent.location.href = window.parent.location.pathname + "?local_user={saved_login}&submit_pin=" + input.value;
+                    }};
+                    
+                    document.getElementById('chg_btn').onclick = function() {{
+                        localStorage.removeItem('crm_user_v5');
+                        localStorage.removeItem('crm_token_v5');
+                        window.parent.location.href = window.parent.location.pathname;
+                    }};
+                </script>
+                """
+                st.components.v1.html(pin_html, height=110)
+                
+                # Обработка отправки PIN-кода из HTML-формы
+                if "submit_pin" in st.query_params:
+                    entered_pin = st.query_params["submit_pin"]
+                    if match_and_authorize(saved_login, entered_pin, save_data_func):
                         st.rerun()
             else:
-                # Первичный вход (если на устройстве еще никто не авторизован)
+                # Первичный вход (если заходят первый раз)
                 st.markdown("<p style='text-align:center; color:#7F8C9A;'>Первичный вход в CRM</p>", unsafe_allow_html=True)
-                with st.form("initial_login_form"):
+                with st.form("initial_form"):
                     iu = st.text_input("Логин:", placeholder="Введите логин")
                     ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
-                    remember_me = st.checkbox("Запомнить меня на этом устройстве", value=True)
+                    submit = st.form_submit_button("Войти в систему", use_container_width=True, type="primary")
                     
-                    submit_init = st.form_submit_button("Войти в систему", use_container_width=True, type="primary")
-                    if submit_init:
-                        if match_and_authorize(iu, ip, c_mgr, save_data_func, remember_me):
+                    if submit:
+                        if match_and_authorize(iu, ip, save_data_func):
                             st.rerun()
     st.stop()
 
-def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
+def match_and_authorize(login, secret, save_data_func):
     if not secret:
-        st.error("Поле ввода не может быть пустым.")
+        st.error("Поле не может быть пустым.")
         return False
         
     user_found = None
@@ -154,18 +127,23 @@ def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
                 break
                 
     if user_found:
-        exp_login = (datetime.now() + timedelta(days=365)).date()
-        c_mgr.set("crm_saved_login", user_found["login"], expires_at=exp_login)
+        st.session_state.authenticated = True
+        st.session_state.user_role = user_found["role"]
+        st.session_state.user_login = user_found["login"]
+        st.session_state.user_name = user_found.get("name", user_found["login"])
         
-        if remember:
-            st.session_state["auth_pending_token"] = True
-            st.session_state["auth_pending_user"] = user_found
-        else:
-            st.session_state.authenticated = True
-            st.session_state.user_role = user_found["role"]
-            st.session_state.user_login = user_found["login"]
-            st.session_state.user_name = user_found.get("name", user_found["login"])
-            st.toast("Вы успешно вошли!", icon="🔓")
+        _token = secrets.token_hex(32)
+        user_found["auth_token"] = _token
+        save_data_func(st.session_state.crm_store)
+        
+        # Записываем данные в LocalStorage телефона через JS-инъекцию
+        st.html(f"""
+        <script>
+            localStorage.setItem('crm_user_v5', '{user_found["login"]}');
+            localStorage.setItem('crm_token_v5', '{_token}');
+            window.parent.location.href = window.parent.location.pathname;
+        </script>
+        """)
         return True
     else:
         st.error("Неверный логин, пароль или PIN-код.")
@@ -173,8 +151,6 @@ def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
 
 def render_profile_settings(current_user_obj, save_data_func):
     st.markdown("### 🔓 Настройка PIN-кода")
-    st.markdown("<small style='color:#7F8C9A;'>Установите 4-значный цифровой PIN для быстрого доступа со смартфона.</small>", unsafe_allow_html=True)
-    
     db_pin = current_user_obj.get("pin", "")
     set_pin = st.text_input("Придумайте 4 цифры PIN:", value=db_pin, max_chars=4, type="password", key="auth_profile_pin")
     
@@ -185,4 +161,4 @@ def render_profile_settings(current_user_obj, save_data_func):
             st.success("PIN-код успешно изменен!")
             st.rerun()
         else:
-            st.error("Ошибка: PIN-код должен состоять строго из 4 ЦИФР!")
+            st.error("Ошибка: PIN должен состоять строго из 4 ЦИФР!")
