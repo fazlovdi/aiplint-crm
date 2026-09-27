@@ -1148,9 +1148,9 @@ with st.sidebar:
                 cookie_manager.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31))
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
-            else: st.error("Пароли не совпадают")
+            else:
+                st.error("Пароли не совпадают")
 
-    # === НАЧАЛО НОВОГО БЛОКА: НАСТРОЙКА PIN И FACE ID ===
     current_user_obj = None
     for u in st.session_state.crm_store.get("users", []):
         if u["login"] == st.session_state.user_login:
@@ -1160,7 +1160,6 @@ with st.sidebar:
     if current_user_obj:
         with st.expander("Настройка PIN и Face ID"):
             auth.render_profile_settings(current_user_obj, save_data)
-    # === КОНЕЦ НОВОГО БЛОКА ===
 
     if st.session_state.user_role == "admin":
         with st.expander("Экспорт базы"):
@@ -1189,13 +1188,11 @@ with st.sidebar:
                             commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
     
     st.markdown("---")
-    # === ОБНОВЛЕННАЯ КНОПКА ВЫХОДА ===
     if st.button("Выйти", use_container_width=True):
         if current_user_obj and "auth_token" in current_user_obj:
             del current_user_obj["auth_token"]
         save_data(st.session_state.crm_store)
         
-        # Очищаем долгосрочные куки входа
         c_mgr = auth.get_cookie_manager()
         c_mgr.delete("crm_auth_token")
         
@@ -1205,79 +1202,25 @@ with st.sidebar:
         st.session_state.user_name = None
         st.rerun()
 
-        if np and np == cp:
-                _new_token = secrets.token_hex(16)
-                for u in st.session_state.crm_store["users"]:
-                    if u["login"] == cul:
-                        u["password"] = hash_password(np)
-                        u["auth_token"] = _new_token
-                save_data(st.session_state.crm_store)
-                st.query_params["auth_token"] = _new_token
-                st.session_state["pending_save_token"] = _new_token
-                st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
-                st.rerun()
-            else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
-    if st.session_state.user_role == "admin":
-        with st.expander("\u042d\u043a\u0441\u043f\u043e\u0440\u0442 \u0431\u0430\u0437\u044b"):
-            st.download_button("\u0421\u043a\u0430\u0447\u0430\u0442\u044c CSV", data=export_clients_csv(), file_name="clients_export.csv", mime="text/csv", use_container_width=True)
-        with st.expander("\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430\u043c\u0438"):
-            st.markdown("### \u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430")
-            nul = st.text_input("\u041b\u043e\u0433\u0438\u043d:", key="adm_nu_l")
-            nup = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", key="adm_nu_p")
-            nun = st.text_input("\u0418\u043c\u044f / \u0414\u043e\u043b\u0436\u043d\u043e\u0441\u0442\u044c:", key="adm_nu_n")
-            nur = st.selectbox("\u0420\u043e\u043b\u044c:", ["manager", "admin"], key="adm_nu_r")
-            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", use_container_width=True, type="primary"):
-                if nul and nup and nun:
-                    if not any(u["login"] == nul.strip() for u in st.session_state.crm_store.get("users", [])):
-                        st.session_state.crm_store.setdefault("users", []).append({"login": nul.strip(), "password": hash_password(nup), "role": nur, "name": nun.strip()})
-                        commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0441\u043e\u0437\u0434\u0430\u043d")
-                    else: st.error("\u041b\u043e\u0433\u0438\u043d \u0443\u0436\u0435 \u0437\u0430\u043d\u044f\u0442")
-                else: st.error("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0432\u0441\u0435 \u043f\u043e\u043b\u044f")
-            st.markdown("---")
-            for u in st.session_state.crm_store.get("users", []):
-                ucl, ucr = st.columns([3, 1])
-                with ucl: st.markdown(f"**{u.get('name', u['login'])}** ({u['role']})")
-                with ucr:
-                    if u["login"] != st.session_state.user_login:
-                        if st.button("X", key=f"del_u_{u['login']}", help="\u0423\u0434\u0430\u043b\u0438\u0442\u044c"):
-                            st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
-                            commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
-    st.markdown("---")
-    if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
-        _tok = st.query_params.get("auth_token")
-        if _tok:
-            for u in st.session_state.crm_store.get("users", []):
-                if u.get("auth_token") == _tok:
-                    u.pop("auth_token", None)
-            save_data(st.session_state.crm_store)
-            if "auth_token" in st.query_params:
-                del st.query_params["auth_token"]
-        st.session_state["pending_clear_token"] = True
-        st.session_state.authenticated = False
-        st.session_state.user_role = None
-        st.session_state.user_login = None
-        st.session_state.user_name = None
-        st.rerun()
-
 nc1, nc2, nc3, nc4 = st.columns(4)
 with nc1:
-    if st.button("\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438" else "secondary"):
-        st.session_state.active_tab = "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438"
+    if st.button("Клиенты и сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты и сделки" else "secondary"):
+        st.session_state.active_tab = "Клиенты и сделки"
         st.session_state.expanded_task_key = None
         st.rerun()
 with nc2:
-    if st.button("\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a" else "secondary"):
-        st.session_state.active_tab = "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a"
+    if st.button("Планировщик", use_container_width=True, type="primary" if st.session_state.active_tab == "Планировщик" else "secondary"):
+        st.session_state.active_tab = "Планировщик"
         st.session_state.expanded_task_key = None
         st.rerun()
 with nc3:
-    if st.button("\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438" else "secondary"):
-        st.session_state.active_tab = "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438"
+    if st.button("Внутренние задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
+        st.session_state.active_tab = "Внутренние задачи"
         st.session_state.expanded_task_key = None
         st.rerun()
 with nc4:
-    if st.button("\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438" else "secondary"):
-        st.session_state.active_tab = "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438"
+    if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
+        st.session_state.active_tab = "Поставщики"
         st.session_state.expanded_task_key = None
         st.rerun()
 st.markdown("---")
