@@ -1,127 +1,9 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
+import extra_streamlit_components as stx
 from datetime import datetime
 from collections import defaultdict
-
-import hashlib
-import secrets
-
-def hash_password(pwd, salt=None):
-    if not pwd: return ""
-    if salt is None: salt = secrets.token_hex(16)
-    h = hashlib.sha256((salt + pwd.strip()).encode()).hexdigest()
-    return f"{salt}:{h}"
-
-def verify_password(pwd, stored):
-    if not stored: return False
-    if ":" in stored:
-        parts = stored.split(":")
-        if len(parts) == 2:
-            salt, h = parts
-            return hashlib.sha256((salt + pwd.strip()).encode()).hexdigest() == h
-    if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
-        return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
-    return pwd.strip() == stored
-
-def check_auto_login():
-    if st.session_state.get("authenticated"): return True
-    if "local_auth_token" in st.query_params:
-        token = st.query_params["local_auth_token"]
-        for u in st.session_state.crm_store.get("users", []):
-            if u.get("auth_token") == token:
-                st.session_state.authenticated = True
-                st.session_state.user_role = u["role"]
-                st.session_state.user_login = u["login"]
-                st.session_state.user_name = u.get("name", u["login"])
-                return True
-    return False
-
-def render_auth_screen(save_data_func):
-    st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
-    if not st.session_state.get("authenticated") and "local_auth_token" not in st.query_params and "local_user" not in st.query_params and "_js_checked" not in st.query_params:
-        st.components.v1.html("""
-        <script>
-            var token = localStorage.getItem('crm_token_v5');
-            var user = localStorage.getItem('crm_user_v5');
-            if (token) { window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + token; }
-            else if (user) { window.parent.location.href = window.parent.location.pathname + "?local_user=" + user; }
-            else { window.parent.location.href = window.parent.location.pathname + "?_js_checked=1"; }
-        </script>
-        """, height=0)
-        st.stop()
-    saved_login = st.query_params.get("local_user", "")
-    col1, col2, col3 = st.columns(3)
-    with col2:
-        with st.container(border=True):
-            if saved_login:
-                st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Вход для аккаунта: <b>{saved_login}</b></p>", unsafe_allow_html=True)
-                pin_html = f"""
-                <div style="text-align:center;">
-                    <input type="password" id="numeric_pin" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="••••" 
-                           style="width:100%; max-width:200px; text-align:center; font-size:1rem; padding:10px; border:1.5px solid #DCE0E5; border-radius:10px; margin-bottom:15px;">
-                    <br>
-                    <button id="sub_btn" style="width:48%; padding:10px; background:#bc1661; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">Войти</button>
-                    <button id="chg_btn" style="width:48%; padding:10px; background:transparent; color:#bc1661; border:1px solid #C9CFD7; border-radius:10px; cursor:pointer;">Сменить</button>
-                </div>
-                <script>
-                    var input = document.getElementById('numeric_pin'); input.focus();
-                    input.onkeydown = function(e) {{ if (e.key === 'Enter' || e.keyCode === 13) {{ e.preventDefault(); document.getElementById('sub_btn').click(); }} }};
-                    document.getElementById('sub_btn').onclick = function() {{ window.parent.location.href = window.parent.location.pathname + "?local_user={saved_login}&submit_pin=" + input.value; }};
-                    document.getElementById('chg_btn').onclick = function() {{ localStorage.removeItem('crm_user_v5'); localStorage.removeItem('crm_token_v5'); window.parent.location.href = window.parent.location.pathname; }};
-                </script>
-                """
-                st.components.v1.html(pin_html, height=110)
-                if "submit_pin" in st.query_params:
-                    entered_pin = st.query_params["submit_pin"]
-                    if match_and_authorize(saved_login, entered_pin, save_data_func): st.rerun()
-            else:
-                st.markdown("<p style='text-align:center; color:#7F8C9A;'>Вход в CRM</p>", unsafe_allow_html=True)
-                with st.form("initial_form"):
-                    iu = st.text_input("Логин:", placeholder="Введите логин")
-                    ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
-                    submit = st.form_submit_button("Войти в систему", use_container_width=True, type="primary")
-                    if submit:
-                        if match_and_authorize(iu, ip, save_data_func): st.rerun()
-    st.stop()
-
-def match_and_authorize(login, secret, save_data_func):
-    if not secret: st.error("Поле не может быть пустым."); return False
-    user_found = None
-    for u in st.session_state.crm_store["users"]:
-        if u["login"] == login.strip():
-            if verify_password(secret, u["password"]) or (u.get("pin") and secret.strip() == u["pin"]):
-                user_found = u; break
-    if user_found:
-        st.session_state.authenticated = True
-        st.session_state.user_role = user_found["role"]
-        st.session_state.user_login = user_found["login"]
-        st.session_state.user_name = user_found.get("name", user_found["login"])
-        _token = secrets.token_hex(32)
-        user_found["auth_token"] = _token
-        save_data_func(st.session_state.crm_store)
-        st.components.v1.html(f"""
-        <script>
-            localStorage.setItem('crm_user_v5', '{user_found["login"]}');
-            localStorage.setItem('crm_token_v5', '{_token}');
-            window.parent.location.href = window.parent.location.pathname;
-        </script>
-        """, height=0)
-        st.stop()
-        return True
-    else: st.error("Неверный логин, пароль или PIN-код."); return False
-
-def render_profile_settings(current_user_obj, save_data_func):
-    st.markdown("### 🔓 Настройка PIN-кода")
-    db_pin = current_user_obj.get("pin", "")
-    set_pin = st.text_input("Придумайте 4 цифры PIN:", value=db_pin, max_chars=4, type="password", key="auth_profile_pin")
-    if st.button("Сохранить PIN-код", use_container_width=True, type="primary"):
-        if set_pin.isdigit() and len(set_pin) == 4:
-            current_user_obj["pin"] = set_pin
-            save_data_func(st.session_state.crm_store)
-            st.success("PIN-код успешно изменен!")
-            st.rerun()
-        else: st.error("Ошибка: PIN должен состоять строго из 4 ЦИФР!")
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 
@@ -1100,16 +982,8 @@ def close_deal_dialog(deal_id):
             st.error("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
 
 if "crm_store" not in st.session_state:
-    with st.spinner("Загрузка данных..."):
+    with st.spinner("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0434\u0430\u043d\u043d\u044b\u0445..."):
         st.session_state.crm_store = load_data()
-
-check_auto_login()
-
-if "f_ph" not in st.session_state: st.session_state.f_ph = []
-
-if "f_em" not in st.session_state: st.session_state.f_em = []
-# ... и так далее до строки с CookieManager()
-
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
 if "f_ad" not in st.session_state: st.session_state.f_ad = []
@@ -1133,24 +1007,80 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# === Авто-вход через localStorage ===
-# Запуск экрана авторизации
-if not st.session_state.get("authenticated"):
-    render_auth_screen(save_data)
+cookie_manager = stx.CookieManager()
+cookies = cookie_manager.get_all()
+
+if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
+    stored_token = cookies.get("auth_token")
+    if stored_token:
+        st.query_params["auth_token"] = stored_token
+        st.rerun()
+
+_auth_token = st.query_params.get("auth_token")
+if _auth_token and not st.session_state.authenticated:
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("auth_token") == _auth_token:
+            st.session_state.authenticated = True
+            st.session_state.user_role = u["role"]
+            st.session_state.user_login = u["login"]
+            st.session_state.user_name = u.get("name", u["login"])
+            break
+    if not st.session_state.authenticated:
+        if "auth_token" in st.query_params:
+            del st.query_params["auth_token"]
+        cookie_manager.delete("auth_token")
+
+MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
+
+st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
+
+def check_login(username, password):
+    for u in st.session_state.crm_store.get("users", []):
+        if u["login"] == username.strip() and verify_password(password, u["password"]):
+            st.session_state.authenticated = True
+            st.session_state.user_role = u["role"]
+            st.session_state.user_login = u["login"]
+            st.session_state.user_name = u.get("name", u["login"])
+            return True
+    return False
+
+if not st.session_state.authenticated:
+    st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>\u0410\u0432\u0442\u043e\u0440\u0438\u0437\u0443\u0439\u0442\u0435\u0441\u044c \u0434\u043b\u044f \u0432\u0445\u043e\u0434\u0430 \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0443</p>", unsafe_allow_html=True)
+    lc, mc, rc = st.columns([1, 2, 1])
+    with mc:
+        with st.container(border=True):
+            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d")
+            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c")
+            if st.button("\u0412\u043e\u0439\u0442\u0438", use_container_width=True, type="primary"):
+                if check_login(iu, ip):
+                    _token = secrets.token_hex(16)
+                    for u in st.session_state.crm_store["users"]:
+                        if u["login"] == iu.strip():
+                            u["auth_token"] = _token
+                            break
+                    save_data(st.session_state.crm_store)
+                    st.query_params["auth_token"] = _token
+                    cookie_manager.set("auth_token", _token, expires_at=datetime(2027, 12, 31))
+                    st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
+                    st.rerun()
+                else:
+                    st.error("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043b\u043e\u0433\u0438\u043d \u0438\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u044c.")
+    st.stop()
 
 st.markdown(f"""<div class="greeting-block"><h1 style='text-align: center; margin-bottom: 0.1rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0;'>\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u0442\u0435\u0431\u0435 \u0434\u043d\u044f, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
 
 with st.sidebar:
-    if st.session_state.cloud_ok: st.success("Облако активно")
-    else: st.warning("Облако недоступно (работает локально)")
+    if st.session_state.cloud_ok: st.success("\u041e\u0431\u043b\u0430\u043a\u043e \u0430\u043a\u0442\u0438\u0432\u043d\u043e")
+    else: st.warning("\u041e\u0431\u043b\u0430\u043a\u043e \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e (\u0440\u0430\u0431\u043e\u0442\u0430 \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)")
     st.markdown("---")
     st.markdown(f"**{st.session_state.user_name}**")
-    st.markdown(f"Роль: `{st.session_state.user_role}`")
-    with st.expander("Сменить пароль"):
+    st.markdown(f"\u0420\u043e\u043b\u044c: `{st.session_state.user_role}`")
+    with st.expander("\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c"):
         cul = st.session_state.user_login
-        np = st.text_input("Новый пароль:", type="password", key="self_new_pwd")
-        cp = st.text_input("Повторите пароль:", type="password", key="self_conf_pwd")
-        if st.button("Обновить", key="btn_save_self_pwd", use_container_width=True):
+        np = st.text_input("\u041d\u043e\u0432\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c:", type="password", key="self_new_pwd")
+        cp = st.text_input("\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c:", type="password", key="self_conf_pwd")
+        if st.button("\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c", key="btn_save_self_pwd", use_container_width=True):
             if np and np == cp:
                 _new_token = secrets.token_hex(16)
                 for u in st.session_state.crm_store["users"]:
@@ -1158,65 +1088,47 @@ with st.sidebar:
                         u["password"] = hash_password(np)
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
-                st.components.v1.html(f"""
-                <script>
-                try {{ localStorage.setItem('crm_token_v5', '{_new_token}'); localStorage.setItem('crm_user_v5', '{cul}'); }} catch(e) {{}}
-                </script>
-                """, height=0)
-                st.toast("Пароль изменён", icon="✅")
+                st.query_params["auth_token"] = _new_token
+                cookie_manager.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31))
+                st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
                 st.rerun()
-            else:
-                st.error("Пароли не совпадают")
-
-    current_user_obj = None
-    for u in st.session_state.crm_store.get("users", []):
-        if u["login"] == st.session_state.user_login:
-            current_user_obj = u
-            break
-
-    if current_user_obj:
-        with st.expander("Настройка PIN-кода"):
-            render_profile_settings(current_user_obj, save_data)
-
-
+            else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
     if st.session_state.user_role == "admin":
-        with st.expander("Экспорт базы"):
-            st.download_button("Скачать CSV", data=export_clients_csv(), file_name="clients_export.csv", mime="text/csv", use_container_width=True)
-        with st.expander("Управление сотрудниками"):
-            st.markdown("### Создать сотрудника")
-            nul = st.text_input("Логин:", key="adm_nu_l")
-            nup = st.text_input("Пароль:", key="adm_nu_p")
-            nun = st.text_input("Имя / Должность:", key="adm_nu_n")
-            nur = st.selectbox("Роль:", ["manager", "admin"], key="adm_nu_r")
-            if st.button("Создать", use_container_width=True, type="primary"):
+        with st.expander("\u042d\u043a\u0441\u043f\u043e\u0440\u0442 \u0431\u0430\u0437\u044b"):
+            st.download_button("\u0421\u043a\u0430\u0447\u0430\u0442\u044c CSV", data=export_clients_csv(), file_name="clients_export.csv", mime="text/csv", use_container_width=True)
+        with st.expander("\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430\u043c\u0438"):
+            st.markdown("### \u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430")
+            nul = st.text_input("\u041b\u043e\u0433\u0438\u043d:", key="adm_nu_l")
+            nup = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", key="adm_nu_p")
+            nun = st.text_input("\u0418\u043c\u044f / \u0414\u043e\u043b\u0436\u043d\u043e\u0441\u0442\u044c:", key="adm_nu_n")
+            nur = st.selectbox("\u0420\u043e\u043b\u044c:", ["manager", "admin"], key="adm_nu_r")
+            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", use_container_width=True, type="primary"):
                 if nul and nup and nun:
                     if not any(u["login"] == nul.strip() for u in st.session_state.crm_store.get("users", [])):
                         st.session_state.crm_store.setdefault("users", []).append({"login": nul.strip(), "password": hash_password(nup), "role": nur, "name": nun.strip()})
-                        commit_and_rerun(st.session_state.crm_store, "Сотрудник создан")
-                    else: st.error("Логин уже занят")
-                else: st.error("Заполните все поля")
+                        commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0441\u043e\u0437\u0434\u0430\u043d")
+                    else: st.error("\u041b\u043e\u0433\u0438\u043d \u0443\u0436\u0435 \u0437\u0430\u043d\u044f\u0442")
+                else: st.error("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0432\u0441\u0435 \u043f\u043e\u043b\u044f")
             st.markdown("---")
             for u in st.session_state.crm_store.get("users", []):
                 ucl, ucr = st.columns([3, 1])
                 with ucl: st.markdown(f"**{u.get('name', u['login'])}** ({u['role']})")
                 with ucr:
                     if u["login"] != st.session_state.user_login:
-                        if st.button("X", key=f"del_u_{u['login']}", help="Удалить"):
+                        if st.button("X", key=f"del_u_{u['login']}", help="\u0423\u0434\u0430\u043b\u0438\u0442\u044c"):
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
-                            commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
-    
+                            commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
     st.markdown("---")
-    if st.button("Выйти", use_container_width=True):
-        if current_user_obj and "auth_token" in current_user_obj:
-            del current_user_obj["auth_token"]
-        save_data(st.session_state.crm_store)
-        
-        st.components.v1.html("""
-        <script>
-        try { localStorage.removeItem('crm_token_v5'); localStorage.removeItem('crm_user_v5'); } catch(e) {}
-        </script>
-        """, height=0)
-        
+    if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
+        _tok = st.query_params.get("auth_token")
+        if _tok:
+            for u in st.session_state.crm_store.get("users", []):
+                if u.get("auth_token") == _tok:
+                    u.pop("auth_token", None)
+            save_data(st.session_state.crm_store)
+            if "auth_token" in st.query_params:
+                del st.query_params["auth_token"]
+        cookie_manager.delete("auth_token")
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -1225,23 +1137,23 @@ with st.sidebar:
 
 nc1, nc2, nc3, nc4 = st.columns(4)
 with nc1:
-    if st.button("Клиенты и сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты и сделки" else "secondary"):
-        st.session_state.active_tab = "Клиенты и сделки"
+    if st.button("\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438" else "secondary"):
+        st.session_state.active_tab = "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438"
         st.session_state.expanded_task_key = None
         st.rerun()
 with nc2:
-    if st.button("Планировщик", use_container_width=True, type="primary" if st.session_state.active_tab == "Планировщик" else "secondary"):
-        st.session_state.active_tab = "Планировщик"
+    if st.button("\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a" else "secondary"):
+        st.session_state.active_tab = "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a"
         st.session_state.expanded_task_key = None
         st.rerun()
 with nc3:
-    if st.button("Внутренние задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
-        st.session_state.active_tab = "Внутренние задачи"
+    if st.button("\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438" else "secondary"):
+        st.session_state.active_tab = "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438"
         st.session_state.expanded_task_key = None
         st.rerun()
 with nc4:
-    if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
-        st.session_state.active_tab = "Поставщики"
+    if st.button("\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438" else "secondary"):
+        st.session_state.active_tab = "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438"
         st.session_state.expanded_task_key = None
         st.rerun()
 st.markdown("---")
