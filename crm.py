@@ -1106,15 +1106,15 @@ with st.sidebar:
                             commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
     
     st.markdown("---")
-      if st.button("Выйти", use_container_width=True):
+    if st.button("Выйти", use_container_width=True):
         if current_user_obj and "auth_token" in current_user_obj:
             del current_user_obj["auth_token"]
         save_data(st.session_state.crm_store)
-
+        
         c_mgr = auth.get_cookie_manager()
         c_mgr.delete("crm_auth_token")
         c_mgr.delete("crm_saved_login")
-
+        
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
