@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 def get_cookie_manager():
     if "cookie_manager" not in st.session_state:
-        st.session_state.cookie_manager = stx.CookieManager(key="crm_cookie_v5")
+        st.session_state.cookie_manager = stx.CookieManager(key="crm_cookie_v10")
     return st.session_state.cookie_manager
 
 def hash_password(pwd, salt=None):
@@ -18,28 +18,27 @@ def hash_password(pwd, salt=None):
 
 def verify_password(pwd, stored):
     if not stored: return False
-    # Проверка для хэшированных паролей с солью (формат salt:hash)
     if ":" in stored:
         parts = stored.split(":")
         if len(parts) == 2:
             salt, h = parts
             return hashlib.sha256((salt + pwd.strip()).encode()).hexdigest() == h
-    # Проверка для простых хэшей sha256 (длиной 64 символа)
     if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
         return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
-    # Проверка для обычного открытого текста или PIN-кода
     return pwd.strip() == stored
 
 def check_auto_login():
-    """Проверка сессии при обновлении страницы до рендеринга интерфейса."""
+    """Проверяет состояние сессии и защищает от вылетов при обновлении страницы (F5)."""
+    # Если в текущей сессии мы уже авторизованы, сразу пропускаем
     if st.session_state.get("authenticated"):
         return True
         
     c_mgr = get_cookie_manager()
     stored_token = c_mgr.get("crm_auth_token")
     
+    # Даем браузеру микропаузу для отдачи кук, если страница только что обновилась
     if not stored_token:
-        time.sleep(0.05)
+        time.sleep(0.08)
         stored_token = c_mgr.get("crm_auth_token")
         
     if stored_token:
@@ -51,21 +50,21 @@ def check_auto_login():
                 st.session_state.user_name = u.get("name", u["login"])
                 return True
     return False
-
 def render_auth_screen(save_data_func):
     c_mgr = get_cookie_manager()
     saved_login = c_mgr.get("crm_saved_login")
     if not saved_login:
-        time.sleep(0.05)
+        time.sleep(0.08)
         saved_login = c_mgr.get("crm_saved_login") or ""
 
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     
+    # Плиточная структура интерфейса
     col1, col2, col3 = st.columns(3)
     with col2:
         with st.container(border=True):
             if saved_login:
-                # Если в сессии есть флаг, что нужно дописать токен авторизации
+                # Отработка отложенной записи токена («Запомнить меня») во втором цикле
                 if st.session_state.get("auth_pending_token") and st.session_state.get("auth_pending_user"):
                     user_obj = st.session_state["auth_pending_user"]
                     _token = secrets.token_hex(32)
@@ -85,63 +84,70 @@ def render_auth_screen(save_data_func):
                     st.toast("Вы успешно вошли!", icon="🔓")
                     st.rerun()
 
-                st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Устройство авторизовано под учетной записью: <b>{saved_login}</b></p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Вход для аккаунта: <b>{saved_login}</b></p>", unsafe_allow_html=True)
                 
-                ip = st.text_input("Введите 4-значный PIN-код:", type="password", max_chars=4, key="crm_pin_input_field", placeholder="••••")
-                
-                st.html("""
-                <script>
-                function patchPinInput() {
-                    var doc = window.parent.document;
-                    var input = doc.querySelector('input[key="crm_pin_input_field"]') || doc.querySelector('input[type="password"]');
-                    if (input) {
-                        input.setAttribute('inputmode', 'numeric');
-                        input.setAttribute('pattern', '[0-9]*');
-                        input.style.textAlign = 'center';
-                        input.style.fontSize = '1rem';
-                        input.style.letterSpacing = 'normal';
+                # Использование st.form для мгновенного входа по кнопке Ввод (Enter)
+                with st.form("pin_login_form", clear_on_submit=False):
+                    # Поле ввода PIN с нативным вызовом цифровой клавиатуры через inputmode
+                    ip = st.text_input(
+                        "Введите 4-значный PIN-код:", 
+                        type="password", 
+                        max_chars=4, 
+                        placeholder="••••",
+                        help=None
+                    )
+                    
+                    # Инъекция атрибутов для стандартного шрифта и выравнивания
+                    st.markdown("""
+                    <style>
+                        .stTextInput input[type="password"] { text-align: center !important; font-size: 1rem !important; letter-spacing: normal !important; }
+                    </style>
+                    <script>
+                        setTimeout(function() {
+                            var inputs = window.parent.document.querySelectorAll('input[type="password"]');
+                            inputs.forEach(function(i) {
+                                i.setAttribute('inputmode', 'numeric');
+                                i.setAttribute('pattern', '[0-9]*');
+                            });
+                        }, 100);
+                    </script>
+                    """, unsafe_allow_html=True)
+                    
+                    btn_col, change_col = st.columns(2)
+                    with btn_col:
+                        submit_pin = st.form_submit_button("Войти", use_container_width=True, type="primary")
+                    with change_col:
+                        change_acc = st.form_submit_button("Сменить аккаунт", use_container_width=True)
                         
-                        input.onkeydown = function(e) {
-                            if (e.key === 'Enter' || e.keyCode === 13) {
-                                e.preventDefault();
-                                var btn = doc.querySelector('button[kind="primary"]');
-                                if (btn) btn.click();
-                            }
-                        };
-                    }
-                }
-                setTimeout(patchPinInput, 200);
-                </script>
-                """)
-                
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Войти", use_container_width=True, type="primary", key="pin_submit_btn"):
+                    if submit_pin:
                         if match_and_authorize(saved_login, ip, c_mgr, save_data_func, True):
                             st.rerun()
-                with c2:
-                    if st.button("Сменить аккаунт", use_container_width=True, key="change_acc_btn"):
+                            
+                    if change_acc:
                         c_mgr.delete("crm_saved_login")
                         c_mgr.delete("crm_auth_token")
                         st.rerun()
             else:
+                # Первичный вход (если на устройстве еще никто не авторизован)
                 st.markdown("<p style='text-align:center; color:#7F8C9A;'>Первичный вход в CRM</p>", unsafe_allow_html=True)
-                iu = st.text_input("Логин:", placeholder="Введите логин", key="init_login_field")
-                ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="init_pass_field")
-                remember_me = st.checkbox("Запомнить меня на этом устройстве", value=True)
-                
-                if st.button("Войти", use_container_width=True, type="primary", key="init_submit_btn"):
-                    if match_and_authorize(iu, ip, c_mgr, save_data_func, remember_me):
-                        st.rerun()
+                with st.form("initial_login_form"):
+                    iu = st.text_input("Логин:", placeholder="Введите логин")
+                    ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
+                    remember_me = st.checkbox("Запомнить меня на этом устройстве", value=True)
+                    
+                    submit_init = st.form_submit_button("Войти в систему", use_container_width=True, type="primary")
+                    if submit_init:
+                        if match_and_authorize(iu, ip, c_mgr, save_data_func, remember_me):
+                            st.rerun()
     st.stop()
 
 def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
     if not secret:
-        st.error("Поле не может быть пустым.")
+        st.error("Поле ввода не может быть пустым.")
         return False
         
     user_found = None
-    for u in st.session_state.crm_store.get("users", []):
+    for u in st.session_state.crm_store["users"]:
         if u["login"] == login.strip():
             if verify_password(secret, u["password"]) or (u.get("pin") and secret.strip() == u["pin"]):
                 user_found = u
@@ -152,7 +158,6 @@ def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
         c_mgr.set("crm_saved_login", user_found["login"], expires_at=exp_login)
         
         if remember:
-            # Вместо второго вызова .set вешаем хук ожидания
             st.session_state["auth_pending_token"] = True
             st.session_state["auth_pending_user"] = user_found
         else:
