@@ -1015,7 +1015,6 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# === Авто-вход через localStorage ===
 # Запуск экрана авторизации из модуля auth.py
 if not st.session_state.get("authenticated"):
     auth.render_auth_screen(save_data)
@@ -1099,6 +1098,7 @@ with st.sidebar:
         try { localStorage.removeItem('crm_user_v5'); } catch(e) {}
         </script>
         """, height=0)
+        
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
