@@ -97,84 +97,20 @@ def render_auth_screen(save_data_func):
                         else:
                             st.error("Неверный логин, пароль или PIN.")
                 elif auth_mode == "Face ID / Биометрия":
-                    st.markdown("<p style='text-align:center; color:#7F8C9A;'>Используйте Face ID для мгновенного входа</p>", unsafe_allow_html=True)
-                    
-                    components.html("""
-                    <script>
-                    async function triggerBio() {
-                        try {
-                            var savedBioUser = localStorage.getItem('crm_faceid_user');
-                            if (!savedBioUser) {
-                                alert("Face ID еще не настроен. Сначала войдите по паролю и привяжите телефон в боковом меню.");
-                                return;
-                            }
-
-                            // Безопасный вызов локальной биометрии смартфона через Keychain / Keystore браузера
-                            if (window.crypto && window.crypto.subtle) {
-                                // Запрашиваем доступ к локальному зашифрованному хранилищу устройства
-                                // Это принудительно вызывает нативную системную шторку Face ID / Touch ID
-                                await window.crypto.subtle.generateKey(
-                                    { name: "AES-GCM", length: 256 },
-                                    false,
-                                    ["encrypt", "decrypt"]
-                                );
-                                
-                                // Перенаправляем на сервер Streamlit с успешным именем пользователя
-                                window.parent.location.href = window.parent.location.pathname + "?bio_login_success=" + savedBioUser;
-                            } else {
-                                alert("Ваш браузер заблокировал биометрию. Откройте сайт через HTTPS保護.");
-                            }
-                        } catch (err) {
-                            console.error(err);
-                            alert("Вход отменен или Face ID не распознан. Попробуйте войти по PIN-коду.");
-                        }
-                    }
-                    </script>
-                    <button onclick="triggerBio()" style="width:100%; padding:12px; background:#bc1661; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size: 15px; box-shadow: 0 4px 10px rgba(188,22,97,0.2);">
-                        🖼️ Войти по Face ID
-                    </button>
-                    """, height=60)
+                    st.markdown("<p style='text-align:center; color:#7F8C9A;'>Вход по биометрии временно отключен ограничениями браузера. Используйте вход по PIN-коду.</p>", unsafe_allow_html=True)
         st.stop()
 
 def render_profile_settings(current_user_obj, save_data_func):
-    st.markdown("### 1. Быстрый вход по PIN")
+    st.markdown("### 🔓 Быстрый вход по PIN-коду")
+    st.markdown("<small style='color:#7F8C9A;'>Задайте 4 цифры, чтобы заходить в CRM со смартфона в одно нажатие, не вводя длинный пароль.</small>", unsafe_allow_html=True)
+    
     db_pin = current_user_obj.get("pin", "")
-    set_pin = st.text_input("Введите 4 цифры PIN:", value=db_pin, max_chars=4, type="password", key="auth_profile_pin")
-    if st.button("Сохранить PIN-код", use_container_width=True):
+    set_pin = st.text_input("Придумайте 4 цифры PIN:", value=db_pin, max_chars=4, type="password", key="auth_profile_pin")
+    
+    if st.button("Сохранить PIN-код", use_container_width=True, type="primary"):
         if set_pin.isdigit() and len(set_pin) == 4:
             current_user_obj["pin"] = set_pin
             save_data_func(st.session_state.crm_store)
-            st.success("PIN-код успешно сохранен!")
+            st.success("PIN-код успешно сохранен! Теперь его можно вводить в поле пароля при входе.")
         else:
-            st.error("PIN должен состоять из 4 цифр!")
-            
-    st.markdown("---")
-    st.markdown("### 2. Вход по Face ID")
-    
-    components.html(f"""
-    <script>
-    async function saveBioBinding() {{
-        try {{
-            if (window.crypto && window.crypto.subtle) {{
-                // Инициируем создание крипто-ключа с подтверждением через Face ID / Touch ID телефона
-                await window.crypto.subtle.generateKey(
-                    {{ name: "AES-GCM", length: 256 }},
-                    false,
-                    ["encrypt", "decrypt"]
-                );
-                
-                localStorage.setItem('crm_faceid_user', '{st.session_state.user_login}');
-                alert("Этот телефон успешно привязан! Теперь вы можете использовать Face ID для быстрого входа.");
-            }} else {{
-                alert("Криптография недоступна. Переведите сайт на HTTPS протокол.");
-            }}
-        }} catch (err) {{
-            console.error(err);
-            alert("Ошибка привязки Face ID. Пожалуйста, откройте CRM через HTTPS (защищенное соединение).");
-        }}
-    }}
-    </script>
-    <button onclick="saveBioBinding()" style="width:100%; padding:8px; background:#2C3E50; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer;">
-        📱 Привязать Face ID на этом телефоне
-    </button>
-    """, height=45)
+            st.error("PIN должен состоять строго из 4 цифр!")
