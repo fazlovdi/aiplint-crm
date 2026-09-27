@@ -136,11 +136,8 @@ if "user_login" not in st.session_state: st.session_state.user_login = None
 if "user_name" not in st.session_state: st.session_state.user_name = None
 
 # --- Cookie Manager ---
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
+cookie_manager = stx.CookieManager()
 
-cookie_manager = get_cookie_manager()
 cookies = cookie_manager.get_all()
 
 if cookies is None:
