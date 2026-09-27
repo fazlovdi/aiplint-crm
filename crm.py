@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
+# extra_streamlit_components removed - using localStorage JS instead
 from datetime import datetime
 from collections import defaultdict
 
@@ -1006,30 +1007,9 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
+# Auto-login via localStorage (works on iPhone without extra packages)
 if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
-    st.components.v1.html("""
-    <script>
-    (function() {
-        var token = null;
-        try { token = localStorage.getItem('crm_auth_token'); } catch(e) {}
-        if (!token) { try { token = sessionStorage.getItem('crm_auth_token'); } catch(e) {} }
-        if (!token) { try { var m = document.cookie.match(/crm_auth_token=([^;]+)/); if (m) token = m[1]; } catch(e) {} }
-        if (token) {
-            try {
-                var url = new URL(window.parent.location.href);
-                url.searchParams.set('auth_token', token);
-                window.parent.location.replace(url.toString());
-            } catch(e) {
-                try {
-                    var url = new URL(window.location.href);
-                    url.searchParams.set('auth_token', token);
-                    window.location.replace(url.toString());
-                } catch(e2) {}
-            }
-        }
-    })();
-    </script>
-    """, height=1)
+    st.components.v1.html("""<script>(function(){try{var w=window.parent||window;var t=w.localStorage.getItem('crm_auth_token');if(t&&!w.location.search.includes('auth_token=')){w.location.href=w.location.pathname+'?auth_token='+t;}}catch(e){}})();</script>""", height=0)
 
 _auth_token = st.query_params.get("auth_token")
 if _auth_token and not st.session_state.authenticated:
@@ -1043,13 +1023,7 @@ if _auth_token and not st.session_state.authenticated:
     if not st.session_state.authenticated:
         if "auth_token" in st.query_params:
             del st.query_params["auth_token"]
-        st.components.v1.html("""
-        <script>
-        try { localStorage.removeItem('crm_auth_token'); } catch(e) {}
-        try { sessionStorage.removeItem('crm_auth_token'); } catch(e) {}
-        try { document.cookie = 'crm_auth_token=; path=/; max-age=0; SameSite=None; Secure'; } catch(e) {}
-        </script>
-        """, height=1)
+        st.components.v1.html("""<script>(function(){try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}})();</script>""", height=0)
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
@@ -1068,87 +1042,14 @@ def check_login(username, password):
 if not st.session_state.authenticated:
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>\u0410\u0432\u0442\u043e\u0440\u0438\u0437\u0443\u0439\u0442\u0435\u0441\u044c \u0434\u043b\u044f \u0432\u0445\u043e\u0434\u0430 \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0443</p>", unsafe_allow_html=True)
+    # Hidden form for iOS Safari password autofill (Face ID)
+    st.components.v1.html("""<form style="position:fixed;top:-999px;left:-999px;opacity:0;" id="crm_hidden_login" autocomplete="on" onsubmit="return false;"><input type="text" name="username" autocomplete="username" id="crm_hidden_user"/><input type="password" name="password" autocomplete="current-password" id="crm_hidden_pass"/></form><script>(function(){var f=document.getElementById('crm_hidden_login');var fu=document.getElementById('crm_hidden_user');var fp=document.getElementById('crm_hidden_pass');var w=window.parent||window;var si=w.setInterval(function(){try{var su=w.document.querySelector('input[aria-label="\u041b\u043e\u0433\u0438\u043d:"]');var sp=w.document.querySelector('input[aria-label="\u041f\u0430\u0440\u043e\u043b\u044c:"]');if(su&&sp){fu.value=su.value;fp.value=sp.value;}}catch(e){}},500);w.crmStopSync=function(){clearInterval(si);};})(window);</script>""", height=0)
     lc, mc, rc = st.columns([1, 2, 1])
     with mc:
         with st.container(border=True):
-            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d", autocomplete="username")
-            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c", autocomplete="current-password")
-            remember_me = st.checkbox("\u0417\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0432\u0445\u043e\u0434 (\u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0441\u043f\u0440\u0430\u0448\u0438\u0432\u0430\u0442\u044c)", value=True)
-            
-            # Face ID / Touch ID button for iPhone
-            faceid_available = st.components.v1.html("""
-            <script>
-            (function() {
-                var btn = window.parent.document.getElementById('crm_faceid_btn');
-                if (!btn) return;
-                if (window.PublicKeyCredential && window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-                    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(available) {
-                        if (available) {
-                            btn.style.display = 'block';
-                        }
-                    });
-                }
-            })();
-            </script>
-            """, height=0)
-            st.markdown('<button id="crm_faceid_btn" style="display:none;width:100%;padding:12px;background:#007AFF;color:white;border:none;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer;margin-bottom:8px;">\U0001F4D0 Войти через Face ID</button>', unsafe_allow_html=True)
-            if st.button("\U0001F4D0 Face ID / Touch ID", key="faceid_btn", use_container_width=True, type="secondary"):
-                st.session_state["faceid_requested"] = True
-                st.rerun()
-            
-            if st.session_state.get("faceid_requested"):
-                st.components.v1.html("""
-                <script>
-                (function() {
-                    var token = null;
-                    try { token = localStorage.getItem('crm_auth_token'); } catch(e) {}
-                    if (!token) { try { token = sessionStorage.getItem('crm_auth_token'); } catch(e) {} }
-                    if (!token) { try { var m = document.cookie.match(/crm_auth_token=([^;]+)/); if (m) token = m[1]; } catch(e) {} }
-                    
-                    if (!token) {
-                        alert('Нет сохранённой авторизации. Сначала войдите с логином и паролем, поставив галочку "Запомнить вход".');
-                        return;
-                    }
-                    
-                    if (!window.PublicKeyCredential || !window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-                        var url = new URL(window.parent.location.href);
-                        url.searchParams.set('auth_token', token);
-                        window.parent.location.replace(url.toString());
-                        return;
-                    }
-                    
-                    var challenge = new Uint8Array(32);
-                    crypto.getRandomValues(challenge);
-                    
-                    var storedCredId = null;
-                    try { storedCredId = localStorage.getItem('crm_faceid_cred'); } catch(e) {}
-                    
-                    var publicKey = {
-                        challenge: challenge,
-                        timeout: 60000,
-                        userVerification: 'required'
-                    };
-                    
-                    if (storedCredId) {
-                        try {
-                            var credIdBytes = atob(storedCredId);
-                            var credIdArr = new Uint8Array(credIdBytes.length);
-                            for (var i = 0; i < credIdBytes.length; i++) credIdArr[i] = credIdBytes.charCodeAt(i);
-                            publicKey.allowCredentials = [{ type: 'public-key', id: credIdArr }];
-                        } catch(e) {}
-                    }
-                    
-                    navigator.credentials.get({ publicKey: publicKey }).then(function(assertion) {
-                        var url = new URL(window.parent.location.href);
-                        url.searchParams.set('auth_token', token);
-                        window.parent.location.replace(url.toString());
-                    }).catch(function(err) {
-                        alert('Face ID не подтверждён: ' + (err.message || err));
-                    });
-                })();
-                </script>
-                """, height=1)
-                st.session_state["faceid_requested"] = False
+            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d", key="login_user_input")
+            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c", key="login_pass_input")
+            remember_me = st.checkbox("\u0417\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0432\u0445\u043e\u0434 (\u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0441\u043f\u0440\u0430\u0448\u0438\u0432\u0430\u0442\u044c)", value=True, key="remember_me_chk")
             if st.button("\u0412\u043e\u0439\u0442\u0438", use_container_width=True, type="primary"):
                 if check_login(iu, ip):
                     _token = secrets.token_hex(16)
@@ -1158,53 +1059,7 @@ if not st.session_state.authenticated:
                             break
                     save_data(st.session_state.crm_store)
                     st.query_params["auth_token"] = _token
-                    if remember_me:
-                        st.components.v1.html("""
-                        <script>
-                        (function() {
-                            var t = '""" + _token + """';
-                            try { localStorage.setItem('crm_auth_token', t); } catch(e) {}
-                            try { sessionStorage.setItem('crm_auth_token', t); } catch(e) {}
-                            try { document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=None; Secure'; } catch(e) {}
-                        })();
-                        </script>
-                        """,                         # Register Face ID credential for future biometric login
-                        st.components.v1.html("""
-                        <script>
-                        (function() {
-                            if (!window.PublicKeyCredential || !window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return;
-                            window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(available) {
-                                if (!available) return;
-                                var existing = null;
-                                try { existing = localStorage.getItem('crm_faceid_cred'); } catch(e) {}
-                                if (existing) return;
-                                var challenge = new Uint8Array(32);
-                                crypto.getRandomValues(challenge);
-                                var userId = new Uint8Array(16);
-                                crypto.getRandomValues(userId);
-                                navigator.credentials.create({
-                                    publicKey: {
-                                        challenge: challenge,
-                                        rp: { name: 'Aiplint CRM' },
-                                        user: { id: userId, name: 'crm_user', displayName: 'CRM User' },
-                                        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-                                        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
-                                        timeout: 60000
-                                    }
-                                }).then(function(cred) {
-                                    try {
-                                        var rawId = cred.rawId;
-                                        var binary = '';
-                                        var bytes = new Uint8Array(rawId);
-                                        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-                                        localStorage.setItem('crm_faceid_cred', btoa(binary));
-                                    } catch(e) {}
-                                }).catch(function(err) {});
-                            });
-                        })();
-                        </script>
-                        """, height=1)
-                    st.toastheight=1)
+                    st.session_state["_remember_me"] = remember_me
                     st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
                     st.rerun()
                 else:
@@ -1212,6 +1067,11 @@ if not st.session_state.authenticated:
     st.stop()
 
 st.markdown(f"""<div class="greeting-block"><h1 style='text-align: center; margin-bottom: 0.1rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0;'>\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u0442\u0435\u0431\u0435 \u0434\u043d\u044f, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
+
+# Save token to localStorage if remember me was checked
+_current_token = st.query_params.get("auth_token")
+if _current_token and st.session_state.get("_remember_me", True):
+    st.components.v1.html(f"<script>(function(){{try{{window.parent.localStorage.setItem('crm_auth_token','{_current_token}')}}catch(e){{}}}})();</script>", height=0)
 
 with st.sidebar:
     if st.session_state.cloud_ok: st.success("\u041e\u0431\u043b\u0430\u043a\u043e \u0430\u043a\u0442\u0438\u0432\u043d\u043e")
@@ -1232,16 +1092,7 @@ with st.sidebar:
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
                 st.query_params["auth_token"] = _new_token
-                st.components.v1.html("""
-                <script>
-                (function() {
-                    var t = '""" + _new_token + """';
-                    try { localStorage.setItem('crm_auth_token', t); } catch(e) {}
-                    try { sessionStorage.setItem('crm_auth_token', t); } catch(e) {}
-                    try { document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=None; Secure'; } catch(e) {}
-                })();
-                </script>
-                """, height=1)
+                st.session_state["_remember_me"] = True  # Keep session after password change
                 st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
                 st.rerun()
             else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
@@ -1280,13 +1131,7 @@ with st.sidebar:
             save_data(st.session_state.crm_store)
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
-        st.components.v1.html("""
-        <script>
-        try { localStorage.removeItem('crm_auth_token'); } catch(e) {}
-        try { sessionStorage.removeItem('crm_auth_token'); } catch(e) {}
-        try { document.cookie = 'crm_auth_token=; path=/; max-age=0; SameSite=None; Secure'; } catch(e) {}
-        </script>
-        """, height=1)
+        st.components.v1.html("""<script>(function(){try{window.parent.localStorage.removeItem('crm_auth_token');window.parent.crmStopSync&&window.parent.crmStopSync();}catch(e){}})();</script>""", height=0)
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
