@@ -1,14 +1,14 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import extra_streamlit_components as stx
 import hashlib
 import secrets
 import time
 from datetime import datetime, timedelta
 
-def get_cookie_manager(key_suffix="default"):
-    # Передаем динамический ключ, чтобы избежать ошибки DuplicateElementKey
-    return stx.CookieManager(key=f"crm_cookie_mgr_{key_suffix}")
+def get_cookie_manager():
+    if "cookie_manager" not in st.session_state:
+        st.session_state.cookie_manager = stx.CookieManager(key="crm_cookie_v5")
+    return st.session_state.cookie_manager
 
 def hash_password(pwd, salt=None):
     if not pwd: return ""
@@ -30,7 +30,7 @@ def check_auto_login():
     if st.session_state.get("authenticated"):
         return True
         
-    c_mgr = get_cookie_manager("auto")
+    c_mgr = get_cookie_manager()
     stored_token = c_mgr.get("crm_auth_token")
     
     if not stored_token:
@@ -48,7 +48,7 @@ def check_auto_login():
     return False
 
 def render_auth_screen(save_data_func):
-    c_mgr = get_cookie_manager("screen")
+    c_mgr = get_cookie_manager()
     saved_login = c_mgr.get("crm_saved_login")
     if not saved_login:
         time.sleep(0.05)
@@ -60,11 +60,30 @@ def render_auth_screen(save_data_func):
     with col2:
         with st.container(border=True):
             if saved_login:
+                # Если в сессии есть флаг, что нужно дописать токен авторизации
+                if st.session_state.get("auth_pending_token") and st.session_state.get("auth_pending_user"):
+                    user_obj = st.session_state["auth_pending_user"]
+                    _token = secrets.token_hex(32)
+                    user_obj["auth_token"] = _token
+                    save_data_func(st.session_state.crm_store)
+                    
+                    exp_token = (datetime.now() + timedelta(days=90)).date()
+                    c_mgr.set("crm_auth_token", _token, expires_at=exp_token)
+                    
+                    st.session_state.authenticated = True
+                    st.session_state.user_role = user_obj["role"]
+                    st.session_state.user_login = user_obj["login"]
+                    st.session_state.user_name = user_obj.get("name", user_obj["login"])
+                    
+                    st.session_state.pop("auth_pending_token", None)
+                    st.session_state.pop("auth_pending_user", None)
+                    st.toast("Вы успешно вошли!", icon="🔓")
+                    st.rerun()
+
                 st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Устройство авторизовано под учетной записью: <b>{saved_login}</b></p>", unsafe_allow_html=True)
                 
                 ip = st.text_input("Введите 4-значный PIN-код:", type="password", max_chars=4, key="crm_pin_input_field", placeholder="••••")
                 
-                # Перешли на стабильный st.html и исправили предупреждения
                 st.html("""
                 <script>
                 function patchPinInput() {
@@ -124,24 +143,19 @@ def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
                 break
                 
     if user_found:
-        st.session_state.authenticated = True
-        st.session_state.user_role = user_found["role"]
-        st.session_state.user_login = user_found["login"]
-        st.session_state.user_name = user_found.get("name", user_found["login"])
-        
-        # Разводим запись кук по разным стекам, чтобы избежать DuplicateElementKey
         exp_login = (datetime.now() + timedelta(days=365)).date()
         c_mgr.set("crm_saved_login", user_found["login"], expires_at=exp_login)
         
         if remember:
-            _token = secrets.token_hex(32)
-            user_found["auth_token"] = _token
-            save_data_func(st.session_state.crm_store)
-            
-            # Используем изолированный менеджер кук для второй записи
-            c_mgr_token = get_cookie_manager("token_submit")
-            exp_token = (datetime.now() + timedelta(days=90)).date()
-            c_mgr_token.set("crm_auth_token", _token, expires_at=exp_token)
+            # Вместо второго вызова .set вешаем хук ожидания
+            st.session_state["auth_pending_token"] = True
+            st.session_state["auth_pending_user"] = user_found
+        else:
+            st.session_state.authenticated = True
+            st.session_state.user_role = user_found["role"]
+            st.session_state.user_login = user_found["login"]
+            st.session_state.user_name = user_found.get("name", user_found["login"])
+            st.toast("Вы успешно вошли!", icon="🔓")
         return True
     else:
         st.error("Неверный логин, пароль или PIN-код.")
