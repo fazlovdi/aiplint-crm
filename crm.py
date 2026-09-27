@@ -985,12 +985,10 @@ if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
 
-# МГНОВЕННЫЙ АВТО-ВХОД ПРИ ОБНОВЛЕНИИ СТРАНИЦЫ
-# Если токен в куках совпадает, этот вызов сразу сделает пользователя авторизованным
 auth.check_auto_login()
 
-# Далее идут ваши остальные инициализации переменных из оригинального кода...
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
+
 if "f_em" not in st.session_state: st.session_state.f_em = []
 # ... и так далее до строки с CookieManager()
 
@@ -1075,10 +1073,11 @@ with st.sidebar:
         if u["login"] == st.session_state.user_login:
             current_user_obj = u
             break
-            
+
     if current_user_obj:
         with st.expander("Настройка PIN-кода"):
             auth.render_profile_settings(current_user_obj, save_data)
+
 
     if st.session_state.user_role == "admin":
         with st.expander("Экспорт базы"):
@@ -1107,15 +1106,15 @@ with st.sidebar:
                             commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
     
     st.markdown("---")
-    if st.button("Выйти", use_container_width=True):
+      if st.button("Выйти", use_container_width=True):
         if current_user_obj and "auth_token" in current_user_obj:
             del current_user_obj["auth_token"]
         save_data(st.session_state.crm_store)
-        
+
         c_mgr = auth.get_cookie_manager()
         c_mgr.delete("crm_auth_token")
-        c_mgr.delete("crm_saved_login")  # Очищаем, чтобы при выходе можно было ввести другой логин
-        
+        c_mgr.delete("crm_saved_login")
+
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
