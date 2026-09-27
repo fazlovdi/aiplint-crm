@@ -18,11 +18,16 @@ def hash_password(pwd, salt=None):
 
 def verify_password(pwd, stored):
     if not stored: return False
+    # Проверка для хэшированных паролей с солью (формат salt:hash)
     if ":" in stored:
         parts = stored.split(":")
-        if len(parts) == 2 and len(parts) == 32:
+        if len(parts) == 2:
             salt, h = parts
             return hashlib.sha256((salt + pwd.strip()).encode()).hexdigest() == h
+    # Проверка для простых хэшей sha256 (длиной 64 символа)
+    if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
+        return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
+    # Проверка для обычного открытого текста или PIN-кода
     return pwd.strip() == stored
 
 def check_auto_login():
