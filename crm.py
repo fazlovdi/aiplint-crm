@@ -982,8 +982,18 @@ def close_deal_dialog(deal_id):
             st.error("\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
 
 if "crm_store" not in st.session_state:
-    with st.spinner("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0434\u0430\u043d\u043d\u044b\u0445..."):
+    with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
+
+# МГНОВЕННЫЙ АВТО-ВХОД ПРИ ОБНОВЛЕНИИ СТРАНИЦЫ
+# Если токен в куках совпадает, этот вызов сразу сделает пользователя авторизованным
+auth.check_auto_login()
+
+# Далее идут ваши остальные инициализации переменных из оригинального кода...
+if "f_ph" not in st.session_state: st.session_state.f_ph = []
+if "f_em" not in st.session_state: st.session_state.f_em = []
+# ... и так далее до строки с CookieManager()
+
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
 if "f_ad" not in st.session_state: st.session_state.f_ad = []
@@ -1030,100 +1040,9 @@ if st.session_state.get("pending_clear_token"):
 
 # Шаг 3: если не авторизован и нет токена в URL — проверяем localStorage через JS
 # (пропускаем если только что очистили — чтобы не было цикла)
-if not st.session_state.get("authenticated") and not st.query_params.get("auth_token") and not _just_cleared:
-    st.components.v1.html("""
-    <script>
-    (function(){
-        try {
-            var token = localStorage.getItem('crm_auth_token');
-            if (token) {
-                window.parent.location.href = window.parent.location.pathname + '?auth_token=' + encodeURIComponent(token);
-            }
-        } catch(e) {
-            try {
-                var token = localStorage.getItem('crm_auth_token');
-                if (token) {
-                    window.location.href = window.location.pathname + '?auth_token=' + encodeURIComponent(token);
-                }
-            } catch(e2) {}
-        }
-    })();
-    </script>
-    """, height=0)
-
-# Шаг 4: проверка токена из URL
-_auth_token = st.query_params.get("auth_token")
-if _auth_token and not st.session_state.authenticated:
-    for u in st.session_state.crm_store.get("users", []):
-        if u.get("auth_token") == _auth_token:
-            st.session_state.authenticated = True
-            st.session_state.user_role = u["role"]
-            st.session_state.user_login = u["login"]
-            st.session_state.user_name = u.get("name", u["login"])
-            break
-    # Запуск нового экрана авторизации со всеми вашими требованиями
-auth.render_auth_screen(save_data)
-
-MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
-
-st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
-
-def check_login(username, password):
-    for u in st.session_state.crm_store.get("users", []):
-        if u["login"] == username.strip() and verify_password(password, u["password"]):
-            st.session_state.authenticated = True
-            st.session_state.user_role = u["role"]
-            st.session_state.user_login = u["login"]
-            st.session_state.user_name = u.get("name", u["login"])
-            return True
-    return False
-
-if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>\u0410\u0432\u0442\u043e\u0440\u0438\u0437\u0443\u0439\u0442\u0435\u0441\u044c \u0434\u043b\u044f \u0432\u0445\u043e\u0434\u0430 \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0443</p>", unsafe_allow_html=True)
-    lc, mc, rc = st.columns([1, 2, 1])
-    with mc:
-        with st.container(border=True):
-            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d", key="login_user")
-            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c", key="login_pass")
-            remember = st.checkbox("\u0417\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0432\u0445\u043e\u0434", value=True, key="remember_login")
-            if st.button("\u0412\u043e\u0439\u0442\u0438", use_container_width=True, type="primary"):
-                if check_login(iu, ip):
-                    _token = secrets.token_hex(16)
-                    for u in st.session_state.crm_store["users"]:
-                        if u["login"] == iu.strip():
-                            u["auth_token"] = _token
-                            break
-                    save_data(st.session_state.crm_store)
-                    st.query_params["auth_token"] = _token
-                    if remember:
-                        st.session_state["pending_save_token"] = _token
-                    st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
-                    st.rerun()
-                else:
-                    st.error("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043b\u043e\u0433\u0438\u043d \u0438\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u044c.")
-            # JS: добавляем autocomplete для iOS Face ID
-            st.components.v1.html("""
-            <script>
-            (function(){
-                var w = window;
-                try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
-                var inputs = w.document.querySelectorAll('input');
-                inputs.forEach(function(inp) {
-                    if (inp.type === 'password') {
-                        inp.setAttribute('autocomplete', 'current-password');
-                    } else {
-                        var ph = (inp.placeholder || '').toLowerCase();
-                        var key = (inp.getAttribute('data-testid') || '') + (inp.id || '');
-                        if (ph.includes('логин') || key.includes('login')) {
-                            inp.setAttribute('autocomplete', 'username');
-                        }
-                    }
-                });
-            })();
-            </script>
-            """, height=0)
-    st.stop()
+# Запуск нового умного экрана PIN-авторизации из модуля auth.py
+if not st.session_state.get("authenticated"):
+    auth.render_auth_screen(save_data)
 
 st.markdown(f"""<div class="greeting-block"><h1 style='text-align: center; margin-bottom: 0.1rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0;'>\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u0442\u0435\u0431\u0435 \u0434\u043d\u044f, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
 
@@ -1158,7 +1077,7 @@ with st.sidebar:
             break
             
     if current_user_obj:
-        with st.expander("Настройка PIN и Face ID"):
+        with st.expander("Настройка PIN-кода"):
             auth.render_profile_settings(current_user_obj, save_data)
 
     if st.session_state.user_role == "admin":
@@ -1195,6 +1114,7 @@ with st.sidebar:
         
         c_mgr = auth.get_cookie_manager()
         c_mgr.delete("crm_auth_token")
+        c_mgr.delete("crm_saved_login")  # Очищаем, чтобы при выходе можно было ввести другой логин
         
         st.session_state.authenticated = False
         st.session_state.user_role = None
