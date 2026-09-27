@@ -40,7 +40,7 @@ def render_auth_screen(save_data_func):
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     
     # JS-мост для чтения вечной сессии из памяти телефона
-    if not st.session_state.get("authenticated") and "local_auth_token" not in st.query_params and "local_user" not in st.query_params:
+    if not st.session_state.get("authenticated") and "local_auth_token" not in st.query_params and "local_user" not in st.query_params and "no_session" not in st.query_params:
         st.html("""
         <script>
             var token = localStorage.getItem('crm_token_v5');
@@ -49,6 +49,8 @@ def render_auth_screen(save_data_func):
                 window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + token;
             } else if (user) {
                 window.parent.location.href = window.parent.location.pathname + "?local_user=" + user;
+            } else {
+                window.parent.location.href = window.parent.location.pathname + "?no_session=1";
             }
         </script>
         """)
@@ -99,8 +101,7 @@ def render_auth_screen(save_data_func):
                 # Обработка отправки PIN-кода из HTML-формы
                 if "submit_pin" in st.query_params:
                     entered_pin = st.query_params["submit_pin"]
-                    if match_and_authorize(saved_login, entered_pin, save_data_func):
-                        st.rerun()
+                    match_and_authorize(saved_login, entered_pin, save_data_func)
             else:
                 # Первичный вход (если заходят первый раз)
                 st.markdown("<p style='text-align:center; color:#7F8C9A;'>Первичный вход в CRM</p>", unsafe_allow_html=True)
@@ -110,8 +111,7 @@ def render_auth_screen(save_data_func):
                     submit = st.form_submit_button("Войти в систему", use_container_width=True, type="primary")
                     
                     if submit:
-                        if match_and_authorize(iu, ip, save_data_func):
-                            st.rerun()
+                        match_and_authorize(iu, ip, save_data_func)
     st.stop()
 
 def match_and_authorize(login, secret, save_data_func):
@@ -137,14 +137,15 @@ def match_and_authorize(login, secret, save_data_func):
         save_data_func(st.session_state.crm_store)
         
         # Записываем данные в LocalStorage телефона через JS-инъекцию
-        st.html(f"""
+        _login = user_found["login"]
+        st.components.v1.html(f"""
         <script>
-            localStorage.setItem('crm_user_v5', '{user_found["login"]}');
+            localStorage.setItem('crm_user_v5', '{_login}');
             localStorage.setItem('crm_token_v5', '{_token}');
-            window.parent.location.href = window.parent.location.pathname;
+            window.parent.location.href = window.parent.location.pathname + "?local_auth_token={_token}";
         </script>
-        """)
-        return True
+        """, height=0)
+        st.stop()
     else:
         st.error("Неверный логин, пароль или PIN-код.")
         return False
