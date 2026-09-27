@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import hashlib
 import secrets
 
@@ -21,10 +20,11 @@ def verify_password(pwd, stored):
     return pwd.strip() == stored
 
 def check_auto_login():
-    """Мгновенный авто-вход через localStorage."""
+    """Мгновенный авто-вход без CookieManager."""
     if st.session_state.get("authenticated"):
         return True
     
+    # Считываем токен, переданный из локального хранилища браузера
     if "local_auth_token" in st.query_params:
         token = st.query_params["local_auth_token"]
         for u in st.session_state.crm_store.get("users", []):
@@ -33,36 +33,27 @@ def check_auto_login():
                 st.session_state.user_role = u["role"]
                 st.session_state.user_login = u["login"]
                 st.session_state.user_name = u.get("name", u["login"])
-                # Очищаем query params
-                for key in ["local_auth_token", "_js_checked", "local_user", "submit_pin"]:
-                    if key in st.query_params:
-                        del st.query_params[key]
                 return True
     return False
 
 def render_auth_screen(save_data_func):
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     
-    needs_js_check = (
-        not st.session_state.get("authenticated")
-        and "local_auth_token" not in st.query_params
-        and "local_user" not in st.query_params
-        and "submit_pin" not in st.query_params
-        and "_js_checked" not in st.query_params
-    )
-    
-    if needs_js_check:
-        components.html("""
+    # JS-мост для чтения вечной сессии из памяти телефона
+    if not st.session_state.get("authenticated") and "local_auth_token" not in st.query_params and "local_user" not in st.query_params and "_js_checked" not in st.query_params:
+        st.components.v1.html("""
         <script>
-            var token = localStorage.getItem('crm_token_v5');
-            var user = localStorage.getItem('crm_user_v5');
-            if (token) {
-                window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + encodeURIComponent(token);
-            } else if (user) {
-                window.parent.location.href = window.parent.location.pathname + "?local_user=" + encodeURIComponent(user);
-            } else {
-                window.parent.location.href = window.parent.location.pathname + "?_js_checked=1";
-            }
+            (function() {
+                var token = localStorage.getItem('crm_token_v5');
+                var user = localStorage.getItem('crm_user_v5');
+                if (token) {
+                    window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + encodeURIComponent(token);
+                } else if (user) {
+                    window.parent.location.href = window.parent.location.pathname + "?local_user=" + encodeURIComponent(user);
+                } else {
+                    window.parent.location.href = window.parent.location.pathname + "?_js_checked=1";
+                }
+            })();
         </script>
         """, height=0)
         st.stop()
@@ -75,6 +66,7 @@ def render_auth_screen(save_data_func):
             if saved_login:
                 st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Вход для аккаунта: <b>{saved_login}</b></p>", unsafe_allow_html=True)
                 
+                # HTML+JS форма для ввода PIN-кода. Решает все ваши проблемы с клавиатурой, шрифтом и кнопкой Enter
                 pin_html = f"""
                 <div style="text-align:center;">
                     <input type="password" id="numeric_pin" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="••••" 
@@ -86,15 +78,19 @@ def render_auth_screen(save_data_func):
                 <script>
                     var input = document.getElementById('numeric_pin');
                     input.focus();
+                    
+                    // Вход по нажатию Enter (Ввод)
                     input.onkeydown = function(e) {{
                         if (e.key === 'Enter' || e.keyCode === 13) {{
                             e.preventDefault();
                             document.getElementById('sub_btn').click();
                         }}
                     }};
+                    
                     document.getElementById('sub_btn').onclick = function() {{
                         window.parent.location.href = window.parent.location.pathname + "?local_user={saved_login}&submit_pin=" + input.value;
                     }};
+                    
                     document.getElementById('chg_btn').onclick = function() {{
                         localStorage.removeItem('crm_user_v5');
                         localStorage.removeItem('crm_token_v5');
@@ -102,13 +98,15 @@ def render_auth_screen(save_data_func):
                     }};
                 </script>
                 """
-                components.html(pin_html, height=110)
+                st.components.v1.html(pin_html, height=110)
                 
+                # Обработка отправки PIN-кода из HTML-формы
                 if "submit_pin" in st.query_params:
                     entered_pin = st.query_params["submit_pin"]
                     if match_and_authorize(saved_login, entered_pin, save_data_func):
-                        pass  # match_and_authorize handles redirect via st.stop()
+                        st.rerun()
             else:
+                # Первичный вход (если заходят первый раз)
                 st.markdown("<p style='text-align:center; color:#7F8C9A;'>Первичный вход в CRM</p>", unsafe_allow_html=True)
                 with st.form("initial_form"):
                     iu = st.text_input("Логин:", placeholder="Введите логин")
@@ -117,7 +115,7 @@ def render_auth_screen(save_data_func):
                     
                     if submit:
                         if match_and_authorize(iu, ip, save_data_func):
-                            pass  # match_and_authorize handles redirect via st.stop()
+                            st.rerun()
     st.stop()
 
 def match_and_authorize(login, secret, save_data_func):
@@ -142,17 +140,18 @@ def match_and_authorize(login, secret, save_data_func):
         user_found["auth_token"] = _token
         save_data_func(st.session_state.crm_store)
         
-        # Сохраняем в localStorage и перенаправляем на чистый URL
-        # st.stop() гарантирует, что JS выполнится до любого rerun
-        safe_login = user_found["login"].replace("'", "\\'")
-        components.html(f"""
+        # Записываем данные в LocalStorage телефона через JS-инъекцию
+        st.components.v1.html(f"""
         <script>
-            localStorage.setItem('crm_user_v5', '{safe_login}');
-            localStorage.setItem('crm_token_v5', '{_token}');
-            window.parent.location.href = window.parent.location.pathname;
+            (function() {{
+                localStorage.setItem('crm_user_v5', '{user_found["login"]}');
+                localStorage.setItem('crm_token_v5', '{_token}');
+                window.parent.location.href = window.parent.location.pathname;
+            }})();
         </script>
         """, height=0)
         st.stop()
+        return True
     else:
         st.error("Неверный логин, пароль или PIN-код.")
         return False
@@ -170,22 +169,3 @@ def render_profile_settings(current_user_obj, save_data_func):
             st.rerun()
         else:
             st.error("Ошибка: PIN должен состоять строго из 4 ЦИФР!")
-
-def clear_local_storage():
-    """Очищает localStorage через JS-инъекцию. Вызывать перед st.rerun()."""
-    components.html("""
-    <script>
-        localStorage.removeItem('crm_token_v5');
-        localStorage.removeItem('crm_user_v5');
-    </script>
-    """, height=0)
-
-def save_token_to_localstorage(login, token):
-    """Сохраняет токен в localStorage через JS-инъекцию. Вызывать перед st.rerun()."""
-    safe_login = login.replace("'", "\\'")
-    components.html(f"""
-    <script>
-        localStorage.setItem('crm_user_v5', '{safe_login}');
-        localStorage.setItem('crm_token_v5', '{token}');
-    </script>
-    """, height=0)
