@@ -56,7 +56,7 @@ def render_auth_screen(save_data_func):
 
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns()
+    col1, col2, col3 = st.columns(3)
     with col2:
         with st.container(border=True):
             if saved_login:
