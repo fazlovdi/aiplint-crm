@@ -1,3 +1,4 @@
+import auth
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
@@ -1060,9 +1061,8 @@ if _auth_token and not st.session_state.authenticated:
             st.session_state.user_login = u["login"]
             st.session_state.user_name = u.get("name", u["login"])
             break
-    if not st.session_state.authenticated:
-        if "auth_token" in st.query_params:
-            del st.query_params["auth_token"]
+    # Запуск нового экрана авторизации со всеми вашими требованиями
+auth.render_auth_screen(save_data)
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
@@ -1128,16 +1128,83 @@ if not st.session_state.authenticated:
 st.markdown(f"""<div class="greeting-block"><h1 style='text-align: center; margin-bottom: 0.1rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0;'>\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u0442\u0435\u0431\u0435 \u0434\u043d\u044f, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
 
 with st.sidebar:
-    if st.session_state.cloud_ok: st.success("\u041e\u0431\u043b\u0430\u043a\u043e \u0430\u043a\u0442\u0438\u0432\u043d\u043e")
-    else: st.warning("\u041e\u0431\u043b\u0430\u043a\u043e \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u043e (\u0440\u0430\u0431\u043e\u0442\u0430 \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e)")
+    if st.session_state.cloud_ok: st.success("Облако активно")
+    else: st.warning("Облако недоступно (работает локально)")
     st.markdown("---")
     st.markdown(f"**{st.session_state.user_name}**")
-    st.markdown(f"\u0420\u043e\u043b\u044c: `{st.session_state.user_role}`")
-    with st.expander("\u0421\u043c\u0435\u043d\u0438\u0442\u044c \u043f\u0430\u0440\u043e\u043b\u044c"):
+    st.markdown(f"Роль: `{st.session_state.user_role}`")
+    with st.expander("Сменить пароль"):
         cul = st.session_state.user_login
-        np = st.text_input("\u041d\u043e\u0432\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c:", type="password", key="self_new_pwd")
-        cp = st.text_input("\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c:", type="password", key="self_conf_pwd")
-        if st.button("\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c", key="btn_save_self_pwd", use_container_width=True):
+        np = st.text_input("Новый пароль:", type="password", key="self_new_pwd")
+        cp = st.text_input("Повторите пароль:", type="password", key="self_conf_pwd")
+        if st.button("Обновить", key="btn_save_self_pwd", use_container_width=True):
+            if np and np == cp:
+                _new_token = secrets.token_hex(16)
+                for u in st.session_state.crm_store["users"]:
+                    if u["login"] == cul:
+                        u["password"] = hash_password(np)
+                        u["auth_token"] = _new_token
+                save_data(st.session_state.crm_store)
+                cookie_manager.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31))
+                st.toast("Пароль изменён", icon="✅")
+                st.rerun()
+            else: st.error("Пароли не совпадают")
+
+    # === НАЧАЛО НОВОГО БЛОКА: НАСТРОЙКА PIN И FACE ID ===
+    current_user_obj = None
+    for u in st.session_state.crm_store.get("users", []):
+        if u["login"] == st.session_state.user_login:
+            current_user_obj = u
+            break
+            
+    if current_user_obj:
+        with st.expander("Настройка PIN и Face ID"):
+            auth.render_profile_settings(current_user_obj, save_data)
+    # === КОНЕЦ НОВОГО БЛОКА ===
+
+    if st.session_state.user_role == "admin":
+        with st.expander("Экспорт базы"):
+            st.download_button("Скачать CSV", data=export_clients_csv(), file_name="clients_export.csv", mime="text/csv", use_container_width=True)
+        with st.expander("Управление сотрудниками"):
+            st.markdown("### Создать сотрудника")
+            nul = st.text_input("Логин:", key="adm_nu_l")
+            nup = st.text_input("Пароль:", key="adm_nu_p")
+            nun = st.text_input("Имя / Должность:", key="adm_nu_n")
+            nur = st.selectbox("Роль:", ["manager", "admin"], key="adm_nu_r")
+            if st.button("Создать", use_container_width=True, type="primary"):
+                if nul and nup and nun:
+                    if not any(u["login"] == nul.strip() for u in st.session_state.crm_store.get("users", [])):
+                        st.session_state.crm_store.setdefault("users", []).append({"login": nul.strip(), "password": hash_password(nup), "role": nur, "name": nun.strip()})
+                        commit_and_rerun(st.session_state.crm_store, "Сотрудник создан")
+                    else: st.error("Логин уже занят")
+                else: st.error("Заполните все поля")
+            st.markdown("---")
+            for u in st.session_state.crm_store.get("users", []):
+                ucl, ucr = st.columns([3, 1])
+                with ucl: st.markdown(f"**{u.get('name', u['login'])}** ({u['role']})")
+                with ucr:
+                    if u["login"] != st.session_state.user_login:
+                        if st.button("X", key=f"del_u_{u['login']}", help="Удалить"):
+                            st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
+                            commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
+    
+    st.markdown("---")
+    # === ОБНОВЛЕННАЯ КНОПКА ВЫХОДА ===
+    if st.button("Выйти", use_container_width=True):
+        if current_user_obj and "auth_token" in current_user_obj:
+            del current_user_obj["auth_token"]
+        save_data(st.session_state.crm_store)
+        
+        # Очищаем долгосрочные куки входа
+        c_mgr = auth.get_cookie_manager()
+        c_mgr.delete("crm_auth_token")
+        
+        st.session_state.authenticated = False
+        st.session_state.user_role = None
+        st.session_state.user_login = None
+        st.session_state.user_name = None
+        st.rerun()
+
             if np and np == cp:
                 _new_token = secrets.token_hex(16)
                 for u in st.session_state.crm_store["users"]:
