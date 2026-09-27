@@ -22,7 +22,7 @@ def verify_password(pwd, stored):
     if not stored: return False
     if ":" in stored:
         parts = stored.split(":")
-        if len(parts) == 2 and len(parts)[0] == 32:
+        if len(parts) == 2 and len(parts[0]) == 32:
             salt, h = parts
             return hashlib.sha256((salt + pwd.strip()).encode()).hexdigest() == h
     return pwd.strip() == stored
