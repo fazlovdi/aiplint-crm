@@ -1062,7 +1062,9 @@ with st.sidebar:
                         u["password"] = hash_password(np)
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
-                cookie_manager.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31))
+                # Используем правильный менеджер кук из модуля auth
+c_mgr = auth.get_cookie_manager()
+c_mgr.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31).date())
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else:
