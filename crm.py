@@ -1009,6 +1009,8 @@ if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = N
 
 cookie_manager = stx.CookieManager()
 cookies = cookie_manager.get_all()
+if cookies is None:
+    st.stop()
 
 if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
     stored_token = cookies.get("auth_token")
