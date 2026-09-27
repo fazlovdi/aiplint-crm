@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
-import extra_streamlit_components as stx
 from datetime import datetime
 from collections import defaultdict
 
@@ -1007,25 +1006,30 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-cookie_manager = stx.CookieManager()
-cookies = cookie_manager.get_all()
-
-# Ждём загрузки cookie-компонента (при первом рендере get_all() возвращает {})
-if "cookies_ready" not in st.session_state:
-    st.session_state.cookies_ready = False
-
-if not st.session_state.cookies_ready:
-    st.session_state.cookies_ready = True
-    # Компонент уже отрендерен выше, ждём пока JS прочтёт куки и вернёт их
-    with st.spinner("Загрузка..."):
-        st.stop()
-
-# При повторном рендере cookies уже содержат реальные значения из браузера
 if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
-    stored_token = cookies.get("auth_token")
-    if stored_token:
-        st.query_params["auth_token"] = stored_token
-        st.rerun()
+    st.components.v1.html("""
+    <script>
+    (function() {
+        var token = null;
+        try { token = localStorage.getItem('crm_auth_token'); } catch(e) {}
+        if (!token) { try { token = sessionStorage.getItem('crm_auth_token'); } catch(e) {} }
+        if (!token) { try { var m = document.cookie.match(/crm_auth_token=([^;]+)/); if (m) token = m[1]; } catch(e) {} }
+        if (token) {
+            try {
+                var url = new URL(window.parent.location.href);
+                url.searchParams.set('auth_token', token);
+                window.parent.location.replace(url.toString());
+            } catch(e) {
+                try {
+                    var url = new URL(window.location.href);
+                    url.searchParams.set('auth_token', token);
+                    window.location.replace(url.toString());
+                } catch(e2) {}
+            }
+        }
+    })();
+    </script>
+    """, height=1)
 
 _auth_token = st.query_params.get("auth_token")
 if _auth_token and not st.session_state.authenticated:
@@ -1039,7 +1043,13 @@ if _auth_token and not st.session_state.authenticated:
     if not st.session_state.authenticated:
         if "auth_token" in st.query_params:
             del st.query_params["auth_token"]
-        cookie_manager.delete("auth_token")
+        st.components.v1.html("""
+        <script>
+        try { localStorage.removeItem('crm_auth_token'); } catch(e) {}
+        try { sessionStorage.removeItem('crm_auth_token'); } catch(e) {}
+        try { document.cookie = 'crm_auth_token=; path=/; max-age=0; SameSite=None; Secure'; } catch(e) {}
+        </script>
+        """, height=1)
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
@@ -1061,8 +1071,84 @@ if not st.session_state.authenticated:
     lc, mc, rc = st.columns([1, 2, 1])
     with mc:
         with st.container(border=True):
-            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d")
-            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c")
+            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d", autocomplete="username")
+            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c", autocomplete="current-password")
+            remember_me = st.checkbox("\u0417\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0432\u0445\u043e\u0434 (\u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0441\u043f\u0440\u0430\u0448\u0438\u0432\u0430\u0442\u044c)", value=True)
+            
+            # Face ID / Touch ID button for iPhone
+            faceid_available = st.components.v1.html("""
+            <script>
+            (function() {
+                var btn = window.parent.document.getElementById('crm_faceid_btn');
+                if (!btn) return;
+                if (window.PublicKeyCredential && window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+                    window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(available) {
+                        if (available) {
+                            btn.style.display = 'block';
+                        }
+                    });
+                }
+            })();
+            </script>
+            """, height=0)
+            st.markdown('<button id="crm_faceid_btn" style="display:none;width:100%;padding:12px;background:#007AFF;color:white;border:none;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer;margin-bottom:8px;">\U0001F4D0 Войти через Face ID</button>', unsafe_allow_html=True)
+            if st.button("\U0001F4D0 Face ID / Touch ID", key="faceid_btn", use_container_width=True, type="secondary"):
+                st.session_state["faceid_requested"] = True
+                st.rerun()
+            
+            if st.session_state.get("faceid_requested"):
+                st.components.v1.html("""
+                <script>
+                (function() {
+                    var token = null;
+                    try { token = localStorage.getItem('crm_auth_token'); } catch(e) {}
+                    if (!token) { try { token = sessionStorage.getItem('crm_auth_token'); } catch(e) {} }
+                    if (!token) { try { var m = document.cookie.match(/crm_auth_token=([^;]+)/); if (m) token = m[1]; } catch(e) {} }
+                    
+                    if (!token) {
+                        alert('Нет сохранённой авторизации. Сначала войдите с логином и паролем, поставив галочку "Запомнить вход".');
+                        return;
+                    }
+                    
+                    if (!window.PublicKeyCredential || !window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+                        var url = new URL(window.parent.location.href);
+                        url.searchParams.set('auth_token', token);
+                        window.parent.location.replace(url.toString());
+                        return;
+                    }
+                    
+                    var challenge = new Uint8Array(32);
+                    crypto.getRandomValues(challenge);
+                    
+                    var storedCredId = null;
+                    try { storedCredId = localStorage.getItem('crm_faceid_cred'); } catch(e) {}
+                    
+                    var publicKey = {
+                        challenge: challenge,
+                        timeout: 60000,
+                        userVerification: 'required'
+                    };
+                    
+                    if (storedCredId) {
+                        try {
+                            var credIdBytes = atob(storedCredId);
+                            var credIdArr = new Uint8Array(credIdBytes.length);
+                            for (var i = 0; i < credIdBytes.length; i++) credIdArr[i] = credIdBytes.charCodeAt(i);
+                            publicKey.allowCredentials = [{ type: 'public-key', id: credIdArr }];
+                        } catch(e) {}
+                    }
+                    
+                    navigator.credentials.get({ publicKey: publicKey }).then(function(assertion) {
+                        var url = new URL(window.parent.location.href);
+                        url.searchParams.set('auth_token', token);
+                        window.parent.location.replace(url.toString());
+                    }).catch(function(err) {
+                        alert('Face ID не подтверждён: ' + (err.message || err));
+                    });
+                })();
+                </script>
+                """, height=1)
+                st.session_state["faceid_requested"] = False
             if st.button("\u0412\u043e\u0439\u0442\u0438", use_container_width=True, type="primary"):
                 if check_login(iu, ip):
                     _token = secrets.token_hex(16)
@@ -1072,7 +1158,53 @@ if not st.session_state.authenticated:
                             break
                     save_data(st.session_state.crm_store)
                     st.query_params["auth_token"] = _token
-                    cookie_manager.set("auth_token", _token, expires_at=datetime(2027, 12, 31))
+                    if remember_me:
+                        st.components.v1.html("""
+                        <script>
+                        (function() {
+                            var t = '""" + _token + """';
+                            try { localStorage.setItem('crm_auth_token', t); } catch(e) {}
+                            try { sessionStorage.setItem('crm_auth_token', t); } catch(e) {}
+                            try { document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=None; Secure'; } catch(e) {}
+                        })();
+                        </script>
+                        """,                         # Register Face ID credential for future biometric login
+                        st.components.v1.html("""
+                        <script>
+                        (function() {
+                            if (!window.PublicKeyCredential || !window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) return;
+                            window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function(available) {
+                                if (!available) return;
+                                var existing = null;
+                                try { existing = localStorage.getItem('crm_faceid_cred'); } catch(e) {}
+                                if (existing) return;
+                                var challenge = new Uint8Array(32);
+                                crypto.getRandomValues(challenge);
+                                var userId = new Uint8Array(16);
+                                crypto.getRandomValues(userId);
+                                navigator.credentials.create({
+                                    publicKey: {
+                                        challenge: challenge,
+                                        rp: { name: 'Aiplint CRM' },
+                                        user: { id: userId, name: 'crm_user', displayName: 'CRM User' },
+                                        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+                                        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+                                        timeout: 60000
+                                    }
+                                }).then(function(cred) {
+                                    try {
+                                        var rawId = cred.rawId;
+                                        var binary = '';
+                                        var bytes = new Uint8Array(rawId);
+                                        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                                        localStorage.setItem('crm_faceid_cred', btoa(binary));
+                                    } catch(e) {}
+                                }).catch(function(err) {});
+                            });
+                        })();
+                        </script>
+                        """, height=1)
+                    st.toastheight=1)
                     st.toast("\u0423\u0441\u043f\u0435\u0448\u043d\u044b\u0439 \u0432\u0445\u043e\u0434", icon="\U0001F513")
                     st.rerun()
                 else:
@@ -1100,7 +1232,16 @@ with st.sidebar:
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
                 st.query_params["auth_token"] = _new_token
-                cookie_manager.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31))
+                st.components.v1.html("""
+                <script>
+                (function() {
+                    var t = '""" + _new_token + """';
+                    try { localStorage.setItem('crm_auth_token', t); } catch(e) {}
+                    try { sessionStorage.setItem('crm_auth_token', t); } catch(e) {}
+                    try { document.cookie = 'crm_auth_token=' + t + '; path=/; max-age=31536000; SameSite=None; Secure'; } catch(e) {}
+                })();
+                </script>
+                """, height=1)
                 st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
                 st.rerun()
             else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
@@ -1139,9 +1280,14 @@ with st.sidebar:
             save_data(st.session_state.crm_store)
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
-        cookie_manager.delete("auth_token")
+        st.components.v1.html("""
+        <script>
+        try { localStorage.removeItem('crm_auth_token'); } catch(e) {}
+        try { sessionStorage.removeItem('crm_auth_token'); } catch(e) {}
+        try { document.cookie = 'crm_auth_token=; path=/; max-age=0; SameSite=None; Secure'; } catch(e) {}
+        </script>
+        """, height=1)
         st.session_state.authenticated = False
-        st.session_state.pop("cookies_ready", None)
         st.session_state.user_role = None
         st.session_state.user_login = None
         st.session_state.user_name = None
