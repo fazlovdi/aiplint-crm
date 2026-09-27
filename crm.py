@@ -1205,7 +1205,7 @@ with st.sidebar:
         st.session_state.user_name = None
         st.rerun()
 
-            if np and np == cp:
+        if np and np == cp:
                 _new_token = secrets.token_hex(16)
                 for u in st.session_state.crm_store["users"]:
                     if u["login"] == cul:
