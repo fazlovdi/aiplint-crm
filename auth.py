@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import hashlib
 import secrets
 
@@ -43,19 +44,17 @@ def render_auth_screen(save_data_func):
     if not st.session_state.get("authenticated") and "local_auth_token" not in st.query_params and "local_user" not in st.query_params and "_js_checked" not in st.query_params:
         st.components.v1.html("""
         <script>
-            (function() {
-                var token = localStorage.getItem('crm_token_v5');
-                var user = localStorage.getItem('crm_user_v5');
-                if (token) {
-                    window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + encodeURIComponent(token);
-                } else if (user) {
-                    window.parent.location.href = window.parent.location.pathname + "?local_user=" + encodeURIComponent(user);
-                } else {
-                    window.parent.location.href = window.parent.location.pathname + "?_js_checked=1";
-                }
-            })();
+            var token = localStorage.getItem('crm_token_v5');
+            var user = localStorage.getItem('crm_user_v5');
+            if (token) {
+                window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + token;
+            } else if (user) {
+                window.parent.location.href = window.parent.location.pathname + "?local_user=" + user;
+            } else {
+                window.parent.location.href = window.parent.location.pathname + "?_js_checked=1";
+            }
         </script>
-        """, height=0)
+        """)
         st.stop()
 
     saved_login = st.query_params.get("local_user", "")
@@ -143,11 +142,9 @@ def match_and_authorize(login, secret, save_data_func):
         # Записываем данные в LocalStorage телефона через JS-инъекцию
         st.components.v1.html(f"""
         <script>
-            (function() {{
-                localStorage.setItem('crm_user_v5', '{user_found["login"]}');
-                localStorage.setItem('crm_token_v5', '{_token}');
-                window.parent.location.href = window.parent.location.pathname;
-            }})();
+            localStorage.setItem('crm_user_v5', '{user_found["login"]}');
+            localStorage.setItem('crm_token_v5', '{_token}');
+            window.parent.location.href = window.parent.location.pathname;
         </script>
         """, height=0)
         st.stop()
