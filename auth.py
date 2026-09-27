@@ -54,7 +54,7 @@ def render_auth_screen(save_data_func):
                 window.parent.location.href = window.parent.location.pathname + "?_js_checked=1";
             }
         </script>
-        """, height=0)
+        """)
         st.stop()
 
     saved_login = st.query_params.get("local_user", "")
@@ -144,7 +144,7 @@ def match_and_authorize(login, secret, save_data_func):
         <script>
             localStorage.setItem('crm_user_v5', '{user_found["login"]}');
             localStorage.setItem('crm_token_v5', '{_token}');
-            window.parent.location.href = window.parent.location.pathname;
+            window.parent.location.href = window.parent.location.pathname + "?local_auth_token=" + '{_token}';
         </script>
         """, height=0)
         st.stop()
