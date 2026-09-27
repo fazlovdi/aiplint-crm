@@ -1039,7 +1039,12 @@ with st.sidebar:
                         u["password"] = hash_password(np)
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
-                auth.save_token_to_localstorage(cul, _new_token)
+                # Обновляем токен в localStorage браузера
+                st.components.v1.html(f"""
+                <script>
+                try {{ localStorage.setItem('crm_token_v5', '{_new_token}'); }} catch(e) {{}}
+                </script>
+                """, height=0)
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else:
@@ -1088,7 +1093,15 @@ with st.sidebar:
             del current_user_obj["auth_token"]
         save_data(st.session_state.crm_store)
         
-        auth.clear_local_storage()
+        # Очищаем localStorage браузера
+        st.components.v1.html("""
+        <script>
+        try {
+            localStorage.removeItem('crm_token_v5');
+            localStorage.removeItem('crm_user_v5');
+        } catch(e) {}
+        </script>
+        """, height=0)
         
         st.session_state.authenticated = False
         st.session_state.user_role = None
