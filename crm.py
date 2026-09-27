@@ -1,7 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
-# extra_streamlit_components removed - using localStorage instead
 from datetime import datetime
 from collections import defaultdict
 
@@ -1007,29 +1006,11 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# --- Auto-login via localStorage (no extra packages needed) ---
-if not st.session_state.get("authenticated") and not st.query_params.get("auth_token") and not st.query_params.get("checked"):
-    # Inject JS to check localStorage for saved auth token
-    st.components.v1.html("""
-    <script>
-    (function() {
-        var token = null;
-        try { token = window.localStorage.getItem('crm_auth_token'); } catch(e) {}
-        if (!token) { try { token = window.parent.localStorage.getItem('crm_auth_token'); } catch(e) {} }
-        var url = new URL(window.parent.location.href);
-        if (token) {
-            url.searchParams.set('auth_token', token);
-        } else {
-            url.searchParams.set('checked', '1');
-        }
-        window.parent.location.href = url.toString();
-    })();
-    </script>
-    """, height=0)
-    st.markdown("<p style='text-align:center;color:#7F8C9A;margin-top:3rem;'>\u041F\u0440\u043E\u0432\u0435\u0440\u043A\u0430 \u0430\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u0438...</p>")
-    st.stop()
-
+# === Авторизация через localStorage (без extra_streamlit_components) ===
 _auth_token = st.query_params.get("auth_token")
+_no_token = st.query_params.get("_no_token")
+
+# Шаг 1: Если есть токен в URL — авторизуемся
 if _auth_token and not st.session_state.authenticated:
     for u in st.session_state.crm_store.get("users", []):
         if u.get("auth_token") == _auth_token:
@@ -1041,8 +1022,37 @@ if _auth_token and not st.session_state.authenticated:
     if not st.session_state.authenticated:
         if "auth_token" in st.query_params:
             del st.query_params["auth_token"]
-        # Clear invalid token from localStorage
-        st.components.v1.html("""<script>try{window.localStorage.removeItem('crm_auth_token');}catch(e){}try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>""", height=0)
+        st.components.v1.html("""<script>try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>""", height=0)
+
+# Шаг 2: Если не авторизован и нет флага _no_token — проверяем localStorage через JS
+if not st.session_state.get("authenticated") and not _no_token and not _auth_token:
+    st.components.v1.html("""<script>
+(function(){
+    var token = null;
+    try { token = window.parent.localStorage.getItem('crm_auth_token'); } catch(e) {
+        try { token = window.localStorage.getItem('crm_auth_token'); } catch(e2) {}
+    }
+    var base = window.parent.location.href.split('?')[0];
+    var redirectUrl;
+    if (token) {
+        redirectUrl = base + '?auth_token=' + encodeURIComponent(token);
+    } else {
+        redirectUrl = base + '?_no_token=1';
+    }
+    try { window.parent.location.replace(redirectUrl); }
+    catch(e) {
+        try { window.parent.location.href = redirectUrl; }
+        catch(e2) { window.location.href = redirectUrl; }
+    }
+})();
+</script>""", height=0)
+    st.markdown("<p style='text-align:center;color:#7F8C9A;margin-top:3rem;'>\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0430\u0432\u0442\u043e\u0440\u0438\u0437\u0430\u0446\u0438\u0438...</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;margin-top:1rem;'><a href='?_no_token=1' style='color:#bc1661;'>\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0432\u0445\u043e\u0434\u0443</a></p>", unsafe_allow_html=True)
+    st.stop()
+
+# Очищаем флаг _no_token из URL
+if "_no_token" in st.query_params:
+    del st.query_params["_no_token"]
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
@@ -1059,23 +1069,15 @@ def check_login(username, password):
     return False
 
 if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>\u0410\u0439\u043F\u043B\u0438\u043D\u0442 CRM</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>\u0410\u0432\u0442\u043E\u0440\u0438\u0437\u0443\u0439\u0442\u0435\u0441\u044C \u0434\u043B\u044F \u0432\u0445\u043E\u0434\u0430 \u0432 \u0441\u0438\u0441\u0442\u0435\u043C\u0443</p>", unsafe_allow_html=True)
-    # Hidden form for iOS Safari password autofill (Face ID)
-    st.components.v1.html("""
-    <form style="position:absolute;left:-9999px;top:-9999px;opacity:0;" autocomplete="on">
-        <input type="text" name="username" autocomplete="username" />
-        <input type="password" name="password" autocomplete="current-password" />
-        <button type="submit">submit</button>
-    </form>
-    """, height=0)
+    st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>\u0410\u0432\u0442\u043e\u0440\u0438\u0437\u0443\u0439\u0442\u0435\u0441\u044c \u0434\u043b\u044f \u0432\u0445\u043e\u0434\u0430 \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0443</p>", unsafe_allow_html=True)
     lc, mc, rc = st.columns([1, 2, 1])
     with mc:
         with st.container(border=True):
-            iu = st.text_input("\u041B\u043E\u0433\u0438\u043D:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043B\u043E\u0433\u0438\u043D", key="auth_login")
-            ip = st.text_input("\u041F\u0430\u0440\u043E\u043B\u044C:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043F\u0430\u0440\u043E\u043B\u044C", key="auth_pass")
-            remember = st.checkbox("\u0417\u0430\u043F\u043E\u043C\u043D\u0438\u0442\u044C \u0432\u0445\u043E\u0434 (\u0431\u043E\u043B\u044C\u0448\u0435 \u043D\u0435 \u0441\u043F\u0440\u0430\u0448\u0438\u0432\u0430\u0442\u044C)", value=True, key="remember_me")
-            if st.button("\u0412\u043E\u0439\u0442\u0438", use_container_width=True, type="primary"):
+            iu = st.text_input("\u041b\u043e\u0433\u0438\u043d:", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043b\u043e\u0433\u0438\u043d")
+            ip = st.text_input("\u041f\u0430\u0440\u043e\u043b\u044c:", type="password", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c")
+            _remember = st.checkbox("\u0417\u0430\u043f\u043e\u043c\u043d\u0438\u0442\u044c \u0432\u0445\u043e\u0434 (\u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435 \u0441\u043f\u0440\u0430\u0448\u0438\u0432\u0430\u0442\u044c)", value=True, key="remember_me_cb")
+            if st.button("\u0412\u043e\u0439\u0442\u0438", use_container_width=True, type="primary"):
                 if check_login(iu, ip):
                     _token = secrets.token_hex(16)
                     for u in st.session_state.crm_store["users"]:
@@ -1083,15 +1085,41 @@ if not st.session_state.authenticated:
                             u["auth_token"] = _token
                             break
                     save_data(st.session_state.crm_store)
-                    st.query_params["auth_token"] = _token
-                    if "checked" in st.query_params:
-                        del st.query_params["checked"]
-                    if remember:
-                        st.components.v1.html(f"""<script>try{{window.localStorage.setItem('crm_auth_token','{_token}');}}catch(e){{}}try{{window.parent.localStorage.setItem('crm_auth_token','{_token}');}}catch(e){{}}</script>""", height=0)
-                    st.toast("\u0423\u0441\u043F\u0435\u0448\u043D\u044B\u0439 \u0432\u0445\u043E\u0434", icon="\U0001F513")
-                    st.rerun()
+                    if _remember:
+                        st.components.v1.html(f"""<script>
+(function(){{
+    try {{ window.parent.localStorage.setItem('crm_auth_token','{_token}'); }} catch(e) {{}}
+    setTimeout(function(){{
+        var u = new URL(window.parent.location.href);
+        u.searchParams.set('auth_token','{_token}');
+        window.parent.location.replace(u.toString());
+    }}, 100);
+}})();
+</script>""", height=0)
+                        st.stop()
+                    else:
+                        st.query_params["auth_token"] = _token
+                        st.rerun()
                 else:
-                    st.error("\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438\u043B\u0438 \u043F\u0430\u0440\u043E\u043B\u044C.")
+                    st.error("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043b\u043e\u0433\u0438\u043d \u0438\u043b\u0438 \u043f\u0430\u0440\u043e\u043b\u044c.")
+    st.components.v1.html("""<script>
+(function(){{
+    try {{
+        var w = window.parent;
+        var inputs = w.document.querySelectorAll('input');
+        for (var i = 0; i < inputs.length; i++) {{
+            var inp = inputs[i];
+            if (inp.type === 'password') {{
+                inp.setAttribute('autocomplete', 'current-password');
+                inp.setAttribute('name', 'password');
+            }} else if (inp.type === 'text' && inp.placeholder && inp.placeholder.indexOf('\u043e\u0433\u0438\u043d') >= 0) {{
+                inp.setAttribute('autocomplete', 'username');
+                inp.setAttribute('name', 'username');
+            }}
+        }}
+    }} catch(e) {{}}
+}})();
+</script>""", height=0)
     st.stop()
 
 st.markdown(f"""<div class="greeting-block"><h1 style='text-align: center; margin-bottom: 0.1rem;'>\u0410\u0439\u043f\u043b\u0438\u043d\u0442 CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0;'>\u041f\u0440\u043e\u0434\u0443\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u0442\u0435\u0431\u0435 \u0434\u043d\u044f, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
@@ -1115,7 +1143,7 @@ with st.sidebar:
                         u["auth_token"] = _new_token
                 save_data(st.session_state.crm_store)
                 st.query_params["auth_token"] = _new_token
-                st.components.v1.html(f"""<script>try{{window.localStorage.setItem('crm_auth_token','{_new_token}');}}catch(e){{}}try{{window.parent.localStorage.setItem('crm_auth_token','{_new_token}');}}catch(e){{}}</script>""", height=0)
+                st.components.v1.html(f"""<script>try{{window.parent.localStorage.setItem('crm_auth_token','{_new_token}');}}catch(e){{}}</script>""", height=0)
                 st.toast("\u041f\u0430\u0440\u043e\u043b\u044c \u0438\u0437\u043c\u0435\u043d\u0451\u043d", icon="\u2705")
                 st.rerun()
             else: st.error("\u041f\u0430\u0440\u043e\u043b\u0438 \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u044e\u0442")
@@ -1145,7 +1173,7 @@ with st.sidebar:
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
     st.markdown("---")
-    if st.button("\u0412\u044B\u0439\u0442\u0438", use_container_width=True):
+    if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
         _tok = st.query_params.get("auth_token")
         if _tok:
             for u in st.session_state.crm_store.get("users", []):
@@ -1154,9 +1182,7 @@ with st.sidebar:
             save_data(st.session_state.crm_store)
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
-        if "checked" in st.query_params:
-            del st.query_params["checked"]
-        st.components.v1.html("""<script>try{window.localStorage.removeItem('crm_auth_token');}catch(e){}try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>""", height=0)
+        st.components.v1.html("""<script>try{window.parent.localStorage.removeItem('crm_auth_token');}catch(e){}</script>""", height=0)
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
