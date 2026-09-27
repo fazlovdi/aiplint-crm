@@ -54,7 +54,7 @@ def render_auth_screen(save_data_func):
                 window.parent.location.href = window.parent.location.pathname + "?_js_checked=1";
             }
         </script>
-        """)
+        """, height=0)
         st.stop()
 
     saved_login = st.query_params.get("local_user", "")
