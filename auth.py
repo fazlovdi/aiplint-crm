@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 def get_cookie_manager():
     if "cookie_manager" not in st.session_state:
-        st.session_state.cookie_mgr_obj = stx.CookieManager(key="crm_cookie_v3")
+        st.session_state.cookie_mgr_obj = stx.CookieManager(key="crm_cookie_v4")
         st.session_state.cookie_manager = st.session_state.cookie_mgr_obj
     return st.session_state.cookie_manager
 
@@ -22,20 +22,19 @@ def verify_password(pwd, stored):
     if not stored: return False
     if ":" in stored:
         parts = stored.split(":")
-        if len(parts) == 2 and len(parts[0]) == 32:
+        if len(parts) == 2 and len(parts)[0] == 32:
             salt, h = parts
             return hashlib.sha256((salt + pwd.strip()).encode()).hexdigest() == h
     return pwd.strip() == stored
 
 def check_auto_login():
-    """Надежная проверка сессии. Предотвращает вылеты при обновлении страницы."""
+    """Проверка сессии при обновлении страницы до рендеринга интерфейса."""
     if st.session_state.get("authenticated"):
         return True
         
     c_mgr = get_cookie_manager()
     stored_token = c_mgr.get("crm_auth_token")
     
-    # Небольшая пауза, если куки еще загружаются браузером
     if not stored_token:
         time.sleep(0.1)
         stored_token = c_mgr.get("crm_auth_token")
@@ -49,6 +48,7 @@ def check_auto_login():
                 st.session_state.user_name = u.get("name", u["login"])
                 return True
     return False
+
 def render_auth_screen(save_data_func):
     c_mgr = get_cookie_manager()
     saved_login = c_mgr.get("crm_saved_login")
@@ -64,10 +64,9 @@ def render_auth_screen(save_data_func):
             if saved_login:
                 st.markdown(f"<p style='text-align:center; font-size:0.95rem; color:#7F8C9A;'>Устройство авторизовано под учетной записью: <b>{saved_login}</b></p>", unsafe_allow_html=True)
                 
-                # Поле ввода PIN с выравниванием по центру и стандартным шрифтом
                 ip = st.text_input("Введите 4-значный PIN-код:", type="password", max_chars=4, key="crm_pin_input_field", placeholder="••••")
                 
-                # Нативный JS-скрипт: включает цифровую клавиатуру и отправляет форму по кнопке "Ввод"
+                # JS-скрипт форсирования клавиатуры и отправки по кнопке Ввод (Enter)
                 components.html("""
                 <script>
                 function patchPinInput() {
@@ -80,11 +79,9 @@ def render_auth_screen(save_data_func):
                         input.style.fontSize = '1rem';
                         input.style.letterSpacing = 'normal';
                         
-                        // Обработка нажатия клавиши Enter (Ввод) на клавиатуре
                         input.onkeydown = function(e) {
                             if (e.key === 'Enter' || e.keyCode === 13) {
                                 e.preventDefault();
-                                // Ищем первичную кнопку Streamlit и имитируем клик
                                 var btn = doc.querySelector('button[kind="primary"]');
                                 if (btn) btn.click();
                             }
@@ -134,13 +131,18 @@ def match_and_authorize(login, secret, c_mgr, save_data_func, remember):
         st.session_state.user_login = user_found["login"]
         st.session_state.user_name = user_found.get("name", user_found["login"])
         
-        c_mgr.set("crm_saved_login", user_found["login"], expires_at=datetime.now() + timedelta(days=365))
+        # Исправлено: передаем строго тип datetime.date
+        exp_login = (datetime.now() + timedelta(days=365)).date()
+        c_mgr.set("crm_saved_login", user_found["login"], expires_at=exp_login)
         
         if remember:
             _token = secrets.token_hex(32)
             user_found["auth_token"] = _token
             save_data_func(st.session_state.crm_store)
-            c_mgr.set("crm_auth_token", _token, expires_at=datetime.now() + timedelta(days=90))
+            
+            # Исправлено: передаем строго тип datetime.date
+            exp_token = (datetime.now() + timedelta(days=90)).date()
+            c_mgr.set("crm_auth_token", _token, expires_at=exp_token)
         return True
     else:
         st.error("Неверный логин, пароль или PIN-код.")
