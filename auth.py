@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 import extra_streamlit_components as stx
 import hashlib
 import secrets
+import base64
 from datetime import datetime, timedelta
 
 def get_cookie_manager():
@@ -27,7 +28,7 @@ def render_auth_screen(save_data_func):
     cookie_manager = get_cookie_manager()
     cookies = cookie_manager.get_all()
     
-    # 1. Автоматический вход по токену ("Больше не запрашивать")
+    # 1. Автоматический вход по долгосрочному токену
     if not st.session_state.get("authenticated"):
         stored_token = cookies.get("crm_auth_token")
         if stored_token:
@@ -39,7 +40,7 @@ def render_auth_screen(save_data_func):
                     st.session_state.user_name = u.get("name", u["login"])
                     st.rerun()
 
-    # 2. Вход через Face ID из JS-параметра
+    # 2. Вход через Face ID при успешном возврате из JavaScript
     if "bio_login_success" in st.query_params:
         logged_user = st.query_params.get("bio_login_success")
         for u in st.session_state.crm_store.get("users", []):
@@ -95,23 +96,54 @@ def render_auth_screen(save_data_func):
                             st.rerun()
                         else:
                             st.error("Неверный логин, пароль или PIN.")
-                            
                 elif auth_mode == "Face ID / Биометрия":
                     st.markdown("<p style='text-align:center; color:#7F8C9A;'>Используйте Face ID для мгновенного входа</p>", unsafe_allow_html=True)
-                    components.html("""
+                    
+                    raw_challenge = secrets.token_bytes(32)
+                    b64_challenge = base64.b64encode(raw_challenge).decode('utf-8')
+                    
+                    components.html(f"""
                     <script>
-                    function triggerBio() {
-                        if (window.PublicKeyCredential) {
+                    async function triggerBio() {{
+                        try {{
+                            if (!window.PublicKeyCredential) {{
+                                alert("Биометрия не поддерживается вашим браузером или устройством.");
+                                return;
+                            }}
+                            
                             var savedBioUser = localStorage.getItem('crm_faceid_user');
-                            if(savedBioUser) {
+                            var savedCredId = localStorage.getItem('crm_faceid_cred_id');
+                            
+                            if (!savedBioUser || !savedCredId) {{
+                                alert("Face ID еще не настроен. Сначала войдите по паролю и привяжите телефон в боковом меню.");
+                                return;
+                            }}
+
+                            const rawId = Uint8Array.from(atob(savedCredId), c => c.charCodeAt(0));
+                            const challengeBytes = Uint8Array.from(atob("{b64_challenge}"), c => c.charCodeAt(0));
+                            
+                            const credential = await navigator.credentials.get({{
+                                publicKey: {{
+                                    challenge: challengeBytes,
+                                    timeout: 60000,
+                                    allowCredentials: [{{
+                                        id: rawId,
+                                        type: 'public-key'
+                                    }}],
+                                    userVerification: 'required'
+                                }}
+                            }});
+                            
+                            if (credential) {{
                                 window.parent.location.href = window.parent.location.pathname + "?bio_login_success=" + savedBioUser;
-                            } else {
-                                alert("Face ID еще не настроен. Войдите по паролю и привяжите телефон в боковом меню.");
-                            }
-                        } else { alert("Биометрия не поддерживается браузером."); }
-                    }
+                            }}
+                        }} catch (err) {{
+                            console.error(err);
+                            alert("Ошибка сканирования биометрии или отмена операции.");
+                        }}
+                    }}
                     </script>
-                    <button onclick="triggerBio()" style="width:100%; padding:12px; background:#bc1661; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">
+                    <button onclick="triggerBio()" style="width:100%; padding:12px; background:#bc1661; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size: 15px;">
                         🖼️ Войти по Face ID
                     </button>
                     """, height=60)
@@ -131,13 +163,52 @@ def render_profile_settings(current_user_obj, save_data_func):
             
     st.markdown("---")
     st.markdown("### 2. Вход по Face ID")
+    
+    raw_user_id = secrets.token_bytes(16)
+    b64_user_id = base64.b64encode(raw_user_id).decode('utf-8')
+    raw_challenge = secrets.token_bytes(32)
+    b64_challenge = base64.b64encode(raw_challenge).decode('utf-8')
+    
     components.html(f"""
     <script>
-    function saveBioBinding() {{
-        if (window.PublicKeyCredential) {{
-            localStorage.setItem('crm_faceid_user', '{st.session_state.user_login}');
-            alert("Этот телефон привязан! Теперь доступен вход через Face ID.");
-        }} else {{ alert("Устройство не поддерживает биометрию в веб."); }}
+    async function saveBioBinding() {{
+        try {{
+            if (!window.PublicKeyCredential) {{
+                alert("Устройство не поддерживает биометрию в веб-приложениях.");
+                return;
+            }}
+
+            const challengeBytes = Uint8Array.from(atob("{b64_challenge}"), c => c.charCodeAt(0));
+            const userIdBytes = Uint8Array.from(atob("{b64_user_id}"), c => c.charCodeAt(0));
+
+            const credential = await navigator.credentials.create({{
+                publicKey: {{
+                    challenge: challengeBytes,
+                    rp: {{ name: "Айплинт CRM" }},
+                    user: {{
+                        id: userIdBytes,
+                        name: "{st.session_state.user_login}",
+                        displayName: "{st.session_state.user_name}"
+                    }},
+                    pubKeyCredParams: [{{ type: "public-key", alg: -7 }}, {{ type: "public-key", alg: -257 }}],
+                    timeout: 60000,
+                    authenticatorSelection: {{
+                        authenticatorAttachment: 'platform',
+                        userVerification: 'required'
+                    }}
+                }}
+            }});
+
+            if (credential) {{
+                const credIdB64 = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+                localStorage.setItem('crm_faceid_user', '{st.session_state.user_login}');
+                localStorage.setItem('crm_faceid_cred_id', credIdB64);
+                alert("Face ID успешно привязан к этому телефону! Теперь вы можете использовать его для входа.");
+            }}
+        }} catch (err) {{
+            console.error(err);
+            alert("Не удалось привязать Face ID. Убедитесь, что вы открыли сайт по защищенному протоколу HTTPS и разрешили биометрию.");
+        }}
     }}
     </script>
     <button onclick="saveBioBinding()" style="width:100%; padding:8px; background:#2C3E50; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer;">
