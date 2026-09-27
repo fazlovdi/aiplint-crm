@@ -1015,7 +1015,8 @@ if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# Запуск экрана авторизации из модуля auth.py
+# === Авто-вход через localStorage ===
+# Запуск экрана авторизации
 if not st.session_state.get("authenticated"):
     auth.render_auth_screen(save_data)
 
@@ -1041,7 +1042,7 @@ with st.sidebar:
                 save_data(st.session_state.crm_store)
                 st.components.v1.html(f"""
                 <script>
-                try {{ localStorage.setItem('crm_token_v5', '{_new_token}'); }} catch(e) {{}}
+                try {{ localStorage.setItem('crm_token_v5', '{_new_token}'); localStorage.setItem('crm_user_v5', '{cul}'); }} catch(e) {{}}
                 </script>
                 """, height=0)
                 st.toast("Пароль изменён", icon="✅")
@@ -1094,8 +1095,7 @@ with st.sidebar:
         
         st.components.v1.html("""
         <script>
-        try { localStorage.removeItem('crm_token_v5'); } catch(e) {}
-        try { localStorage.removeItem('crm_user_v5'); } catch(e) {}
+        try { localStorage.removeItem('crm_token_v5'); localStorage.removeItem('crm_user_v5'); } catch(e) {}
         </script>
         """, height=0)
         
