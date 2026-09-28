@@ -739,6 +739,20 @@ def render_task_detail(t, cl, d, key_prefix):
             if t.get("completion_files"):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0451\u0442\u0430:**")
                 render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
+            if not t.get("reviewed", False):
+                task_author = t.get("created_by", "") or t.get("manager", "")
+                if task_author == st.session_state.user_name or st.session_state.user_role == "admin":
+                    st.markdown("---")
+                    if st.button("\u2705 \u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430", key=f"btn_review_{key_prefix}", type="primary", use_container_width=True):
+                        t["reviewed"] = True
+                        t["last_modified"] = now_str()
+                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0443\u043f\u043b\u0430 \u0432 \u0430\u0440\u0445\u0438\u0432")
+                    if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_reopen_{key_prefix}", use_container_width=True):
+                        t["done"] = False
+                        t["completion_report"] = ""
+                        t["completion_files"] = []
+                        t["last_modified"] = now_str()
+                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u0432 \u0440\u0430\u0431\u043e\u0442\u0443")
 
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
@@ -814,6 +828,8 @@ def migrate_task_files(t):
     if "receiver_phone" not in t: t["receiver_phone"] = ""
     if "ship_pay" not in t: t["ship_pay"] = ""
     if "tk_num" not in t: t["tk_num"] = ""
+    if "created_by" not in t: t["created_by"] = ""
+    if "reviewed" not in t: t["reviewed"] = False
     if t.get("type") == "\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430": t["type"] = "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437"
 
 def migrate_data(data):
@@ -1205,7 +1221,8 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044
                 "task_comments": [], "flagged": False,
                 "products": nproducts, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
-                "ship_pay": nship_pay, "tk_num": ntk_num.strip()
+                "ship_pay": nship_pay, "tk_num": ntk_num.strip(),
+                "created_by": st.session_state.user_name, "reviewed": False
             }
             cl = get_client_by_id(cl_id)
             if cl:
@@ -1710,24 +1727,42 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             task_search = st.text_input("\u041f\u043e\u0438\u0441\u043a \u043f\u043e \u0437\u0430\u0434\u0430\u0447\u0430\u043c:", key="task_search_input", placeholder="\u0418\u0441\u043a\u0430\u0442\u044c \u043f\u043e \u0442\u0435\u043a\u0441\u0442\u0443, \u043a\u043b\u0438\u0435\u043d\u0442\u0443, \u043d\u043e\u043c\u0435\u0440\u0443...").strip().lower()
         di = {d["id"]: d for d in st.session_state.crm_store.get("deals", [])}
         aat = []
+        review_tasks = []
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
-                if not tk.get("done", False):
-                    tm = tk.get("manager", "")
-                    dtm = tk.get("delegated_to", "")
+                tk_done = tk.get("done", False)
+                tk_reviewed = tk.get("reviewed", False)
+                if tk_done and not tk_reviewed:
+                    task_author = tk.get("created_by", "") or tk.get("manager", "")
                     if mf == "\u041c\u043e\u0438 \u0437\u0430\u0434\u0430\u0447\u0438":
-                        if tm and tm != cu and dtm != cu: continue
+                        if task_author != cu and st.session_state.user_role != "admin": continue
                     elif mf != "\u0412\u0441\u0435":
-                        if tm != mf and dtm != mf: continue
+                        if task_author != mf and st.session_state.user_role != "admin": continue
                     if task_search:
                         search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                         if task_search not in search_text: continue
                     task_deal = di.get(tk.get("deal_id"))
                     mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
-                    aat.append({"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl})
+                    review_tasks.append({"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl})
+                    continue
+                if tk_done and tk_reviewed:
+                    continue
+                tm = tk.get("manager", "")
+                dtm = tk.get("delegated_to", "")
+                if mf == "\u041c\u043e\u0438 \u0437\u0430\u0434\u0430\u0447\u0438":
+                    if tm and tm != cu and dtm != cu: continue
+                elif mf != "\u0412\u0441\u0435":
+                    if tm != mf and dtm != mf: continue
+                if task_search:
+                    search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
+                    if task_search not in search_text: continue
+                task_deal = di.get(tk.get("deal_id"))
+                mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
+                aat.append({"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl})
         aat.sort(key=lambda x: x["sort_date"])
-        tt_list = [t for t in aat if t["sort_date"] <= now_time.date()]
-        ft_list = [t for t in aat if t["sort_date"] > now_time.date()]
+        new_list = [t for t in aat if not t["task_obj"].get("in_work", False)]
+        tt_list = [t for t in aat if t["task_obj"].get("in_work", False) and t["sort_date"] <= now_time.date()]
+        ft_list = [t for t in aat if t["task_obj"].get("in_work", False) and t["sort_date"] > now_time.date()]
         def render_task_block(t, sk):
             task = t["task_obj"]
             cl = t["client_obj"]
@@ -1758,24 +1793,36 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
                     render_scroll_restore(f"tb_{task_key}")
             if is_tk_exp:
                 render_task_detail(task, cl, di.get(task.get("deal_id")), f"tb_{sk}_{t['client_id']}_{t['task_idx']}")
-        task_l, task_r = st.columns(2)
-        with task_l:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            with st.container(border=True):
+                st.subheader(f"\u041d\u043e\u0432\u044b\u0435 ({len(new_list)})")
+                if new_list:
+                    for t in new_list: render_task_block(t, "new")
+                else: st.caption("\u041d\u043e\u0432\u044b\u0445 \u0437\u0430\u0434\u0430\u0447 \u043d\u0435\u0442.")
+        with col2:
             with st.container(border=True):
                 st.subheader(f"\u041d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f ({len(tt_list)})")
                 if tt_list:
                     for t in tt_list: render_task_block(t, "today")
-                else: st.success("\u0412\u0441\u0435 \u0437\u0430\u0434\u0430\u0447\u0438 \u043d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0437\u0430\u043a\u0440\u044b\u0442\u044b.")
-        with task_r:
+                else: st.caption("\u041d\u0430 \u0441\u0435\u0433\u043e\u0434\u043d\u044f \u0437\u0430\u0434\u0430\u0447 \u043d\u0435\u0442.")
+        with col3:
             with st.container(border=True):
                 st.subheader(f"\u041f\u0440\u0435\u0434\u0441\u0442\u043e\u044f\u0449\u0438\u0435 ({len(ft_list)})")
                 if ft_list:
                     for t in ft_list: render_task_block(t, "future")
                 else: st.caption("\u041f\u043b\u0430\u043d \u043d\u0430 \u0431\u0443\u0434\u0443\u0449\u0438\u0435 \u0434\u043d\u0438 \u043f\u0443\u0441\u0442.")
+        with col4:
+            with st.container(border=True):
+                st.subheader(f"\u041d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435 ({len(review_tasks)})")
+                if review_tasks:
+                    for t in review_tasks: render_task_block(t, "review")
+                else: st.caption("\u0417\u0430\u0434\u0430\u0447 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435 \u043d\u0435\u0442.")
     with plan_sub2:
         archived_tasks = []
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
-                if tk.get("done", False):
+                if tk.get("done", False) and tk.get("reviewed", False):
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
