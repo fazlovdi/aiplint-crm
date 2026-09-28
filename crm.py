@@ -23,7 +23,7 @@ st.markdown("""
     button[kind="primary"], .stButton > button[kind="primary"] { background-color: #bc1661; color: #FFFFFF; border-radius: 10px; font-weight: 600; font-size: 0.95rem; padding: 0.55rem 1.1rem; border: none; box-shadow: 0 2px 6px rgba(188,22,97,0.2); transition: all 0.15s ease; }
     button[kind="primary"]:hover { background-color: #9a1452; box-shadow: 0 3px 10px rgba(188,22,97,0.25); }
     button[kind="secondary"], .stButton > button[kind="secondary"] { background-color: transparent; color: #bc1661; border: 1px solid #C9CFD7; border-radius: 10px; font-weight: 500; font-size: 0.95rem; padding: 0.55rem 1.1rem; transition: all 0.15s ease; }
-    .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
+    .stButton > button { border-radius: 10px; font-weight: 500; font-size: 0.85rem; transition: all 0.15s ease; margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
     .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
     .stTextInput > div > input:focus, .stTextArea > div > textarea:focus, .stNumberInput > div > div > input:focus, .stSelectbox > div > div:focus-within { outline: none; border-color: #DCE0E5 !important; box-shadow: none !important; }
     .stSelectbox > div > div { background-color: #FFFFFF; border-radius: 10px; border: 1.5px solid #DCE0E5; padding: 0.35rem 0.75rem; }
@@ -33,7 +33,7 @@ st.markdown("""
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #C9CFD7; border-radius: 4px; }
-    .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
+    .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.5; font-size: 0.9rem; }
     .stMarkdown strong { color: #2C3E50; font-weight: 600; }
     .stMarkdown { margin-top: 0.15rem !important; margin-bottom: 0.15rem !important; }
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
@@ -73,12 +73,10 @@ st.markdown("""
     .copy-btn-crm:hover { background: #DCE0E5; }
     .center-btn-wrap { max-width: 280px; margin: 0 auto; }
     .section-title { text-align: center; font-size: 1rem; font-weight: 700; color: #2C3E50; margin: 0.3rem 0; }
-
-    .rework-badge { display: inline-block; background: #FFEBEE; color: #C62828; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid #C62828; }
-    [data-testid="stMultiInput"] > div > div > p { display: none !important; }
-    .stMarkdown p, .stMarkdown li { font-size: 0.9rem !important; }
-    .stButton > button { font-size: 0.85rem !important; }
-    h3 { font-size: 1rem !important; }
+    .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input, .stSelectbox > div > div { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
+    .stTextInput > div > input:focus, .stTextArea > div > textarea:focus, .stNumberInput > div > div > input:focus { border-color: #bc1661 !important; }
+    .stMultiInput > div { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
+    .stMultiInput > div > div > p { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -623,8 +621,6 @@ def render_task_detail(t, cl, d, key_prefix):
         st.markdown(f"**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:** {t.get('manager', '\u2014')}")
         if t.get('in_work') and not t.get('done'):
             st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
-        if t.get('needs_rework') and not t.get('done'):
-            st.markdown('<span class="rework-badge">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
         if t.get('delegated_to') and t.get('delegated_to') != t.get('manager'):
             st.markdown(f'<span class="delegated-badge">\u0414\u0435\u043b\u0435\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u043e: {t["delegated_to"]}</span>', unsafe_allow_html=True)
         if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
@@ -689,7 +685,6 @@ def render_task_detail(t, cl, d, key_prefix):
                     if st.button("\u0412\u0437\u044f\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_inwork_{key_prefix}", type="primary", use_container_width=True):
                         t["in_work"] = True
                         t["in_work_by"] = st.session_state.user_name
-                        t["needs_rework"] = False
                         t["last_modified"] = now_str()
                         commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u0437\u044f\u0442\u0430 \u0432 \u0440\u0430\u0431\u043e\u0442\u0443")
                 else:
@@ -733,6 +728,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         cl["last_modified"] = now_str()
                         if d: d["last_modified"] = now_str()
                         st.session_state[show_key] = False
+                        st.session_state[f"show_new_after_{key_prefix}"] = True
                         commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
                     else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
             st.markdown("---")
@@ -749,59 +745,57 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0451\u0442\u0430:**")
                 render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
             st.markdown("---")
-            rw1, rw2 = st.columns(2)
-            with rw1:
-                if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
-                    t["done"] = False
-                    t["in_work"] = False
-                    t["needs_rework"] = True
-                    t["last_modified"] = now_str()
-                    cl["last_modified"] = now_str()
-                    if d: d["last_modified"] = now_str()
-                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
-            with rw2:
-                show_new_after_key = f"show_new_after_{key_prefix}"
-                if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e", key=f"btn_new_after_{key_prefix}", use_container_width=True):
-                    st.session_state[show_new_after_key] = not st.session_state.get(show_new_after_key, False)
-                    st.rerun()
-            show_new_after_key = f"show_new_after_{key_prefix}"
-            if st.session_state.get(show_new_after_key, False):
-                with st.container(border=True):
-                    st.markdown("**\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0437\u0430\u0434\u0430\u0447\u0443:**")
-                    nat_topic = st.text_input("\u0422\u0435\u043c\u0430:", key=f"nat_topic_{key_prefix}")
-                    nat_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                    nat_dl = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
-                    nat_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"nat_comment_{key_prefix}")
-                    nat_files = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
-                    if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"nat_go_{key_prefix}", use_container_width=True, type="primary"):
-                        if nat_topic.strip() and nat_mgr:
-                            cl_id = d["client_id"] if d else cl["id"]
-                            deal_id = d["id"] if d else None
-                            tfi_list = save_uploaded_files(nat_files, cl_id, "task_file") if nat_files else []
-                            prefix_tn = "\u0417\u0421" if deal_id else "\u0417\u041a"
-                            tn = generate_task_number(prefix_tn)
+            if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_reopen_{key_prefix}", type="primary", use_container_width=True):
+                t["done"] = False
+                t["in_work"] = False
+                t.pop("in_work_by", None)
+                t["completion_report"] = ""
+                t["completion_files"] = []
+                t["last_modified"] = now_str()
+                cl["last_modified"] = now_str()
+                if d: d["last_modified"] = now_str()
+                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u0432 \u043d\u043e\u0432\u044b\u0435")
+            show_new_after = st.session_state.get(f"show_new_after_{key_prefix}", False)
+            if show_new_after:
+                st.markdown("---")
+                st.markdown("**\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0437\u0430\u0434\u0430\u0447\u0443:**")
+                nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"nat_topic_{key_prefix}")
+                nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
+                nt_comment2 = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", key=f"nat_comment_{key_prefix}")
+                nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
+                nc1, nc2 = st.columns(2)
+                with nc1:
+                    if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"nat_go_{key_prefix}", type="primary", use_container_width=True):
+                        if not nt_topic2.strip():
+                            st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
+                        elif not nt_mgr2:
+                            st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                        else:
+                            tfi = save_uploaded_files(nt_files2, cl["id"], "task_file") if nt_files2 else []
+                            prefix = "\u0417\u0421" if d else "\u0417\u041a"
+                            tn = generate_task_number(prefix)
                             new_task = {
-                                "text": nat_topic.strip(), "deadline": nat_dl.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
-                                "task_files": normalize_file_list(tfi_list), "manager": nat_mgr,
+                                "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
+                                "task_files": normalize_file_list(tfi), "manager": nt_mgr2,
                                 "completion_report": "", "completion_files": [],
-                                "deal_id": deal_id, "task_comment": nat_comment.strip(),
+                                "deal_id": t.get("deal_id"), "task_comment": nt_comment2.strip(),
                                 "order_amount": 0, "last_modified": now_str(),
                                 "task_number": tn, "created_at": now_str(),
-                                "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False,
-                                "task_comments": [], "flagged": False, "needs_rework": False,
-                                "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "",
-                                "ship_pay": "", "tk_num": ""
+                                "in_work": False, "ready_to_ship": False, "delegated_to": None,
+                                "task_comments": [], "flagged": False,
+                                "products": "", "ship_addr": "", "receiver": "",
+                                "receiver_phone": "", "ship_pay": "", "tk_num": ""
                             }
                             cl.setdefault("tasks", []).append(new_task)
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            assign_task_numbers(st.session_state.crm_store)
-                            st.session_state[show_new_after_key] = False
+                            st.session_state[f"show_new_after_{key_prefix}"] = False
                             commit_and_rerun(st.session_state.crm_store, "\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-                        elif not nat_topic.strip():
-                            st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
-                        else:
-                            st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                with nc2:
+                    if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"nat_cancel_{key_prefix}", use_container_width=True):
+                        st.session_state[f"show_new_after_{key_prefix}"] = False
+                        st.rerun()
 
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
@@ -813,13 +807,9 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     tk_label = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')} \u2014 {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
     if t.get('in_work') and not tk_done: tk_label += ' | \u0412 \u0440\u0430\u0431\u043e\u0442\u0435'
     if t.get('ready_to_ship') and not tk_done: tk_label += ' | \u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435'
-    if t.get('needs_rework') and not tk_done: tk_label += ' | \u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435'
     tk_selected = is_tk_exp
     tk_border = "#2196F3" if tk_selected else tk_bc
     tk_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tk_selected else ""
-    if t.get('needs_rework') and not tk_done:
-        tk_bg = "#FFEBEE"
-        tk_border = "#C62828" if not tk_selected else "#2196F3"
     st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }}</style>", unsafe_allow_html=True)
     with st.container(key=f"tk_btn_wrap_{task_key}"):
         if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
@@ -870,7 +860,6 @@ def migrate_task_files(t):
         if t.get("completion_file_path"): t["completion_files"].append({"file_path": t["completion_file_path"], "file_name": t.get("completion_file_name", "\u0444\u0430\u0439\u043b"), "file_hash": ""})
     if "task_comments" not in t: t["task_comments"] = []
     if "in_work" not in t: t["in_work"] = False
-    if "needs_rework" not in t: t["needs_rework"] = False
     if "ready_to_ship" not in t: t["ready_to_ship"] = False
     if "delegated_to" not in t: t["delegated_to"] = None
     if "created_at" not in t: t["created_at"] = t.get("last_modified", "")
@@ -958,7 +947,6 @@ def load_data():
                         if "task_number" not in t: t["task_number"] = ""
                         if "created_at" not in t: t["created_at"] = t.get("last_modified", "")
                         if "in_work" not in t: t["in_work"] = False
-                        if "needs_rework" not in t: t["needs_rework"] = False
                         if "ready_to_ship" not in t: t["ready_to_ship"] = False
                         if "delegated_to" not in t: t["delegated_to"] = None
                         if "task_comments" not in t: t["task_comments"] = []
@@ -1101,7 +1089,7 @@ if _auth_token and not st.session_state.authenticated:
 
 MGR_PLACEHOLDER = "\u0412\u044b\u0431\u0435\u0440\u0438 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e"
 
-st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
+st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p, .stMultiInput > div > div > p, .stMultiInput > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
 
 def check_login(username, password):
     for u in st.session_state.crm_store.get("users", []):
@@ -1811,13 +1799,9 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             exp_label = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{task.get('task_number', '')} {fd} \u2014 {t['client_name']} \u2014 {t['text']}"
             if task.get('in_work'): exp_label += ' | \u0412 \u0440\u0430\u0431\u043e\u0442\u0435'
             if task.get('ready_to_ship'): exp_label += ' | \u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435'
-            if task.get('needs_rework') and not task.get('done'): exp_label += ' | \u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435'
             tb_selected = is_tk_exp
             tb_border = "#2196F3" if tb_selected else tk_bc
             tb_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tb_selected else ""
-            if task.get('needs_rework') and not task.get('done'):
-                tk_bg = "#FFEBEE"
-                tb_border = "#C62828" if not tb_selected else "#2196F3"
             st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tb_border} !important; border-radius: 10px !important; {tb_shadow} }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
@@ -1850,9 +1834,10 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
                 if tk.get("done", False):
+                    if arch_search:
+                        search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('completion_report', '')} {tk.get('products', '')}".lower()
+                        if arch_search not in search_text: continue
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
-        if arch_search:
-            archived_tasks = [at for at in archived_tasks if arch_search in f"{at['task_obj'].get('text', '')} {at['task_obj'].get('task_number', '')} {at['client_name']} {at['task_obj'].get('completion_report', '')}".lower()]
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
             for at in archived_tasks[:50]:
@@ -1963,7 +1948,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                             st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
                             st.rerun()
                         if st.session_state.get(show_it_complete, False):
-                            it_report = st.text_area("\u041e\u0442\u0447\u0451\u0442:", key=f"it_report_{it['id']}", height=100)
+                            it_report = st.text_input("\u041e\u0442\u0447\u0451\u0442:", key=f"it_report_{it['id']}")
                             if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
                                 if it_report.strip():
                                     it["done"] = True
