@@ -1806,21 +1806,28 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             for ti, tk in enumerate(cl.get("tasks", [])):
                 tm = tk.get("manager", "")
                 dtm = tk.get("delegated_to", "")
+                tk_done = tk.get("done", False)
+                tk_reviewed = tk.get("reviewed", False)
+                is_review_task = tk_done and not tk_reviewed
+                is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
+                passes_mgr = True
                 if mf == "\u041c\u043e\u0438 \u0437\u0430\u0434\u0430\u0447\u0438":
-                    if tm and tm != cu and dtm != cu: continue
+                    if tm and tm != cu and dtm != cu: passes_mgr = False
                 elif mf != "\u0412\u0441\u0435":
-                    if tm != mf and dtm != mf: continue
+                    if tm != mf and dtm != mf: passes_mgr = False
+                if is_review_task and is_author:
+                    passes_mgr = True
+                if not passes_mgr: continue
                 if task_search:
                     search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                     if task_search not in search_text: continue
                 task_deal = di.get(tk.get("deal_id"))
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
-                if tk.get("done", False) and not tk.get("reviewed", False):
-                    is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
+                if is_review_task:
                     if is_author:
                         review_tasks.append(entry)
-                elif not tk.get("done", False):
+                elif not tk_done:
                     if not tk.get("in_work", False) and not tk.get("needs_rework", False):
                         new_tasks.append(entry)
                     else:
@@ -1891,7 +1898,7 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
         archived_tasks = []
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
-                if tk.get("done", False):
+                if tk.get("done", False) and tk.get("reviewed", False):
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
