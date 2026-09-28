@@ -689,6 +689,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 if not t.get('in_work'):
                     if st.button("\u0412\u0437\u044f\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_inwork_{key_prefix}", type="primary", use_container_width=True):
                         t["in_work"] = True
+                        t["needs_rework"] = False
                         t["in_work_by"] = st.session_state.user_name
                         t["last_modified"] = now_str()
                         commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u0437\u044f\u0442\u0430 \u0432 \u0440\u0430\u0431\u043e\u0442\u0443")
@@ -786,6 +787,7 @@ def render_task_detail(t, cl, d, key_prefix):
             if t.get("needs_rework"):
                 st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
             if t.get("completion_report"): st.caption(f"\u041e\u0442\u0447\u0451\u0442: {t['completion_report']}")
+            if t.get("rework_comment"): st.warning(f"\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435: {t['rework_comment']}")
             if t.get("completion_files"):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0451\u0442\u0430:**")
                 render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
@@ -798,19 +800,37 @@ def render_task_detail(t, cl, d, key_prefix):
                         if st.button("\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430", key=f"btn_review_{key_prefix}", type="primary", use_container_width=True):
                             t["reviewed"] = True
                             t["needs_rework"] = False
+                            t["rework_comment"] = ""
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0432 \u0430\u0440\u0445\u0438\u0432\u0435")
                     with rc2:
-                        if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
-                            t["done"] = False
-                            t["in_work"] = False
-                            t["needs_rework"] = True
-                            t["last_modified"] = now_str()
-                            cl["last_modified"] = now_str()
-                            if d: d["last_modified"] = now_str()
-                            commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
+                        if st.button("Вернуть в работу", key=f"btn_rework_{key_prefix}", use_container_width=True):
+                            st.session_state[f"show_rework_{key_prefix}"] = True
+                            st.rerun()
+                    if st.session_state.get(f"show_rework_{key_prefix}", False):
+                        rework_comment = st.text_area("Комментарий к доработке (обязательно):", key=f"rework_comment_{key_prefix}", height=100, placeholder="Опишите, что нужно доработать")
+                        rw1, rw2 = st.columns(2)
+                        with rw1:
+                            if st.button("Отправить на доработку", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
+                                if not rework_comment.strip():
+                                    st.warning("Напишите комментарий — без него нельзя отправить задачу на доработку")
+                                else:
+                                    t["done"] = False
+                                    t["in_work"] = False
+                                    t["needs_rework"] = True
+                                    t["rework_comment"] = rework_comment.strip()
+                                    t.setdefault("task_comments", []).append({"author": st.session_state.get("user_login", ""), "text": rework_comment.strip(), "date": now_str()})
+                                    t["last_modified"] = now_str()
+                                    cl["last_modified"] = now_str()
+                                    if d: d["last_modified"] = now_str()
+                                    st.session_state[f"show_rework_{key_prefix}"] = False
+                                    commit_and_rerun(st.session_state.crm_store, "Задача возвращена на доработку")
+                        with rw2:
+                            if st.button("Отмена", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
+                                st.session_state[f"show_rework_{key_prefix}"] = False
+                                st.rerun()
                 else:
                     st.info("\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0432\u0442\u043e\u0440\u043e\u043c")
             else:
@@ -887,6 +907,7 @@ def migrate_task_files(t):
     if "in_work" not in t: t["in_work"] = False
     if "needs_rework" not in t: t["needs_rework"] = False
     if "reviewed" not in t: t["reviewed"] = False
+    if "rework_comment" not in t: t["rework_comment"] = ""
     if "created_by" not in t: t["created_by"] = ""
     if "ready_to_ship" not in t: t["ready_to_ship"] = False
     if "delegated_to" not in t: t["delegated_to"] = None
@@ -1806,29 +1827,22 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
             for ti, tk in enumerate(cl.get("tasks", [])):
                 tm = tk.get("manager", "")
                 dtm = tk.get("delegated_to", "")
-                tk_done = tk.get("done", False)
-                tk_reviewed = tk.get("reviewed", False)
-                is_review_task = tk_done and not tk_reviewed
-                is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
-                passes_mgr = True
                 if mf == "\u041c\u043e\u0438 \u0437\u0430\u0434\u0430\u0447\u0438":
-                    if tm and tm != cu and dtm != cu: passes_mgr = False
+                    if tm and tm != cu and dtm != cu: continue
                 elif mf != "\u0412\u0441\u0435":
-                    if tm != mf and dtm != mf: passes_mgr = False
-                if is_review_task and is_author:
-                    passes_mgr = True
-                if not passes_mgr: continue
+                    if tm != mf and dtm != mf: continue
                 if task_search:
                     search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                     if task_search not in search_text: continue
                 task_deal = di.get(tk.get("deal_id"))
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
-                if is_review_task:
+                if tk.get("done", False) and not tk.get("reviewed", False):
+                    is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
                     if is_author:
                         review_tasks.append(entry)
-                elif not tk_done:
-                    if not tk.get("in_work", False) and not tk.get("needs_rework", False):
+                elif not tk.get("done", False):
+                    if not tk.get("in_work", False):
                         new_tasks.append(entry)
                     else:
                         aat.append(entry)
@@ -1898,7 +1912,7 @@ elif st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\
         archived_tasks = []
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
-                if tk.get("done", False) and tk.get("reviewed", False):
+                if tk.get("done", False):
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
