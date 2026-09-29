@@ -139,7 +139,6 @@ FILE_NAME = "web_crm_database_v2.json"
 YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
 MAX_URL = "https://max.ru"
 MAX_NUMBER = "+79003293300"
-TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
 CATEGORIES = ["\u041d\u0435 \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0451\u043d", "\u0414\u0438\u0437\u0430\u0439\u043d\u0435\u0440", "\u0421\u0442\u0440\u043e\u0438\u0442\u0435\u043b\u044c", "\u0414\u0438\u043b\u0435\u0440", "\u041f\u043e\u043a\u0443\u043f\u0430\u0442\u0435\u043b\u044c"]
 TASK_TYPES = ["\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"]
 SHIP_PAY_OPTIONS = ["", "\u0412\u043a\u043b\u044e\u0447\u0435\u043d\u043e \u0432 \u0441\u0447\u0451\u0442", "\u041a\u043b\u0438\u0435\u043d\u0442\u043e\u043c \u043f\u0440\u0438 \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0438"]
@@ -152,41 +151,6 @@ else:
 
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-def send_telegram(chat_id, text):
-    if not chat_id or not TELEGRAM_BOT_TOKEN:
-        return
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": str(chat_id), "text": text, "parse_mode": "HTML"},
-            timeout=5
-        )
-    except:
-        pass
-
-def get_user_by_login(login):
-    for u in st.session_state.crm_store.get("users", []):
-        if u.get("login") == login:
-            return u
-    return None
-
-def add_notification(to_login, text, notif_type="info"):
-    store = st.session_state.crm_store
-    if "notifications" not in store:
-        store["notifications"] = []
-    notif = {
-        "id": len(store["notifications"]) + 1,
-        "to": to_login,
-        "text": text,
-        "type": notif_type,
-        "read": False,
-        "created_at": now_str()
-    }
-    store["notifications"].append(notif)
-    u = get_user_by_login(to_login)
-    if u and u.get("telegram_chat_id"):
-        send_telegram(u["telegram_chat_id"], text)
 
 def get_sort_key(entity):
     return entity.get("last_modified", "1970-01-01 00:00:00")
@@ -765,17 +729,13 @@ def render_task_detail(t, cl, d, key_prefix):
                         t["done"] = True
                         t["completion_report"] = rt.strip()
                         t["last_modified"] = now_str()
+                        add_notification(t.get("created_by", ""), f"Задача на проверке: {t.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}", f"\u2705 Задача на проверке: {t.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}")
                         fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
                         if fi_list: t["completion_files"] = normalize_file_list(fi_list)
                         cl["last_modified"] = now_str()
                         if d: d["last_modified"] = now_str()
                         st.session_state[show_key] = False
                         st.session_state[f"show_new_after_{key_prefix}"] = True
-                        _done_author = t.get("created_by", "")
-                        _done_num = t.get("task_number", "")
-                        _done_cl = cl.get("name", "")
-                        _done_who = st.session_state.get("user_name", "")
-                        add_notification(_done_author, f"\u2705 Задача на проверке: {_done_num} — {_done_cl} | Выполнил: {_done_who}", "review")
                         commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
                     else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
             if st.session_state.get(f"show_new_after_{key_prefix}", False):
@@ -809,11 +769,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl.setdefault("tasks", []).append(new_task)
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            _nt_mgr = new_task.get("manager", "")
-                            _nt_topic = new_task.get("text", "")
-                            _nt_dl = new_task.get("deadline", "")
-                            _nt_cl = cl.get("name", "")
-                            add_notification(_nt_mgr, f"\U0001f4dd Новая задача: {_nt_topic} | Клиент: {_nt_cl} | Срок: {_nt_dl}", "new_task")
+                            add_notification(nt_mgr2, f"Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name','')} | Срок: {nt_dl2.isoformat()}", f"\U0001F4DD Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name','')} | Срок: {nt_dl2.isoformat()}")
                             st.session_state[f"show_new_after_{key_prefix}"] = False
                             commit_and_rerun(st.session_state.crm_store, "\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
                         else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
@@ -872,11 +828,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                     cl["last_modified"] = now_str()
                                     if d: d["last_modified"] = now_str()
                                     st.session_state[f"show_rework_{key_prefix}"] = False
-                                    _rw_mgr = t.get("manager", "")
-                                    _rw_num = t.get("task_number", "")
-                                    _rw_cl = cl.get("name", "")
-                                    _rw_comment = rework_comment.strip()[:100]
-                                    add_notification(_rw_mgr, f"\U0001f501 Задача возвращена на доработку: {_rw_num} — {_rw_cl} | Комментарий: {_rw_comment}", "rework")
+                                    add_notification(t.get("manager", ""), f"Задача возвращена на доработку: {t.get('task_number','')} — {cl.get('name','')} | Комментарий: {rework_comment.strip()}", f"\u26a0\ufe0f Задача на доработку: {t.get('task_number','')} — {cl.get('name','')} | Комментарий: {rework_comment.strip()}")
                                     commit_and_rerun(st.session_state.crm_store, "Задача возвращена на доработку")
                         with rw2:
                             if st.button("Отмена", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
@@ -978,6 +930,7 @@ def migrate_task_files(t):
 def migrate_data(data):
     du = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}]
     if "users" not in data: data["users"] = du
+    if "notifications" not in data: data["notifications"] = []
     for u in data["users"]:
         if not is_hashed(u.get("password", "")): u["password"] = hash_password(u["password"])
         if "telegram_chat_id" not in u: u["telegram_chat_id"] = ""
@@ -1021,15 +974,12 @@ def migrate_data(data):
     if "chat_messages" not in data: data["chat_messages"] = []
     if "qa_entries" not in data: data["qa_entries"] = []
     if "suppliers" not in data: data["suppliers"] = []
-    if "notifications" not in data: data["notifications"] = []
-    for u in data.get("users", []):
-        if "telegram_chat_id" not in u: u["telegram_chat_id"] = ""
     data["_migrated"] = "v2"
     return data
 
 def load_data():
     download_db_from_yandex()
-    db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": []}
+    db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
     if os.path.exists(FILE_NAME):
         try:
             with open(FILE_NAME, "r", encoding="utf-8") as f:
@@ -1109,6 +1059,103 @@ def commit_and_rerun(data=None, toast_msg=None):
         st.toast(toast_msg, icon="\u2705")
     st.rerun()
 
+# ====== УВЕДОМЛЕНИЯ ======
+TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
+
+def get_user_by_login(login):
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("login") == login:
+            return u
+    return None
+
+def send_telegram(chat_id, text):
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=5
+        )
+    except:
+        pass
+
+def add_notification(to_login, text, tg_text=None):
+    """Создаёт уведомление: внутреннее (колокольчик) + Telegram"""
+    store = st.session_state.crm_store
+    if "notifications" not in store:
+        store["notifications"] = []
+    notif = {
+        "id": len(store["notifications"]) + 1,
+        "to": to_login,
+        "text": text,
+        "date": now_str(),
+        "read": False
+    }
+    store["notifications"].append(notif)
+    # Telegram
+    u = get_user_by_login(to_login)
+    if u and u.get("telegram_chat_id"):
+        send_telegram(u["telegram_chat_id"], tg_text or text)
+
+def get_unread_count():
+    me = st.session_state.get("user_login", "")
+    notifs = st.session_state.crm_store.get("notifications", [])
+    return sum(1 for n in notifs if n.get("to") == me and not n.get("read", False))
+
+def get_my_notifications():
+    me = st.session_state.get("user_login", "")
+    notifs = st.session_state.crm_store.get("notifications", [])
+    mine = [n for n in notifs if n.get("to") == me]
+    mine.sort(key=lambda n: n.get("date", ""), reverse=True)
+    return mine[:30]
+
+def mark_all_notifications_read():
+    me = st.session_state.get("user_login", "")
+    for n in st.session_state.crm_store.get("notifications", []):
+        if n.get("to") == me:
+            n["read"] = True
+    save_data(st.session_state.crm_store)
+
+def render_notifications_bell():
+    """Колокольчик с уведомлениями — узкая колонка слева"""
+    unread = get_unread_count()
+    bell_key = "crm_bell_toggle"
+    if st.session_state.get(bell_key, False):
+        bell_label = "🔔"
+    else:
+        bell_label = f"🔔" + (f" {unread}" if unread > 0 else "")
+    if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)", use_container_width=True):
+        st.session_state[bell_key] = not st.session_state.get(bell_key, False)
+        if st.session_state[bell_key] and unread > 0:
+            mark_all_notifications_read()
+        st.rerun()
+
+def render_notifications_panel():
+    """Панель уведомлений на всю ширину"""
+    bell_key = "crm_bell_toggle"
+    if not st.session_state.get(bell_key, False):
+        return
+    notifs = get_my_notifications()
+    with st.container(border=True):
+        st.markdown("### 🔔 Уведомления")
+        if not notifs:
+            st.caption("Нет уведомлений")
+        else:
+            for n in notifs:
+                bg = "#F0F4FF" if not n.get("read", False) else "#F5F6F8"
+                st.markdown(
+                    f'<div style="background:{bg};border-radius:8px;padding:8px 12px;margin-bottom:6px;">'
+                    f'<span style="font-size:0.75rem;color:#95A5B7;">{n.get("date","")}</span><br>'
+                    f'<span style="font-size:0.9rem;color:#2C3E50;">{n.get("text","")}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            if st.button("Прочитать все", key="btn_read_all", use_container_width=True):
+                mark_all_notifications_read()
+                st.rerun()
+
+
 @st.dialog("\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u0441\u0434\u0435\u043b\u043a\u0443", width="medium")
 def close_deal_dialog(deal_id):
     deal = None
@@ -1154,12 +1201,6 @@ if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
 if "f_ad" not in st.session_state: st.session_state.f_ad = []
 if "last_id" not in st.session_state: st.session_state.last_id = None
-# Toast for unread notifications
-_unread_toast = [n for n in st.session_state.crm_store.get("notifications", []) if not n.get("read", False) and n.get("to") == st.session_state.get("user_login", "")]
-if _unread_toast:
-    _uc = len(_unread_toast)
-    st.toast(f"\U0001f514 У вас {_uc} новых уведомлени{'е' if _uc == 1 else 'я' if _uc < 5 else 'й'}", icon="\U0001f514")
-
 if "active_tab" not in st.session_state: st.session_state.active_tab = "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a"
 if "client_form_version" not in st.session_state: st.session_state.client_form_version = 0
 if "authenticated" not in st.session_state: st.session_state.authenticated = False
@@ -1291,17 +1332,16 @@ with st.sidebar:
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
     with st.expander("Telegram уведомления"):
-        _cu = st.session_state.user_login
-        _u_obj = get_user_by_login(_cu)
-        _cur_tg = _u_obj.get("telegram_chat_id", "") if _u_obj else ""
-        _tg_input = st.text_input("Ваш Telegram Chat ID:", value=_cur_tg, key="tg_chat_id_input")
-        if st.button("Сохранить", key="save_tg_btn", use_container_width=True):
-            if _u_obj:
-                _u_obj["telegram_chat_id"] = _tg_input.strip()
+        st.markdown("Введите Chat ID для push-уведомлений в Telegram")
+        st.caption("Узнать Chat ID: @userinfobot в Telegram")
+        tg_id = st.text_input("Chat ID:", value=str(get_user_by_login(st.session_state.user_login).get("telegram_chat_id", "")) if get_user_by_login(st.session_state.user_login) else "", key="tg_chat_id_input")
+        if st.button("Сохранить", key="btn_save_tg", use_container_width=True, type="primary"):
+            u = get_user_by_login(st.session_state.user_login)
+            if u:
+                u["telegram_chat_id"] = tg_id.strip()
                 save_data(st.session_state.crm_store)
                 st.toast("Chat ID сохранён", icon="\u2705")
                 st.rerun()
-        st.caption("Чтобы узнать Chat ID: найдите @userinfobot в Telegram, отправьте /start")
     st.markdown("---")
     if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
         _tok = st.query_params.get("auth_token")
@@ -1319,40 +1359,9 @@ with st.sidebar:
         st.session_state.user_name = None
         st.rerun()
 
-# === Уведомления (колокольчик) ===
-_notifs = st.session_state.crm_store.get("notifications", [])
-_unread = [n for n in _notifs if not n.get("read", False) and n.get("to") == st.session_state.get("user_login", "")]
-_unread_count = len(_unread)
-
-_bell_cols = st.columns([0.08, 0.92])
-with _bell_cols[0]:
-    _bell_label = f"\U0001f514 {_unread_count}" if _unread_count > 0 else "\U0001f514"
-    if st.button(_bell_label, key="bell_notif_btn", help="Уведомления", use_container_width=True):
-        st.session_state["show_notif_panel"] = not st.session_state.get("show_notif_panel", False)
-        if st.session_state["show_notif_panel"]:
-            for n in _notifs:
-                if n.get("to") == st.session_state.get("user_login", "") and not n.get("read", False):
-                    n["read"] = True
-            save_data(st.session_state.crm_store)
-        st.rerun()
-with _bell_cols[1]:
-    pass
-
-if st.session_state.get("show_notif_panel", False):
-    _my_notifs = [n for n in _notifs if n.get("to") == st.session_state.get("user_login", "")]
-    _my_notifs = _my_notifs[-30:]
-    _my_notifs.reverse()
-    with st.container(border=True):
-        st.markdown(f"**Уведомления ({len(_my_notifs)})**")
-        if _my_notifs:
-            for n in _my_notifs:
-                _icon = "\U0001f4dd" if n.get("type") == "new_task" else "\u2705" if n.get("type") == "review" else "\U0001f501" if n.get("type") == "rework" else "\u2139\ufe0f"
-                _bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
-                st.markdown(f'<div style="background:{_bg};padding:8px 12px;border-radius:8px;margin-bottom:4px;">{_icon} {n.get("text", "")}<br><small style="color:#95A5B7">{n.get("created_at", "")}</small></div>', unsafe_allow_html=True)
-        else:
-            st.caption("Нет уведомлений")
-
-nc1, nc2, nc3, nc4 = st.columns(4)
+bell_col, nc1, nc2, nc3, nc4 = st.columns([1, 4, 4, 4, 4])
+with bell_col:
+    render_notifications_bell()
 with nc1:
     if st.button("\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438" else "secondary"):
         st.session_state.active_tab = "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438"
@@ -1374,6 +1383,14 @@ with nc4:
         st.session_state.expanded_task_key = None
         st.rerun()
 st.markdown("---")
+
+# Toast при загрузке если есть непрочитанные
+_unread_count = get_unread_count()
+if _unread_count > 0 and not st.session_state.get("crm_toast_shown", False):
+    st.toast(f"У вас {_unread_count} новых уведомлений", icon="\U0001F514")
+    st.session_state["crm_toast_shown"] = True
+
+render_notifications_panel()
 
 cu = st.session_state.user_name
 
@@ -1431,9 +1448,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044
                 if deal_id:
                     d = get_deal_by_id(deal_id)
                     if d: d["last_modified"] = now_str()
-                _cl_name = cl.get("name", "")
-                _dl = te.get("deadline", "")
-                add_notification(ntm, f"\U0001f4dd Новая задача: {ntopic.strip()} | Клиент: {_cl_name} | Срок: {_dl}", "new_task")
+                add_notification(ntm, f"Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
                 return True
         return False
     return False
@@ -2076,10 +2091,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                         "completed_report": ""
                     }
                     internal_tasks.append(new_it)
-                    _it_mgr = new_it.get("manager", "")
-                    _it_topic = new_it.get("text", "")
-                    _it_dl = new_it.get("deadline", "")
-                    add_notification(_it_mgr, f"\U0001f4dd Новая внутренняя задача: {_it_topic} | Срок: {_it_dl}", "new_task")
+                    add_notification(it_mgr, f"Новая внутренняя задача: {it_topic.strip()} | Срок: {it_dl.isoformat()}", f"\U0001F4DD Новая внутренняя задача: {it_topic.strip()} | Срок: {it_dl.isoformat()}")
                     st.session_state[show_it_key] = False
                     commit_and_rerun(st.session_state.crm_store, "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u044f\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
