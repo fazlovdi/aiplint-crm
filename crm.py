@@ -149,57 +149,10 @@ if isinstance(raw_token, str):
 else:
     YANDEX_TOKEN = ""
 
-TELEGRAM_BOT_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
-if not TELEGRAM_BOT_TOKEN:
-    TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
+TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
 
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-def send_telegram_message(chat_id, text):
-    """Отправляет сообщение в Telegram через бота."""
-    if not TELEGRAM_BOT_TOKEN or not chat_id:
-        return
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        resp = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=10)
-        return resp.status_code == 200
-    except:
-        return False
-
-def add_notification(user_login, text, ntype="task", ref_id=None):
-    """Добавляет внутреннее уведомление + отправляет в Telegram если есть chat_id."""
-    notifs = st.session_state.crm_store.setdefault("notifications", [])
-    notifs.append({
-        "id": uuid.uuid4().hex[:8],
-        "user": user_login,
-        "text": text,
-        "type": ntype,
-        "ref_id": ref_id,
-        "time": now_str(),
-        "read": False
-    })
-    # Telegram push
-    for u in st.session_state.crm_store.get("users", []):
-        if u.get("login") == user_login:
-            cid = u.get("telegram_chat_id", "")
-            if cid:
-                send_telegram_message(cid, text)
-            break
-
-def get_unread_count(user_login):
-    notifs = st.session_state.crm_store.get("notifications", [])
-    return sum(1 for n in notifs if n.get("user") == user_login and not n.get("read", False))
-
-def get_user_notifications(user_login, limit=30):
-    notifs = st.session_state.crm_store.get("notifications", [])
-    user_notifs = [n for n in notifs if n.get("user") == user_login]
-    user_notifs.sort(key=lambda n: n.get("time", ""), reverse=True)
-    return user_notifs[:limit]
-
-def mark_notifications_read(user_login):
-    for n in st.session_state.crm_store.get("notifications", []):
-        if n.get("user") == user_login:
-            n["read"] = True
 
 def get_sort_key(entity):
     return entity.get("last_modified", "1970-01-01 00:00:00")
@@ -316,7 +269,7 @@ def download_db_from_yandex():
                 return
     except: pass
     if not os.path.exists(FILE_NAME):
-        db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": []}
+        db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
         with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(db, f, ensure_ascii=False, indent=2)
 
 def upload_db_to_yandex_async():
@@ -473,6 +426,101 @@ def format_created_date(entity):
 
 def get_managers_list():
     return [u.get("name", u["login"]) for u in st.session_state.crm_store.get("users", []) if u.get("role") != "admin"]
+
+def get_user_by_login(login):
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("login") == login:
+            return u
+    return None
+
+def get_user_by_name(name):
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("name", u.get("login", "")) == name:
+            return u
+    return None
+
+def send_telegram(chat_id, text):
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": int(chat_id), "text": text, "parse_mode": "HTML"},
+            timeout=5
+        )
+    except:
+        pass
+
+def create_notification(user_login, text, ntype="task"):
+    notifs = st.session_state.crm_store.setdefault("notifications", [])
+    notifs.append({
+        "id": len(notifs) + 1,
+        "user": user_login,
+        "text": text,
+        "type": ntype,
+        "read": False,
+        "created_at": now_str()
+    })
+    u = get_user_by_login(user_login)
+    if u and u.get("telegram_chat_id"):
+        send_telegram(u["telegram_chat_id"], text)
+
+def notify_new_task(manager_name, task_text, client_name, deadline, task_number=""):
+    u = get_user_by_name(manager_name)
+    if not u:
+        return
+    msg = f"\U0001F4DD Новая задача: {task_text}"
+    if task_number:
+        msg += f" \u2116{task_number}"
+    if client_name:
+        msg += f" | Клиент: {client_name}"
+    if deadline:
+        msg += f" | Срок: {deadline}"
+    create_notification(u["login"], msg, "new_task")
+
+def notify_task_done(task_text, client_name, done_by, task_number=""):
+    # Find the task author (created_by) - this is called with task object
+    # We need created_by passed in
+    pass
+
+def notify_task_on_review(created_by_login, task_text, client_name, done_by_name, task_number=""):
+    if not created_by_login:
+        return
+    msg = f"\u2705 Задача на проверке: {task_text}"
+    if task_number:
+        msg += f" \u2116{task_number}"
+    if client_name:
+        msg += f" | Клиент: {client_name}"
+    if done_by_name:
+        msg += f" | Выполнил: {done_by_name}"
+    create_notification(created_by_login, msg, "review")
+
+def render_notification_bell():
+    notifs = st.session_state.crm_store.get("notifications", [])
+    cu = st.session_state.get("user_login", "")
+    my_notifs = [n for n in notifs if n.get("user") == cu or (st.session_state.get("user_role") == "admin" and n.get("user") == cu)]
+    unread = [n for n in my_notifs if not n.get("read", False)]
+    bell_icon = "\U0001F514" if unread else "\U0001F515"
+    count_text = f" ({len(unread)})" if unread else ""
+    if st.button(f"{bell_icon}{count_text}", key="notif_bell_btn", help="Уведомления"):
+        st.session_state["show_notifications"] = not st.session_state.get("show_notifications", False)
+        st.rerun()
+    if st.session_state.get("show_notifications", False):
+        with st.container(border=True):
+            if my_notifs:
+                for n in reversed(my_notifs[-30:]):
+                    bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
+                    st.markdown(f'<div style="background:{bg};padding:8px 12px;border-radius:8px;margin-bottom:4px;font-size:0.85rem;">{n.get("text","")}<br><span style="font-size:0.72rem;color:#95A5B7;">{n.get("created_at","")}</span></div>', unsafe_allow_html=True)
+                if st.button("Отметить все прочитанными", key="mark_read_btn", use_container_width=True):
+                    for n in notifs:
+                        if n.get("user") == cu:
+                            n["read"] = True
+                    save_data(st.session_state.crm_store)
+                    st.rerun()
+            else:
+                st.caption("Нет уведомлений")
+    if unread and not st.session_state.get("show_notifications", False):
+        st.toast(f"У вас {len(unread)} новых уведомлений", icon="\U0001F514")
 
 def render_copy_button(text, btn_id, label="\U0001F4CB \u041a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
     safe_text = text.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", "\\n")
@@ -784,12 +832,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         if d: d["last_modified"] = now_str()
                         st.session_state[show_key] = False
                         st.session_state[f"show_new_after_{key_prefix}"] = True
-                        _author = t.get("created_by", "")
-                        _task_num = t.get("task_number", "")
-                        _client_name = cl.get("name", "") if cl else ""
-                        _reporter = st.session_state.get("user_name", "")
-                        if _author:
-                            add_notification(_author, f"✅ Задача на проверке: {_task_num} — {_client_name} | Выполнил: {_reporter}", ntype="review", ref_id=_task_num)
+                        notify_task_on_review(t.get("created_by", ""), t.get("text", ""), cl.get("name", ""), st.session_state.get("user_name", ""), t.get("task_number", ""))
                         commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
                     else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
             if st.session_state.get(f"show_new_after_{key_prefix}", False):
@@ -824,8 +867,8 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             st.session_state[f"show_new_after_{key_prefix}"] = False
-                            add_notification(nt_mgr2, f"📝 Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name', '')} | Срок: {nt_dl2.strftime('%d.%m.%Y')}")
-                            commit_and_rerun(st.session_state.crm_store, "Новая задача создана")
+                            notify_new_task(new_task.get("manager", ""), new_task.get("text", ""), cl.get("name", ""), format_date(new_task.get("deadline", "")), new_task.get("task_number", ""))
+                            commit_and_rerun(st.session_state.crm_store, "\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
                         else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
                 with nc2:
                     if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"nat_cancel_{key_prefix}", use_container_width=True):
@@ -983,10 +1026,10 @@ def migrate_task_files(t):
 def migrate_data(data):
     du = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440"}]
     if "users" not in data: data["users"] = du
-    if "notifications" not in data: data["notifications"] = []
     for u in data["users"]:
         if not is_hashed(u.get("password", "")): u["password"] = hash_password(u["password"])
-        if "telegram_chat_id" not in u: u["telegram_chat_id"] = ""
+    if "telegram_chat_id" not in u: u["telegram_chat_id"] = ""
+    for c in data.get("clients", []):
         client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
         first_deal_id = client_deals[0]["id"] if client_deals else None
         for k, v in [("email",""),("address",""),("base_comment",""),("category","\u041d\u0435 \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0451\u043d"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[]),("last_modified","1970-01-01 00:00:00"),("client_chat",[]),("created_at","")]:
@@ -1026,6 +1069,7 @@ def migrate_data(data):
     if "chat_messages" not in data: data["chat_messages"] = []
     if "qa_entries" not in data: data["qa_entries"] = []
     if "suppliers" not in data: data["suppliers"] = []
+    if "notifications" not in data: data["notifications"] = []
     data["_migrated"] = "v2"
     return data
 
@@ -1286,21 +1330,18 @@ with st.sidebar:
                         if st.button("X", key=f"del_u_{u['login']}", help="\u0423\u0434\u0430\u043b\u0438\u0442\u044c"):
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
-with st.expander("Telegram уведомления"):
-    _cur_tg = ""
-    for u in st.session_state.crm_store.get("users", []):
-        if u.get("login") == st.session_state.user_login:
-            _cur_tg = u.get("telegram_chat_id", "")
-            break
-    _tg_input = st.text_input("Ваш Telegram Chat ID:", value=_cur_tg, key="tg_chat_id_input", placeholder="Например: 123456789")
-    st.caption("Чтобы узнать Chat ID: найдите бота @userinfobot в Telegram и отправьте /start")
-    if st.button("Сохранить", key="save_tg_btn", use_container_width=True):
-        for u in st.session_state.crm_store.get("users", []):
-            if u.get("login") == st.session_state.user_login:
-                u["telegram_chat_id"] = _tg_input.strip()
-                break
-        save_data(st.session_state.crm_store)
-        st.toast("Chat ID сохранён", icon="✅")
+    st.markdown("---")
+    with st.expander("Telegram уведомления"):
+        cur_user = get_user_by_login(st.session_state.user_login)
+        cur_chat_id = cur_user.get("telegram_chat_id", "") if cur_user else ""
+        tg_input = st.text_input("Ваш Chat ID:", value=cur_chat_id, key="tg_chat_id_input")
+        if st.button("Сохранить", key="save_tg_btn", use_container_width=True):
+            if cur_user:
+                cur_user["telegram_chat_id"] = tg_input.strip()
+                save_data(st.session_state.crm_store)
+                st.toast("Chat ID сохранён", icon="\u2705")
+                st.rerun()
+        st.caption("Чтобы узнать свой Chat ID: найдите @userinfobot в Telegram, отправьте /start")
     st.markdown("---")
     if st.button("\u0412\u044b\u0439\u0442\u0438", use_container_width=True):
         _tok = st.query_params.get("auth_token")
@@ -1317,62 +1358,33 @@ with st.expander("Telegram уведомления"):
         st.session_state.user_login = None
         st.session_state.user_name = None
         st.rerun()
+notif_col, spacer_col = st.columns([1, 10])
+with notif_col:
+    render_notification_bell()
 
-# Уведомления - колокольчик
-_bell_unread = get_unread_count(st.session_state.user_login)
-_bell_col, _nav_col = st.columns([0.15, 0.85])
-with _bell_col:
-    _bell_label = "🔔" + (f" ({_bell_unread})" if _bell_unread else "")
-    if st.button(_bell_label, key="bell_btn", help="Уведомления", use_container_width=True):
-        st.session_state["show_notifications"] = not st.session_state.get("show_notifications", False)
+nc1, nc2, nc3, nc4 = st.columns(4)
+with nc1:
+    if st.button("\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438" else "secondary"):
+        st.session_state.active_tab = "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438"
+        st.session_state.expanded_task_key = None
         st.rerun()
-with _nav_col:
-    nc1, nc2, nc3, nc4 = st.columns(4)
-    with nc1:
-        if st.button("\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438" else "secondary"):
-            st.session_state.active_tab = "\u041a\u043b\u0438\u0435\u043d\u0442\u044b \u0438 \u0441\u0434\u0435\u043b\u043a\u0438"
-            st.session_state.expanded_task_key = None
-            st.rerun()
-    with nc2:
-        if st.button("\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a" else "secondary"):
-            st.session_state.active_tab = "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a"
-            st.session_state.expanded_task_key = None
-            st.rerun()
-    with nc3:
-        if st.button("\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438" else "secondary"):
-            st.session_state.active_tab = "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438"
-            st.session_state.expanded_task_key = None
-            st.rerun()
-    with nc4:
-        if st.button("\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438" else "secondary"):
-            st.session_state.active_tab = "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438"
-            st.session_state.expanded_task_key = None
-            st.rerun()
-if st.session_state.get("show_notifications", False):
-    with st.container(border=True):
-        st.markdown("**🔔 Уведомления**")
-        _notifs = get_user_notifications(st.session_state.user_login)
-        if _notifs:
-            for n in _notifs:
-                _bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
-                _icon = "📝" if n.get("type") == "task" else "ℹ️"
-                st.markdown(f'<div style="background:{_bg};border-radius:8px;padding:8px 12px;margin-bottom:4px;"><span style="font-size:0.85rem;"><b>{_icon}</b> {n.get("text","")} <span style="color:#95A5B7;font-size:0.75rem;">{n.get("time","")}</span></span></div>', unsafe_allow_html=True)
-            if st.button("✓ Отметить все прочитанными", key="mark_read_btn", use_container_width=True):
-                mark_notifications_read(st.session_state.user_login)
-                save_data(st.session_state.crm_store)
-                st.session_state["show_notifications"] = False
-                st.rerun()
-        else:
-            st.info("Нет уведомлений")
-        if st.button("Закрыть", key="close_notif_btn", use_container_width=True):
-            st.session_state["show_notifications"] = False
-            st.rerun()
+with nc2:
+    if st.button("\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a" else "secondary"):
+        st.session_state.active_tab = "\u041f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0449\u0438\u043a"
+        st.session_state.expanded_task_key = None
+        st.rerun()
+with nc3:
+    if st.button("\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438" else "secondary"):
+        st.session_state.active_tab = "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438"
+        st.session_state.expanded_task_key = None
+        st.rerun()
+with nc4:
+    if st.button("\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438", use_container_width=True, type="primary" if st.session_state.active_tab == "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438" else "secondary"):
+        st.session_state.active_tab = "\u041f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0438"
+        st.session_state.expanded_task_key = None
+        st.rerun()
 st.markdown("---")
 
-# Toast для непрочитанных
-if get_unread_count(st.session_state.user_login) > 0 and not st.session_state.get("_notif_toasted", False):
-    st.toast(f"🔔 У вас {get_unread_count(st.session_state.user_login)} непрочитанных уведомлений")
-    st.session_state["_notif_toasted"] = True
 cu = st.session_state.user_name
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"):
@@ -1429,7 +1441,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="\u0421\u0432\u044
                 if deal_id:
                     d = get_deal_by_id(deal_id)
                     if d: d["last_modified"] = now_str()
-                add_notification(ntm, f"📝 Новая задача: {ntopic.strip()} | Клиент: {cl.get('name', '') if cl else ''} | Срок: {ntd.strftime('%d.%m.%Y')}")
+                notify_new_task(te.get("manager", ""), te.get("text", ""), cl.get("name", ""), format_date(te.get("deadline", "")), te.get("task_number", ""))
                 return True
         return False
     return False
@@ -2069,11 +2081,12 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                         "comment": it_comment.strip(),
                         "created_at": now_str(),
                         "last_modified": now_str(),
-                        "completed_report": ""
+                        "completed_report": "",
+                        "created_by": st.session_state.get("user_login", "")
                     }
                     internal_tasks.append(new_it)
                     st.session_state[show_it_key] = False
-                    add_notification(it_mgr, f"📝 Новая внутренняя задача: {it_topic.strip()} | Срок: {it_dl.strftime('%d.%m.%Y')}")
+                    notify_new_task(new_it.get("manager", ""), new_it.get("text", ""), "", new_it.get("deadline", ""), "")
                     commit_and_rerun(st.session_state.crm_store, "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u044f\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
 
     st.markdown("---")
@@ -2137,6 +2150,7 @@ elif st.session_state.active_tab == "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\
                                     it["completed_report"] = it_report.strip()
                                     it["last_modified"] = now_str()
                                     st.session_state[show_it_complete] = False
+                                    notify_task_on_review(it.get("created_by", ""), it.get("text", ""), "", st.session_state.get("user_name", ""), "")
                                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
                                 else:
                                     st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0451\u0442")
