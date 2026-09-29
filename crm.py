@@ -1068,6 +1068,20 @@ def get_user_by_login(login):
             return u
     return None
 
+def resolve_login(name_or_login):
+    """Преобразует имя сотрудника в логин (для уведомлений)."""
+    if not name_or_login:
+        return ""
+    # Сначала пробуем как логин
+    u = get_user_by_login(name_or_login)
+    if u:
+        return u["login"]
+    # Потом ищем по имени
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("name") == name_or_login:
+            return u["login"]
+    return name_or_login
+
 def send_telegram(chat_id, text):
     if not TELEGRAM_BOT_TOKEN or not chat_id:
         return
@@ -1082,6 +1096,7 @@ def send_telegram(chat_id, text):
 
 def add_notification(to_login, text, tg_text=None):
     """Создаёт уведомление: внутреннее (колокольчик) + Telegram"""
+    to_login = resolve_login(to_login)
     store = st.session_state.crm_store
     if "notifications" not in store:
         store["notifications"] = []
@@ -1121,14 +1136,12 @@ def render_notifications_bell():
     """Колокольчик с уведомлениями — узкая колонка слева"""
     unread = get_unread_count()
     bell_key = "crm_bell_toggle"
-    if st.session_state.get(bell_key, False):
-        bell_label = "🔔"
+    if unread > 0:
+        bell_label = f"🔔 {unread}"
     else:
-        bell_label = f"🔔" + (f" {unread}" if unread > 0 else "")
+        bell_label = "🔔"
     if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)", use_container_width=True):
         st.session_state[bell_key] = not st.session_state.get(bell_key, False)
-        if st.session_state[bell_key] and unread > 0:
-            mark_all_notifications_read()
         st.rerun()
 
 def render_notifications_panel():
@@ -1137,23 +1150,29 @@ def render_notifications_panel():
     if not st.session_state.get(bell_key, False):
         return
     notifs = get_my_notifications()
+    unread = get_unread_count()
     with st.container(border=True):
-        st.markdown("### 🔔 Уведомления")
+        hc, bc = st.columns([10, 2])
+        with hc:
+            st.markdown("### 🔔 Уведомления")
+        with bc:
+            if unread > 0:
+                if st.button("Прочитать все", key="btn_read_all", use_container_width=True):
+                    mark_all_notifications_read()
+                    st.rerun()
         if not notifs:
             st.caption("Нет уведомлений")
         else:
             for n in notifs:
-                bg = "#F0F4FF" if not n.get("read", False) else "#F5F6F8"
+                bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
+                border = "1px solid #BBDEFB" if not n.get("read", False) else "1px solid #E8EBEF"
                 st.markdown(
-                    f'<div style="background:{bg};border-radius:8px;padding:8px 12px;margin-bottom:6px;">'
+                    f'<div style="background:{bg};border:{border};border-radius:10px;padding:10px 14px;margin-bottom:8px;">'
                     f'<span style="font-size:0.75rem;color:#95A5B7;">{n.get("date","")}</span><br>'
-                    f'<span style="font-size:0.9rem;color:#2C3E50;">{n.get("text","")}</span>'
+                    f'<span style="font-size:0.95rem;color:#2C3E50;">{n.get("text","")}</span>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
-            if st.button("Прочитать все", key="btn_read_all", use_container_width=True):
-                mark_all_notifications_read()
-                st.rerun()
 
 
 @st.dialog("\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u0441\u0434\u0435\u043b\u043a\u0443", width="medium")
