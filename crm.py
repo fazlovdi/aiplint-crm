@@ -83,13 +83,25 @@ st.markdown("""
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
 
-    /* Sticky search bar for deals tab */
-    .crm-sticky-bar { position: sticky; top: 0; z-index: 100; background-color: #F5F6F8; padding: 8px 0; }
+    /* Sticky search bar for deals tab — fix parent overflow so position:sticky works */
+    [data-testid="stVerticalBlock"], [data-testid="stAppViewBlockContainer"] { overflow: visible !important; }
+    .stApp > div, .stApp > div > div { overflow: visible !important; }
+    section[data-testid="stMain"] { overflow: visible !important; }
+    .crm-sticky-bar { position: sticky; top: 0; z-index: 9999; background-color: #F5F6F8; padding: 8px 0; margin: 0 -1rem; }
     /* Scroll-to-top button */
     #crm-scroll-top { position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%; background: #bc1661; color: white; border: none; font-size: 20px; cursor: pointer; z-index: 999998; display: none; box-shadow: 0 2px 8px rgba(188,22,97,0.3); transition: opacity 0.2s; }
     #crm-scroll-top:hover { background: #9a1452; }
-    /* Bell button compact */
-    .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
+    /* Bell button — compact, fits bell + number */
+    [key="crm_bell_wrap"] button, [data-testid="stButton"] button[key="btn_bell"] { 
+        white-space: nowrap !important; 
+        min-width: auto !important; 
+        width: auto !important; 
+        font-size: 0.9rem !important; 
+        padding: 0.4rem 0.8rem !important; 
+        display: inline-flex !important; 
+        align-items: center !important; 
+        gap: 4px !important;
+    }
 
 </style>
 """, unsafe_allow_html=True)
@@ -161,7 +173,62 @@ st.components.v1.html("""
             });
         }
     };
+    // Sticky search bar — JS fallback for Streamlit
+    w.crmInitStickyBar = function() {
+        var doc = w.document;
+        var bar = doc.querySelector('.crm-sticky-bar');
+        if (!bar) return;
+        var placeholder = null;
+        function onScroll() {
+            var rect = bar.getBoundingClientRect();
+            var scrollTop = w.scrollY || doc.documentElement.scrollTop;
+            // Get the bar's natural position from its parent
+            var parent = bar.parentElement;
+            if (!parent) return;
+            var parentRect = parent.getBoundingClientRect();
+            var barTop = parentRect.top + scrollTop;
+            if (scrollTop > barTop - 10) {
+                if (!bar.classList.contains('crm-sticky-fixed')) {
+                    // Create placeholder to prevent layout jump
+                    if (!placeholder) {
+                        placeholder = doc.createElement('div');
+                        placeholder.style.height = bar.offsetHeight + 'px';
+                        bar.parentElement.insertBefore(placeholder, bar);
+                    }
+                    bar.classList.add('crm-sticky-fixed');
+                    bar.style.position = 'fixed';
+                    bar.style.top = '0';
+                    bar.style.left = rect.left + 'px';
+                    bar.style.width = rect.width + 'px';
+                    bar.style.zIndex = '9999';
+                    bar.style.background = '#F5F6F8';
+                    bar.style.padding = '8px 0';
+                    bar.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)';
+                }
+            } else {
+                if (bar.classList.contains('crm-sticky-fixed')) {
+                    bar.classList.remove('crm-sticky-fixed');
+                    bar.style.position = '';
+                    bar.style.top = '';
+                    bar.style.left = '';
+                    bar.style.width = '';
+                    bar.style.zIndex = '';
+                    bar.style.background = '';
+                    bar.style.padding = '';
+                    bar.style.boxShadow = '';
+                    if (placeholder) {
+                        placeholder.parentElement && placeholder.parentElement.removeChild(placeholder);
+                        placeholder = null;
+                    }
+                }
+            }
+        }
+        w.addEventListener('scroll', onScroll);
+        w.addEventListener('resize', onScroll);
+        onScroll();
+    };
     setTimeout(w.crmInitScrollTop, 500);
+    setTimeout(w.crmInitStickyBar, 600);
 
 </script>
 """, height=0)
@@ -1164,19 +1231,19 @@ def mark_all_notifications_read():
     save_data(st.session_state.crm_store)
 
 def render_notifications_bell():
-    """Колокольчик с уведомлениями — компактная кнопка"""
+    """Колокольчик с уведомлениями — компактная кнопка, число справа от колокольчика"""
     unread = get_unread_count()
     bell_key = "crm_bell_toggle"
     if unread > 0:
-        bell_label = f"🔔 {unread}"
+        bell_label = f"\U0001F514 {unread}"
     else:
-        bell_label = "🔔"
-    bc_col, _spacer = st.columns([1, 20])
+        bell_label = "\U0001F514"
+    # Кнопка по размеру содержимого, не на всю ширину
+    bc_col, _spacer = st.columns([2, 20])
     with bc_col:
-        with st.container(key="crm_bell_wrap"):
-            if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)"):
-                st.session_state[bell_key] = not st.session_state.get(bell_key, False)
-                st.rerun()
+        if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)"):
+            st.session_state[bell_key] = not st.session_state.get(bell_key, False)
+            st.rerun()
 
 def render_notifications_panel():
     """Панель уведомлений на всю ширину"""
@@ -2233,6 +2300,7 @@ elif st.session_state.active_tab == "Сделки":
     with fc2:
         mgr_filter = st.selectbox("Ответственный:", ["Все"] + get_managers_list(), index=0, key="deal_tab_mgr")
     st.markdown('</div>', unsafe_allow_html=True)
+    st.components.v1.html('<script>(function(){var w=window;try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}if(w.crmInitStickyBar)w.crmInitStickyBar();else setTimeout(function(){if(w.crmInitStickyBar)w.crmInitStickyBar();},300);})();</script>', height=0)
     # Filter deals for "Новые" and "В работе" columns only
     fdeals = []
     for d in all_deals:
