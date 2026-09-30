@@ -82,6 +82,15 @@ st.markdown("""
     .stHorizontalBlock .stButton button { font-size: 0.85rem !important; }
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
+
+    /* Sticky search bar for deals tab */
+    .crm-sticky-bar { position: sticky; top: 0; z-index: 100; background-color: #F5F6F8; padding: 8px 0; }
+    /* Scroll-to-top button */
+    #crm-scroll-top { position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%; background: #bc1661; color: white; border: none; font-size: 20px; cursor: pointer; z-index: 999998; display: none; box-shadow: 0 2px 8px rgba(188,22,97,0.3); transition: opacity 0.2s; }
+    #crm-scroll-top:hover { background: #9a1452; }
+    /* Bell button compact */
+    .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -132,6 +141,28 @@ st.components.v1.html("""
         } catch(e) { fail(); }
     };
 })();
+
+    // Scroll-to-top button
+    w.crmInitScrollTop = function() {
+        var doc = w.document;
+        var btn = doc.getElementById('crm-scroll-top');
+        if (!btn) {
+            btn = doc.createElement('button');
+            btn.id = 'crm-scroll-top';
+            btn.innerHTML = '\u2191';
+            btn.style.cssText = 'position:fixed;bottom:24px;right:24px;width:44px;height:44px;border-radius:50%;background:#bc1661;color:white;border:none;font-size:20px;cursor:pointer;z-index:999998;display:none;box-shadow:0 2px 8px rgba(188,22,97,0.3);transition:opacity 0.2s;';
+            btn.onclick = function() { w.scrollTo({top:0, behavior:'smooth'}); };
+            btn.addEventListener('mouseenter', function() { this.style.background = '#9a1452'; });
+            btn.addEventListener('mouseleave', function() { this.style.background = '#bc1661'; });
+            doc.body.appendChild(btn);
+            w.addEventListener('scroll', function() {
+                if (w.scrollY > 300) { btn.style.display = 'block'; }
+                else { btn.style.display = 'none'; }
+            });
+        }
+    };
+    setTimeout(w.crmInitScrollTop, 500);
+
 </script>
 """, height=0)
 
@@ -1140,11 +1171,12 @@ def render_notifications_bell():
         bell_label = f"🔔 {unread}"
     else:
         bell_label = "🔔"
-    bc1, bc2 = st.columns([1, 20])
-    with bc1:
-        if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)"):
-            st.session_state[bell_key] = not st.session_state.get(bell_key, False)
-            st.rerun()
+    bc_col, _spacer = st.columns([1, 20])
+    with bc_col:
+        with st.container(key="crm_bell_wrap"):
+            if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)"):
+                st.session_state[bell_key] = not st.session_state.get(bell_key, False)
+                st.rerun()
 
 def render_notifications_panel():
     """Панель уведомлений на всю ширину"""
@@ -1658,8 +1690,10 @@ def render_deal_standalone(d, cl, cu):
     parts.append(f"Ответственный: {d.get('manager', '—')}")
     parts.append(f"Задач: {len(dl_tasks)}")
     label = " | ".join(parts)
-    bc = "#2196F3" if is_exp else "#DCE0E5"
-    st.markdown(f"<style>.st-key-dls_wrap_{deal_id} button {{ background-color: #FFFFFF !important; color: #2C3E50 !important; border: 2px solid {bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
+    # Border colors based on task status (like in clients)
+    dl_bg, dl_bc = get_entity_border(dl_tasks)
+    bc = "#2196F3" if is_exp else dl_bc
+    st.markdown(f"<style>.st-key-dls_wrap_{deal_id} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
     with st.container(key=f"dls_wrap_{deal_id}"):
         if st.button(label, key=f"dls_btn_{deal_id}", use_container_width=True, type="primary" if is_exp else "secondary"):
             st.session_state[exp_key] = None if is_exp else deal_id
@@ -2157,55 +2191,54 @@ if st.session_state.active_tab == "Клиенты":
         st.info("База клиентов пуста. Создайте первого клиента.")
 
 elif st.session_state.active_tab == "Сделки":
-    st.markdown("### Сделки")
-    # CSS для закрепления поиска и фильтра при скролле
-    st.markdown("""<style>
-    .deals-sticky-bar { position: sticky; top: 0; z-index: 100; background-color: #F5F6F8; padding: 8px 0; }
-    </style>""", unsafe_allow_html=True)
-    
     all_deals = st.session_state.crm_store.get("deals", [])
     cid_map = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
-    
-    # Подсчёт сумм
+    # Compute sums
     work_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "В работе")
-    closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "Сделка закрыта")
-    
-    # Счётчики сумм
-    sc1, sc2 = st.columns(2)
-    with sc1:
+    closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта")
+    # Sum metrics (no heading)
+    m1, m2 = st.columns(2)
+    with m1:
         st.metric("Сумма сделок в работе", f"{work_sum:,.0f} руб.".replace(",", " "))
-    with sc2:
+    with m2:
         st.metric("Сумма завершённых сделок", f"{closed_sum:,.0f} руб.".replace(",", " "))
-    
-    # Свёрнутые секции для завершённых и архивных
-    closed_deals = [d for d in all_deals if d.get("status", "Новый") == "Сделка закрыта"]
-    arch_deals = [d for d in all_deals if d.get("status", "Новый") == "Архив"]
-    
-    if closed_deals:
-        with st.expander(f"Успешно завершены ({len(closed_deals)})", expanded=False):
-            closed_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+    # Collapsed sections for closed and archive at top
+    with st.expander(f"Успешно завершены ({sum(1 for d in all_deals if d.get('status') == 'Сделка закрыта')})", expanded=False):
+        closed_search = st.text_input("Поиск среди завершённых:", key="deal_closed_search", placeholder="Введите текст...").strip().lower()
+        closed_deals = [d for d in all_deals if d.get("status") == "Сделка закрыта"]
+        if closed_search:
+            closed_deals = [d for d in closed_deals if closed_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
+        closed_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+        if closed_deals:
             for d in closed_deals:
                 render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-    if arch_deals:
-        with st.expander(f"Архив ({len(arch_deals)})", expanded=False):
-            arch_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+        else:
+            st.caption("Завершённых сделок нет.")
+    with st.expander(f"Архив ({sum(1 for d in all_deals if d.get('status') == 'Архив')})", expanded=False):
+        arch_search = st.text_input("Поиск среди архива:", key="deal_arch_search", placeholder="Введите текст...").strip().lower()
+        arch_deals = [d for d in all_deals if d.get("status") == "Архив"]
+        if arch_search:
+            arch_deals = [d for d in arch_deals if arch_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
+        arch_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+        if arch_deals:
             for d in arch_deals:
                 render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-    
-    st.markdown("---")
-    
-    # Закреплённая строка поиска и фильтра
-    with st.container(key="deals_sticky_bar"):
-        st.markdown('<div class="deals-sticky-bar"></div>', unsafe_allow_html=True)
-        fc1, fc2 = st.columns([2, 1])
-        with fc1:
-            deal_search = st.text_input("Поиск по номеру, названию или клиенту:", key="deal_tab_search", placeholder="Введите текст...").strip().lower()
-        with fc2:
-            mgr_filter = st.selectbox("Ответственный:", ["Все"] + get_managers_list(), index=0, key="deal_tab_mgr")
-    
-    # Фильтрация
+        else:
+            st.caption("Архив пуст.")
+    # Sticky search + manager filter
+    st.markdown('<div class="crm-sticky-bar">', unsafe_allow_html=True)
+    fc1, fc2 = st.columns([2, 1])
+    with fc1:
+        deal_search = st.text_input("Поиск по номеру, названию или клиенту:", key="deal_tab_search", placeholder="Введите текст...").strip().lower()
+    with fc2:
+        mgr_filter = st.selectbox("Ответственный:", ["Все"] + get_managers_list(), index=0, key="deal_tab_mgr")
+    st.markdown('</div>', unsafe_allow_html=True)
+    # Filter deals for "Новые" and "В работе" columns only
     fdeals = []
     for d in all_deals:
+        s = d.get("status", "Новый")
+        if s not in ("Новый", "В работе"):
+            continue
         cl = cid_map.get(d.get("client_id"))
         if mgr_filter != "Все" and d.get("manager", "") != mgr_filter:
             continue
@@ -2215,33 +2248,22 @@ elif st.session_state.active_tab == "Сделки":
                 continue
         fdeals.append(d)
     fdeals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
-    def deal_col(dd):
-        s = dd.get("status", "Новый")
-        if s == "Новый": return "new"
-        if s == "В работе": return "work"
-        if s == "Сделка закрыта": return "closed"
-        if s == "Архив": return "arch"
-        return "new"
-    groups = {"new": [], "work": []}
-    for d in fdeals:
-        col = deal_col(d)
-        if col in ("new", "work"):
-            groups[col].append(d)
-    
+    new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
+    work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
     col_new, col_work = st.columns(2)
     with col_new:
         with st.container(border=True):
-            st.subheader(f"Новые ({len(groups['new'])})")
-            if groups["new"]:
-                for d in groups["new"]:
+            st.subheader(f"Новые ({len(new_deals)})")
+            if new_deals:
+                for d in new_deals:
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Новых сделок нет.")
     with col_work:
         with st.container(border=True):
-            st.subheader(f"В работе ({len(groups['work'])})")
-            if groups["work"]:
-                for d in groups["work"]:
+            st.subheader(f"В работе ({len(work_deals)})")
+            if work_deals:
+                for d in work_deals:
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
