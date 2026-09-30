@@ -1133,16 +1133,18 @@ def mark_all_notifications_read():
     save_data(st.session_state.crm_store)
 
 def render_notifications_bell():
-    """Колокольчик с уведомлениями — узкая колонка слева"""
+    """Колокольчик с уведомлениями — компактная кнопка"""
     unread = get_unread_count()
     bell_key = "crm_bell_toggle"
     if unread > 0:
         bell_label = f"🔔 {unread}"
     else:
         bell_label = "🔔"
-    if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)", use_container_width=True):
-        st.session_state[bell_key] = not st.session_state.get(bell_key, False)
-        st.rerun()
+    bc1, bc2 = st.columns([1, 20])
+    with bc1:
+        if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)"):
+            st.session_state[bell_key] = not st.session_state.get(bell_key, False)
+            st.rerun()
 
 def render_notifications_panel():
     """Панель уведомлений на всю ширину"""
@@ -2156,13 +2158,52 @@ if st.session_state.active_tab == "Клиенты":
 
 elif st.session_state.active_tab == "Сделки":
     st.markdown("### Сделки")
+    # CSS для закрепления поиска и фильтра при скролле
+    st.markdown("""<style>
+    .deals-sticky-bar { position: sticky; top: 0; z-index: 100; background-color: #F5F6F8; padding: 8px 0; }
+    </style>""", unsafe_allow_html=True)
+    
     all_deals = st.session_state.crm_store.get("deals", [])
-    fc1, fc2 = st.columns([2, 1])
-    with fc1:
-        deal_search = st.text_input("Поиск по номеру, названию или клиенту:", key="deal_tab_search", placeholder="Введите текст...").strip().lower()
-    with fc2:
-        mgr_filter = st.selectbox("Ответственный:", ["Все"] + get_managers_list(), index=0, key="deal_tab_mgr")
     cid_map = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
+    
+    # Подсчёт сумм
+    work_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "В работе")
+    closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "Сделка закрыта")
+    
+    # Счётчики сумм
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        st.metric("Сумма сделок в работе", f"{work_sum:,.0f} руб.".replace(",", " "))
+    with sc2:
+        st.metric("Сумма завершённых сделок", f"{closed_sum:,.0f} руб.".replace(",", " "))
+    
+    # Свёрнутые секции для завершённых и архивных
+    closed_deals = [d for d in all_deals if d.get("status", "Новый") == "Сделка закрыта"]
+    arch_deals = [d for d in all_deals if d.get("status", "Новый") == "Архив"]
+    
+    if closed_deals:
+        with st.expander(f"Успешно завершены ({len(closed_deals)})", expanded=False):
+            closed_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+            for d in closed_deals:
+                render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+    if arch_deals:
+        with st.expander(f"Архив ({len(arch_deals)})", expanded=False):
+            arch_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+            for d in arch_deals:
+                render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+    
+    st.markdown("---")
+    
+    # Закреплённая строка поиска и фильтра
+    with st.container(key="deals_sticky_bar"):
+        st.markdown('<div class="deals-sticky-bar"></div>', unsafe_allow_html=True)
+        fc1, fc2 = st.columns([2, 1])
+        with fc1:
+            deal_search = st.text_input("Поиск по номеру, названию или клиенту:", key="deal_tab_search", placeholder="Введите текст...").strip().lower()
+        with fc2:
+            mgr_filter = st.selectbox("Ответственный:", ["Все"] + get_managers_list(), index=0, key="deal_tab_mgr")
+    
+    # Фильтрация
     fdeals = []
     for d in all_deals:
         cl = cid_map.get(d.get("client_id"))
@@ -2181,10 +2222,13 @@ elif st.session_state.active_tab == "Сделки":
         if s == "Сделка закрыта": return "closed"
         if s == "Архив": return "arch"
         return "new"
-    groups = {"new": [], "work": [], "closed": [], "arch": []}
+    groups = {"new": [], "work": []}
     for d in fdeals:
-        groups[deal_col(d)].append(d)
-    col_new, col_work, col_closed, col_arch = st.columns(4)
+        col = deal_col(d)
+        if col in ("new", "work"):
+            groups[col].append(d)
+    
+    col_new, col_work = st.columns(2)
     with col_new:
         with st.container(border=True):
             st.subheader(f"Новые ({len(groups['new'])})")
@@ -2201,22 +2245,6 @@ elif st.session_state.active_tab == "Сделки":
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
-    with col_closed:
-        with st.container(border=True):
-            st.subheader(f"Успешно завершены ({len(groups['closed'])})")
-            if groups["closed"]:
-                for d in groups["closed"]:
-                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-            else:
-                st.caption("Завершённых сделок нет.")
-    with col_arch:
-        with st.container(border=True):
-            st.subheader(f"Архив ({len(groups['arch'])})")
-            if groups["arch"]:
-                for d in groups["arch"]:
-                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-            else:
-                st.caption("Архив пуст.")
 
 elif st.session_state.active_tab == "Задачи":
     now_time = datetime.now()
