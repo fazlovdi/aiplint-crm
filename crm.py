@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
+import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, time
 import extra_streamlit_components as stx
 from datetime import datetime
 from collections import defaultdict
@@ -243,19 +243,15 @@ CATEGORIES = ["Не определён", "Дизайнер", "Строитель
 TASK_TYPES = ["Связаться", "Отправить заказ", "Отправить образцы"]
 SHIP_PAY_OPTIONS = ["", "Включено в счёт", "Клиентом при получении"]
 
-# Плейсхолдеры и лимиты — определяем ДО использования в функциях
 MGR_PLACEHOLDER = "Выбери ответственного"
 NOTIFICATIONS_LIMIT = 1000
-
-# ============================================================
-# ТОКЕН ЯНДЕКС.ДИСКА
-# ============================================================
 
 raw_token = st.secrets.get("YANDEX_DISK_TOKEN", "")
 if isinstance(raw_token, str):
     YANDEX_TOKEN = raw_token.strip().strip('"').strip("'")
 else:
     YANDEX_TOKEN = ""
+
 
 # ============================================================
 # УТИЛИТЫ
@@ -270,7 +266,6 @@ def get_sort_key(entity):
 
 
 def _safe_js_str(s):
-    """Экранирует строку для вставки в JS-строку в одинарных кавычках."""
     if s is None:
         return ""
     return (
@@ -366,10 +361,6 @@ def inject_payment_container_css(deal_id, status):
     )
 
 
-# ============================================================
-# ПАРОЛИ
-# ============================================================
-
 def hash_password(pwd, salt=None):
     if salt is None:
         salt = secrets.token_hex(16)
@@ -378,7 +369,6 @@ def hash_password(pwd, salt=None):
 
 
 def is_hashed(s):
-    """Проверяет, что строка выглядит как salt:hash или чистый sha256-хэш."""
     if not s:
         return False
     if ":" in s:
@@ -393,7 +383,6 @@ def is_hashed(s):
 
 
 def verify_password(pwd, stored):
-    """Проверяет пароль. Plain-пароли не поддерживаются (безопасность)."""
     if not stored:
         return False
     if ":" in stored:
@@ -404,7 +393,6 @@ def verify_password(pwd, stored):
         return False
     if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
         return hashlib.sha256(pwd.strip().encode()).hexdigest() == stored
-    # Plain-пароли не принимаем
     return False
 
 
@@ -509,8 +497,6 @@ def upload_file_to_yandex(file_bytes, remote_name):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _download_file_from_yandex_cached(remote_path, _token):
-    """Кешированная загрузка файла. _token с подчёркиванием — Streamlit не хеширует его,
-    но при смене токена кеш можно сбросить через st.cache_data.clear()."""
     if not _token:
         return None
     try:
@@ -530,19 +516,13 @@ def _download_file_from_yandex_cached(remote_path, _token):
 
 
 def download_file_from_yandex(remote_path):
-    """Публичная обёртка — подставляет актуальный токен."""
     return _download_file_from_yandex_cached(remote_path, YANDEX_TOKEN)
 
-
-# ============================================================
-# ФОРМАТИРОВАНИЕ И ФАЙЛЫ
-# ============================================================
 
 def format_phone(p_str):
     if not p_str:
         return ""
     d = re.sub(r"\D", "", p_str)
-    # Обрезаем лишние цифры (добавочные номера и т.п.)
     if len(d) > 11:
         d = d[:11]
     if len(d) == 11 and d[0] in ("7", "8"):
@@ -558,7 +538,6 @@ def save_uploaded_file(u_file, c_id, prefix=""):
     b = u_file.getvalue()
     file_hash = hashlib.sha256(b).hexdigest()
 
-    # Дедупликация по хешу содержимого
     if file_hash:
         for c in st.session_state.crm_store.get("clients", []):
             for f in c.get("client_files", []):
@@ -638,10 +617,6 @@ def export_clients_csv():
     return ("\ufeff" + o.getvalue()).encode("utf-8")
 
 
-# ============================================================
-# ДОСТУП К СУЩНОСТЯМ
-# ============================================================
-
 def get_client_by_id(c_id):
     for c in st.session_state.crm_store["clients"]:
         if c["id"] == c_id:
@@ -663,10 +638,6 @@ def get_managers_list():
         if u.get("role") != "admin"
     ]
 
-
-# ============================================================
-# ДАТЫ
-# ============================================================
 
 def parse_deadline(ds):
     if not ds:
@@ -739,7 +710,42 @@ def format_created_date(entity):
 
 # ============================================================
 # УТИЛИТЫ СКРОЛЛА
+# 🔧 СКРОЛЛ — ИЗМЕНЕНО: ищем правильный контейнер (section[data-testid="stMain"])
 # ============================================================
+
+def _scroll_js_common():
+    """JS-хелпер: находит контейнер, в котором реально скроллится контент Streamlit."""
+    return """
+    function getMainScroller() {
+        var d = window.parent.document;
+        var main = d.querySelector('section[data-testid="stMain"]') || d.querySelector('section.main');
+        if (main) {
+            if (main.scrollHeight > main.clientHeight + 2) return main;
+            var inner = main.querySelector('[data-testid="stAppViewBlockContainer"]');
+            if (inner && inner.scrollHeight > inner.clientHeight + 2) return inner;
+            var inner2 = main.querySelector('.block-container');
+            if (inner2 && inner2.scrollHeight > inner2.clientHeight + 2) return inner2;
+            return main;
+        }
+        var app = d.querySelector('.stApp');
+        if (app) return app;
+        return d.documentElement;
+    }
+    function getScrollTop() {
+        var el = getMainScroller();
+        return el ? el.scrollTop : (window.parent.scrollY || 0);
+    }
+    function setScrollTop(y) {
+        var el = getMainScroller();
+        if (el) el.scrollTop = y;
+        try { window.parent.scrollTo(0, y); } catch(e) {}
+        try { window.parent.document.documentElement.scrollTop = y; } catch(e) {}
+    }
+    function scrollKey() {
+        return 'crm_scroll_' + (window.parent.location.pathname || 'root');
+    }
+    """
+
 
 def render_copy_button(text, btn_id, label="\U0001F4CB Копировать"):
     safe_text = _safe_js_str(text)
@@ -749,24 +755,54 @@ def render_copy_button(text, btn_id, label="\U0001F4CB Копировать"):
     )
 
 
-def render_scroll_restore(key):
-    st.components.v1.html(
-        f"""<script>(function(){{var k='crm_scroll_'+window.location.pathname;try{{var s=window.parent.sessionStorage.getItem(k);if(s){{window.parent.scrollTo(0,parseInt(s));window.parent.sessionStorage.removeItem(k);}}}}catch(e){{}}}})();</script>""",
-        height=0,
-    )
+def render_scroll_restore(key=None):
+    """Восстанавливает позицию скролла после rerun."""
+    if key:
+        flag_key = f"_scroll_restored_{key}"
+        if st.session_state.get(flag_key):
+            return
+        st.session_state[flag_key] = True
+
+    js = _scroll_js_common() + """
+    (function(){
+        try {
+            var k = scrollKey();
+            var saved = window.parent.sessionStorage.getItem(k);
+            if (saved === null) return;
+            var y = parseInt(saved);
+            if (isNaN(y) || y <= 0) return;
+            var attempts = 0;
+            function tryScroll() {
+                attempts++;
+                setScrollTop(y);
+                if (attempts < 10) {
+                    setTimeout(tryScroll, 60);
+                } else {
+                    window.parent.sessionStorage.removeItem(k);
+                }
+            }
+            setTimeout(tryScroll, 40);
+        } catch(e) {}
+    })();
+    """
+    st.components.v1.html(f"<script>{js}</script>", height=0)
 
 
 def save_scroll_and_rerun(key=None):
-    st.components.v1.html(
-        """<script>(function(){try{window.parent.sessionStorage.setItem('crm_scroll_'+window.parent.location.pathname,window.parent.scrollY);}catch(e){}})();</script>""",
-        height=0,
-    )
+    """Сохраняет позицию скролла и перезапускает приложение."""
+    js = _scroll_js_common() + """
+    (function(){
+        try {
+            var y = getScrollTop();
+            window.parent.sessionStorage.setItem(scrollKey(), y);
+        } catch(e) {}
+    })();
+    """
+    st.components.v1.html(f"<script>{js}</script>", height=0)
+    # 🔧 Короткая пауза, чтобы браузер успел записать в sessionStorage
+    time.sleep(0.05)
     st.rerun()
 
-
-# ============================================================
-# INLINE-КОМПОНЕНТЫ (телефон, трек)
-# ============================================================
 
 def render_phone_inline(phone, uid):
     cph = re.sub(r"\D", "", phone)
@@ -816,10 +852,6 @@ def render_track_inline(track_num, uid):
         unsafe_allow_html=True,
     )
 
-
-# ============================================================
-# ФАЙЛЫ — РЕНДЕР
-# ============================================================
 
 def get_file_bytes(fp):
     if fp and not fp.startswith("CRM_NE_TROGAT") and os.path.exists(fp):
@@ -895,10 +927,6 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     files.pop(len(img_files) + i)
                     commit_and_rerun(st.session_state.crm_store, "Файл удалён")
 
-
-# ============================================================
-# ПЕЧАТЬ
-# ============================================================
 
 def build_print_html(task, cl, tp, fd):
     def esc(s):
@@ -1345,7 +1373,6 @@ def render_task_detail(t, cl, d, key_prefix):
                     d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Срок обновлён")
         else:
-            # Задача выполнена — блок проверки/доработки
             if t.get("needs_rework"):
                 st.markdown(
                     '<span class="rework-badge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;'
@@ -1426,15 +1453,10 @@ def render_task_detail(t, cl, d, key_prefix):
 
 
 # ============================================================
-# СТРОКА ЗАДАЧИ (в списках)
+# СТРОКА ЗАДАЧИ
 # ============================================================
 
 def render_task_row(t, cl, d, task_key, key_prefix, state_key="expanded_task_key"):
-    """
-    Отрисовка кнопки-строки задачи в списках.
-    state_key — ключ в session_state для хранения раскрытой задачи.
-    Разные вкладки используют разные state_key, чтобы раскрытия не путались.
-    """
     is_tk_exp = st.session_state.get(state_key) == task_key
     tk_done = t.get("done", False)
     tk_overdue = is_task_overdue(t)
@@ -1487,10 +1509,6 @@ def render_task_row(t, cl, d, task_key, key_prefix, state_key="expanded_task_key
         render_task_detail(t, cl, d, key_prefix)
 
 
-# ============================================================
-# ЦВЕТ ГРАНИЦЫ СУЩНОСТИ
-# ============================================================
-
 def get_entity_border(tasks_list):
     has_overdue = any(not t.get("done") and is_task_overdue(t) for t in tasks_list)
     has_active = any(not t.get("done") for t in tasks_list)
@@ -1501,10 +1519,6 @@ def get_entity_border(tasks_list):
     else:
         return "#FFFFFF", "#DCE0E5"
 
-
-# ============================================================
-# ХЕЛПЕРЫ ВЁРСТКИ
-# ============================================================
 
 def indented(margin=0.03):
     if margin <= 0:
@@ -1530,10 +1544,6 @@ def render_centered_button(label, key=None, btn_type="primary"):
             return True
     return False
 
-
-# ============================================================
-# МИГРАЦИИ
-# ============================================================
 
 def migrate_task_files(t):
     if "task_files" not in t:
@@ -1676,10 +1686,6 @@ def migrate_data(data):
     return data
 
 
-# ============================================================
-# ЗАГРУЗКА / СОХРАНЕНИЕ
-# ============================================================
-
 def _default_db():
     return {
         "clients": [], "deals": [],
@@ -1701,7 +1707,6 @@ def load_data():
     except Exception:
         return db
 
-    # Полная миграция, если версия не совпадает
     if data.get("_migrated") != "v2":
         data = migrate_data(data)
         try:
@@ -1712,7 +1717,6 @@ def load_data():
             pass
         return data
 
-    # Тонкая до-миграция на случай новых полей
     for c in data.get("clients", []):
         client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
         first_deal_id = client_deals[0]["id"] if client_deals else None
@@ -1793,10 +1797,6 @@ def commit_and_rerun(data=None, toast_msg=None):
     st.rerun()
 
 
-# ============================================================
-# УВЕДОМЛЕНИЯ + TELEGRAM
-# ============================================================
-
 TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
 
 
@@ -1808,7 +1808,6 @@ def get_user_by_login(login):
 
 
 def resolve_login(name_or_login):
-    """Преобразует имя сотрудника в логин (для уведомлений)."""
     if not name_or_login:
         return ""
     u = get_user_by_login(name_or_login)
@@ -1834,16 +1833,12 @@ def send_telegram(chat_id, text):
 
 
 def add_notification(to_login, text, tg_text=None):
-    """Создаёт уведомление: внутреннее (колокольчик) + Telegram.
-    Если получатель не определён — уведомление не создаётся."""
     to_login = resolve_login(to_login)
     if not to_login:
         return
-
     store = st.session_state.crm_store
     if "notifications" not in store:
         store["notifications"] = []
-
     next_id = (max([n.get("id", 0) for n in store["notifications"]], default=0)) + 1
     notif = {
         "id": next_id,
@@ -1853,12 +1848,8 @@ def add_notification(to_login, text, tg_text=None):
         "read": False,
     }
     store["notifications"].append(notif)
-
-    # Ограничиваем историю уведомлений
     if len(store["notifications"]) > NOTIFICATIONS_LIMIT:
         store["notifications"] = store["notifications"][-NOTIFICATIONS_LIMIT:]
-
-    # Telegram — в фоне, чтобы не блокировать UI
     u = get_user_by_login(to_login)
     if u and u.get("telegram_chat_id"):
         threading.Thread(
@@ -1931,10 +1922,6 @@ def render_notifications_panel():
                 )
 
 
-# ============================================================
-# ДИАЛОГ ЗАКРЫТИЯ СДЕЛКИ
-# ============================================================
-
 @st.dialog("Завершить сделку", width="medium")
 def close_deal_dialog(deal_id):
     deal = None
@@ -2005,25 +1992,18 @@ if "yandex_folders_ready" not in st.session_state:
     st.session_state.yandex_folders_ready = True
 if "deal_file_uploader_ver" not in st.session_state: st.session_state.deal_file_uploader_ver = {}
 
-# Раскрытия (state) — разделены по вкладкам, чтобы не путались
 if "expanded_client_id" not in st.session_state: st.session_state.expanded_client_id = None
 if "expanded_deal_id" not in st.session_state: st.session_state.expanded_deal_id = None
 if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id = None
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
 
-# Ключи раскрытой задачи — отдельные для каждой вкладки
 if "expanded_task_key" not in st.session_state: st.session_state.expanded_task_key = None
 if "expanded_task_key_clients" not in st.session_state: st.session_state.expanded_task_key_clients = None
 if "expanded_task_key_deals" not in st.session_state: st.session_state.expanded_task_key_deals = None
 if "expanded_task_key_internal" not in st.session_state: st.session_state.expanded_task_key_internal = None
 if "expanded_task_key_suppliers" not in st.session_state: st.session_state.expanded_task_key_suppliers = None
 if "deal_tab_expanded" not in st.session_state: st.session_state.deal_tab_expanded = None
-
-
-# ============================================================
-# COOKIE MANAGER (один раз)
-# ============================================================
 
 if "cookie_manager" not in st.session_state:
     st.session_state.cookie_manager = stx.CookieManager()
@@ -2057,10 +2037,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# ============================================================
-# ЛОГИН
-# ============================================================
 
 def check_login(username, password):
     for u in st.session_state.crm_store.get("users", []):
@@ -2101,10 +2077,6 @@ if not st.session_state.authenticated:
     st.stop()
 
 
-# ============================================================
-# ПРИВЕТСТВИЕ
-# ============================================================
-
 st.markdown(
     f"""<div class="greeting-block">
     <h1 style='text-align: center; margin-bottom: 0.1rem;'>Айплинт CRM</h1>
@@ -2113,10 +2085,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# ============================================================
-# БОКОВАЯ ПАНЕЛЬ
-# ============================================================
 
 with st.sidebar:
     if st.session_state.cloud_ok:
@@ -2224,10 +2192,6 @@ with st.sidebar:
         st.rerun()
 
 
-# ============================================================
-# ВЕРХНЯЯ ПАНЕЛЬ: УВЕДОМЛЕНИЯ + ВКЛАДКИ
-# ============================================================
-
 render_notifications_bell()
 
 nc1, nc2, nc3, nc4, nc5 = st.columns(5)
@@ -2235,12 +2199,15 @@ nc1, nc2, nc3, nc4, nc5 = st.columns(5)
 
 def _switch_tab(tab_name):
     st.session_state.active_tab = tab_name
-    # Сбрасываем все раскрытые задачи при переключении вкладок
     st.session_state.expanded_task_key = None
     st.session_state.expanded_task_key_clients = None
     st.session_state.expanded_task_key_deals = None
     st.session_state.expanded_task_key_internal = None
     st.session_state.expanded_task_key_suppliers = None
+    # 🔧 СКРОЛЛ — сбрасываем флаги восстановления
+    for k in list(st.session_state.keys()):
+        if k.startswith("_scroll_restored_"):
+            del st.session_state[k]
     st.rerun()
 
 
@@ -2262,7 +2229,6 @@ with nc5:
 
 st.markdown("---")
 
-# Toast при загрузке если есть непрочитанные
 _unread_count = get_unread_count()
 if _unread_count > 0 and not st.session_state.get("crm_toast_shown", False):
     st.toast(f"У вас {_unread_count} новых уведомлений", icon="\U0001F514")
@@ -2272,10 +2238,6 @@ render_notifications_panel()
 
 cu = st.session_state.user_name
 
-
-# ============================================================
-# ФОРМА СОЗДАНИЯ ЗАДАЧИ
-# ============================================================
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox(
@@ -2350,10 +2312,6 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         return False
     return False
 
-
-# ============================================================
-# РАСКРЫТАЯ КАРТОЧКА СДЕЛКИ (в дереве клиента)
-# ============================================================
 
 def render_deal_card_expanded(d, cl):
     with st.container(border=True):
@@ -2498,10 +2456,6 @@ def render_deal_card_expanded(d, cl):
                 commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
 
 
-# ============================================================
-# СДЕЛКА В ДЕРЕВЕ КЛИЕНТА
-# ============================================================
-
 def render_deal_in_tree(d, cl):
     is_dl_exp = (
         st.session_state.expanded_deal_id == d["id"]
@@ -2575,10 +2529,6 @@ def render_deal_in_tree(d, cl):
                     commit_and_rerun(st.session_state.crm_store, "Задача создана")
 
 
-# ============================================================
-# СВЁРНУТАЯ КАРТОЧКА СДЕЛКИ (вкладка «Сделки»)
-# ============================================================
-
 def render_deal_standalone(d, cl, cu):
     deal_id = d["id"]
     exp_key = "deal_tab_expanded"
@@ -2613,14 +2563,13 @@ def render_deal_standalone(d, cl, cu):
             else:
                 st.session_state[exp_key] = deal_id
                 st.rerun()
+        # 🔧 СКРОЛЛ — ДОБАВЛЕНО (раньше не было)
+        if not is_exp:
+            render_scroll_restore(f"dls_{deal_id}")
 
     if is_exp:
         render_deal_card_tab(d, cl, cu)
 
-
-# ============================================================
-# РАСКРЫТАЯ КАРТОЧКА СДЕЛКИ (вкладка «Сделки»)
-# ============================================================
 
 def render_deal_card_tab(d, cl, cu):
     deal_id = d["id"]
@@ -2836,10 +2785,6 @@ def render_deal_card_tab(d, cl, cu):
                 commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
 
 
-# ============================================================
-# РАСКРЫТАЯ КАРТОЧКА КЛИЕНТА
-# ============================================================
-
 def render_client_card_expanded(cl):
     with st.container(border=True):
         st.markdown(format_created_date(cl), unsafe_allow_html=True)
@@ -2959,18 +2904,12 @@ def render_client_card_expanded(cl):
                         commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
 
 
-# ============================================================
-# КЛИЕНТ В ДЕРЕВЕ
-# ============================================================
-
 def render_client_in_tree(cl):
     is_cl_exp = st.session_state.expanded_client_id == cl["id"]
     is_cl_deals_exp = st.session_state.expanded_tree_id == cl["id"]
     cl_tasks_all = cl.get("tasks", [])
     cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl["id"]]
 
-    # Все задачи клиента (включая по сделкам) уже в cl_tasks_all.
-    # Убран двойной список — там была ошибка дублирования.
     cl_bg, cl_bc = get_entity_border(cl_tasks_all)
 
     cl_label = (
@@ -3080,10 +3019,6 @@ def render_client_in_tree(cl):
                         st.session_state.auto_expand_deal_id = did
                         commit_and_rerun(st.session_state.crm_store, "Сделка создана")
 
-
-# ============================================================
-# ФОРМА ДОБАВЛЕНИЯ КЛИЕНТА
-# ============================================================
 
 def render_client_form(fv):
     with st.expander("Добавить клиента", expanded=False, key=f"add_client_form_{fv}"):
@@ -3271,7 +3206,6 @@ elif st.session_state.active_tab == "Сделки":
     with m2:
         st.metric("Сумма завершённых сделок", f"{closed_sum:,.0f} руб.".replace(",", " "))
 
-    # Завершённые
     with st.expander(f"Успешно завершены ({sum(1 for d in all_deals if d.get('status') == 'Сделка закрыта')})", expanded=False):
         closed_search = st.text_input("Поиск среди завершённых:", key="deal_closed_search", placeholder="Введите текст...").strip().lower()
         closed_deals = [d for d in all_deals if d.get("status") == "Сделка закрыта"]
@@ -3287,7 +3221,6 @@ elif st.session_state.active_tab == "Сделки":
         else:
             st.caption("Завершённых сделок нет.")
 
-    # Архив
     with st.expander(f"Архив ({sum(1 for d in all_deals if d.get('status') == 'Архив')})", expanded=False):
         arch_search = st.text_input("Поиск среди архива:", key="deal_arch_search", placeholder="Введите текст...").strip().lower()
         arch_deals = [d for d in all_deals if d.get("status") == "Архив"]
@@ -3303,7 +3236,6 @@ elif st.session_state.active_tab == "Сделки":
         else:
             st.caption("Архив пуст.")
 
-    # Липкая строка поиска
     st.markdown('<div class="crm-sticky-bar">', unsafe_allow_html=True)
     fc1, fc2 = st.columns([2, 1])
     with fc1:
@@ -3556,6 +3488,9 @@ elif st.session_state.active_tab == "Задачи":
                         else:
                             st.session_state.expanded_task_key = task_key
                             st.rerun()
+                    # 🔧 СКРОЛЛ — ДОБАВЛЕНО
+                    if not is_tk_exp:
+                        render_scroll_restore(f"arch_{task_key}")
                     if is_tk_exp:
                         render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
         else:
