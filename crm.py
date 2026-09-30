@@ -83,9 +83,10 @@ st.markdown("""
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
 
-    /* Sticky search bar for deals tab — CSS sticky + JS fixed fallback */
-    .st-key-deals_sticky_header { position: sticky; top: 0; z-index: 100; background-color: #F5F6F8; padding: 8px 0; margin: 0 -1rem; }
-    .crm-sticky-fixed { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; z-index: 100 !important; background-color: #F5F6F8 !important; padding: 8px 1rem !important; box-shadow: 0 2px 6px rgba(0,0,0,0.08) !important; }
+    /* Sticky search bar for deals tab — JS-driven, no parent overflow changes */
+    .st-key-deals_sticky_header { transition: none; }
+    .deals-sticky-fixed { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; z-index: 9999 !important; background-color: #F5F6F8 !important; padding: 8px 1rem !important; box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important; }
+    .deals-sticky-placeholder { height: 0; }
     /* Scroll-to-top button */
     #crm-scroll-top { position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%; background: #bc1661; color: white; border: none; font-size: 20px; cursor: pointer; z-index: 999998; display: none; box-shadow: 0 2px 8px rgba(188,22,97,0.3); transition: opacity 0.2s; }
     #crm-scroll-top:hover { background: #9a1452; }
@@ -163,34 +164,6 @@ st.components.v1.html("""
         }
     };
     setTimeout(w.crmInitScrollTop, 500);
-
-    // Sticky search bar — JS fallback using position:fixed
-    w.crmInitStickyBar = function() {
-        var doc = w.document;
-        var bar = doc.querySelector('.st-key-deals_sticky_header');
-        if (!bar || bar._crmStickyReady) return;
-        bar._crmStickyReady = true;
-        var placeholder = null;
-        function onScroll() {
-            if (!bar || !bar.parentElement) return;
-            var rect = bar.getBoundingClientRect();
-            if (rect.top < 0 && !bar.classList.contains('crm-sticky-fixed')) {
-                if (!placeholder) {
-                    placeholder = doc.createElement('div');
-                    placeholder.style.height = bar.offsetHeight + 'px';
-                    bar.parentElement.insertBefore(placeholder, bar);
-                }
-                placeholder.style.display = 'block';
-                bar.classList.add('crm-sticky-fixed');
-            } else if (rect.top >= 0 && bar.classList.contains('crm-sticky-fixed')) {
-                bar.classList.remove('crm-sticky-fixed');
-                if (placeholder) placeholder.style.display = 'none';
-            }
-        }
-        w.addEventListener('scroll', onScroll);
-        w.addEventListener('resize', onScroll);
-        setTimeout(onScroll, 200);
-    };
 
 </script>
 """, height=0)
@@ -2254,14 +2227,54 @@ elif st.session_state.active_tab == "Сделки":
                 render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
         else:
             st.caption("Архив пуст.")
-    # Sticky search + manager filter
+    # Sticky search + manager filter — JS-driven fixed position
     with st.container(key="deals_sticky_header"):
         fc1, fc2 = st.columns([2, 1])
         with fc1:
             deal_search = st.text_input("Поиск по номеру, названию или клиенту:", key="deal_tab_search", placeholder="Введите текст...").strip().lower()
         with fc2:
             mgr_filter = st.selectbox("Ответственный:", ["Все"] + get_managers_list(), index=0, key="deal_tab_mgr")
-    st.components.v1.html('<script>(function(){var w=window;try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}var doc=w.document;var bar=doc.querySelector(".st-key-deals_sticky_header");if(!bar)return;if(w._crmStickyBarReady)return;w._crmStickyBarReady=true;var placeholder=null;function onScroll(){if(!bar)return;var rect=bar.getBoundingClientRect();if(rect.top<0&&!bar.classList.contains("crm-sticky-fixed")){if(!placeholder){placeholder=doc.createElement("div");placeholder.style.height=bar.offsetHeight+"px";bar.parentElement.insertBefore(placeholder,bar);}placeholder.style.display="block";bar.classList.add("crm-sticky-fixed");}else if(rect.top>=0&&bar.classList.contains("crm-sticky-fixed")){bar.classList.remove("crm-sticky-fixed");if(placeholder)placeholder.style.display="none";}}w.addEventListener("scroll",onScroll);w.addEventListener("resize",onScroll);setTimeout(onScroll,100);setTimeout(onScroll,500);})();</script>', height=0)
+    st.components.v1.html('''<script>
+(function(){
+  var w=window;
+  try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}
+  var sel='.st-key-deals_sticky_header';
+  function init(){
+    var el=w.document.querySelector(sel);
+    if(!el){setTimeout(init,200);return;}
+    var ph=w.document.createElement('div');
+    ph.className='deals-sticky-placeholder';
+    el.parentNode.insertBefore(ph,el);
+    var fixed=false;
+    var origTop=0;
+    function measure(){
+      var r=el.getBoundingClientRect();
+      origTop=r.top+w.scrollY;
+    }
+    function onScroll(){
+      if(fixed){
+        if(w.scrollY<origTop-1){
+          el.classList.remove('deals-sticky-fixed');
+          ph.style.height='0px';
+          fixed=false;
+        }
+      } else {
+        var r=el.getBoundingClientRect();
+        if(r.top<0){
+          measure();
+          el.classList.add('deals-sticky-fixed');
+          ph.style.height=r.height+'px';
+          fixed=true;
+        }
+      }
+    }
+    w.addEventListener('scroll',onScroll,{passive:true});
+    setTimeout(measure,500);
+    setTimeout(onScroll,600);
+  }
+  init();
+})();
+</script>''', height=0)
     # Filter deals for "Новые" and "В работе" columns only
     fdeals = []
     for d in all_deals:
