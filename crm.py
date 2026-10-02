@@ -5,6 +5,15 @@ import extra_streamlit_components as stx
 from datetime import datetime
 from collections import defaultdict
 
+def _safe_id(v):
+    """Safely convert value to int, returning 0 for non-numeric values."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 
 st.markdown("""
@@ -2466,7 +2475,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
                     st.warning("Выберите ответственного")
                 else:
                     new_it = {
-                        "id": (max([int(t.get("id", 0) or 0) for t in internal_tasks], default=0)) + 1,
+                        "id": (max([_safe_id(t.get("id", 0)) for t in internal_tasks], default=0)) + 1,
                         "text": it_topic.strip(),
                         "deadline": it_dl.isoformat(),
                         "done": False,
