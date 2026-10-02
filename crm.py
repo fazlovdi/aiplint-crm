@@ -2466,7 +2466,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
                     st.warning("Выберите ответственного")
                 else:
                     new_it = {
-                        "id": (max([t.get("id", 0) for t in internal_tasks], default=0)) + 1,
+                        "id": (max([int(t.get("id", 0) or 0) for t in internal_tasks], default=0)) + 1,
                         "text": it_topic.strip(),
                         "deadline": it_dl.isoformat(),
                         "done": False,
