@@ -121,13 +121,13 @@ st.markdown("""
     [data-testid="stDialog"] > div > div > button:first-child {
         display: none !important;
     }
-    /* Make dialog header the positioning context for the close button */
+    /* Make dialog window (not content area) the positioning context for the close button */
+    [data-testid="stDialog"] [data-testid="stVerticalBlock"],
+    [data-testid="stEmotionCache"] [data-testid="stDialog"] [data-testid="stVerticalBlock"] {
+        position: static !important;
+    }
     [data-testid="stDialog"] > div > div,
     [data-testid="stEmotionCache"] [data-testid="stDialog"] > div > div {
-        position: relative !important;
-    }
-    [data-testid="stDialog"] header,
-    [data-testid="stEmotionCache"] [data-testid="stDialog"] header {
         position: relative !important;
     }
     /* Custom close button positioning */
@@ -2343,8 +2343,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
     st.markdown('<style>.st-key-' + _close_key + ' { height: 0; overflow: visible; z-index: 9999; }</style>', unsafe_allow_html=True)
     with st.container(key=_close_key):
         _close_btn_key = f"close_btn_{key_prefix}"
-        st.markdown(f'<style>.st-key-{_close_key} .stButton > button {{ width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;z-index:9999!important;display:flex!important;align-items:center!important;justify-content:center!important; }} .st-key-{_close_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_key} {{ height:0!important;overflow:visible!important; }}</style>', unsafe_allow_html=True)
-        st.components.v1.html('<script>(function(){var w=window;try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}var d=w.document;function moveBtn(){var dlg=d.querySelector("[data-testid=stDialog]");if(!dlg)return;var hdr=dlg.querySelector("header");if(!hdr)return;var origBtn=dlg.querySelector(".st-key-' + _close_key + ' button");if(!origBtn)return;if(hdr.querySelector(".crm-close-moved"))return;origBtn.style.display="none";var btn=d.createElement("button");btn.className="crm-close-moved";btn.textContent="\u2715";btn.style.cssText="position:absolute;top:50%;right:0.75rem;transform:translateY(-50%);width:32px;height:32px;min-height:32px;padding:0;font-size:1.1rem;line-height:1;background:#FFFFFF;border:1px solid #DCE0E5;border-radius:8px;color:#5A6B7D;z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;";btn.addEventListener("mouseenter",function(){this.style.background="#EEF0F3";this.style.borderColor="#C9CFD7";});btn.addEventListener("mouseleave",function(){this.style.background="#FFFFFF";this.style.borderColor="#DCE0E5";});btn.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();origBtn.click();});hdr.appendChild(btn);}moveBtn();var obs=new MutationObserver(function(){moveBtn();});obs.observe(d.body,{childList:true,subtree:true});setTimeout(function(){obs.disconnect();},5000);})();</script>', height=0)
+        st.markdown(f'<style>.st-key-{_close_key} .stButton > button {{ position:absolute;top:0.4rem;right:0.4rem;width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;z-index:9999!important;display:flex!important;align-items:center!important;justify-content:center!important; }} .st-key-{_close_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_key} {{ height:0!important;overflow:visible!important; }}</style>', unsafe_allow_html=True)
         if st.button("\u2715", key=_close_btn_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c"):
             if _is_editing and not _show_close_warning:
                 st.session_state[f"_show_close_warning_{key_prefix}"] = True
