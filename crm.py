@@ -619,7 +619,7 @@ def render_task_detail(t, cl, d, key_prefix):
         # Top row: task number + pencil edit button
         num_col, edit_col = st.columns([20, 1])
         with num_col:
-            st.markdown(f"**Задача \u2116{t.get('task_number', '')}**")
+            st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}**")
         with edit_col:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             pencil_key = f"btn_pencil_edit_{key_prefix}"
@@ -629,7 +629,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.rerun()
         st.markdown(format_created_date(t), unsafe_allow_html=True)
         
-        # Two columns: left = info, right = files/comments/buttons
+        # Two columns: left = info + action buttons, right = comments + files
         left_col, right_col = st.columns(2)
         
         with left_col:
@@ -711,11 +711,22 @@ def render_task_detail(t, cl, d, key_prefix):
                             st.session_state[f"show_edit_dl_{key_prefix}"] = True
                             st.rerun()
                 
-                st.markdown(f"**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:** {t.get('manager', '\u2014')}")
+                # Editable responsible person (replaces delegate button)
+                st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
+                mgr_options = [""] + get_managers_list()
+                current_mgr = t.get("manager", "")
+                current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
+                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=f"task_mgr_inline_{key_prefix}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+                if new_mgr != current_mgr and new_mgr:
+                    t["manager"] = new_mgr
+                    t["delegated_to"] = new_mgr
+                    t["last_modified"] = now_str()
+                    cl["last_modified"] = now_str()
+                    if d: d["last_modified"] = now_str()
+                    commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                
                 if t.get('in_work') and not t.get('done'):
                     st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
-                if t.get('delegated_to') and t.get('delegated_to') != t.get('manager'):
-                    st.markdown(f'<span class="delegated-badge">\u0414\u0435\u043b\u0435\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u043e: {t["delegated_to"]}</span>', unsafe_allow_html=True)
                 if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
@@ -726,26 +737,131 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
+                
+                # Action buttons in left column (below task info)
+                st.markdown("---")
+                tk_done = t.get("done", False)
+                if not tk_done:
+                    render_print_button(t, cl, t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f'), format_date(t.get('deadline', '')), f"{key_prefix}_print")
+                    if t.get("task_files"):
+                        render_print_file_button(t["task_files"], f"{key_prefix}_pfile")
+                    st.markdown("---")
+                    show_key = f"show_complete_{key_prefix}"
+                    if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
+                        st.session_state[show_key] = not st.session_state.get(show_key, False)
+                        st.rerun()
+                    if st.session_state.get(show_key, False):
+                        rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
+                        uf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b/\u0444\u043e\u0442\u043e \u043e\u0442\u0447\u0435\u0442\u0430:", key=f"uf_{key_prefix}", accept_multiple_files=True)
+                        if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
+                            if rt.strip():
+                                t["done"] = True
+                                t["completion_report"] = rt.strip()
+                                t["last_modified"] = now_str()
+                                add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
+                                fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
+                                if fi_list: t["completion_files"] = normalize_file_list(fi_list)
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                st.session_state[show_key] = False
+                                st.session_state[f"show_new_after_{key_prefix}"] = True
+                                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
+                            else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0435\u0442")
+                    if st.session_state.get(f"show_new_after_{key_prefix}", False):
+                        st.markdown("---")
+                        st.markdown("**\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0437\u0430\u0434\u0430\u0447\u0443:**")
+                        nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"nat_topic_{key_prefix}")
+                        nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                        nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
+                        nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"nat_comment_{key_prefix}")
+                        nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
+                        nc1, nc2 = st.columns(2)
+                        with nc1:
+                            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"nat_go_{key_prefix}", type="primary", use_container_width=True):
+                                if nt_topic2.strip():
+                                    ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
+                                    prefix2 = "\u0417\u0421" if d else "\u0417\u041a"
+                                    tn2 = generate_task_number(prefix2)
+                                    new_task = {
+                                        "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
+                                        "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
+                                        "completion_report": "", "completion_files": [],
+                                        "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
+                                        "order_amount": 0, "last_modified": now_str(),
+                                        "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
+                                        "in_work": False, "ready_to_ship": False, "delegated_to": None,
+                                        "needs_rework": False, "reviewed": False,
+                                        "task_comments": [], "flagged": False,
+                                        "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "",
+                                        "ship_pay": "", "tk_num": ""
+                                    }
+                                    cl.setdefault("tasks", []).append(new_task)
+                                    cl["last_modified"] = now_str()
+                                    if d: d["last_modified"] = now_str()
+                                    add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
+                                    st.session_state[f"show_new_after_{key_prefix}"] = False
+                                    commit_and_rerun(st.session_state.crm_store, "\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+                                else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
+                        with nc2:
+                            if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"nat_cancel_{key_prefix}", use_container_width=True):
+                                st.session_state[f"show_new_after_{key_prefix}"] = False
+                                st.rerun()
+                else:
+                    if t.get("needs_rework"):
+                        st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
+                    if t.get("completion_report"): st.caption(f"\u041e\u0442\u0447\u0435\u0442: {t['completion_report']}")
+                    if t.get("rework_comment"): st.warning(f"\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435: {t['rework_comment']}")
+                    if t.get("completion_files"):
+                        st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0435\u0442\u0430:**")
+                        render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
+                    if not t.get("reviewed", False):
+                        is_author = (st.session_state.user_role == "admin") or (t.get("created_by", "") == st.session_state.get("user_login", ""))
+                        if is_author:
+                            st.markdown("---")
+                            rc1, rc2 = st.columns(2)
+                            with rc1:
+                                if st.button("\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430", key=f"btn_review_{key_prefix}", type="primary", use_container_width=True):
+                                    t["reviewed"] = True
+                                    t["needs_rework"] = False
+                                    t["rework_comment"] = ""
+                                    t["last_modified"] = now_str()
+                                    cl["last_modified"] = now_str()
+                                    if d: d["last_modified"] = now_str()
+                                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0432 \u0430\u0440\u0445\u0438\u0432\u0435")
+                            with rc2:
+                                if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
+                                    st.session_state[f"show_rework_{key_prefix}"] = True
+                                    st.rerun()
+                            if st.session_state.get(f"show_rework_{key_prefix}", False):
+                                rework_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rework_comment_{key_prefix}", height=100, placeholder="\u041e\u043f\u0438\u0448\u0438\u0442\u0435, \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c")
+                                rw1, rw2 = st.columns(2)
+                                with rw1:
+                                    if st.button("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
+                                        if not rework_comment.strip():
+                                            st.warning("\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u2014 \u0431\u0435\u0437 \u043d\u0435\u0433\u043e \u043d\u0435\u043b\u044c\u0437\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
+                                        else:
+                                            t["done"] = False
+                                            t["in_work"] = False
+                                            t["needs_rework"] = True
+                                            t["rework_comment"] = rework_comment.strip()
+                                            t.setdefault("task_comments", []).append({"author": st.session_state.get("user_login", ""), "text": rework_comment.strip(), "date": now_str()})
+                                            t["last_modified"] = now_str()
+                                            cl["last_modified"] = now_str()
+                                            if d: d["last_modified"] = now_str()
+                                            st.session_state[f"show_rework_{key_prefix}"] = False
+                                            add_notification(t.get("manager", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: {rework_comment.strip()}", f"\u26a0\ufe0f \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: {rework_comment.strip()}")
+                                            commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
+                                with rw2:
+                                    if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
+                                        st.session_state[f"show_rework_{key_prefix}"] = False
+                                        st.rerun()
+                        else:
+                            st.info("\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0432\u0442\u043e\u0440\u043e\u043c")
+                    else:
+                        st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         
         with right_col:
-            # Files block
-            if t.get("task_files"):
-                st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
-                render_file_thumbs(t["task_files"], f"{key_prefix}_files")
-            st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
-            ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}", accept_multiple_files=True, label_visibility="collapsed")
-            if st.button("\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
-                if ntf_existing:
-                    fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
-                    if fi_list:
-                        t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
-                        t["last_modified"] = now_str()
-                        cl["last_modified"] = now_str()
-                        if d: d["last_modified"] = now_str()
-                        commit_and_rerun(st.session_state.crm_store, "\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b")
-                else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
-            st.markdown("---")
-            # Comments block
+            # Comments block (now above files)
             if t.get("task_comments"):
                 st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 for tc in t["task_comments"]:
@@ -763,143 +879,22 @@ def render_task_detail(t, cl, d, key_prefix):
                     commit_and_rerun(st.session_state.crm_store, "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
                 else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442")
             st.markdown("---")
-            # Action buttons
-            tk_done = t.get("done", False)
-            if not tk_done:
-                render_print_button(t, cl, t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f'), format_date(t.get('deadline', '')), f"{key_prefix}_print")
-                if t.get("task_files"):
-                    render_print_file_button(t["task_files"], f"{key_prefix}_pfile")
-                st.markdown("---")
-                if st.button("\u0414\u0435\u043b\u0435\u0433\u0438\u0440\u043e\u0432\u0430\u0442\u044c", key=f"btn_delegate_{key_prefix}", use_container_width=True):
-                    st.session_state[f"show_delegate_{key_prefix}"] = not st.session_state.get(f"show_delegate_{key_prefix}", False)
-                    st.rerun()
-                if st.session_state.get(f"show_delegate_{key_prefix}", False):
-                    with st.container(border=True):
-                        dlg_to = st.selectbox("\u0414\u0435\u043b\u0435\u0433\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043d\u0430:", [""] + get_managers_list(), index=0, key=f"dlg_to_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                        if st.button("\u041f\u0435\u0440\u0435\u043d\u0430\u0437\u043d\u0430\u0447\u0438\u0442\u044c", key=f"dlg_go_{key_prefix}", type="primary", use_container_width=True):
-                            if dlg_to:
-                                t["delegated_to"] = dlg_to
-                                t["manager"] = dlg_to
-                                t["last_modified"] = now_str()
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                st.session_state[f"show_delegate_{key_prefix}"] = False
-                                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0434\u0435\u043b\u0435\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0430")
-                            else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430")
-                st.markdown("---")
-                show_key = f"show_complete_{key_prefix}"
-                if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
-                    st.session_state[show_key] = not st.session_state.get(show_key, False)
-                    st.rerun()
-                if st.session_state.get(show_key, False):
-                    rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
-                    uf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b/\u0444\u043e\u0442\u043e \u043e\u0442\u0447\u0435\u0442\u0430:", key=f"uf_{key_prefix}", accept_multiple_files=True)
-                    if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
-                        if rt.strip():
-                            t["done"] = True
-                            t["completion_report"] = rt.strip()
-                            t["last_modified"] = now_str()
-                            add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
-                            fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
-                            if fi_list: t["completion_files"] = normalize_file_list(fi_list)
-                            cl["last_modified"] = now_str()
-                            if d: d["last_modified"] = now_str()
-                            st.session_state[show_key] = False
-                            st.session_state[f"show_new_after_{key_prefix}"] = True
-                            commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
-                        else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0435\u0442")
-                if st.session_state.get(f"show_new_after_{key_prefix}", False):
-                    st.markdown("---")
-                    st.markdown("**\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0437\u0430\u0434\u0430\u0447\u0443:**")
-                    nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"nat_topic_{key_prefix}")
-                    nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                    nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
-                    nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"nat_comment_{key_prefix}")
-                    nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
-                    nc1, nc2 = st.columns(2)
-                    with nc1:
-                        if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"nat_go_{key_prefix}", type="primary", use_container_width=True):
-                            if nt_topic2.strip():
-                                ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
-                                prefix2 = "\u0417\u0421" if d else "\u0417\u041a"
-                                tn2 = generate_task_number(prefix2)
-                                new_task = {
-                                    "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
-                                    "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
-                                    "completion_report": "", "completion_files": [],
-                                    "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
-                                    "order_amount": 0, "last_modified": now_str(),
-                                    "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
-                                    "in_work": False, "ready_to_ship": False, "delegated_to": None,
-                                    "needs_rework": False, "reviewed": False,
-                                    "task_comments": [], "flagged": False,
-                                    "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "",
-                                    "ship_pay": "", "tk_num": ""
-                                }
-                                cl.setdefault("tasks", []).append(new_task)
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
-                                st.session_state[f"show_new_after_{key_prefix}"] = False
-                                commit_and_rerun(st.session_state.crm_store, "\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-                            else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
-                    with nc2:
-                        if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"nat_cancel_{key_prefix}", use_container_width=True):
-                            st.session_state[f"show_new_after_{key_prefix}"] = False
-                            st.rerun()
-            else:
-                if t.get("needs_rework"):
-                    st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
-                if t.get("completion_report"): st.caption(f"\u041e\u0442\u0447\u0435\u0442: {t['completion_report']}")
-                if t.get("rework_comment"): st.warning(f"\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435: {t['rework_comment']}")
-                if t.get("completion_files"):
-                    st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0435\u0442\u0430:**")
-                    render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
-                if not t.get("reviewed", False):
-                    is_author = (st.session_state.user_role == "admin") or (t.get("created_by", "") == st.session_state.get("user_login", ""))
-                    if is_author:
-                        st.markdown("---")
-                        rc1, rc2 = st.columns(2)
-                        with rc1:
-                            if st.button("\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430", key=f"btn_review_{key_prefix}", type="primary", use_container_width=True):
-                                t["reviewed"] = True
-                                t["needs_rework"] = False
-                                t["rework_comment"] = ""
-                                t["last_modified"] = now_str()
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0432 \u0430\u0440\u0445\u0438\u0432\u0435")
-                        with rc2:
-                            if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
-                                st.session_state[f"show_rework_{key_prefix}"] = True
-                                st.rerun()
-                        if st.session_state.get(f"show_rework_{key_prefix}", False):
-                            rework_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rework_comment_{key_prefix}", height=100, placeholder="\u041e\u043f\u0438\u0448\u0438\u0442\u0435, \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c")
-                            rw1, rw2 = st.columns(2)
-                            with rw1:
-                                if st.button("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
-                                    if not rework_comment.strip():
-                                        st.warning("\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u2014 \u0431\u0435\u0437 \u043d\u0435\u0433\u043e \u043d\u0435\u043b\u044c\u0437\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
-                                    else:
-                                        t["done"] = False
-                                        t["in_work"] = False
-                                        t["needs_rework"] = True
-                                        t["rework_comment"] = rework_comment.strip()
-                                        t.setdefault("task_comments", []).append({"author": st.session_state.get("user_login", ""), "text": rework_comment.strip(), "date": now_str()})
-                                        t["last_modified"] = now_str()
-                                        cl["last_modified"] = now_str()
-                                        if d: d["last_modified"] = now_str()
-                                        st.session_state[f"show_rework_{key_prefix}"] = False
-                                        add_notification(t.get("manager", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: {rework_comment.strip()}", f"\u26a0\ufe0f \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: {rework_comment.strip()}")
-                                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
-                            with rw2:
-                                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
-                                    st.session_state[f"show_rework_{key_prefix}"] = False
-                                    st.rerun()
-                    else:
-                        st.info("\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0432\u0442\u043e\u0440\u043e\u043c")
-                else:
-                    st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
+            # Files block (now below comments)
+            if t.get("task_files"):
+                st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
+                render_file_thumbs(t["task_files"], f"{key_prefix}_files")
+            st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
+            ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}", accept_multiple_files=True, label_visibility="collapsed")
+            if st.button("\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
+                if ntf_existing:
+                    fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
+                    if fi_list:
+                        t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
+                        t["last_modified"] = now_str()
+                        cl["last_modified"] = now_str()
+                        if d: d["last_modified"] = now_str()
+                        commit_and_rerun(st.session_state.crm_store, "\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b")
+                else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
 
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
