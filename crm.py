@@ -553,10 +553,43 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 # Description field (editable) - multiline, auto height
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
-                _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
-                _desc_height = 38 + (_desc_lines - 1) * 22
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }}</style>", unsafe_allow_html=True)
+                # Count visible lines: explicit newlines + estimated wrapping (~30 chars per line in narrow column)
+                if cur_desc:
+                    _lines = cur_desc.split('\n')
+                    _desc_lines = sum(max(1, (len(l) + 29) // 30) for l in _lines)
+                else:
+                    _desc_lines = 1
+                _desc_height = max(34, 34 + (_desc_lines - 1) * 20)
+                st.markdown(f"""<style>
+.st-key-{desc_key} .stTextArea > div > textarea {{
+    padding: 0.4rem 0.6rem !important;
+    font-size: 0.85rem !important;
+    border-radius: 10px !important;
+    resize: none !important;
+    line-height: 1.25 !important;
+    overflow: hidden !important;
+}}
+.st-key-{desc_key} .stTextArea > div > textarea::placeholder {{
+    font-size: 0.68rem !important;
+}}
+</style>""", unsafe_allow_html=True)
                 new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
+                # Auto-resize textarea to fit content
+                st.components.v1.html(f"""<script>
+(function() {{
+    var w = window;
+    try {{ if (window.parent && window.parent !== window) w = window.parent; }} catch(e) {{}}
+    var ta = w.document.querySelector('.st-key-{desc_key} textarea');
+    if (ta) {{
+        function adjust() {{
+            ta.style.height = 'auto';
+            ta.style.height = Math.max(34, ta.scrollHeight) + 'px';
+        }}
+        adjust();
+        ta.addEventListener('input', adjust);
+    }}
+}})();
+</script>""", height=0)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
