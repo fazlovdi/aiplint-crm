@@ -61,7 +61,7 @@ st.markdown("""
     /* Hide container close button */
     .stContainer > div > button[kind="header"] { display: none !important; }
     /* Pencil edit button styling */
-    .pencil-btn button { min-width: 32px !important; width: 32px !important; height: 32px !important; padding: 0 !important; font-size: 14px !important; border-radius: 6px !important; }
+    div[class*="pencil_edit"] button, div[class*="pencil_dl"] button { min-width: 36px !important; width: 36px !important; height: 36px !important; padding: 0 !important; font-size: 16px !important; border-radius: 8px !important; border: 1px solid #DCE0E5 !important; background: #EEF0F3 !important; }
 
     .custom-print-btn { width: 100%; padding: 10px; background: #bc1661; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s; }
     .custom-print-btn:hover { background: #9a1452; }
@@ -671,9 +671,10 @@ def render_task_detail(t, cl, d, key_prefix):
             st.markdown(f"**Задача №{t.get('task_number', '')}**")
         with hdr[1]:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-            if st.button("\u270e" if not show_edit else "\u2714", key=f"btn_pencil_edit_{key_prefix}", help="Редактировать задачу"):
-                st.session_state[f"show_edit_task_{key_prefix}"] = not show_edit
-                st.rerun()
+            with st.container(key=f"pencil_edit_{key_prefix}"):
+                if st.button("\u270e" if not show_edit else "\u2714", key=f"btn_pencil_edit_{key_prefix}", help="Редактировать задачу"):
+                    st.session_state[f"show_edit_task_{key_prefix}"] = not show_edit
+                    st.rerun()
 
         st.markdown(format_created_date(t), unsafe_allow_html=True)
 
@@ -736,9 +737,10 @@ def render_task_detail(t, cl, d, key_prefix):
                 with dl_row[0]:
                     st.markdown(f"**Срок:** {format_date(t.get('deadline', ''))}")
                 with dl_row[1]:
-                    if st.button("\u270e", key=f"btn_pencil_dl_{key_prefix}", help="Изменить срок"):
-                        st.session_state[f"show_dl_edit_{key_prefix}"] = not show_dl_edit
-                        st.rerun()
+                    with st.container(key=f"pencil_dl_{key_prefix}"):
+                        if st.button("\u270e", key=f"btn_pencil_dl_{key_prefix}", help="Изменить срок"):
+                            st.session_state[f"show_dl_edit_{key_prefix}"] = not show_dl_edit
+                            st.rerun()
 
                 if show_dl_edit:
                     ndd = st.date_input("Новый срок:", value=parse_deadline(t.get("deadline", "")), format="DD/MM/YYYY", key=f"dl_{key_prefix}")
