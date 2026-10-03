@@ -70,7 +70,7 @@ st.markdown("""
     .thumb-item { position:relative; width:110px; margin: 0 auto; text-align:center; }
     .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:default; border:1px solid #DCE0E5; display:block; margin:0 auto; }
     .thumb-item img:hover { border-color:#DCE0E5; }
-    .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:6px; text-align:center; }
+    .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:12px; text-align:center; }
     .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; margin-bottom: 0.8rem !important; }
     .ready-badge { display: inline-block; background: #2E7D32; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     .in-work-badge { display: inline-block; background: #bc1661; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -577,7 +577,7 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     html_json = json.dumps(html_content).replace('<', '\\u003c')
     safe_key = key_suffix.replace('-', '_').replace('.', '_')
     btn_id = f"print_btn_{safe_key}"
-    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="width:auto;padding:4px 12px;font-size:0.85rem;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
+    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="width:100%;padding:10px;font-size:14px;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
     st.components.v1.html(f"""<script>(function() {{ var btn = window.parent.document.getElementById('{btn_id}'); if (!btn) return; var html = {html_json}; btn.addEventListener('click', function() {{ var w = window.open('', '_blank'); if (!w) {{ alert('Разрешите всплывающие окна'); return; }} w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500); w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }}; }}); }})();</script>""", height=0)
 
 def render_print_file_button(files, key_suffix):
@@ -628,25 +628,17 @@ def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # Top row: task number + print button + pencil edit button
-        num_col, print_col, edit_col = st.columns([16, 2, 2])
-        # CSS to align print and edit buttons at same level
+        num_col, edit_col = st.columns([18, 2])
+        # CSS to align edit button at same level
         st.markdown(f"""<style>
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button {{
-            min-height: 32px !important;
-            padding: 4px 10px !important;
-            font-size: 0.85rem !important;
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button {{
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }}
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown {{
-            margin-top: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-        }}
         </style>""", unsafe_allow_html=True)
         with num_col:
+            st.markdown(format_created_date(t), unsafe_allow_html=True)
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             st.subheader(_task_header)
             # Add clickable deal number if task belongs to a deal
@@ -659,21 +651,13 @@ def render_task_detail(t, cl, d, key_prefix):
                     st.session_state["deal_tab_expanded"] = _deal_id
                     st.session_state.pop("dialog_task_key", None)
                     st.rerun()
-        with print_col:
-            _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
-            _fd = format_date(t.get('deadline', ''))
-            render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
         with edit_col:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if not show_edit:
                 pencil_key = f"btn_pencil_edit_{key_prefix}"
-                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
                 if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
                     st.session_state[f"show_edit_task_{key_prefix}"] = True
                     st.rerun()
-        st.markdown(format_created_date(t), unsafe_allow_html=True)
-        
-        
         
         # Two columns: left = info + action buttons, right = comments + files
         left_col, right_col = st.columns(2)
@@ -785,8 +769,12 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
                 
-                # Action buttons in left column (below task info)
+                # Print button (above action buttons)
+                _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
+                _fd = format_date(t.get('deadline', ''))
+                render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
                 st.markdown("---")
+                # Action buttons in left column (below task info)
                 tk_done = t.get("done", False)
                 if not tk_done:
                     if not t.get("in_work") and not t.get("needs_rework"):
