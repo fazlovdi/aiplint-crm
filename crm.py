@@ -71,7 +71,7 @@ st.markdown("""
     .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:default; border:1px solid #DCE0E5; display:block; margin:0 auto; }
     .thumb-item img:hover { border-color:#DCE0E5; }
     .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:6px; text-align:center; }
-    .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; margin-bottom: 0.8rem !important; }
+    .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; margin-bottom: 0.1rem !important; }
     .ready-badge { display: inline-block; background: #2E7D32; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     .in-work-badge { display: inline-block; background: #bc1661; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     .delegated-badge { display: inline-block; background: #E65100; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -637,10 +637,10 @@ def render_entity_chat(entity, entity_type, entity_id):
 
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
-        st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }} .st-key-task_detail_{key_prefix} [data-testid="stHorizontalBlock"]:nth-of-type(2) > div:nth-child(2) > div[data-testid="stVerticalBlock"] > div:first-child {{ margin-top: 0 !important; padding-top: 0 !important; }} .st-key-task_detail_{key_prefix} [data-testid="stHorizontalBlock"]:nth-of-type(2) > div:nth-child(2) > div[data-testid="stVerticalBlock"] {{ gap: 0.1rem !important; }}</style>', unsafe_allow_html=True)
         # Top row: left column = header + print, right column = edit pencil
         # Matches the two-column layout (left_col, right_col) below
-        _top_left, _top_right = st.columns(2)
+        _top_left, _top_right = st.columns([20, 1])
         # CSS to align print and edit buttons at same level
         st.markdown(f"""<style>
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
@@ -683,7 +683,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
         with _top_right:
-            pass  # Edit button moved to left column
+            pass
         st.markdown(format_created_date(t), unsafe_allow_html=True)
         
         
@@ -800,6 +800,13 @@ def render_task_detail(t, cl, d, key_prefix):
                 
                 # Action buttons in left column (below task info)
                 st.markdown("---")
+                show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
+                if not show_edit:
+                    pencil_key = f"btn_pencil_edit_{key_prefix}"
+                    st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                    if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
+                        st.session_state[f"show_edit_task_{key_prefix}"] = True
+                        st.rerun()
                 tk_done = t.get("done", False)
                 if not tk_done:
                     if not t.get("in_work") and not t.get("needs_rework"):
@@ -809,12 +816,6 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
-                    # Edit pencil button (moved from top-right, same compact size)
-                    pencil_key = f"btn_pencil_edit_{key_prefix}"
-                    st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                    if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                        st.session_state[f"show_edit_task_{key_prefix}"] = True
-                        st.rerun()
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
@@ -922,7 +923,6 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         
         with right_col:
-            st.markdown(f"""<style>.st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{ margin-top: 0 !important; padding-top: 0 !important; }} .st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) > div:first-child {{ margin-top: 0 !important; padding-top: 0 !important; }} .st-key-task_detail_{key_prefix} .stHorizontalBlock:nth-child(2) > div:nth-child(2) > div {{ margin-top: 0 !important; padding-top: 0 !important; }} </style>""", unsafe_allow_html=True)
             # Comments block (now above files)
             if t.get("task_comments"):
                 st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
