@@ -1280,6 +1280,7 @@ if "deal_file_uploader_ver" not in st.session_state: st.session_state.deal_file_
 if "expanded_client_id" not in st.session_state: st.session_state.expanded_client_id = None
 if "expanded_deal_id" not in st.session_state: st.session_state.expanded_deal_id = None
 if "expanded_task_key" not in st.session_state: st.session_state.expanded_task_key = None
+if "dialog_task_key" not in st.session_state: st.session_state.dialog_task_key = None
 if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id = None
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
@@ -1429,26 +1430,31 @@ with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
         st.session_state.expanded_task_key = None
+        st.session_state.pop("dialog_task_key", None)
         st.rerun()
 with nc2:
     if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"
         st.session_state.expanded_task_key = None
+        st.session_state.pop("dialog_task_key", None)
         st.rerun()
 with nc3:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"
         st.session_state.expanded_task_key = None
+        st.session_state.pop("dialog_task_key", None)
         st.rerun()
 with nc4:
     if st.button("Внутренние задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
         st.session_state.active_tab = "Внутренние задачи"
         st.session_state.expanded_task_key = None
+        st.session_state.pop("dialog_task_key", None)
         st.rerun()
 with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
         st.session_state.expanded_task_key = None
+        st.session_state.pop("dialog_task_key", None)
         st.rerun()
 st.markdown("---")
 
@@ -2164,6 +2170,16 @@ def render_client_form(fv):
                     st.toast(f"Клиент {cn} добавлен", icon="✅")
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
+@st.dialog("Подробности задачи", width="large")
+def task_detail_dialog(task, cl, d, key_prefix):
+    # Close button in top right
+    _, close_col = st.columns([20, 1])
+    with close_col:
+        if st.button("✕", key=f"dialog_close_{key_prefix}", help="Закрыть"):
+            st.session_state.pop("dialog_task_key", None)
+            st.rerun()
+    render_task_detail(task, cl, d, key_prefix)
+
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
     render_client_form(fv)
@@ -2377,7 +2393,6 @@ elif st.session_state.active_tab == "Задачи":
             io_ = is_task_overdue(task)
             fd = format_date(t["deadline_str"])
             task_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
-            is_tk_exp = st.session_state.expanded_task_key == task_key
             if task.get("needs_rework"): tk_bg, tk_bc = "#FFEBEE", "#D32F2F"
             elif io_: tk_bg, tk_bc = "#FFEBEE", "#C62828"
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
@@ -2386,22 +2401,12 @@ elif st.session_state.active_tab == "Задачи":
             if task.get('needs_rework'): exp_label += ' | На доработке'
             elif task.get('in_work'): exp_label += ' | В работе'
             if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
-            tb_selected = is_tk_exp
-            tb_border = "#2196F3" if tb_selected else tk_bc
-            tb_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tb_selected else ""
-            st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tb_border} !important; border-radius: 10px !important; {tb_shadow} }}</style>", unsafe_allow_html=True)
+            st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
-                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
-                    if is_tk_exp:
-                        st.session_state.expanded_task_key = None
-                        save_scroll_and_rerun()
-                    else:
-                        st.session_state.expanded_task_key = task_key
-                        st.rerun()
-                if not is_tk_exp:
-                    render_scroll_restore(f"tb_{task_key}")
-            if is_tk_exp:
-                render_task_detail(task, cl, di.get(task.get("deal_id")), f"tb_{sk}_{t['client_id']}_{t['task_idx']}")
+                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
+                    st.session_state["dialog_task_key"] = task_key
+                    st.rerun()
+                render_scroll_restore(f"tb_{task_key}")
         col_new, col_today, col_future, col_review = st.columns(4)
         with col_new:
             with st.container(border=True):
@@ -2439,20 +2444,30 @@ elif st.session_state.active_tab == "Задачи":
                 task = at["task_obj"]
                 cl = at["client_obj"]
                 task_key = f"arch_{at['task_idx']}_{cl['id']}"
-                is_tk_exp = st.session_state.expanded_task_key == task_key
                 exp_label = f"✅ Задача №{task.get('task_number', '')} — {at['client_name']} — {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
                 with st.container(key=f"arch_wrap_{task_key}"):
-                    if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
-                        if is_tk_exp:
-                            st.session_state.expanded_task_key = None
-                            save_scroll_and_rerun()
-                        else:
-                            st.session_state.expanded_task_key = task_key
-                            st.rerun()
-                    if is_tk_exp:
-                        render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
+                    if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True):
+                        st.session_state["dialog_task_key"] = task_key
+                        st.rerun()
         else:
             st.caption("Архив пуст.")
+    # Show task detail dialog if requested
+    _dialog_key = st.session_state.get("dialog_task_key")
+    if _dialog_key:
+        _found = False
+        for _cl in st.session_state.crm_store.get("clients", []):
+            if _found: break
+            for _ti, _tk in enumerate(_cl.get("tasks", [])):
+                _tk_keys = [f"tb_new_{_cl['id']}_{_ti}", f"tb_today_{_cl['id']}_{_ti}", f"tb_future_{_cl['id']}_{_ti}", f"tb_review_{_cl['id']}_{_ti}", f"arch_{_ti}_{_cl['id']}"]
+                if _dialog_key in _tk_keys:
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, _dialog_key)
+                    _found = True
+                    break
 
 elif st.session_state.active_tab == "Внутренние задачи":
     st.markdown("### Внутренние задачи")
