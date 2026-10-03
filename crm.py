@@ -516,7 +516,7 @@ def get_file_bytes(fp):
     rp = normalize_remote_path(fp)
     return download_file_from_yandex(rp) if rp else None
 
-def render_file_thumbs(files, prefix, allow_delete=False):
+def render_file_thumbs(files, prefix, allow_delete=False, in_dialog=False):
     if not files:
         st.caption("Файлов нет")
         return
@@ -544,21 +544,21 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 # Show thumbnail for images
                 if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
                     b64 = base64.b64encode(fb).decode()
-                    mt = f"image/{{'jpeg' if ext == '.jpg' else ext[1:]}}"
+                    mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
                     st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
                 else:
                     # Non-image file: show icon + name
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
                     st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
 
-                # Description field (editable) - auto-expanding text_area
+                # Description field (editable) - auto-height text_area
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
-                # Calculate height based on content: ~20 chars per line in narrow column
-                _desc_lines = max(1, len(cur_desc) // 20 + cur_desc.count("\n") + 1) if cur_desc else 1
-                _desc_height = max(38, _desc_lines * 22 + 16)
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; padding: 0.35rem 0.6rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }}</style>", unsafe_allow_html=True)
-                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, height=_desc_height, label_visibility="collapsed", placeholder="Описание файла...")
+                # Calculate height based on text length
+                desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 > 0 else 0)) if cur_desc else 1
+                desc_height = max(38, desc_lines * 22)
+                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: {desc_height}px !important; height: {desc_height}px !important; padding: 0.35rem 0.6rem !important; font-size: 0.85rem !important; border-radius: 8px !important; resize: none !important; }} .st-key-{desc_key} .stTextArea > div > div {{ gap: 0 !important; }}</style>", unsafe_allow_html=True)
+                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=desc_height)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
@@ -572,10 +572,8 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
                     if st.button("\U0001F5D1", key=del_key, help="Удалить"):
                         files.pop(i)
-                        commit_and_rerun(st.session_state.crm_store, "Файл удалён")
-
-
-
+                        save_data(st.session_state.crm_store)
+                        st.toast("Файл удалён", icon="\u2705")
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     products_html = esc(task.get('products', '')).replace('\n', '<br>')
@@ -591,7 +589,7 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     html_json = json.dumps(html_content).replace('<', '\\u003c')
     safe_key = key_suffix.replace('-', '_').replace('.', '_')
     btn_id = f"print_btn_{safe_key}"
-    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="width:auto;padding:4px 12px;font-size:0.85rem;margin-right:12px;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
+    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="width:auto;padding:4px 12px;font-size:0.85rem;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
     st.components.v1.html(f"""<script>(function() {{ var btn = window.parent.document.getElementById('{btn_id}'); if (!btn) return; var html = {html_json}; btn.addEventListener('click', function() {{ var w = window.open('', '_blank'); if (!w) {{ alert('Разрешите всплывающие окна'); return; }} w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500); w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }}; }}); }})();</script>""", height=0)
 
 def render_print_file_button(files, key_suffix):
@@ -641,9 +639,14 @@ def render_entity_chat(entity, entity_type, entity_id):
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
-        # CSS to align buttons
+        # CSS for compact buttons and right column margin
         st.markdown(f"""<style>
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
+        .st-key-task_detail_{key_prefix} .stButton > button,
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button {{
+            min-height: 32px !important;
+            padding: 4px 10px !important;
+            font-size: 0.85rem !important;
+        }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button {{
             min-height: 32px !important;
             padding: 4px 10px !important;
@@ -657,61 +660,56 @@ def render_task_detail(t, cl, d, key_prefix):
             display: flex !important;
             align-items: center !important;
         }}
+        /* Print button right margin */
+        .st-key-task_detail_{key_prefix} .custom-print-btn {{
+            margin-right: 12px !important;
+        }}
+        /* Right column: no top margin */
+        .st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+        }}
         </style>""", unsafe_allow_html=True)
-
-        # Build header with creation date
-        _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
-        _created = t.get("created_at") or t.get("last_modified", "")
-        _created_str = ""
-        if _created and _created != "1970-01-01 00:00:00":
-            try:
-                _dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
-                _created_str = _dt.strftime("%d.%m.%Y")
-            except:
-                try:
-                    _dt = datetime.strptime(_created[:10], "%Y-%m-%d")
-                    _created_str = _dt.strftime("%d.%m.%Y")
-                except:
-                    pass
-        if _created_str:
-            _task_header = f"{_task_header} \u043e\u0442 {_created_str}"
-        _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
-        _fd = format_date(t.get('deadline', ''))
 
         # Two columns: left = everything, right = comments + files
         left_col, right_col = st.columns(2)
 
         with left_col:
-            show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
+            # Header with date
+            _created = format_created_date(t)
+            # Extract just the date part from created_date HTML
+            _created_date = ""
+            if _created:
+                import re as _re
+                _m = _re.search(r'(\d{2}\.\d{2}\.\d{4})', _created)
+                if _m: _created_date = _m.group(1)
 
-            if not show_edit_task:
-                # Header + deal link + print button
+            if d:
+                _task_header = f"Задача по сделке \u2116{t.get('task_number', '')}"
+            else:
+                _task_header = f"Задача \u2116{t.get('task_number', '')}"
+            if _created_date:
+                _task_header = f"{_task_header} от {_created_date}"
+
+            _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
+            _fd = format_date(t.get('deadline', ''))
+            _deal_num = d.get('deal_number', d.get('title', '')) if d else ""
+            _deal_id = d.get('id') if d else None
+            _deal_link_key = f"deal_link_{key_prefix}"
+
+            _hdr_inner, _print_inner = st.columns([14, 1])
+            with _hdr_inner:
+                st.subheader(_task_header)
                 if d:
-                    _deal_num = d.get('deal_number', d.get('title', ''))
-                    _deal_id = d.get('id')
-                    _deal_link_key = f"deal_link_{key_prefix}"
-                    _hdr_inner, _print_inner = st.columns([14, 1])
-                    with _hdr_inner:
-                        st.subheader(_task_header)
-                        if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
-                            st.session_state.active_tab = "\u0421\u0434\u0435\u043b\u043a\u0438"
-                            st.session_state["deal_tab_expanded"] = _deal_id
-                            st.session_state.pop("dialog_task_key", None)
-                            st.rerun()
-                    with _print_inner:
-                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-                else:
-                    _hdr_inner, _print_inner = st.columns([14, 1])
-                    with _hdr_inner:
-                        st.subheader(_task_header)
-                    with _print_inner:
-                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
+                    if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
+                        st.session_state.active_tab = "Сделки"
+                        st.session_state["deal_tab_expanded"] = _deal_id
+                        st.session_state.pop("dialog_task_key", None)
+                        st.rerun()
+            with _print_inner:
+                render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
 
-                # Edit pencil button (compact, left-aligned)
-                pencil_key = f"btn_pencil_edit_{key_prefix}"
-                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                    st.session_state[f"show_edit_task_{key_prefix}"] = True
+            show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
 
             if show_edit_task:
                 # Inline editing mode
@@ -724,7 +722,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
-                    et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a")
+                    et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
                     et_amount = st.text_input("\u0421\u0443\u043c\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u0430 (\u0440\u0443\u0431.):", value=str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "", key=f"edit_amount_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
                     et_tk = st.text_input("\u0422\u0440\u0435\u043a:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
                 else:
@@ -766,7 +764,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown(f"**\u0422\u0435\u043c\u0430:** {t.get('text', '')}")
                 st.markdown(f"**\u0422\u0438\u043f:** {t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')}")
 
-                # Deadline: clickable date, no pencil button
+                # Deadline: clickable date with overdue color
                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                 if show_edit_dl:
                     ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
@@ -818,7 +816,13 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
 
-                # Action buttons in left column
+                # Edit button (compact, left-aligned)
+                pencil_key = f"btn_pencil_edit_{key_prefix}"
+                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e \u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443"):
+                    st.session_state[f"show_edit_task_{key_prefix}"] = True
+
+                # Action buttons
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
@@ -858,6 +862,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                     cl["last_modified"] = now_str()
                                     if d: d["last_modified"] = now_str()
                                     st.session_state[show_key] = False
+                                    # Create new task if checkbox was checked
                                     if create_new_task and nt_topic2.strip():
                                         ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
                                         prefix2 = "\u0417\u0421" if d else "\u0417\u041a"
@@ -884,12 +889,12 @@ def render_task_detail(t, cl, d, key_prefix):
                                 st.session_state[show_key] = False
                 else:
                     if t.get("needs_rework"):
-                        st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
+                        st.markdown('<span class="rework-badge">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
                     if t.get("completion_report"): st.caption(f"\u041e\u0442\u0447\u0435\u0442: {t['completion_report']}")
                     if t.get("rework_comment"): st.warning(f"\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435: {t['rework_comment']}")
                     if t.get("completion_files"):
                         st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0435\u0442\u0430:**")
-                        render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
+                        render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles", in_dialog=True)
                     if not t.get("reviewed", False):
                         is_author = (st.session_state.user_role == "admin") or (t.get("created_by", "") == st.session_state.get("user_login", ""))
                         if is_author:
@@ -959,7 +964,7 @@ def render_task_detail(t, cl, d, key_prefix):
             # Files block
             if t.get("task_files"):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
-                render_file_thumbs(t["task_files"], f"{key_prefix}_files")
+                render_file_thumbs(t["task_files"], f"{key_prefix}_files", in_dialog=True)
             st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
             ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
@@ -976,6 +981,344 @@ def render_task_detail(t, cl, d, key_prefix):
                         save_data(st.session_state.crm_store)
                         st.toast("\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b", icon="\u2705")
                 else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
+def render_task_row(t, cl, d, task_key, key_prefix):
+    is_tk_exp = st.session_state.expanded_task_key == task_key
+    tk_done = t.get("done", False)
+    tk_overdue = is_task_overdue(t)
+    tk_rework = t.get("needs_rework", False)
+    if tk_done and not t.get("reviewed", False): tk_bg, tk_bc = "#FFF8E1", "#FF8F00"
+    elif tk_done: tk_bg, tk_bc = "#F5F6F8", "#C9CFD7"
+    elif tk_rework: tk_bg, tk_bc = "#FFEBEE", "#D32F2F"
+    elif tk_overdue: tk_bg, tk_bc = "#FFEBEE", "#C62828"
+    elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
+    else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
+    tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
+    if tk_rework and not tk_done: tk_label += ' | На доработке'
+    if t.get('in_work') and not tk_done and not tk_rework: tk_label += ' | В работе'
+    if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
+    if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
+    tk_selected = is_tk_exp
+    tk_border = "#2196F3" if tk_selected else tk_bc
+    tk_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tk_selected else ""
+    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }}</style>", unsafe_allow_html=True)
+    with st.container(key=f"tk_btn_wrap_{task_key}"):
+        if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
+            if is_tk_exp:
+                st.session_state.expanded_task_key = None
+                save_scroll_and_rerun()
+            else:
+                st.session_state.expanded_task_key = task_key
+                st.rerun()
+        if not is_tk_exp:
+            render_scroll_restore(f"tk_{task_key}")
+    if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
+
+def get_entity_border(tasks_list):
+    has_overdue = any(not t.get("done") and is_task_overdue(t) for t in tasks_list)
+    has_active = any(not t.get("done") for t in tasks_list)
+    if has_overdue: return "#FFEBEE", "#C62828"
+    elif has_active: return "#E8F5E9", "#4CAF50"
+    else: return "#FFFFFF", "#DCE0E5"
+
+def indented(margin=0.03):
+    if margin <= 0:
+        return st.container()
+    cols = st.columns([margin, 1 - margin], gap="small")
+    return cols[1]
+
+def render_separator():
+    st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
+
+def render_centered_title(title):
+    st.markdown(f'<p class="section-title">{title}</p>', unsafe_allow_html=True)
+
+def render_centered_button(label, key=None, btn_type="primary"):
+    lbl_hash = hashlib.md5(label.encode()).hexdigest()[:6]
+    btn_key = f"cb_{lbl_hash}_{key}" if key else f"cb_{lbl_hash}"
+    cl1, cl2, cl3 = st.columns([1, 2, 1], gap="small")
+    with cl2:
+        if st.button(label, key=btn_key, type=btn_type, use_container_width=True):
+            return True
+    return False
+
+def migrate_task_files(t):
+    if "task_files" not in t:
+        t["task_files"] = []
+        if t.get("file_path"): t["task_files"].append({"file_path": t["file_path"], "file_name": t.get("file_name", "файл"), "file_hash": ""})
+    if "completion_files" not in t:
+        t["completion_files"] = []
+        if t.get("completion_file_path"): t["completion_files"].append({"file_path": t["completion_file_path"], "file_name": t.get("completion_file_name", "файл"), "file_hash": ""})
+    if "task_comments" not in t: t["task_comments"] = []
+    if "in_work" not in t: t["in_work"] = False
+    if "needs_rework" not in t: t["needs_rework"] = False
+    if "reviewed" not in t: t["reviewed"] = False
+    if "rework_comment" not in t: t["rework_comment"] = ""
+    if "created_by" not in t: t["created_by"] = ""
+    if "ready_to_ship" not in t: t["ready_to_ship"] = False
+    if "delegated_to" not in t: t["delegated_to"] = None
+    if "created_at" not in t: t["created_at"] = t.get("last_modified", "")
+    if "flagged" not in t: t["flagged"] = False
+    if "needs_rework" not in t: t["needs_rework"] = False
+    if "reviewed" not in t: t["reviewed"] = False
+    if "type" not in t: t["type"] = "Связаться"
+    if "products" not in t: t["products"] = ""
+    if "ship_addr" not in t: t["ship_addr"] = ""
+    if "receiver" not in t: t["receiver"] = ""
+    if "receiver_phone" not in t: t["receiver_phone"] = ""
+    if "ship_pay" not in t: t["ship_pay"] = ""
+    if "tk_num" not in t: t["tk_num"] = ""
+    if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
+
+def migrate_data(data):
+    du = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]
+    if "users" not in data: data["users"] = du
+    if "notifications" not in data: data["notifications"] = []
+    for u in data["users"]:
+        if not is_hashed(u.get("password", "")): u["password"] = hash_password(u["password"])
+        if "telegram_chat_id" not in u: u["telegram_chat_id"] = ""
+    for c in data.get("clients", []):
+        client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
+        first_deal_id = client_deals[0]["id"] if client_deals else None
+        for k, v in [("email",""),("address",""),("base_comment",""),("category","Не определён"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[]),("last_modified","1970-01-01 00:00:00"),("client_chat",[]),("created_at","")]:
+            if k not in c or c[k] == "-": c[k] = v
+        for ea in c.get("extra_addresses", []):
+            if isinstance(ea, str):
+                idx = c["extra_addresses"].index(ea)
+                c["extra_addresses"][idx] = {"address": ea, "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""}
+        for t in c.get("tasks", []):
+            if "manager" not in t: t["manager"] = c.get("manager", "")
+            if "deadline" in t and " " in str(t["deadline"]): t["deadline"] = str(t["deadline"]).split(" ")[0]
+            if "completion_report" not in t: t["completion_report"] = ""
+            if "deal_id" not in t: t["deal_id"] = first_deal_id
+            if "last_modified" not in t: t["last_modified"] = "1970-01-01 00:00:00"
+            if "task_number" not in t: t["task_number"] = ""
+            if "created_at" not in t: t["created_at"] = ""
+            migrate_task_files(t)
+    for d in data.get("deals", []):
+        if "deal_title" not in d: d["deal_title"] = ""
+        if "deal_comments" not in d: d["deal_comments"] = []
+        if "deal_files" not in d: d["deal_files"] = []
+        if "payment_status" not in d: d["payment_status"] = "Не оплачено"
+        if "manager" not in d: d["manager"] = ""
+        if "close_files" not in d:
+            d["close_files"] = []
+            if d.get("close_file_path"): d["close_files"].append({"file_path": d["close_file_path"], "file_name": d.get("close_file_name", "файл"), "file_hash": ""})
+        if "last_modified" not in d: d["last_modified"] = "1970-01-01 00:00:00"
+        if "deal_chat" not in d: d["deal_chat"] = []
+        if "deal_number" not in d: d["deal_number"] = ""
+        if "created_at" not in d: d["created_at"] = ""
+        if d.get("status") == "New": d["status"] = "Новый"
+        if d.get("status") == "На согласовании": d["status"] = "В работе"
+        if d.get("title", "").startswith("Заказ"): d["title"] = d.get("deal_number", d["title"])
+    assign_task_numbers(data)
+    assign_deal_numbers(data)
+    if "internal_tasks" not in data: data["internal_tasks"] = []
+    if "chat_messages" not in data: data["chat_messages"] = []
+    if "qa_entries" not in data: data["qa_entries"] = []
+    if "suppliers" not in data: data["suppliers"] = []
+    data["_migrated"] = "v2"
+    return data
+
+def load_data():
+    download_db_from_yandex()
+    db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
+    if os.path.exists(FILE_NAME):
+        try:
+            with open(FILE_NAME, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("_migrated") != "v2":
+                data = migrate_data(data)
+                with open(FILE_NAME, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                upload_db_to_yandex_async()
+            else:
+                for c in data.get("clients", []):
+                    client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
+                    first_deal_id = client_deals[0]["id"] if client_deals else None
+                    if "last_modified" not in c: c["last_modified"] = "1970-01-01 00:00:00"
+                    if "client_chat" not in c: c["client_chat"] = []
+                    if "created_at" not in c: c["created_at"] = c.get("last_modified", "")
+                    for t in c.get("tasks", []):
+                        if "completion_report" not in t: t["completion_report"] = ""
+                        if "deal_id" not in t: t["deal_id"] = first_deal_id
+                        if "last_modified" not in t: t["last_modified"] = "1970-01-01 00:00:00"
+                        if "task_number" not in t: t["task_number"] = ""
+                        if "created_at" not in t: t["created_at"] = t.get("last_modified", "")
+                        if "in_work" not in t: t["in_work"] = False
+                        if "needs_rework" not in t: t["needs_rework"] = False
+                        if "reviewed" not in t: t["reviewed"] = False
+                        if "created_by" not in t: t["created_by"] = ""
+                        if "ready_to_ship" not in t: t["ready_to_ship"] = False
+                        if "delegated_to" not in t: t["delegated_to"] = None
+                        if "task_comments" not in t: t["task_comments"] = []
+                        if "flagged" not in t: t["flagged"] = False
+                        if "type" not in t: t["type"] = "Связаться"
+                        if "products" not in t: t["products"] = ""
+                        if "ship_addr" not in t: t["ship_addr"] = ""
+                        if "receiver" not in t: t["receiver"] = ""
+                        if "receiver_phone" not in t: t["receiver_phone"] = ""
+                        if "ship_pay" not in t: t["ship_pay"] = ""
+                        if "tk_num" not in t: t["tk_num"] = ""
+                        if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
+                        migrate_task_files(t)
+                for d in data.get("deals", []):
+                    if "deal_title" not in d: d["deal_title"] = ""
+                    if "deal_files" not in d: d["deal_files"] = []
+                    if "payment_status" not in d: d["payment_status"] = "Не оплачено"
+                    if "manager" not in d: d["manager"] = ""
+                    if "close_files" not in d:
+                        d["close_files"] = []
+                        if d.get("close_file_path"): d["close_files"].append({"file_path": d["close_file_path"], "file_name": d.get("close_file_name", "файл"), "file_hash": ""})
+                    if "last_modified" not in d: d["last_modified"] = "1970-01-01 00:00:00"
+                    if "deal_chat" not in d: d["deal_chat"] = []
+                    if "deal_number" not in d: d["deal_number"] = ""
+                    if "created_at" not in d: d["created_at"] = d.get("last_modified", "")
+                    if d.get("status") == "На согласовании": d["status"] = "В работе"
+                    if d.get("title", "").startswith("Заказ"): d["title"] = d.get("deal_number", d["title"])
+                assign_task_numbers(data)
+                assign_deal_numbers(data)
+                if "internal_tasks" not in data: data["internal_tasks"] = []
+                if "chat_messages" not in data: data["chat_messages"] = []
+                if "qa_entries" not in data: data["qa_entries"] = []
+                if "suppliers" not in data: data["suppliers"] = []
+            return data
+        except Exception:
+            return db
+    return db
+
+def save_data(data):
+    try:
+        with open(FILE_NAME, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        upload_db_to_yandex_async()
+    except Exception as e:
+        st.sidebar.error(f"Ошибка сохранения: {e}")
+
+def commit_and_rerun(data=None, toast_msg=None):
+    if data is not None:
+        save_data(data)
+    if toast_msg:
+        st.toast(toast_msg, icon="✅")
+    st.rerun()
+
+# ====== УВЕДОМЛЕНИЯ ======
+TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
+
+def get_user_by_login(login):
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("login") == login:
+            return u
+    return None
+
+def resolve_login(name_or_login):
+    """Преобразует имя сотрудника в логин (для уведомлений)."""
+    if not name_or_login:
+        return ""
+    # Сначала пробуем как логин
+    u = get_user_by_login(name_or_login)
+    if u:
+        return u["login"]
+    # Потом ищем по имени
+    for u in st.session_state.crm_store.get("users", []):
+        if u.get("name") == name_or_login:
+            return u["login"]
+    return name_or_login
+
+def send_telegram(chat_id, text):
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=5
+        )
+    except:
+        pass
+
+def add_notification(to_login, text, tg_text=None):
+    """Создаёт уведомление: внутреннее (колокольчик) + Telegram"""
+    to_login = resolve_login(to_login)
+    store = st.session_state.crm_store
+    if "notifications" not in store:
+        store["notifications"] = []
+    notif = {
+        "id": len(store["notifications"]) + 1,
+        "to": to_login,
+        "text": text,
+        "date": now_str(),
+        "read": False
+    }
+    store["notifications"].append(notif)
+    # Telegram
+    u = get_user_by_login(to_login)
+    if u and u.get("telegram_chat_id"):
+        send_telegram(u["telegram_chat_id"], tg_text or text)
+
+def get_unread_count():
+    me = st.session_state.get("user_login", "")
+    notifs = st.session_state.crm_store.get("notifications", [])
+    return sum(1 for n in notifs if n.get("to") == me and not n.get("read", False))
+
+def get_my_notifications():
+    me = st.session_state.get("user_login", "")
+    notifs = st.session_state.crm_store.get("notifications", [])
+    mine = [n for n in notifs if n.get("to") == me]
+    mine.sort(key=lambda n: n.get("date", ""), reverse=True)
+    return mine[:30]
+
+def mark_all_notifications_read():
+    me = st.session_state.get("user_login", "")
+    for n in st.session_state.crm_store.get("notifications", []):
+        if n.get("to") == me:
+            n["read"] = True
+    save_data(st.session_state.crm_store)
+
+def render_notifications_bell():
+    """Колокольчик с уведомлениями — компактная кнопка"""
+    unread = get_unread_count()
+    bell_key = "crm_bell_toggle"
+    if unread > 0:
+        bell_label = f"🔔 {unread}"
+    else:
+        bell_label = "🔔"
+    bc_col, _spacer = st.columns([1, 20])
+    with bc_col:
+        with st.container(key="crm_bell_wrap"):
+            if st.button(bell_label, key="btn_bell", help=f"Уведомления ({unread} непрочитанных)"):
+                st.session_state[bell_key] = not st.session_state.get(bell_key, False)
+                st.rerun()
+
+def render_notifications_panel():
+    """Панель уведомлений на всю ширину"""
+    bell_key = "crm_bell_toggle"
+    if not st.session_state.get(bell_key, False):
+        return
+    notifs = get_my_notifications()
+    unread = get_unread_count()
+    with st.container(border=True):
+        hc, bc = st.columns([10, 2])
+        with hc:
+            st.markdown("### 🔔 Уведомления")
+        with bc:
+            if unread > 0:
+                if st.button("Прочитать все", key="btn_read_all", use_container_width=True):
+                    mark_all_notifications_read()
+                    st.rerun()
+        if not notifs:
+            st.caption("Нет уведомлений")
+        else:
+            for n in notifs:
+                bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
+                border = "1px solid #BBDEFB" if not n.get("read", False) else "1px solid #E8EBEF"
+                st.markdown(
+                    f'<div style="background:{bg};border:{border};border-radius:10px;padding:10px 14px;margin-bottom:8px;">'
+                    f'<span style="font-size:0.75rem;color:#95A5B7;">{n.get("date","")}</span><br>'
+                    f'<span style="font-size:0.95rem;color:#2C3E50;">{n.get("text","")}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
 
 @st.dialog("Завершить сделку", width="medium")
 def close_deal_dialog(deal_id):
