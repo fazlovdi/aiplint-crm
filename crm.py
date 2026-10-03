@@ -539,9 +539,17 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     b64 = base64.b64encode(fb).decode()
                     mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
                     st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" onclick="window.crmOpenLightbox && window.crmOpenLightbox(this.src)" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
-                    dl_key = f"dl_{prefix}_{i}"
-                    st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:none!important;color:#bc1661!important;font-size:0.75rem!important;padding:0!important;text-decoration:underline!important; }}</style>", unsafe_allow_html=True)
-                    st.download_button("\U00002B07", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
+                    # Download and Print buttons as small icons
+                    btn_col1, btn_col2 = st.columns(2)
+                    with btn_col1:
+                        dl_key = f"dl_{prefix}_{i}"
+                        st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;font-size:0.8rem!important;padding:2px 6px!important;min-height:26px!important;border-radius:6px!important; }}</style>", unsafe_allow_html=True)
+                        st.download_button("\U00002B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
+                    with btn_col2:
+                        pr_key = f"pr_{prefix}_{i}"
+                        pr_btn_id = f"prf_{prefix}_{i}"
+                        st.markdown(f'<button id="{pr_btn_id}" style="background:none;border:1px solid #DCE0E5;color:#5A6B7D;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:pointer;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
+                        st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pr_btn_id}');if(!b)return;var b64="{b64}";var mt="{mt}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0;text-align:center"><img src="data:'+mt+';base64,'+b64+'" style="max-width:100%;max-height:100%" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"/></body></html>');w.document.close();}});}})();</script>""", height=0)
                     if allow_delete and st.session_state.user_role == "admin":
                         del_key = f"del_{prefix}_{i}"
                         st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
@@ -559,15 +567,37 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 pdf_btn_id = f"pdf_view_{prefix}_{i}"
                 st.markdown(f'<button class="custom-print-btn" id="{pdf_btn_id}" style="background:#5A6B7D;margin-bottom:4px;">\U0001F4C4 {fn}</button>', unsafe_allow_html=True)
                 st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pdf_btn_id}');if(!b)return;var b64="{b64}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;var html='<html><head><title>{fn}</title></head><body style="margin:0"><iframe src="data:application/pdf;base64,'+b64+'" style="width:100vw;height:100vh;border:0"></iframe></body></html>';w.document.open();w.document.write(html);w.document.close();}});}})();</script>""", height=0)
-            dl_key = f"dl_{prefix}_o_{i}"
-            st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:none!important;color:#bc1661!important;font-size:0.85rem!important;padding:2px 0!important;text-decoration:underline!important;font-weight:500!important; }}</style>", unsafe_allow_html=True)
-            st.download_button(f"\U0001F4C4 {fn}", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
+            else:
+                of_btn_id = f"of_view_{prefix}_{i}"
+                st.markdown(f'<button class="custom-print-btn" id="{of_btn_id}" style="background:#5A6B7D;margin-bottom:4px;">\U0001F4C4 {fn}</button>', unsafe_allow_html=True)
+                st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{of_btn_id}');if(!b)return;b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.write('<html><head><title>{fn}</title></head><body><pre style="padding:20px;white-space:pre-wrap;font-family:monospace;">{fn}</pre></body></html>');w.document.close();}});}})();</script>""", height=0)
+            # Download and Print buttons as small icons
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                dl_key = f"dl_{prefix}_o_{i}"
+                st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;font-size:0.8rem!important;padding:2px 6px!important;min-height:26px!important;border-radius:6px!important; }}</style>", unsafe_allow_html=True)
+                st.download_button("\U00002B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
+            with btn_col2:
+                pr_btn_id = f"prf_o_{prefix}_{i}"
+                printable = ext in [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"]
+                if printable:
+                    b64 = base64.b64encode(fb).decode()
+                    if ext == ".pdf":
+                        st.markdown(f'<button id="{pr_btn_id}" style="background:none;border:1px solid #DCE0E5;color:#5A6B7D;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:pointer;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
+                        st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pr_btn_id}');if(!b)return;var b64="{b64}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0"><iframe src="data:application/pdf;base64,'+b64+'" style="width:100vw;height:100vh;border:0" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"></iframe></body></html>');w.document.close();}});}})();</script>""", height=0)
+                    else:
+                        mt = f"image/{{'jpeg' if ext == '.jpg' else ext[1:]}}"
+                        st.markdown(f'<button id="{pr_btn_id}" style="background:none;border:1px solid #DCE0E5;color:#5A6B7D;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:pointer;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
+                        st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pr_btn_id}');if(!b)return;var b64="{b64}";var mt="{mt}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0;text-align:center"><img src="data:'+mt+';base64,'+b64+'" style="max-width:100%;max-height:100%" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"/></body></html>');w.document.close();}});}})();</script>""", height=0)
+                else:
+                    st.markdown(f'<button disabled style="background:none;border:1px solid #E8EBEF;color:#C9CFD7;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:not-allowed;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
             if allow_delete and st.session_state.user_role == "admin":
                 del_key = f"del_{prefix}_o_{i}"
                 st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
                 if st.button("\U0001F5D1 Удалить", key=del_key):
                     files.pop(len(img_files) + i)
                     commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+
 
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -584,7 +614,7 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     html_json = json.dumps(html_content).replace('<', '\\u003c')
     safe_key = key_suffix.replace('-', '_').replace('.', '_')
     btn_id = f"print_btn_{safe_key}"
-    st.markdown(f'<button class="custom-print-btn" id="{btn_id}">Распечатать задачу</button>', unsafe_allow_html=True)
+    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="width:auto;padding:4px 12px;font-size:0.85rem;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
     st.components.v1.html(f"""<script>(function() {{ var btn = window.parent.document.getElementById('{btn_id}'); if (!btn) return; var html = {html_json}; btn.addEventListener('click', function() {{ var w = window.open('', '_blank'); if (!w) {{ alert('Разрешите всплывающие окна'); return; }} w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500); w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }}; }}); }})();</script>""", height=0)
 
 def render_print_file_button(files, key_suffix):
@@ -638,7 +668,7 @@ def render_task_detail(t, cl, d, key_prefix):
         num_col, edit_col = st.columns([20, 1])
         with num_col:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
-            st.markdown(f"<h3 style=\"margin:0;font-size:1.25rem\">{_task_header}</h3>")
+            st.subheader(_task_header)
         with edit_col:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if not show_edit:
@@ -648,6 +678,13 @@ def render_task_detail(t, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = True
                     st.rerun()
         st.markdown(format_created_date(t), unsafe_allow_html=True)
+        
+        # Print button (small printer icon)
+        _tp = t.get("type", "Связаться")
+        _fd = format_date(t.get("deadline", ""))
+        _print_key = f"task_print_{key_prefix}"
+        st.markdown(f"""<style>.st-key-{_print_key} button {{ padding: 2px 10px !important; font-size: 0.85rem !important; min-height: 28px !important; max-width: 40px !important; }}</style>""", unsafe_allow_html=True)
+        render_print_button(t, cl, _tp, _fd, _print_key)
         
         # Two columns: left = info + action buttons, right = comments + files
         left_col, right_col = st.columns(2)
@@ -763,6 +800,14 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
+                    if not t.get("in_work") and not t.get("needs_rework"):
+                        if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
+                            t["in_work"] = True
+                            t["last_modified"] = now_str()
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
+                    show_key = f"show_complete_{key_prefix}"
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
