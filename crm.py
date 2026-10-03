@@ -637,7 +637,8 @@ def render_task_detail(t, cl, d, key_prefix):
         # Top row: task number + pencil edit button
         num_col, edit_col = st.columns([20, 1])
         with num_col:
-            st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}**")
+            _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
+            st.markdown(f"<h3 style=\"margin:0;font-size:1.25rem\">{_task_header}</h3>")
         with edit_col:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if not show_edit:
@@ -676,26 +677,32 @@ def render_task_detail(t, cl, d, key_prefix):
                     et_pay = t.get("ship_pay", "")
                     et_amount = str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""
                     et_tk = t.get("tk_num", "")
-                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
-                    if not et_mgr:
-                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
-                    else:
-                        t["text"] = et_topic
-                        t["type"] = et_type
-                        t["manager"] = et_mgr
-                        t["task_comment"] = et_comment
-                        t["products"] = et_products
-                        t["ship_addr"] = et_addr
-                        t["receiver"] = et_recv
-                        t["receiver_phone"] = et_rphone
-                        t["ship_pay"] = et_pay
-                        t["order_amount"] = int(et_amount) if et_amount and et_amount.strip().isdigit() else 0
-                        t["tk_num"] = et_tk
-                        t["last_modified"] = now_str()
-                        cl["last_modified"] = now_str()
-                        if d: d["last_modified"] = now_str()
+                _save_col, _cancel_col = st.columns(2)
+                with _save_col:
+                    if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
+                        if not et_mgr:
+                            st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                        else:
+                            t["text"] = et_topic
+                            t["type"] = et_type
+                            t["manager"] = et_mgr
+                            t["task_comment"] = et_comment
+                            t["products"] = et_products
+                            t["ship_addr"] = et_addr
+                            t["receiver"] = et_recv
+                            t["receiver_phone"] = et_rphone
+                            t["ship_pay"] = et_pay
+                            t["order_amount"] = int(et_amount) if et_amount and et_amount.strip().isdigit() else 0
+                            t["tk_num"] = et_tk
+                            t["last_modified"] = now_str()
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            st.session_state[f"show_edit_task_{key_prefix}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
+                with _cancel_col:
+                    if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"edit_cancel_{key_prefix}", use_container_width=True):
                         st.session_state[f"show_edit_task_{key_prefix}"] = False
-                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
+                        st.rerun()
             else:
                 # Display mode
                 st.markdown(f"**\u0422\u0435\u043c\u0430:** {t.get('text', '')}")
@@ -715,7 +722,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
                             commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
                     with dl_btn_col2:
-                        if st.button("\u041e\u0442\u043c.", key=f"dl_cancel_{key_prefix}", use_container_width=True):
+                        if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
                             st.rerun()
                 else:
@@ -741,13 +748,13 @@ def render_task_detail(t, cl, d, key_prefix):
                 
                 if t.get('in_work') and not t.get('done'):
                     st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
+                st.markdown("---")
                 if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
                 if t.get('tk_num'):
-                    st.markdown("**\u0422\u0440\u0435\u043a:**")
-                    render_track_inline(t['tk_num'], key_prefix)
+                    st.markdown(f"**\u0422\u0440\u0435\u043a:** `{t['tk_num']}`")
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
@@ -756,7 +763,6 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
-                    st.markdown("---")
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
