@@ -68,8 +68,8 @@ st.markdown("""
     #crm-lightbox { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999999; display:none; align-items:center; justify-content:center; cursor:pointer; }
     #crm-lightbox img { max-width:90%; max-height:90%; border-radius:8px; }
     .thumb-item { position:relative; width:110px; }
-    .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:pointer; border:1px solid #DCE0E5; }
-    .thumb-item img:hover { border-color:#bc1661; }
+    .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:default; border:1px solid #DCE0E5; }
+    .thumb-item img:hover { border-color:#DCE0E5; }
     .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; }
     .ready-badge { display: inline-block; background: #2E7D32; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -535,15 +535,12 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
                     b64 = base64.b64encode(fb).decode()
                     mt = f"image/{{'jpeg' if ext == '.jpg' else ext[1:]}}"
-                    st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" onclick="window.crmOpenLightbox && window.crmOpenLightbox(this.src)" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
                 else:
                     # Non-image file: show icon + name
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
                     st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
-                # Download button (clickable)
-                dl_key = f"dl_{prefix}_{i}"
-                st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;font-size:0.8rem!important;padding:2px 6px!important;min-height:26px!important;border-radius:6px!important; }}</style>", unsafe_allow_html=True)
-                st.download_button("\U00002B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
+
                 # Description field (editable)
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
@@ -627,11 +624,15 @@ def render_entity_chat(entity, entity_type, entity_id):
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
-        # Top row: task number + pencil edit button
-        num_col, edit_col = st.columns([20, 1])
+        # Top row: task number + print button + pencil edit button
+        num_col, print_col, edit_col = st.columns([20, 1, 1])
         with num_col:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             st.subheader(_task_header)
+        with print_col:
+            _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
+            _fd = format_date(t.get('deadline', ''))
+            render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
         with edit_col:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if not show_edit:
@@ -654,7 +655,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 # Inline editing mode
                 et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
                 et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
-                et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
                 et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
                     et_products = st.text_area("\u0422\u043e\u0432\u0430\u0440\u044b:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
@@ -729,7 +730,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 
                 # Editable responsible person (replaces delegate button)
                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
-                mgr_options = [""] + get_managers_list()
+                mgr_options = get_managers_list()
                 current_mgr = t.get("manager", "")
                 current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
                 new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=f"task_mgr_inline_{key_prefix}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
@@ -778,7 +779,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         if create_new_task:
                             with st.container(border=True):
                                 nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"cnt_topic_{key_prefix}")
-                                nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                                nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
                                 nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"cnt_dl_{key_prefix}")
                                 nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"cnt_comment_{key_prefix}")
                                 nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"cnt_files_{key_prefix}", accept_multiple_files=True)
@@ -1502,7 +1503,7 @@ cu = st.session_state.user_name
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
     ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
-    ntm = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
+    ntm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
     ntd = st.date_input("Срок:", format="DD/MM/YYYY", key=f"nt_d_{key_suffix}")
     if ntype in ("Отправить заказ", "Отправить образцы"):
         nproducts = st.text_area("Товары:", key=f"nt_prod_{key_suffix}")
@@ -1620,7 +1621,7 @@ def render_deal_card_expanded(d, cl):
             with st.container(border=True):
                 et = st.text_input("Название сделки:", value=d.get("deal_title", ""), key=f"et_{d['id']}")
                 eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"eb_{d['id']}", placeholder="Введите сумму")
-                em = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else ([""] + get_managers_list()).index(d.get('manager', '')), key=f"em_{d['id']}", placeholder=MGR_PLACEHOLDER)
+                em = st.selectbox("Ответственный:", get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else (get_managers_list()).index(d.get('manager', '')), key=f"em_{d['id']}", placeholder=MGR_PLACEHOLDER)
                 if st.button("Сохранить", key=f"es_{d['id']}", use_container_width=True, type="primary"):
                     if not em:
                         st.warning("Выберите ответственного")
@@ -1832,7 +1833,7 @@ def render_deal_card_tab(d, cl, cu):
             with st.container(border=True):
                 et = st.text_input("Название сделки:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
                 eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
-                em = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else ([""] + get_managers_list()).index(d.get('manager', '')), key=f"dls_em_{deal_id}", placeholder=MGR_PLACEHOLDER)
+                em = st.selectbox("Ответственный:", get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else (get_managers_list()).index(d.get('manager', '')), key=f"dls_em_{deal_id}", placeholder=MGR_PLACEHOLDER)
                 if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
                     if not em:
                         st.warning("Выберите ответственного")
@@ -2003,7 +2004,7 @@ def render_client_card_expanded(cl):
                 ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(cl.get('discount', 0)), key=f"ed_{cl['id']}")
                 ec_idx = CATEGORIES.index(cl.get('category', 'Не определён')) if cl.get('category', 'Не определён') in CATEGORIES else 0
                 ec = st.selectbox("Категория", CATEGORIES, index=ec_idx, key=f"ec_{cl['id']}")
-                em = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if cl.get('manager', '') not in get_managers_list() else ([""] + get_managers_list()).index(cl.get('manager', '')), key=f"em_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                em = st.selectbox("Ответственный:", get_managers_list(), index=0 if cl.get('manager', '') not in get_managers_list() else (get_managers_list()).index(cl.get('manager', '')), key=f"em_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 if st.button("Сохранить", key=f"es_{cl['id']}", use_container_width=True, type="primary"):
                     cl['name'], cl['phone'], cl['email'], cl['address'], cl['discount'], cl['category'], cl['manager'] = en, format_phone(ep), ee, ea_val, int(ed), ec, em
                     cl["last_modified"] = now_str()
@@ -2100,7 +2101,7 @@ def render_client_in_tree(cl):
             with st.container(border=True):
                 cd_title = st.text_input("Название сделки:", key=f"cd_title_{cl['id']}")
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
-                cd_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 if st.button("Создать", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
                     if not cd_mgr:
                         st.warning("Выберите ответственного")
@@ -2123,7 +2124,7 @@ def render_client_form(fv):
             cp = st.text_input("Основной телефон", key=f"cp_{fv}")
             ce = st.text_input("Основной Email", key=f"ce_{fv}")
             cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}")
-            cm = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
+            cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
         with acr:
             ca = st.text_input("Основной адрес", key=f"ca_{fv}")
             cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", placeholder="Выбери категорию")
@@ -2198,6 +2199,7 @@ def render_client_form(fv):
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
 @st.dialog("Подробности задачи", width="large")
+@st.fragment
 def task_detail_dialog(task, cl, d, key_prefix):
     render_task_detail(task, cl, d, key_prefix)
 if st.session_state.active_tab == "Клиенты":
@@ -2500,7 +2502,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
     if st.session_state.get(show_it_key, False):
         with st.container(border=True):
             it_topic = st.text_input("Тема задачи:", key="it_topic")
-            it_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0, key="it_mgr", placeholder=MGR_PLACEHOLDER)
+            it_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key="it_mgr", placeholder=MGR_PLACEHOLDER)
             it_dl = st.date_input("Срок:", format="DD/MM/YYYY", key="it_dl")
             it_comment = st.text_area("Комментарии:", key="it_comment")
             if st.button("Создать", key="it_go", use_container_width=True, type="primary"):
@@ -2597,7 +2599,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
                         if st.session_state.get(show_it_edit, False):
                             with st.container(border=True):
                                 eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
-                                eit_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
+                                eit_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else (get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
                                 eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
                                 eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
                                 if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
