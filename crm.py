@@ -520,6 +520,16 @@ def render_file_thumbs(files, prefix, allow_delete=False):
     if not files:
         st.caption("Файлов нет")
         return
+    # CSS to match download button and description height with primary action buttons
+    st.markdown("""<style>
+    .stDownloadButton > button {
+        min-height: 38px !important;
+        padding: 0.55rem 1.1rem !important;
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+    }
+    </style>""", unsafe_allow_html=True)
     all_files = files
     ncols = min(len(all_files), 4)
     if ncols < 1: ncols = 1
@@ -541,9 +551,10 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
                     st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
 
-                # Description field (editable)
+                # Description field (editable) - same height as buttons
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
+                st.markdown(f"<style>.st-key-{desc_key} .stTextInput > div > input {{ min-height: 38px !important; padding: 0.55rem 0.8rem !important; font-size: 0.95rem !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
                 new_desc = st.text_input("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...")
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
@@ -627,8 +638,9 @@ def render_entity_chat(entity, entity_type, entity_id):
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
-        # Top row: task number + print button + pencil edit button
-        num_col, edit_col = st.columns([20, 2])
+        # Top row: left column = header + print, right column = edit pencil
+        # Matches the two-column layout (left_col, right_col) below
+        _top_left, _top_right = st.columns(2)
         # CSS to align print and edit buttons at same level
         st.markdown(f"""<style>
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
@@ -646,17 +658,17 @@ def render_task_detail(t, cl, d, key_prefix):
             align-items: center !important;
         }}
         </style>""", unsafe_allow_html=True)
-        with num_col:
+        with _top_left:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
-            st.subheader(_task_header)
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
             if d:
                 _deal_num = d.get('deal_number', d.get('title', ''))
                 _deal_id = d.get('id')
                 _deal_link_key = f"deal_link_{key_prefix}"
-                _link_inner, _print_inner = st.columns([14, 1])
-                with _link_inner:
+                _hdr_inner, _print_inner = st.columns([14, 1])
+                with _hdr_inner:
+                    st.subheader(_task_header)
                     if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["deal_tab_expanded"] = _deal_id
@@ -665,10 +677,12 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             else:
-                _sub_inner, _print_inner = st.columns([16, 1])
+                _hdr_inner, _print_inner = st.columns([14, 1])
+                with _hdr_inner:
+                    st.subheader(_task_header)
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-        with edit_col:
+        with _top_right:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if not show_edit:
                 pencil_key = f"btn_pencil_edit_{key_prefix}"
