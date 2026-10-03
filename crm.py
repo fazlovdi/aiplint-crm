@@ -550,46 +550,30 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
                     st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
 
-                # Description field (editable) - multiline, auto height
+                # Description field (editable) - one line by default, auto-expand on text growth
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
-                # Count visible lines: explicit newlines + estimated wrapping (~30 chars per line in narrow column)
-                if cur_desc:
-                    _lines = cur_desc.split('\n')
-                    _desc_lines = sum(max(1, (len(l) + 29) // 30) for l in _lines)
-                else:
-                    _desc_lines = 1
-                _desc_height = max(34, 34 + (_desc_lines - 1) * 20)
+                _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
+                _desc_height = 28 + (_desc_lines - 1) * 20
                 st.markdown(f"""<style>
-.st-key-{desc_key} .stTextArea > div > textarea {{
-    padding: 0.4rem 0.6rem !important;
-    font-size: 0.85rem !important;
-    border-radius: 10px !important;
-    resize: none !important;
-    line-height: 1.25 !important;
-    overflow: hidden !important;
-}}
-.st-key-{desc_key} .stTextArea > div > textarea::placeholder {{
-    font-size: 0.68rem !important;
-}}
-</style>""", unsafe_allow_html=True)
+                .st-key-{desc_key} .stTextArea > div > textarea {{
+                    min-height: 28px !important;
+                    height: {_desc_height}px !important;
+                    padding: 0.3rem 0.6rem !important;
+                    font-size: 0.9rem !important;
+                    border-radius: 10px !important;
+                    resize: none !important;
+                    line-height: 1.2 !important;
+                }}
+                .st-key-{desc_key} .stTextArea > div > textarea::placeholder {{
+                    font-size: 0.68rem !important;
+                    color: #95A5B7 !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                }}
+                </style>""", unsafe_allow_html=True)
                 new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
-                # Auto-resize textarea to fit content
-                st.components.v1.html(f"""<script>
-(function() {{
-    var w = window;
-    try {{ if (window.parent && window.parent !== window) w = window.parent; }} catch(e) {{}}
-    var ta = w.document.querySelector('.st-key-{desc_key} textarea');
-    if (ta) {{
-        function adjust() {{
-            ta.style.height = 'auto';
-            ta.style.height = Math.max(34, ta.scrollHeight) + 'px';
-        }}
-        adjust();
-        ta.addEventListener('input', adjust);
-    }}
-}})();
-</script>""", height=0)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
