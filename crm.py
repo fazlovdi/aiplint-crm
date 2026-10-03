@@ -740,7 +740,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _cancel_col:
                     if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"edit_cancel_{key_prefix}", use_container_width=True):
                         st.session_state[f"show_edit_task_{key_prefix}"] = False
-                        st.rerun()
+                        _smart_rerun()
             else:
                 # Display mode
                 st.markdown(f"**\u0422\u0435\u043c\u0430:** {t.get('text', '')}")
@@ -761,14 +761,14 @@ def render_task_detail(t, cl, d, key_prefix):
                     with dl_btn_col2:
                         if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                            st.rerun()
+                            _smart_rerun()
                 else:
                     dl_btn_key = f"btn_dl_click_{key_prefix}"
                     _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
                     st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key, help="\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0447\u0442\u043e\u0431\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
-                        st.rerun()
+                        _smart_rerun()
                 # Editable responsible person (replaces delegate button)
                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
                 mgr_options = get_managers_list()
@@ -799,7 +799,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
                 if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
                     st.session_state[f"show_edit_task_{key_prefix}"] = True
-                    st.rerun()
+                    _smart_rerun()
                 # Action buttons in left column (below task info)
                 st.markdown("---")
                 tk_done = t.get("done", False)
@@ -814,7 +814,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
-                        st.rerun()
+                        _smart_rerun()
                     if st.session_state.get(show_key, False):
                         rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
                         uf_ver = st.session_state.get(f"uf_ver_{key_prefix}", 0)
@@ -864,7 +864,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         with pc2:
                             if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"cancel_complete_{key_prefix}", use_container_width=True):
                                 st.session_state[show_key] = False
-                                st.rerun()
+                                _smart_rerun()
                 else:
                     if t.get("needs_rework"):
                         st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
@@ -890,7 +890,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             with rc2:
                                 if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
                                     st.session_state[f"show_rework_{key_prefix}"] = True
-                                    st.rerun()
+                                    _smart_rerun()
                             if st.session_state.get(f"show_rework_{key_prefix}", False):
                                 rework_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rework_comment_{key_prefix}", height=100, placeholder="\u041e\u043f\u0438\u0448\u0438\u0442\u0435, \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c")
                                 rw1, rw2 = st.columns(2)
@@ -913,7 +913,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                 with rw2:
                                     if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
                                         st.session_state[f"show_rework_{key_prefix}"] = False
-                                        st.rerun()
+                                        _smart_rerun()
                         else:
                             st.info("\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0432\u0442\u043e\u0440\u043e\u043c")
                     else:
@@ -1170,12 +1170,19 @@ def save_data(data):
     except Exception as e:
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
+def _smart_rerun():
+    """Use fragment-scoped rerun when inside a dialog to prevent dialog flicker."""
+    if st.session_state.get("_in_dialog", False):
+        st.rerun(scope="fragment")
+    else:
+        st.rerun()
+
 def commit_and_rerun(data=None, toast_msg=None):
     if data is not None:
         save_data(data)
     if toast_msg:
         st.toast(toast_msg, icon="✅")
-    st.rerun()
+    _smart_rerun()
 
 # ====== УВЕДОМЛЕНИЯ ======
 TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
@@ -2246,9 +2253,10 @@ def render_client_form(fv):
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
 @st.dialog("Подробности задачи", width="large")
-@st.fragment
 def task_detail_dialog(task, cl, d, key_prefix):
+    st.session_state["_in_dialog"] = True
     render_task_detail(task, cl, d, key_prefix)
+    st.session_state["_in_dialog"] = False
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
     render_client_form(fv)
