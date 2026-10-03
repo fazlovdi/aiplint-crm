@@ -127,10 +127,20 @@ st.markdown("""
     [data-testid="stEmotionCache"] [data-testid="stDialog"] > div > div {
         position: relative !important;
     }
+    /* Reduce gap between dialog header and content */
+    [data-testid="stDialog"] [data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+    [data-testid="stDialog"] header {
+        margin-bottom: 0 !important;
+        padding-bottom: 0.3rem !important;
+    }
     /* Custom close button positioning */
     .crm-dialog-close-btn button {
         position: absolute !important;
-        top: 0.4rem !important;
+        top: 0 !important;
         right: 0.4rem !important;
         width: 32px !important;
         height: 32px !important;
@@ -2335,24 +2345,23 @@ def task_detail_dialog(task, cl, d, key_prefix):
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
     _is_editing = st.session_state.get(f"show_edit_task_{key_prefix}", False) or st.session_state.get(f"show_edit_dl_{key_prefix}", False)
 
-    # Close button — right-aligned row under the header
-    _close_btn_key = f"close_btn_{key_prefix}"
-    _close_css_key = f"close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_close_css_key):
-        _spacer_col, _close_col = st.columns([20, 1])
-        with _close_col:
-            if st.button("\u2715", key=_close_btn_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", use_container_width=True):
-                if _is_editing and not _show_close_warning:
-                    st.session_state[f"_show_close_warning_{key_prefix}"] = True
-                    st.rerun(scope="fragment")
-                else:
-                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state[f"show_edit_task_{key_prefix}"] = False
-                    st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                    st.session_state.pop("dialog_task_key", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
+    # Custom close button
+    _close_key = f"dialog_close_{key_prefix}"
+    st.markdown('<style>.st-key-' + _close_key + ' { height: 0; overflow: visible; z-index: 9999; margin: 0 !important; padding: 0 !important; }</style>', unsafe_allow_html=True)
+    with st.container(key=_close_key):
+        _close_btn_key = f"close_btn_{key_prefix}"
+        st.markdown(f'<style>.st-key-{_close_key} .stButton > button {{ position:absolute;top:0;right:0.4rem;width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;z-index:9999!important;display:flex!important;align-items:center!important;justify-content:center!important; }} .st-key-{_close_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_key} {{ height:0!important;overflow:visible!important;margin:0!important;padding:0!important; }}</style>', unsafe_allow_html=True)
+        if st.button("\u2715", key=_close_btn_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c"):
+            if _is_editing and not _show_close_warning:
+                st.session_state[f"_show_close_warning_{key_prefix}"] = True
+                st.rerun(scope="fragment")
+            else:
+                st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                st.session_state[f"show_edit_task_{key_prefix}"] = False
+                st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                st.session_state.pop("dialog_task_key", None)
+                st.session_state["_in_dialog"] = False
+                st.rerun()
 
     # Unsaved changes warning
     if _show_close_warning:
