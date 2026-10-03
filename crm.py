@@ -121,10 +121,17 @@ st.markdown("""
     [data-testid="stDialog"] > div > div > button:first-child {
         display: none !important;
     }
-    /* Make dialog content area the positioning context for the close button */
-    [data-testid="stDialog"] [data-testid="stVerticalBlock"],
+    /* Make dialog header the positioning context for the close button */
+    [data-testid="stDialog"] [data-testid="stVerticalBlock"] {
+        position: static !important;
+        overflow: visible !important;
+    }
     [data-testid="stDialog"] > div > div,
     [data-testid="stEmotionCache"] [data-testid="stDialog"] > div > div {
+        position: relative !important;
+        overflow: visible !important;
+    }
+    [data-testid="stDialog"] header {
         position: relative !important;
     }
     /* Custom close button positioning */
@@ -2424,6 +2431,77 @@ def task_detail_dialog(task, cl, d, key_prefix):
                 if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.rerun(scope="fragment")
+
+    # JS to move close button to dialog header (top-right corner, next to title)
+    st.components.v1.html(f"""
+<script>
+(function() {{
+    var w = window;
+    try {{ if (window.parent && window.parent !== window) w = window.parent; }} catch(e) {{}}
+    
+    function moveCloseBtn() {{
+        var doc = w.document;
+        var dialog = doc.querySelector('[data-testid="stDialog"]');
+        if (!dialog) return false;
+        var header = dialog.querySelector('header');
+        if (!header) return false;
+        
+        // Find our custom close button container by key prefix
+        var allContainers = dialog.querySelectorAll('[class*="st-key-dialog_close_{key_prefix}"]');
+        if (allContainers.length === 0) return false;
+        var btnContainer = allContainers[0];
+        var btn = btnContainer.querySelector('button');
+        if (!btn) return false;
+        
+        // Check if we already moved a clone
+        if (header.querySelector('.crm-moved-close-btn')) return true;
+        
+        // Clone the button and add to header
+        var cloned = btn.cloneNode(true);
+        cloned.className = 'crm-moved-close-btn';
+        cloned.style.cssText = 'position:absolute;top:50%;right:0.5rem;transform:translateY(-50%);width:32px;height:32px;min-height:32px;padding:0;font-size:1.1rem;line-height:1;background:#FFFFFF;border:1px solid #DCE0E5;border-radius:8px;color:#5A6B7D;z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+        
+        // Make header relative if not already
+        if (w.getComputedStyle(header).position === 'static') {{
+            header.style.position = 'relative';
+        }}
+        
+        // Hover effects
+        cloned.addEventListener('mouseenter', function() {{
+            this.style.background = '#EEF0F3';
+            this.style.borderColor = '#C9CFD7';
+        }});
+        cloned.addEventListener('mouseleave', function() {{
+            this.style.background = '#FFFFFF';
+            this.style.borderColor = '#DCE0E5';
+        }});
+        
+        // Click handler - find and click the original button
+        cloned.addEventListener('click', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            btn.click();
+        }});
+        
+        header.appendChild(cloned);
+        
+        // Hide the original button container
+        btnContainer.style.display = 'none';
+        
+        return true;
+    }}
+    
+    // Try immediately and then with retries
+    var attempts = 0;
+    var interval = setInterval(function() {{
+        if (moveCloseBtn() || attempts > 30) {{
+            clearInterval(interval);
+        }}
+        attempts++;
+    }}, 150);
+}})();
+</script>
+""", height=0)
 
     render_task_detail(task, cl, d, key_prefix)
 if st.session_state.active_tab == "Клиенты":
