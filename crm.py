@@ -113,6 +113,56 @@ st.markdown("""
     /* Bell button compact */
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
 
+    /* Hide native dialog close button */
+    [data-testid="stDialog"] [data-testid="stCloseButton"],
+    [data-testid="stDialog"] button[aria-label="Close"],
+    [data-testid="stDialog"] header button[kind="header"],
+    .stDialog button[kind="header"],
+    [data-testid="stDialog"] > div > div > button:first-child {
+        display: none !important;
+    }
+    /* Custom close button positioning */
+    .crm-dialog-close-btn button {
+        position: absolute !important;
+        top: 0.4rem !important;
+        right: 0.4rem !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 !important;
+        font-size: 1.1rem !important;
+        line-height: 1 !important;
+        background: #FFFFFF !important;
+        border: 1px solid #DCE0E5 !important;
+        border-radius: 8px !important;
+        color: #5A6B7D !important;
+        z-index: 9999 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .crm-dialog-close-btn button:hover {
+        background: #EEF0F3 !important;
+        border-color: #C9CFD7 !important;
+    }
+    /* Unsaved changes warning box */
+    .crm-unsaved-warning {
+        border: 2px solid #FF9800 !important;
+        border-radius: 10px !important;
+        background-color: #FFF8E1 !important;
+        padding: 0.5rem 0.8rem !important;
+        margin: 0.3rem 0 !important;
+    }
+    .crm-unsaved-warning p {
+        font-size: 0.85rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    .crm-unsaved-warning .stButton > button {
+        font-size: 0.78rem !important;
+        padding: 0.25rem 0.5rem !important;
+        min-height: 28px !important;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -184,6 +234,25 @@ st.components.v1.html("""
         }
     };
     setTimeout(w.crmInitScrollTop, 500);
+
+    // Intercept Escape key in dialogs to prevent native dialog close
+    w.crmInitDialogEscape = function() {
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var dialog = document.querySelector('[data-testid="stDialog"]');
+                if (dialog && dialog.style.display !== 'none') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // Find our custom close button and click it
+                    var customClose = dialog.querySelector('button[class*="crm-dialog-close"]') ||
+                                      (dialog.querySelectorAll('button') && Array.from(dialog.querySelectorAll('button')).find(b => b.textContent.trim() === '\u2715'));
+                    if (customClose) customClose.click();
+                }
+            }
+        }, true);
+    };
+    setTimeout(w.crmInitDialogEscape, 500);
+
 
 </script>
 """, height=0)
@@ -985,7 +1054,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
                 save_scroll_and_rerun()
             else:
                 st.session_state.expanded_task_key = task_key
-                st.rerun()
+                _smart_rerun()
         if not is_tk_exp:
             render_scroll_restore(f"tk_{task_key}")
     if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
@@ -1171,22 +1240,20 @@ def save_data(data):
     except Exception as e:
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
-def _smart_rerun():
-    """Rerun that uses fragment scope when inside a dialog, app scope otherwise."""
-    if st.session_state.get("_in_dialog", False):
-        try:
-            st.rerun(scope="fragment")
-        except TypeError:
-            st.rerun()
-    else:
-        st.rerun()
-
 def commit_and_rerun(data=None, toast_msg=None):
     if data is not None:
         save_data(data)
     if toast_msg:
-        st.toast(toast_msg, icon="\u2705")
+        st.toast(toast_msg, icon="✅")
     _smart_rerun()
+
+_in_dialog = False
+
+def _smart_rerun():
+    if st.session_state.get("_in_dialog", False):
+        st.rerun(scope="fragment")
+    else:
+        st.rerun()
 
 # ====== УВЕДОМЛЕНИЯ ======
 TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
@@ -2256,147 +2323,101 @@ def render_client_form(fv):
                     st.toast(f"Клиент {cn} добавлен", icon="✅")
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
-# CSS to hide native dialog close button (X)
-st.markdown("""<style>
-[data-testid="stDialog"] [data-testid="stDialogCloseButton"] { display: none !important; }
-.crm-close-btn { position: absolute; top: 0.4rem; right: 0.6rem; z-index: 9999; }
-.crm-close-btn button { width: 32px !important; min-height: 32px !important; padding: 0 !important; font-size: 1.1rem !important; border: 1px solid #DCE0E5 !important; border-radius: 8px !important; background: #fff !important; color: #5A6B7D !important; display: flex !important; align-items: center !important; justify-content: center !important; }
-.crm-close-btn button:hover { background: #EEF0F3 !important; }
-/* Warning block */
-.unsaved-warn { border: 2px solid #FF8F00; border-radius: 10px; background: #FFF8E1; padding: 0.6rem 0.8rem; margin: 0.5rem 0; width: 320px; }
-.unsaved-warn-title { font-size: 0.85rem; font-weight: 700; color: #E65100; margin-bottom: 0.15rem; }
-.unsaved-warn-sub { font-size: 0.78rem; color: #7F8C9A; margin-bottom: 0.6rem; }
-.unsaved-warn-btns { display: flex; gap: 0.3rem; }
-.unsaved-warn-btns button { font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; flex: 1; }
-</style>""", unsafe_allow_html=True)
-
-
-def _save_task_edits(t, cl, d, key_prefix):
-    """Read edit widget values from session_state and apply to task."""
-    et_topic = st.session_state.get(f"edit_topic_{key_prefix}", t.get("text", ""))
-    et_type = st.session_state.get(f"edit_type_{key_prefix}", t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"))
-    et_mgr = st.session_state.get(f"edit_mgr_{key_prefix}", t.get("manager", ""))
-    et_comment = st.session_state.get(f"edit_comment_{key_prefix}", t.get("task_comment", ""))
-    et_products = st.session_state.get(f"edit_prod_{key_prefix}", t.get("products", ""))
-    et_addr = st.session_state.get(f"edit_addr_{key_prefix}", t.get("ship_addr", ""))
-    et_recv = st.session_state.get(f"edit_recv_{key_prefix}", t.get("receiver", ""))
-    et_rphone = st.session_state.get(f"edit_rphone_{key_prefix}", t.get("receiver_phone", ""))
-    et_pay = st.session_state.get(f"edit_pay_{key_prefix}", t.get("ship_pay", ""))
-    et_amount = st.session_state.get(f"edit_amount_{key_prefix}", str(t.get("order_amount", 0)))
-    et_tk = st.session_state.get(f"edit_tk_{key_prefix}", t.get("tk_num", ""))
-    if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
-        t["products"] = et_products
-        t["ship_addr"] = et_addr
-        t["receiver"] = et_recv
-        t["receiver_phone"] = et_rphone
-        t["ship_pay"] = et_pay
-        t["order_amount"] = int(et_amount) if et_amount and str(et_amount).strip().isdigit() else 0
-        t["tk_num"] = et_tk
-    t["text"] = et_topic
-    t["type"] = et_type
-    t["manager"] = et_mgr
-    t["task_comment"] = et_comment
-    t["last_modified"] = now_str()
-    cl["last_modified"] = now_str()
-    if d: d["last_modified"] = now_str()
-    st.session_state[f"show_edit_task_{key_prefix}"] = False
-
-
-def _save_deadline_edits(t, cl, d, key_prefix):
-    """Read deadline edit widget value and apply to task."""
-    ndd = st.session_state.get(f"dl_inline_{key_prefix}")
-    if ndd:
-        t["deadline"] = ndd.isoformat() if hasattr(ndd, 'isoformat') else str(ndd)
-        t["last_modified"] = now_str()
-        cl["last_modified"] = now_str()
-        if d: d["last_modified"] = now_str()
-    st.session_state[f"show_edit_dl_{key_prefix}"] = False
-
-
-# Intercept Escape key in dialog to click custom close button
-st.components.v1.html("""<script>
-(function() {
-    var w = window;
-    try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
-    w.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            var dlgs = w.document.querySelectorAll('[data-testid="stDialog"]');
-            for (var i = 0; i < dlgs.length; i++) {
-                if (dlgs[i].style.display !== 'none') {
-                    var btns = dlgs[i].querySelectorAll('button');
-                    for (var j = 0; j < btns.length; j++) {
-                        if (btns[j].textContent.trim() === '\u2715') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            btns[j].click();
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-    }, true);
-})();
-</script>""", height=0)
-
-
 @st.dialog("Подробности задачи", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
     st.session_state["_in_dialog"] = True
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
+    _is_editing = st.session_state.get(f"show_edit_task_{key_prefix}", False) or st.session_state.get(f"show_edit_dl_{key_prefix}", False)
 
     # Custom close button
-    _close_col = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-    with _close_col[-1]:
-        _close_key = f"dialog_close_{key_prefix}"
-        st.markdown('<style>div[data-testid="stHorizontalBlock"]:has(.st-key-' + _close_key + ') { margin-top: -0.3rem !important; margin-bottom: 0 !important; }</style>', unsafe_allow_html=True)
-        if st.button("\u2715", key=_close_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c"):
-            _is_editing = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-            _is_editing_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
-            if _is_editing or _is_editing_dl:
-                st.session_state[f"_show_close_warn_{key_prefix}"] = True
-                _smart_rerun()
+    _close_key = f"dialog_close_{key_prefix}"
+    st.markdown('<style>.st-key-' + _close_key + ' { position: absolute; top: 0.4rem; right: 0.4rem; z-index: 9999; }</style>', unsafe_allow_html=True)
+    with st.container(key=_close_key):
+        _close_btn_key = f"close_btn_{key_prefix}"
+        st.markdown(f'<style>.st-key-{_close_key} .stButton > button {{ position:absolute;top:0.4rem;right:0.4rem;width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;z-index:9999!important;display:flex!important;align-items:center!important;justify-content:center!important; }} .st-key-{_close_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_key} {{ height:0!important;overflow:visible!important; }}</style>', unsafe_allow_html=True)
+        if st.button("\u2715", key=_close_btn_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c"):
+            if _is_editing and not _show_close_warning:
+                st.session_state[f"_show_close_warning_{key_prefix}"] = True
+                st.rerun(scope="fragment")
             else:
+                st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                st.session_state[f"show_edit_task_{key_prefix}"] = False
+                st.session_state[f"show_edit_dl_{key_prefix}"] = False
                 st.session_state.pop("dialog_task_key", None)
                 st.session_state["_in_dialog"] = False
                 st.rerun()
 
-    # Warning block for unsaved changes
-    if st.session_state.get(f"_show_close_warn_{key_prefix}", False):
-        st.markdown("""<style>
-        .unsaved-warn { border: 2px solid #FF8F00; border-radius: 10px; background: #FFF8E1; padding: 0.6rem 0.8rem; margin: 0.5rem auto; width: 320px; }
-        .unsaved-warn-title { font-size: 0.85rem; font-weight: 700; color: #E65100; margin-bottom: 0.15rem; }
-        .unsaved-warn-sub { font-size: 0.78rem; color: #7F8C9A; margin-bottom: 1.2rem; }
-        .unsaved-warn-btns-wrap { margin-top: 0.8rem; }
-        </style>""", unsafe_allow_html=True)
-        st.markdown('<div class="unsaved-warn"><div class="unsaved-warn-title">\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f</div><div class="unsaved-warn-sub">\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?</div></div>', unsafe_allow_html=True)
-        st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
-        _w1, _w2, _w3 = st.columns(3)
-        with _w1:
-            if st.button("\u0421\u043e\u0445\u0440\u0430\u043d.", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
-                _is_editing = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-                _is_editing_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
-                if _is_editing:
-                    _save_task_edits(task, cl, d, key_prefix)
-                if _is_editing_dl:
-                    _save_deadline_edits(task, cl, d, key_prefix)
-                save_data(st.session_state.crm_store)
-                st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
-                st.session_state[f"_show_close_warn_{key_prefix}"] = False
-                st.session_state.pop("dialog_task_key", None)
-                st.session_state["_in_dialog"] = False
-                st.rerun()
-        with _w2:
-            if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
-                st.session_state[f"show_edit_task_{key_prefix}"] = False
-                st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                st.session_state[f"_show_close_warn_{key_prefix}"] = False
-                st.session_state.pop("dialog_task_key", None)
-                st.session_state["_in_dialog"] = False
-                st.rerun()
-        with _w3:
-            if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
-                st.session_state[f"_show_close_warn_{key_prefix}"] = False
-                _smart_rerun()
+    # Unsaved changes warning
+    if _show_close_warning:
+        _warn_key = f"unsaved_warn_{key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }} .st-key-{_warn_key} .stMarkdown p {{ font-size: 0.85rem !important; margin-bottom: 0.2rem !important; }} .st-key-{_warn_key} .stButton > button {{ font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
+            st.markdown("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?")
+            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
+            _wcol1, _wcol2, _wcol3 = st.columns(3)
+            with _wcol1:
+                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
+                    # Read values from session_state widgets
+                    _et_topic_key = f"edit_topic_{key_prefix}"
+                    _et_type_key = f"edit_type_{key_prefix}"
+                    _et_mgr_key = f"edit_mgr_{key_prefix}"
+                    _et_comment_key = f"edit_comment_{key_prefix}"
+                    if _et_topic_key in st.session_state:
+                        t["text"] = st.session_state[_et_topic_key]
+                    if _et_type_key in st.session_state:
+                        t["type"] = st.session_state[_et_type_key]
+                    if _et_mgr_key in st.session_state:
+                        _mgr_val = st.session_state[_et_mgr_key]
+                        if _mgr_val:
+                            t["manager"] = _mgr_val
+                            t["delegated_to"] = _mgr_val
+                    if _et_comment_key in st.session_state:
+                        t["task_comment"] = st.session_state[_et_comment_key]
+                    # Extended fields
+                    _et_prod_key = f"edit_prod_{key_prefix}"
+                    _et_addr_key = f"edit_addr_{key_prefix}"
+                    _et_recv_key = f"edit_recv_{key_prefix}"
+                    _et_rphone_key = f"edit_rphone_{key_prefix}"
+                    _et_pay_key = f"edit_pay_{key_prefix}"
+                    _et_amount_key = f"edit_amount_{key_prefix}"
+                    _et_tk_key = f"edit_tk_{key_prefix}"
+                    if _et_prod_key in st.session_state: t["products"] = st.session_state[_et_prod_key]
+                    if _et_addr_key in st.session_state: t["ship_addr"] = st.session_state[_et_addr_key]
+                    if _et_recv_key in st.session_state: t["receiver"] = st.session_state[_et_recv_key]
+                    if _et_rphone_key in st.session_state: t["receiver_phone"] = st.session_state[_et_rphone_key]
+                    if _et_pay_key in st.session_state: t["ship_pay"] = st.session_state[_et_pay_key]
+                    if _et_amount_key in st.session_state:
+                        _amt = st.session_state[_et_amount_key]
+                        t["order_amount"] = int(_amt) if _amt and str(_amt).strip().isdigit() else 0
+                    if _et_tk_key in st.session_state: t["tk_num"] = st.session_state[_et_tk_key]
+                    # Deadline
+                    _dl_key = f"dl_inline_{key_prefix}"
+                    if _dl_key in st.session_state:
+                        t["deadline"] = str(st.session_state[_dl_key])
+                    t["last_modified"] = now_str()
+                    cl["last_modified"] = now_str()
+                    if d: d["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state[f"show_edit_task_{key_prefix}"] = False
+                    st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                    st.session_state.pop("dialog_task_key", None)
+                    st.session_state["_in_dialog"] = False
+                    st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
+                    st.rerun()
+            with _wcol2:
+                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state[f"show_edit_task_{key_prefix}"] = False
+                    st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                    st.session_state.pop("dialog_task_key", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+            with _wcol3:
+                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.rerun(scope="fragment")
 
     render_task_detail(task, cl, d, key_prefix)
 if st.session_state.active_tab == "Клиенты":
