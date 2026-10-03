@@ -555,7 +555,7 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 cur_desc = ff.get("description", "")
                 _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
                 _desc_height = 38 + (_desc_lines - 1) * 22
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }}</style>", unsafe_allow_html=True)
+                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }} .st-key-{desc_key} .stTextArea > div > textarea::placeholder {{ font-size: 0.72rem !important; }}</style>", unsafe_allow_html=True)
                 new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
