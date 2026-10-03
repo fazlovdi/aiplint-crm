@@ -516,7 +516,7 @@ def get_file_bytes(fp):
     rp = normalize_remote_path(fp)
     return download_file_from_yandex(rp) if rp else None
 
-def render_file_thumbs(files, prefix, allow_delete=False):
+def render_file_thumbs(files, prefix, allow_delete=False, in_dialog=False):
     if not files:
         st.caption("Файлов нет")
         return
@@ -554,10 +554,9 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 # Description field (editable) - same height as buttons
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
+                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; padding: 0.55rem 0.8rem !important; font-size: 0.95rem !important; border-radius: 10px !important; resize: vertical; }}</style>", unsafe_allow_html=True)
                 _desc_lines = max(1, (len(cur_desc) // 45) + (1 if len(cur_desc) % 45 else 0)) if cur_desc else 1
-                _desc_height = max(38, _desc_lines * 22)
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; padding: 0.55rem 0.8rem !important; font-size: 0.95rem !important; border-radius: 10px !important; resize: vertical !important; }}</style>", unsafe_allow_html=True)
-                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
+                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=38 if _desc_lines <= 1 else 38 + (_desc_lines - 1) * 22)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
@@ -571,7 +570,10 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
                     if st.button("\U0001F5D1", key=del_key, help="Удалить"):
                         files.pop(i)
-                        commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+                        if in_dialog:
+                            save_data(st.session_state.crm_store); st.toast("Файл удалён", icon="✅")
+                        else:
+                            commit_and_rerun(st.session_state.crm_store, "Файл удалён")
 
 
 
@@ -639,28 +641,11 @@ def render_entity_chat(entity, entity_type, entity_id):
 
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
-        st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
-        # Top row: left column = header + print, right column = edit pencil
-        # Matches the two-column layout (left_col, right_col) below
-        _top_left, _top_right = st.columns(2)
-        # CSS to align print and edit buttons at same level
-        st.markdown(f"""<style>
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button {{
-            min-height: 32px !important;
-            padding: 4px 10px !important;
-            font-size: 0.85rem !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }}
-        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown {{
-            margin-top: 0 !important;
-            display: flex !important;
-            align-items: center !important;
-        }}
-        </style>""", unsafe_allow_html=True)
-        with _top_left:
+        st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }} .st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{ margin-top: 0 !important; padding-top: 0 !important; }}</style>', unsafe_allow_html=True)
+        # Two columns: left = everything, right = comments + files
+        left_col, right_col = st.columns(2)
+        
+        with left_col:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
@@ -672,7 +657,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _hdr_inner:
                     st.subheader(_task_header)
                     if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
-                        st.session_state.active_tab = "Сделки"
+                        st.session_state.active_tab = "\u0421\u0434\u0435\u043b\u043a\u0438"
                         st.session_state["deal_tab_expanded"] = _deal_id
                         st.session_state.pop("dialog_task_key", None)
                         st.rerun()
@@ -684,21 +669,8 @@ def render_task_detail(t, cl, d, key_prefix):
                     st.subheader(_task_header)
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-        with _top_right:
-            show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-            if not show_edit:
-                pencil_key = f"btn_pencil_edit_{key_prefix}"
-                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                    st.session_state[f"show_edit_task_{key_prefix}"] = True
-        st.markdown(format_created_date(t), unsafe_allow_html=True)
-        
-        
-        
-        # Two columns: left = info + action buttons, right = comments + files
-        left_col, right_col = st.columns(2)
-        
-        with left_col:
+            st.markdown(format_created_date(t), unsafe_allow_html=True)
+            
             show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             
             if show_edit_task:
@@ -744,7 +716,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             st.session_state[f"show_edit_task_{key_prefix}"] = False
-                            save_data(st.session_state.crm_store); st.toast(""\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430"", icon="✅")
+                            save_data(st.session_state.crm_store); st.toast("\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430", icon="\u2705")
                 with _cancel_col:
                     if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"edit_cancel_{key_prefix}", use_container_width=True):
                         st.session_state[f"show_edit_task_{key_prefix}"] = False
@@ -765,18 +737,19 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                            save_data(st.session_state.crm_store); st.toast(""\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d"", icon="✅")
+                            save_data(st.session_state.crm_store); st.toast("\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d", icon="\u2705")
                     with dl_btn_col2:
                         if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
                 else:
                     dl_btn_key = f"btn_dl_click_{key_prefix}"
-                    _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
+                    _dl_overdue = is_task_overdue(t)
+                    _dl_color = "#C62828" if _dl_overdue else "#2C3E50"
                     st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key, help="\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0447\u0442\u043e\u0431\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                 
-                # Editable responsible person (replaces delegate button)
+                # Editable responsible person
                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
                 mgr_options = get_managers_list()
                 current_mgr = t.get("manager", "")
@@ -788,7 +761,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     t["last_modified"] = now_str()
                     cl["last_modified"] = now_str()
                     if d: d["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store); st.toast(""\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d"", icon="✅")
+                    save_data(st.session_state.crm_store); st.toast("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d", icon="\u2705")
                 
                 if t.get('in_work') and not t.get('done'):
                     st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
@@ -803,17 +776,23 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
                 
-                # Action buttons in left column (below task info)
+                # Edit button (pencil) - above action buttons
+                pencil_key = f"btn_pencil_edit_{key_prefix}"
+                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
+                    st.session_state[f"show_edit_task_{key_prefix}"] = True
+                
+                # Action buttons
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
                     if not t.get("in_work") and not t.get("needs_rework"):
-                        if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
+                        if st.button("\u0412\u0437\u044f\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
                             t["in_work"] = True
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            save_data(st.session_state.crm_store); st.toast(""Задача взята в работу"", icon="✅")
+                            save_data(st.session_state.crm_store); st.toast("\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u0437\u044f\u0442\u0430 \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", icon="\u2705")
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
@@ -836,7 +815,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                     t["done"] = True
                                     t["completion_report"] = rt.strip()
                                     t["last_modified"] = now_str()
-                                    add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
+                                    add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
                                     fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
                                     if fi_list: t["completion_files"] = normalize_file_list(fi_list)
                                     cl["last_modified"] = now_str()
@@ -861,7 +840,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                         cl.setdefault("tasks", []).append(new_task)
                                         add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
                                     st.session_state[f"uf_ver_{key_prefix}"] = uf_ver + 1
-                                    save_data(st.session_state.crm_store); st.toast(""\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430"", icon="✅")
+                                    save_data(st.session_state.crm_store); st.toast("\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430", icon="\u2705")
                                 else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0435\u0442")
                         with pc2:
                             if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"cancel_complete_{key_prefix}", use_container_width=True):
@@ -873,7 +852,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     if t.get("rework_comment"): st.warning(f"\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435: {t['rework_comment']}")
                     if t.get("completion_files"):
                         st.markdown("**\u0424\u0430\u0439\u043b\u044b \u043e\u0442\u0447\u0435\u0442\u0430:**")
-                        render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
+                        render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles", in_dialog=True)
                     if not t.get("reviewed", False):
                         is_author = (st.session_state.user_role == "admin") or (t.get("created_by", "") == st.session_state.get("user_login", ""))
                         if is_author:
@@ -887,7 +866,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                     t["last_modified"] = now_str()
                                     cl["last_modified"] = now_str()
                                     if d: d["last_modified"] = now_str()
-                                    save_data(st.session_state.crm_store); st.toast(""\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0432 \u0430\u0440\u0445\u0438\u0432\u0435"", icon="✅")
+                                    save_data(st.session_state.crm_store); st.toast("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0432 \u0430\u0440\u0445\u0438\u0432\u0435", icon="\u2705")
                             with rc2:
                                 if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
                                     st.session_state[f"show_rework_{key_prefix}"] = True
@@ -909,7 +888,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                             if d: d["last_modified"] = now_str()
                                             st.session_state[f"show_rework_{key_prefix}"] = False
                                             add_notification(t.get("manager", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: {rework_comment.strip()}", f"\u26a0\ufe0f \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: {rework_comment.strip()}")
-                                            save_data(st.session_state.crm_store); st.toast(""\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443"", icon="✅")
+                                            save_data(st.session_state.crm_store); st.toast("\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0449\u0435\u043d\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443", icon="\u2705")
                                 with rw2:
                                     if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
                                         st.session_state[f"show_rework_{key_prefix}"] = False
@@ -919,8 +898,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         
         with right_col:
-            st.markdown(f"""<style>.st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{ margin-top: 0 !important; padding-top: 0 !important; }}</style>""", unsafe_allow_html=True)
-            # Comments block (now above files)
+            # Comments block
             if t.get("task_comments"):
                 st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 for tc in t["task_comments"]:
@@ -935,13 +913,13 @@ def render_task_detail(t, cl, d, key_prefix):
                     t.setdefault("task_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
                     t["last_modified"] = now_str()
                     st.session_state[tc_clr_key] = True
-                    save_data(st.session_state.crm_store); st.toast(""\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d"", icon="✅")
+                    save_data(st.session_state.crm_store); st.toast("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d", icon="\u2705")
                 else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442")
             st.markdown("---")
-            # Files block (now below comments)
+            # Files block
             if t.get("task_files"):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
-                render_file_thumbs(t["task_files"], f"{key_prefix}_files")
+                render_file_thumbs(t["task_files"], f"{key_prefix}_files", in_dialog=True)
             st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
             ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
@@ -955,8 +933,9 @@ def render_task_detail(t, cl, d, key_prefix):
                         cl["last_modified"] = now_str()
                         if d: d["last_modified"] = now_str()
                         st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
-                        save_data(st.session_state.crm_store); st.toast(""\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b"", icon="✅")
+                        save_data(st.session_state.crm_store); st.toast("\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b", icon="\u2705")
                 else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
+
 
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
