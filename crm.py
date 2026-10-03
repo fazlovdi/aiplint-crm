@@ -121,11 +121,13 @@ st.markdown("""
     [data-testid="stDialog"] > div > div > button:first-child {
         display: none !important;
     }
-    /* Make dialog content area the positioning context for the close button */
-    [data-testid="stDialog"] [data-testid="stVerticalBlock"],
+    /* Make dialog box the positioning context for the close button */
     [data-testid="stDialog"] > div > div,
     [data-testid="stEmotionCache"] [data-testid="stDialog"] > div > div {
         position: relative !important;
+    }
+    [data-testid="stDialog"] [data-testid="stVerticalBlock"] {
+        position: static !important;
     }
     /* Custom close button positioning */
     .crm-dialog-close-btn button {
