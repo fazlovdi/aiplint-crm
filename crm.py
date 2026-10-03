@@ -458,9 +458,9 @@ def get_task_sort_date(task):
 
 def format_date(ds):
     if not ds: return ""
-    try: return datetime.strptime(ds, "%Y-%m-%d").strftime("%d/%m/%Y")
+    try: return datetime.strptime(ds, "%Y-%m-%d").strftime("%d.%m.%Y")
     except:
-        try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").strftime("%d/%m/%Y")
+        try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").strftime("%d.%m.%Y")
         except: return ds
 
 def format_created_date(entity):
@@ -582,7 +582,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -748,7 +748,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 # Deadline: clickable date, no pencil button
                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                 if show_edit_dl:
-                    ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD/MM/YYYY", key=f"dl_inline_{key_prefix}")
+                    ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
                     dl_btn_col1, dl_btn_col2 = st.columns(2)
                     with dl_btn_col1:
                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
@@ -822,7 +822,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             with st.container(border=True):
                                 nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"cnt_topic_{key_prefix}")
                                 nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                                nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"cnt_dl_{key_prefix}")
+                                nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD.MM.YYYY", key=f"cnt_dl_{key_prefix}")
                                 nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"cnt_comment_{key_prefix}")
                                 nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"cnt_files_{key_prefix}", accept_multiple_files=True)
                         pc1, pc2 = st.columns(2)
@@ -1545,7 +1545,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
     ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
     ntm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
-    ntd = st.date_input("Срок:", format="DD/MM/YYYY", key=f"nt_d_{key_suffix}")
+    ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
     if ntype in ("Отправить заказ", "Отправить образцы"):
         nproducts = st.text_area("Товары:", key=f"nt_prod_{key_suffix}")
         nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
@@ -2547,7 +2547,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
         with st.container(border=True):
             it_topic = st.text_input("Тема задачи:", key="it_topic")
             it_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key="it_mgr", placeholder=MGR_PLACEHOLDER)
-            it_dl = st.date_input("Срок:", format="DD/MM/YYYY", key="it_dl")
+            it_dl = st.date_input("Срок:", format="DD.MM.YYYY", key="it_dl")
             it_comment = st.text_area("Комментарии:", key="it_comment")
             if st.button("Создать", key="it_go", use_container_width=True, type="primary"):
                 if not it_topic.strip():
@@ -2644,7 +2644,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
                             with st.container(border=True):
                                 eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
                                 eit_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else (get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
-                                eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
+                                eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD.MM.YYYY", key=f"eit_dl_{it['id']}")
                                 eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
                                 if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
                                     if not eit_mgr:
