@@ -70,8 +70,8 @@ st.markdown("""
     .thumb-item { position:relative; width:110px; }
     .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:default; border:1px solid #DCE0E5; }
     .thumb-item img:hover { border-color:#DCE0E5; }
-    .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; }
+    .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:6px; }
+    .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; margin-bottom: 0.8rem !important; }
     .ready-badge { display: inline-block; background: #2E7D32; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     .in-work-badge { display: inline-block; background: #bc1661; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     .delegated-badge { display: inline-block; background: #E65100; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -549,6 +549,9 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
                         save_data(st.session_state.crm_store)
+                # Download button
+                dl_key = f"dl_{prefix}_{i}"
+                st.download_button(label="\u2B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, use_container_width=True)
                 # Delete button for admin
                 if allow_delete and st.session_state.user_role == "admin":
                     del_key = f"del_{prefix}_{i}"
@@ -626,9 +629,36 @@ def render_task_detail(t, cl, d, key_prefix):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # Top row: task number + print button + pencil edit button
         num_col, print_col, edit_col = st.columns([20, 1, 1])
+        # CSS to align print and edit buttons at same level
+        st.markdown(f"""<style>
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button {{
+            min-height: 32px !important;
+            padding: 4px 10px !important;
+            font-size: 0.85rem !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }}
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown {{
+            margin-top: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+        }}
+        </style>""", unsafe_allow_html=True)
         with num_col:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             st.subheader(_task_header)
+            # Add clickable deal number if task belongs to a deal
+            if d:
+                _deal_num = d.get('deal_number', d.get('title', ''))
+                _deal_id = d.get('id')
+                _deal_link_key = f"deal_link_{key_prefix}"
+                if st.button(f"\u041a \u0441\u0434\u0435\u043b\u043a\u0435 {_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
+                    st.session_state.active_tab = "Сделки"
+                    st.session_state["deal_tab_expanded"] = _deal_id
+                    st.session_state.pop("dialog_task_key", None)
+                    st.rerun()
         with print_col:
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
@@ -637,7 +667,7 @@ def render_task_detail(t, cl, d, key_prefix):
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if not show_edit:
                 pencil_key = f"btn_pencil_edit_{key_prefix}"
-                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 28px !important; }}</style>", unsafe_allow_html=True)
+                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
                 if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
                     st.session_state[f"show_edit_task_{key_prefix}"] = True
                     st.rerun()
