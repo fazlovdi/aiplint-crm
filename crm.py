@@ -681,6 +681,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["deal_tab_expanded"] = _deal_id
+                        st.session_state._in_dialog = False
                         st.session_state.pop("dialog_task_key", None)
                         st.rerun()
                 with _print_inner:
@@ -1171,11 +1172,43 @@ def save_data(data):
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
 def _smart_rerun():
-    """Use fragment-scoped rerun when inside a dialog to prevent dialog flicker."""
+    """Rerun only the fragment (dialog) if inside a dialog, otherwise rerun the whole app."""
     if st.session_state.get("_in_dialog", False):
         st.rerun(scope="fragment")
     else:
         st.rerun()
+
+def _save_task_edits(t, cl, d, key_prefix):
+    """Read edit widget values from session state and apply to task."""
+    et_topic = st.session_state.get(f"edit_topic_{key_prefix}", t.get("text", ""))
+    et_type = st.session_state.get(f"edit_type_{key_prefix}", t.get("type", "Связаться"))
+    et_mgr = st.session_state.get(f"edit_mgr_{key_prefix}", t.get("manager", ""))
+    et_comment = st.session_state.get(f"edit_comment_{key_prefix}", t.get("task_comment", ""))
+    t["text"] = et_topic
+    t["type"] = et_type
+    t["manager"] = et_mgr
+    t["task_comment"] = et_comment
+    if et_type in ("Отправить заказ", "Отправить образцы"):
+        t["products"] = st.session_state.get(f"edit_prod_{key_prefix}", t.get("products", ""))
+        t["ship_addr"] = st.session_state.get(f"edit_addr_{key_prefix}", t.get("ship_addr", ""))
+        t["receiver"] = st.session_state.get(f"edit_recv_{key_prefix}", t.get("receiver", ""))
+        t["receiver_phone"] = st.session_state.get(f"edit_rphone_{key_prefix}", t.get("receiver_phone", ""))
+        t["ship_pay"] = st.session_state.get(f"edit_pay_{key_prefix}", t.get("ship_pay", ""))
+        _amt = st.session_state.get(f"edit_amount_{key_prefix}", "")
+        t["order_amount"] = int(_amt) if _amt and str(_amt).strip().isdigit() else 0
+        t["tk_num"] = st.session_state.get(f"edit_tk_{key_prefix}", t.get("tk_num", ""))
+    t["last_modified"] = now_str()
+    cl["last_modified"] = now_str()
+    if d: d["last_modified"] = now_str()
+
+def _save_deadline_edits(t, cl, d, key_prefix):
+    """Read deadline edit value from session state and apply to task."""
+    ndd = st.session_state.get(f"dl_inline_{key_prefix}")
+    if ndd:
+        t["deadline"] = ndd.isoformat() if hasattr(ndd, "isoformat") else str(ndd)
+        t["last_modified"] = now_str()
+        cl["last_modified"] = now_str()
+        if d: d["last_modified"] = now_str()
 
 def commit_and_rerun(data=None, toast_msg=None):
     if data is not None:
@@ -1364,6 +1397,7 @@ if "expanded_client_id" not in st.session_state: st.session_state.expanded_clien
 if "expanded_deal_id" not in st.session_state: st.session_state.expanded_deal_id = None
 if "expanded_task_key" not in st.session_state: st.session_state.expanded_task_key = None
 if "dialog_task_key" not in st.session_state: st.session_state.dialog_task_key = None
+st.session_state._in_dialog = False
 if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id = None
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
@@ -2254,9 +2288,74 @@ def render_client_form(fv):
             else: st.error("Заполните ФИО и телефон")
 @st.dialog("Подробности задачи", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
-    st.session_state["_in_dialog"] = True
+    st.session_state._in_dialog = True
+    _show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
+    _show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
+    _in_edit_mode = _show_edit_task or _show_edit_dl
+    # Hide native dialog close button (X)
+    st.markdown('<style>[data-testid="stDialogCloseButton"] { display: none !important; } [data-testid="stCloseButton"] { display: none !important; } </style>', unsafe_allow_html=True)
+    # When in edit mode, prevent Escape and overlay-click from closing
+    if _in_edit_mode:
+        st.components.v1.html("""<script>
+        (function() {
+            var w = window;
+            try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
+            w.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); }
+            }, true);
+            var overlays = w.document.querySelectorAll('[data-baseweb="overlay"]');
+            overlays.forEach(function(o) { o.style.pointerEvents = 'none'; });
+        })();
+        </script>""", height=0)
     render_task_detail(task, cl, d, key_prefix)
-    st.session_state["_in_dialog"] = False
+    # --- Custom close button with unsaved-changes warning ---
+    st.markdown("---")
+    _show_close_warning = st.session_state.get(f"show_close_warning_{key_prefix}", False)
+    if _show_close_warning:
+        st.warning("У вас есть несохранённые изменения. Сохранить перед выходом?")
+        _w1, _w2, _w3 = st.columns(3)
+        with _w1:
+            if st.button("Сохранить и закрыть", key=f"close_save_{key_prefix}", use_container_width=True, type="primary"):
+                _ok = True
+                if _show_edit_task:
+                    _mgr = st.session_state.get(f"edit_mgr_{key_prefix}", "")
+                    if not _mgr:
+                        st.warning("Выберите ответственного")
+                        _ok = False
+                    else:
+                        _save_task_edits(task, cl, d, key_prefix)
+                if _show_edit_dl:
+                    _save_deadline_edits(task, cl, d, key_prefix)
+                if _ok:
+                    st.session_state[f"show_edit_task_{key_prefix}"] = False
+                    st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                    st.session_state[f"show_close_warning_{key_prefix}"] = False
+                    st.session_state._in_dialog = False
+                    st.session_state.pop("dialog_task_key", None)
+                    save_data(st.session_state.crm_store)
+                    st.toast("Изменения сохранены", icon="✅")
+                    st.rerun()
+        with _w2:
+            if st.button("Закрыть без сохранения", key=f"close_discard_{key_prefix}", use_container_width=True):
+                st.session_state[f"show_edit_task_{key_prefix}"] = False
+                st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                st.session_state[f"show_close_warning_{key_prefix}"] = False
+                st.session_state._in_dialog = False
+                st.session_state.pop("dialog_task_key", None)
+                st.rerun()
+        with _w3:
+            if st.button("Отмена", key=f"close_cancel_{key_prefix}", use_container_width=True):
+                st.session_state[f"show_close_warning_{key_prefix}"] = False
+                _smart_rerun()
+    else:
+        if st.button("Закрыть", key=f"close_dialog_{key_prefix}", use_container_width=True):
+            if _in_edit_mode:
+                st.session_state[f"show_close_warning_{key_prefix}"] = True
+                _smart_rerun()
+            else:
+                st.session_state._in_dialog = False
+                st.session_state.pop("dialog_task_key", None)
+                st.rerun()
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
     render_client_form(fv)
