@@ -683,7 +683,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
         with _top_right:
-            pass  # Кнопка редактирования перенесена в левую колонку
+            pass  # Edit button moved to left column
         st.markdown(format_created_date(t), unsafe_allow_html=True)
         
         
@@ -809,10 +809,10 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
-                    # Кнопка редактирования (перенесена из верхней строки)
+                    # Edit pencil button (moved from top-right, same compact size)
                     pencil_key = f"btn_pencil_edit_{key_prefix}"
                     st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                    if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c", use_container_width=True):
+                    if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
                         st.session_state[f"show_edit_task_{key_prefix}"] = True
                         st.rerun()
                     show_key = f"show_complete_{key_prefix}"
@@ -922,7 +922,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         
         with right_col:
-            st.markdown(f"""<style>.st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{ margin-top: 0 !important; padding-top: 0 !important; }}</style>""", unsafe_allow_html=True)
+            st.markdown(f"""<style>.st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{ margin-top: 0 !important; padding-top: 0 !important; }} .st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) > div:first-child {{ margin-top: 0 !important; padding-top: 0 !important; }} .st-key-task_detail_{key_prefix} .stHorizontalBlock:nth-child(2) > div:nth-child(2) > div {{ margin-top: 0 !important; padding-top: 0 !important; }} </style>""", unsafe_allow_html=True)
             # Comments block (now above files)
             if t.get("task_comments"):
                 st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
