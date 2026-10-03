@@ -7,13 +7,6 @@ from collections import defaultdict
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 
-
-def _safe_id(v):
-    try:
-        return int(v)
-    except (TypeError, ValueError):
-        return 0
-
 st.markdown("""
 <style>
     .stApp { background-color: #F5F6F8; color: #2C3E50; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
@@ -1779,12 +1772,6 @@ def render_deal_card_tab(d, cl, cu):
         st.markdown("---")
         dl_tasks = [t for t in (cl.get("tasks", []) if cl else []) if t.get("deal_id") == deal_id]
         render_centered_title(f"Задачи по сделке ({len(dl_tasks)})")
-        with indented(0.03):
-            if dl_tasks:
-                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
-                for ti, t in enumerate(dl_tasks):
-                    task_key = f"dls_{deal_id}_{ti}"
-                    render_task_row(t, cl, d, task_key, f"dls_{deal_id}_{ti}")
         show_ct_key = f"dls_show_ct_{deal_id}"
         if render_centered_button("Создать задачу по сделке", key=f"dls_btn_ct_{deal_id}"):
             st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
@@ -2479,7 +2466,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
                     st.warning("Выберите ответственного")
                 else:
                     new_it = {
-                        "id": (max([_safe_id(t.get("id", 0)) for t in internal_tasks], default=0)) + 1,
+                        "id": (max([(t.get("id", 0) if isinstance(t.get("id"), (int, float)) else 0) for t in internal_tasks], default=0)) + 1,
                         "text": it_topic.strip(),
                         "deadline": it_dl.isoformat(),
                         "done": False,
