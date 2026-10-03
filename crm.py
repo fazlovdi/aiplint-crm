@@ -683,13 +683,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
         with _top_right:
-            show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-            if not show_edit:
-                pencil_key = f"btn_pencil_edit_{key_prefix}"
-                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                    st.session_state[f"show_edit_task_{key_prefix}"] = True
-                    st.rerun()
+            pass  # Кнопка редактирования перенесена в левую колонку
         st.markdown(format_created_date(t), unsafe_allow_html=True)
         
         
@@ -815,6 +809,12 @@ def render_task_detail(t, cl, d, key_prefix):
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
                             commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
+                    # Кнопка редактирования (перенесена из верхней строки)
+                    pencil_key = f"btn_pencil_edit_{key_prefix}"
+                    st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                    if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c", use_container_width=True):
+                        st.session_state[f"show_edit_task_{key_prefix}"] = True
+                        st.rerun()
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
