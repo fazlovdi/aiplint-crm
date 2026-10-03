@@ -553,9 +553,9 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 # Description field (editable) - multiline, auto height
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
-                _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
+                _desc_lines = max(1, sum(max(1, (len(line) + 39) // 40) for line in cur_desc.split("\n"))) if cur_desc else 1
                 _desc_height = 38 + (_desc_lines - 1) * 22
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }} .st-key-{desc_key} .stTextArea > div > textarea::placeholder {{ font-size: 0.72rem !important; }}</style>", unsafe_allow_html=True)
+                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }}</style>", unsafe_allow_html=True)
                 new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
@@ -764,7 +764,8 @@ def render_task_detail(t, cl, d, key_prefix):
                             st.rerun()
                 else:
                     dl_btn_key = f"btn_dl_click_{key_prefix}"
-                    st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:#2C3E50!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
+                                _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
+                    st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key, help="\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0447\u0442\u043e\u0431\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                         st.rerun()
