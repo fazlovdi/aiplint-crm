@@ -682,7 +682,9 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["deal_tab_expanded"] = _deal_id
                         st.session_state.pop("dialog_task_key", None)
-                        st.rerun()
+                        st.session_state["_dialog_last_action"] = "button"
+                        st.session_state["_in_dialog"] = False
+                        _smart_rerun()
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             else:
@@ -1171,17 +1173,59 @@ def save_data(data):
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
 def _smart_rerun():
-    """Rerun that uses fragment scope inside dialog, full rerun outside."""
+    """Rerun that uses fragment scope inside dialog and full rerun outside."""
+    st.session_state["_dialog_last_action"] = "button"
     if st.session_state.get("_in_dialog", False):
         st.rerun(scope="fragment")
     else:
         st.rerun()
 
+def _save_task_edits(task, cl, d, key_prefix):
+    """Read edit-mode widget values from session_state and apply to task."""
+    if not st.session_state.get(f"show_edit_task_{key_prefix}", False):
+        return
+    et_topic = st.session_state.get(f"edit_topic_{key_prefix}", task.get("text", ""))
+    et_type = st.session_state.get(f"edit_type_{key_prefix}", task.get("type", "Связаться"))
+    et_mgr = st.session_state.get(f"edit_mgr_{key_prefix}", task.get("manager", ""))
+    et_comment = st.session_state.get(f"edit_comment_{key_prefix}", task.get("task_comment", ""))
+    et_products = st.session_state.get(f"edit_prod_{key_prefix}", task.get("products", ""))
+    et_addr = st.session_state.get(f"edit_addr_{key_prefix}", task.get("ship_addr", ""))
+    et_recv = st.session_state.get(f"edit_recv_{key_prefix}", task.get("receiver", ""))
+    et_rphone = st.session_state.get(f"edit_rphone_{key_prefix}", task.get("receiver_phone", ""))
+    et_pay = st.session_state.get(f"edit_pay_{key_prefix}", task.get("ship_pay", ""))
+    et_amount = st.session_state.get(f"edit_amount_{key_prefix}", "")
+    et_tk = st.session_state.get(f"edit_tk_{key_prefix}", task.get("tk_num", ""))
+    task["text"] = et_topic
+    task["type"] = et_type
+    task["manager"] = et_mgr
+    task["task_comment"] = et_comment
+    task["products"] = et_products
+    task["ship_addr"] = et_addr
+    task["receiver"] = et_recv
+    task["receiver_phone"] = et_rphone
+    task["ship_pay"] = et_pay
+    task["order_amount"] = int(et_amount) if et_amount and str(et_amount).strip().isdigit() else 0
+    task["tk_num"] = et_tk
+    task["last_modified"] = now_str()
+    cl["last_modified"] = now_str()
+    if d: d["last_modified"] = now_str()
+
+def _save_deadline_edits(task, cl, d, key_prefix):
+    """Read deadline edit-mode widget value from session_state and apply to task."""
+    if not st.session_state.get(f"show_edit_dl_{key_prefix}", False):
+        return
+    ndd = st.session_state.get(f"dl_inline_{key_prefix}")
+    if ndd:
+        task["deadline"] = ndd.isoformat() if hasattr(ndd, "isoformat") else str(ndd)
+        task["last_modified"] = now_str()
+        cl["last_modified"] = now_str()
+        if d: d["last_modified"] = now_str()
+
 def commit_and_rerun(data=None, toast_msg=None):
     if data is not None:
         save_data(data)
     if toast_msg:
-        st.toast(toast_msg, icon="\u2705")
+        st.toast(toast_msg, icon="✅")
     _smart_rerun()
 
 # ====== УВЕДОМЛЕНИЯ ======
@@ -2252,166 +2296,42 @@ def render_client_form(fv):
                     st.toast(f"Клиент {cn} добавлен", icon="✅")
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
-
-
-def _save_task_edits(t, cl, d, key_prefix):
-    """Read edit field values from session_state and apply to task."""
-    et_topic = st.session_state.get(f"edit_topic_{key_prefix}", t.get("text", ""))
-    et_type = st.session_state.get(f"edit_type_{key_prefix}", t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f"))
-    et_mgr = st.session_state.get(f"edit_mgr_{key_prefix}", "")
-    et_comment = st.session_state.get(f"edit_comment_{key_prefix}", t.get("task_comment", ""))
-    et_products = st.session_state.get(f"edit_prod_{key_prefix}", t.get("products", ""))
-    et_addr = st.session_state.get(f"edit_addr_{key_prefix}", t.get("ship_addr", ""))
-    et_recv = st.session_state.get(f"edit_recv_{key_prefix}", t.get("receiver", ""))
-    et_rphone = st.session_state.get(f"edit_rphone_{key_prefix}", t.get("receiver_phone", ""))
-    et_pay = st.session_state.get(f"edit_pay_{key_prefix}", t.get("ship_pay", ""))
-    et_amount = st.session_state.get(f"edit_amount_{key_prefix}", "")
-    et_tk = st.session_state.get(f"edit_tk_{key_prefix}", t.get("tk_num", ""))
-    ndd = st.session_state.get(f"dl_inline_{key_prefix}", None)
-    t["text"] = et_topic
-    t["type"] = et_type
-    if et_mgr:
-        t["manager"] = et_mgr
-    t["task_comment"] = et_comment
-    t["products"] = et_products
-    t["ship_addr"] = et_addr
-    t["receiver"] = et_recv
-    t["receiver_phone"] = et_rphone
-    t["ship_pay"] = et_pay
-    t["order_amount"] = int(et_amount) if et_amount and et_amount.strip().isdigit() else 0
-    t["tk_num"] = et_tk
-    if ndd is not None:
-        t["deadline"] = ndd.isoformat() if hasattr(ndd, 'isoformat') else str(ndd)
-    t["last_modified"] = now_str()
-    cl["last_modified"] = now_str()
-    if d: d["last_modified"] = now_str()
-
-@st.dialog("\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u043e\u0441\u0442\u0438 \u0437\u0430\u0434\u0430\u0447\u0438", width="large")
+@st.dialog("Подробности задачи", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
     st.session_state["_in_dialog"] = True
-    # CSS: hide native X button
-    st.markdown("""<style>
-    [data-testid="stBaseButton-headerCloseButton"] { display: none !important; }
-    [data-testid="stBaseButton-headerCloseButton"] svg { display: none !important; }
-    </style>""", unsafe_allow_html=True)
-    # Render the task detail
-    render_task_detail(task, cl, d, key_prefix)
-    # Check edit mode after render
-    _is_editing = st.session_state.get(f"show_edit_task_{key_prefix}", False) or st.session_state.get(f"show_edit_dl_{key_prefix}", False)
-    # Hidden Streamlit buttons for close actions
-    _close_key = f"_dlg_close_{key_prefix}"
-    _save_close_key = f"_dlg_save_close_{key_prefix}"
-    _nosave_close_key = f"_dlg_nosave_close_{key_prefix}"
-    # CSS to hide hidden buttons
-    st.markdown(f"""<style>
-    .st-key-{_close_key}, .st-key-{_save_close_key}, .st-key-{_nosave_close_key} {{ display: none !important; }}
-    </style>""", unsafe_allow_html=True)
-    # Button: just close (no edit mode)
-    if st.button("\u2715", key=_close_key):
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state["_in_dialog"] = False
-        st.rerun()
-    # Button: save and close
-    if st.button("\u2715", key=_save_close_key):
-        _save_task_edits(task, cl, d, key_prefix)
-        st.session_state[f"show_edit_task_{key_prefix}"] = False
-        st.session_state[f"show_edit_dl_{key_prefix}"] = False
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state["_in_dialog"] = False
-        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
-    # Button: close without saving
-    if st.button("\u2715", key=_nosave_close_key):
-        st.session_state[f"show_edit_task_{key_prefix}"] = False
-        st.session_state[f"show_edit_dl_{key_prefix}"] = False
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state["_in_dialog"] = False
-        st.rerun()
-    # JS: custom X button + close interception
-    _editing_js = "true" if _is_editing else "false"
-    st.components.v1.html("""
-<script>
-(function() {
-    var w = window;
-    try { if (window.parent && window.parent !== window) w = window.parent; } catch(e) {}
-    var doc = w.document;
-    var closeKey = '""" + _close_key + """';
-    var saveKey = '""" + _save_close_key + """';
-    var nosaveKey = '""" + _nosave_close_key + """';
-    var isEditing = """ + _editing_js + """;
-
-    function findBtn(key) {
-        // Try container approach
-        var c = doc.querySelector('.st-key-' + key);
-        if (c) { var b = c.querySelector('button'); if (b) return b; }
-        // Fallback: search all buttons
-        var btns = doc.querySelectorAll('button');
-        for (var i = 0; i < btns.length; i++) {
-            var p = btns[i].closest('[class*="' + key + '"]');
-            if (p) return btns[i];
-        }
-        return null;
-    }
-
-    function addCustomClose() {
-        if (doc.getElementById('crm-custom-close')) return;
-        var dialog = doc.querySelector('[data-testid="stDialog"]');
-        if (!dialog) return;
-        // Make sure dialog has position relative
-        dialog.style.position = 'relative';
-        var btn = doc.createElement('button');
-        btn.id = 'crm-custom-close';
-        btn.innerHTML = '\u2715';
-        btn.style.cssText = 'position:absolute;top:0.5rem;right:0.75rem;width:2rem;height:2rem;border:none;background:transparent;font-size:1.5rem;color:#7F8C9A;cursor:pointer;z-index:10000;display:flex;align-items:center;justify-content:center;border-radius:0.375rem;transition:background 0.15s,color 0.15s;';
-        btn.onmouseenter = function() { this.style.background = '#EEF0F3'; this.style.color = '#2C3E50'; };
-        btn.onmouseleave = function() { this.style.background = 'transparent'; this.style.color = '#7F8C9A'; };
-        btn.onclick = function(e) {
-            e.preventDefault(); e.stopPropagation();
-            if (isEditing) { showCloseWarning(); }
-            else { var b = findBtn(closeKey); if (b) b.click(); }
-        };
-        dialog.appendChild(btn);
-    }
-
-    function showCloseWarning() {
-        var existing = doc.getElementById('crm-close-warning');
-        if (existing) existing.remove();
-        var dialog = doc.querySelector('[data-testid="stDialog"]');
-        if (!dialog) return;
-        var ov = doc.createElement('div');
-        ov.id = 'crm-close-warning';
-        ov.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(245,246,248,0.97);z-index:10001;display:flex;align-items:center;justify-content:center;border-radius:14px;';
-        ov.innerHTML = '<div style="text-align:center;padding:2rem;max-width:420px;">' +
-            '<p style="font-size:1.1rem;font-weight:600;color:#2C3E50;margin-bottom:1.5rem;">\u0423 \u0432\u0430\u0441 \u0435\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f. \u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?</p>' +
-            '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">' +
-            '<button id="crm-warn-save" style="background:#bc1661;color:white;border:none;border-radius:10px;padding:0.6rem 1.2rem;font-size:0.95rem;font-weight:600;cursor:pointer;">\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438 \u0437\u0430\u043a\u0440\u044b\u0442\u044c</button>' +
-            '<button id="crm-warn-nosave" style="background:transparent;color:#bc1661;border:1px solid #C9CFD7;border-radius:10px;padding:0.6rem 1.2rem;font-size:0.95rem;font-weight:500;cursor:pointer;">\u0411\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f</button>' +
-            '<button id="crm-warn-cancel" style="background:transparent;color:#5A6B7D;border:1px solid #DCE0E5;border-radius:10px;padding:0.6rem 1.2rem;font-size:0.95rem;font-weight:500;cursor:pointer;">\u041e\u0442\u043c\u0435\u043d\u0430</button>' +
-            '</div></div>';
-        dialog.appendChild(ov);
-        doc.getElementById('crm-warn-save').onclick = function() { ov.remove(); var b = findBtn(saveKey); if (b) b.click(); };
-        doc.getElementById('crm-warn-nosave').onclick = function() { ov.remove(); var b = findBtn(nosaveKey); if (b) b.click(); };
-        doc.getElementById('crm-warn-cancel').onclick = function() { ov.remove(); };
-    }
-
-    // Add custom close button
-    setTimeout(addCustomClose, 50);
-    setTimeout(addCustomClose, 200);
-    setTimeout(addCustomClose, 500);
-
-    // MutationObserver to re-add if removed
-    var mo = new MutationObserver(function() {
-        if (!doc.getElementById('crm-custom-close')) addCustomClose();
-    });
-    function startObserver() {
-        var dialog = doc.querySelector('[data-testid="stDialog"]');
-        if (dialog) { mo.observe(dialog, {childList: true, subtree: true}); }
-        else { setTimeout(startObserver, 100); }
-    }
-    startObserver();
-})();
-</script>
-""", height=0)
-    st.session_state["_in_dialog"] = False
+    _last_action = st.session_state.get("_dialog_last_action", "button")
+    _was_editing = (st.session_state.get(f"show_edit_task_{key_prefix}", False) or
+                    st.session_state.get(f"show_edit_dl_{key_prefix}", False))
+    if _was_editing and _last_action != "button":
+        # X was clicked while in edit mode — show confirmation
+        st.session_state["_dialog_last_action"] = None
+        st.warning("У вас есть несохранённые изменения. Сохранить перед закрытием?")
+        _c1, _c2, _c3 = st.columns(3)
+        with _c1:
+            if st.button("Сохранить и закрыть", key=f"cfm_save_{key_prefix}", type="primary", use_container_width=True):
+                _save_task_edits(task, cl, d, key_prefix)
+                _save_deadline_edits(task, cl, d, key_prefix)
+                st.session_state[f"show_edit_task_{key_prefix}"] = False
+                st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                st.session_state.pop("dialog_task_key", None)
+                st.session_state["_in_dialog"] = False
+                st.session_state["_dialog_last_action"] = "button"
+                commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
+        with _c2:
+            if st.button("Без сохранения", key=f"cfm_nosave_{key_prefix}", use_container_width=True):
+                st.session_state[f"show_edit_task_{key_prefix}"] = False
+                st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                st.session_state.pop("dialog_task_key", None)
+                st.session_state["_in_dialog"] = False
+                st.session_state["_dialog_last_action"] = "button"
+                st.rerun()
+        with _c3:
+            if st.button("Отмена", key=f"cfm_cancel_{key_prefix}", use_container_width=True):
+                st.session_state["_dialog_last_action"] = "button"
+                _smart_rerun()
+    else:
+        st.session_state["_dialog_last_action"] = None
+        render_task_detail(task, cl, d, key_prefix)
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
     render_client_form(fv)
@@ -2686,20 +2606,29 @@ elif st.session_state.active_tab == "Задачи":
     # Show task detail dialog if requested
     _dialog_key = st.session_state.get("dialog_task_key")
     if _dialog_key:
-        _found = False
-        for _cl in st.session_state.crm_store.get("clients", []):
-            if _found: break
-            for _ti, _tk in enumerate(_cl.get("tasks", [])):
-                _tk_keys = [f"tb_new_{_cl['id']}_{_ti}", f"tb_today_{_cl['id']}_{_ti}", f"tb_future_{_cl['id']}_{_ti}", f"tb_review_{_cl['id']}_{_ti}", f"arch_{_ti}_{_cl['id']}"]
-                if _dialog_key in _tk_keys:
-                    _deal = None
-                    for _d in st.session_state.crm_store.get("deals", []):
-                        if _d["id"] == _tk.get("deal_id"):
-                            _deal = _d
-                            break
-                    task_detail_dialog(_tk, _cl, _deal, _dialog_key)
-                    _found = True
-                    break
+        _last_action = st.session_state.get("_dialog_last_action", "button")
+        _was_editing = (st.session_state.get(f"show_edit_task_{_dialog_key}", False) or
+                        st.session_state.get(f"show_edit_dl_{_dialog_key}", False))
+        if _last_action != "button" and not _was_editing:
+            # X was clicked, not in edit mode — close dialog without reopening
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state["_dialog_last_action"] = "button"
+            st.rerun()
+        else:
+            _found = False
+            for _cl in st.session_state.crm_store.get("clients", []):
+                if _found: break
+                for _ti, _tk in enumerate(_cl.get("tasks", [])):
+                    _tk_keys = [f"tb_new_{_cl['id']}_{_ti}", f"tb_today_{_cl['id']}_{_ti}", f"tb_future_{_cl['id']}_{_ti}", f"tb_review_{_cl['id']}_{_ti}", f"arch_{_ti}_{_cl['id']}"]
+                    if _dialog_key in _tk_keys:
+                        _deal = None
+                        for _d in st.session_state.crm_store.get("deals", []):
+                            if _d["id"] == _tk.get("deal_id"):
+                                _deal = _d
+                                break
+                        task_detail_dialog(_tk, _cl, _deal, _dialog_key)
+                        _found = True
+                        break
 
 elif st.session_state.active_tab == "Внутренние задачи":
     st.markdown("### Внутренние задачи")
