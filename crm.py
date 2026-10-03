@@ -67,10 +67,10 @@ st.markdown("""
     .qa-card { background: #FFFFFF; border: 1px solid #E8EBEF; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
     #crm-lightbox { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999999; display:none; align-items:center; justify-content:center; cursor:pointer; }
     #crm-lightbox img { max-width:90%; max-height:90%; border-radius:8px; }
-    .thumb-item { position:relative; width:110px; }
-    .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:default; border:1px solid #DCE0E5; }
+    .thumb-item { position:relative; width:110px; margin: 0 auto; text-align:center; }
+    .thumb-item img { width:110px; height:110px; object-fit:cover; border-radius:8px; cursor:default; border:1px solid #DCE0E5; display:block; margin:0 auto; }
     .thumb-item img:hover { border-color:#DCE0E5; }
-    .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:6px; }
+    .thumb-name { font-size:0.7rem; color:#7F8C9A; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:6px; text-align:center; }
     .created-date { font-size: 0.72rem; color: #95A5B7; font-style: italic; margin-bottom: 0.8rem !important; }
     .ready-badge { display: inline-block; background: #2E7D32; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
     .in-work-badge { display: inline-block; background: #bc1661; color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -539,7 +539,7 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 else:
                     # Non-image file: show icon + name
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
-                    st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
 
                 # Description field (editable)
                 desc_key = f"fdesc_{prefix}_{i}"
@@ -628,7 +628,7 @@ def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # Top row: task number + print button + pencil edit button
-        num_col, print_col, edit_col = st.columns([20, 1, 1])
+        num_col, print_col, edit_col = st.columns([16, 2, 2])
         # CSS to align print and edit buttons at same level
         st.markdown(f"""<style>
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
@@ -654,7 +654,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 _deal_num = d.get('deal_number', d.get('title', ''))
                 _deal_id = d.get('id')
                 _deal_link_key = f"deal_link_{key_prefix}"
-                if st.button(f"\u041a \u0441\u0434\u0435\u043b\u043a\u0435 {_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
+                if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
                     st.session_state.active_tab = "Сделки"
                     st.session_state["deal_tab_expanded"] = _deal_id
                     st.session_state.pop("dialog_task_key", None)
@@ -797,10 +797,8 @@ def render_task_detail(t, cl, d, key_prefix):
                             if d: d["last_modified"] = now_str()
                             commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
                     show_key = f"show_complete_{key_prefix}"
-                    show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state[show_key] = not st.session_state.get(show_key, False)
-                        st.rerun()
                     if st.session_state.get(show_key, False):
                         rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
                         uf_ver = st.session_state.get(f"uf_ver_{key_prefix}", 0)
@@ -850,7 +848,6 @@ def render_task_detail(t, cl, d, key_prefix):
                         with pc2:
                             if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"cancel_complete_{key_prefix}", use_container_width=True):
                                 st.session_state[show_key] = False
-                                st.rerun()
                 else:
                     if t.get("needs_rework"):
                         st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
