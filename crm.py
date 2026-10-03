@@ -555,7 +555,7 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 cur_desc = ff.get("description", "")
                 _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
                 _desc_height = 38 + (_desc_lines - 1) * 22
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }}</style>", unsafe_allow_html=True)
+                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.9rem !important; border-radius: 10px !important; resize: none !important; }} .st-key-{desc_key} .stTextArea > div > textarea::placeholder {{ font-size: 0.7rem !important; }}</style>", unsafe_allow_html=True)
                 new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
@@ -764,8 +764,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             st.rerun()
                 else:
                     dl_btn_key = f"btn_dl_click_{key_prefix}"
-                    _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
-                    st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
+                    st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:#2C3E50!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key, help="\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0447\u0442\u043e\u0431\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                         st.rerun()
@@ -790,7 +789,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
                 if t.get('tk_num'):
-                    st.markdown(f"**\u0422\u0440\u0435\u043a:** `{t['tk_num']}`")
+                    st.markdown(f'<div style="font-size:1.1rem"><b>\u0422\u0440\u0435\u043a:</b> <code style="font-size:1rem">{t['tk_num']}</code></div>', unsafe_allow_html=True)
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
@@ -863,6 +862,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         with pc2:
                             if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"cancel_complete_{key_prefix}", use_container_width=True):
                                 st.session_state[show_key] = False
+                                st.rerun()
                 else:
                     if t.get("needs_rework"):
                         st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
