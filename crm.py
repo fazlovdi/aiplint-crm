@@ -653,50 +653,72 @@ def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True):
         st.markdown(f"**Задача №{t.get('task_number', '')}**")
         st.markdown(format_created_date(t), unsafe_allow_html=True)
-        left_col, right_col = st.columns(2)
-        with left_col:
-            st.markdown(f"**Тема:** {t.get('text', '')}")
-            st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
-            st.markdown(f"**Срок:** {format_date(t.get('deadline', ''))}")
-            managers = [""] + get_managers_list()
-            current_mgr = t.get('manager', '')
-            mgr_index = 0 if current_mgr not in managers else managers.index(current_mgr)
-            new_mgr = st.selectbox("Ответственный:", managers, index=mgr_index, key=f"mgr_edit_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-            if new_mgr != current_mgr and new_mgr:
-                t["manager"] = new_mgr
-                t["delegated_to"] = new_mgr
+        st.markdown(f"**Тема:** {t.get('text', '')}")
+        st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
+        st.markdown(f"**Срок:** {format_date(t.get('deadline', ''))}")
+        st.markdown(f"**Ответственный:** {t.get('manager', '—')}")
+        if t.get('in_work') and not t.get('done'):
+            st.markdown('<span class="in-work-badge">В работе</span>', unsafe_allow_html=True)
+        if t.get('delegated_to') and t.get('delegated_to') != t.get('manager'):
+            st.markdown(f'<span class="delegated-badge">Делегировано: {t["delegated_to"]}</span>', unsafe_allow_html=True)
+        if t.get('products'): st.markdown(f"**Товары:** {t['products']}")
+        if t.get('ship_addr'): st.markdown(f"**Адрес:** {t['ship_addr']}")
+        if t.get('receiver'): st.markdown(f"**Получатель:** {t['receiver']} ({t.get('receiver_phone', '')})")
+        if t.get('ship_pay'): st.markdown(f"**Оплата:** {t['ship_pay']}")
+        if t.get('tk_num'):
+            st.markdown(f"**Трек:**")
+            render_track_inline(t['tk_num'], key_prefix)
+        if t.get('order_amount', 0) > 0: st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
+        if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">Готово к отправке</span>', unsafe_allow_html=True)
+        if t.get('task_comment'): st.markdown(f"**Комментарии:** {t['task_comment']}")
+        if t.get("task_files"):
+            st.markdown("**Файлы задачи:**")
+            render_file_thumbs(t["task_files"], f"{key_prefix}_files")
+        st.markdown("**Загрузить файлы в задачу:**")
+        ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}", accept_multiple_files=True, label_visibility="collapsed")
+        if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
+            if ntf_existing:
+                fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
+                if fi_list:
+                    t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
+                    t["last_modified"] = now_str()
+                    cl["last_modified"] = now_str()
+                    if d: d["last_modified"] = now_str()
+                    commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
+            else: st.warning("Выберите файл(ы)")
+        st.markdown("---")
+        if t.get("task_comments"):
+            st.markdown("**Комментарии задачи:**")
+            for tc in t["task_comments"]:
+                st.markdown(f"- *{tc.get('time', '')}* ({tc.get('user', '')}): {tc.get('text', '')}")
+        tc_clr_key = f"clr_tc_{key_prefix}"
+        if st.session_state.get(tc_clr_key):
+            st.session_state[f"tc_input_{key_prefix}"] = ""
+            st.session_state[tc_clr_key] = False
+        ntc = st.text_input("Добавить комментарий:", key=f"tc_input_{key_prefix}", placeholder="Введите комментарий...")
+        if st.button("Добавить", key=f"tc_btn_{key_prefix}", use_container_width=True):
+            if ntc.strip():
+                t.setdefault("task_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
                 t["last_modified"] = now_str()
-                cl["last_modified"] = now_str()
-                if d: d["last_modified"] = now_str()
-                commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
-            if t.get('in_work') and not t.get('done'):
-                st.markdown('<span class="in-work-badge">В работе</span>', unsafe_allow_html=True)
-            if t.get('delegated_to') and t.get('delegated_to') != t.get('manager'):
-                st.markdown(f'<span class="delegated-badge">Делегировано: {t["delegated_to"]}</span>', unsafe_allow_html=True)
-            if t.get('products'): st.markdown(f"**Товары:** {t['products']}")
-            if t.get('ship_addr'): st.markdown(f"**Адрес:** {t['ship_addr']}")
-            if t.get('receiver'): st.markdown(f"**Получатель:** {t['receiver']} ({t.get('receiver_phone', '')})")
-            if t.get('ship_pay'): st.markdown(f"**Оплата:** {t['ship_pay']}")
-            if t.get('tk_num'):
-                st.markdown(f"**Трек:**")
-                render_track_inline(t['tk_num'], key_prefix)
-            if t.get('order_amount', 0) > 0: st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
-            if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">Готово к отправке</span>', unsafe_allow_html=True)
-            if t.get('task_comment'): st.markdown(f"**Комментарии:** {t['task_comment']}")
-            tk_done = t.get("done", False)
-            if not tk_done:
-                st.markdown("---")
-                render_print_button(t, cl, t.get('type', 'Связаться'), format_date(t.get('deadline', '')), f"{key_prefix}_print")
-                if t.get("task_files"):
-                    render_print_file_button(t["task_files"], f"{key_prefix}_pfile")
-                st.markdown("---")
-                show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-                if st.button("Редактировать задачу" if not show_edit_task else "Скрыть", key=f"btn_edit_task_{key_prefix}", use_container_width=True):
-                    st.session_state[f"show_edit_task_{key_prefix}"] = not show_edit_task
-                    st.rerun()
-                if show_edit_task:
-                    render_task_edit_form(t, cl, d, key_prefix)
-                st.markdown("---")
+                st.session_state[tc_clr_key] = True
+                commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
+            else: st.warning("Введите текст")
+        st.markdown("---")
+        tk_done = t.get("done", False)
+        if not tk_done:
+            render_print_button(t, cl, t.get('type', 'Связаться'), format_date(t.get('deadline', '')), f"{key_prefix}_print")
+            if t.get("task_files"):
+                render_print_file_button(t["task_files"], f"{key_prefix}_pfile")
+            st.markdown("---")
+            show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
+            if st.button("Редактировать задачу" if not show_edit_task else "Скрыть", key=f"btn_edit_task_{key_prefix}", use_container_width=True):
+                st.session_state[f"show_edit_task_{key_prefix}"] = not show_edit_task
+                st.rerun()
+            if show_edit_task:
+                render_task_edit_form(t, cl, d, key_prefix)
+            st.markdown("---")
+            tc1, tc2 = st.columns(2)
+            with tc1:
                 if not t.get('in_work'):
                     if st.button("Взять в работу", key=f"btn_inwork_{key_prefix}", type="primary", use_container_width=True):
                         t["in_work"] = True
@@ -710,161 +732,178 @@ def render_task_detail(t, cl, d, key_prefix):
                         t.pop("in_work_by", None)
                         t["last_modified"] = now_str()
                         commit_and_rerun(st.session_state.crm_store)
-                st.markdown("---")
-                show_key = f"show_complete_{key_prefix}"
-                if st.button("Выполнить задачу", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
-                    st.session_state[show_key] = not st.session_state.get(show_key, False)
+            with tc2:
+                if st.button("Делегировать", key=f"btn_delegate_{key_prefix}", use_container_width=True):
+                    st.session_state[f"show_delegate_{key_prefix}"] = not st.session_state.get(f"show_delegate_{key_prefix}", False)
                     st.rerun()
-                if st.session_state.get(show_key, False):
-                    rt = st.text_area("Отчёт (обязательно):", key=f"rt_{key_prefix}", height=100)
-                    uf = st.file_uploader("Файлы/фото отчёта:", key=f"uf_{key_prefix}", accept_multiple_files=True)
-                    if st.button("Подтвердить", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
-                        if rt.strip():
-                            t["done"] = True
-                            t["completion_report"] = rt.strip()
+            if st.session_state.get(f"show_delegate_{key_prefix}", False):
+                with st.container(border=True):
+                    dlg_to = st.selectbox("Делегировать на:", [""] + get_managers_list(), index=0, key=f"dlg_to_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                    if st.button("Переназначить", key=f"dlg_go_{key_prefix}", type="primary", use_container_width=True):
+                        if dlg_to:
+                            t["delegated_to"] = dlg_to
+                            t["manager"] = dlg_to
                             t["last_modified"] = now_str()
-                            add_notification(t.get("created_by", ""), f"Задача на проверке: {t.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}", f"\u2705 Задача на проверке: {t.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}")
-                            fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
-                            if fi_list: t["completion_files"] = normalize_file_list(fi_list)
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            st.session_state[show_key] = False
-                            st.session_state[f"show_new_after_{key_prefix}"] = True
-                            commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
-                        else: st.warning("Введите отчёт")
-                if st.session_state.get(f"show_new_after_{key_prefix}", False):
-                    st.markdown("---")
-                    st.markdown("**Создать новую задачу:**")
-                    nt_topic2 = st.text_input("Тема:", key=f"nat_topic_{key_prefix}")
-                    nt_mgr2 = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                    nt_dl2 = st.date_input("Срок:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
-                    nt_comment2 = st.text_input("Комментарий:", key=f"nat_comment_{key_prefix}")
-                    nt_files2 = st.file_uploader("Файлы:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
-                    nc1, nc2 = st.columns(2)
-                    with nc1:
-                        if st.button("Создать", key=f"nat_go_{key_prefix}", type="primary", use_container_width=True):
-                            if nt_topic2.strip():
-                                ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
-                                prefix2 = "ЗС" if d else "ЗК"
-                                tn2 = generate_task_number(prefix2)
-                                new_task = {
-                                    "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "Связаться",
-                                    "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
-                                    "completion_report": "", "completion_files": [],
-                                    "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
-                                    "order_amount": 0, "last_modified": now_str(),
-                                    "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
-                                    "in_work": False, "ready_to_ship": False, "delegated_to": None,
-                                    "needs_rework": False, "reviewed": False,
-                                    "task_comments": [], "flagged": False,
-                                    "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "",
-                                    "ship_pay": "", "tk_num": ""
-                                }
-                                cl.setdefault("tasks", []).append(new_task)
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                add_notification(nt_mgr2, f"Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name','')} | Срок: {nt_dl2.isoformat()}", f"\U0001F4DD Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name','')} | Срок: {nt_dl2.isoformat()}")
-                                st.session_state[f"show_new_after_{key_prefix}"] = False
-                                commit_and_rerun(st.session_state.crm_store, "Новая задача создана")
-                            else: st.warning("Введите тему")
-                    with nc2:
-                        if st.button("Отмена", key=f"nat_cancel_{key_prefix}", use_container_width=True):
-                            st.session_state[f"show_new_after_{key_prefix}"] = False
-                            st.rerun()
-                st.markdown("---")
-                ndd = st.date_input("Изменить срок:", value=parse_deadline(t.get("deadline", "")), format="DD/MM/YYYY", key=f"dl_{key_prefix}")
-                if st.button("Обновить срок", key=f"dl_btn_{key_prefix}"):
-                    t["deadline"] = ndd.isoformat()
-                    t["last_modified"] = now_str()
-                    cl["last_modified"] = now_str()
-                    if d: d["last_modified"] = now_str()
-                    commit_and_rerun(st.session_state.crm_store, "Срок обновлён")
-            else:
-                if t.get("needs_rework"):
-                    st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">На доработке</span>', unsafe_allow_html=True)
-                if t.get("completion_report"): st.caption(f"Отчёт: {t['completion_report']}")
-                if t.get("rework_comment"): st.warning(f"Комментарий к доработке: {t['rework_comment']}")
-                if t.get("completion_files"):
-                    st.markdown("**Файлы отчёта:**")
-                    render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
-                if not t.get("reviewed", False):
-                    is_author = (st.session_state.user_role == "admin") or (t.get("created_by", "") == st.session_state.get("user_login", ""))
-                    if is_author:
-                        st.markdown("---")
-                        rc1, rc2 = st.columns(2)
-                        with rc1:
-                            if st.button("Проверка выполнена", key=f"btn_review_{key_prefix}", type="primary", use_container_width=True):
-                                t["reviewed"] = True
-                                t["needs_rework"] = False
-                                t["rework_comment"] = ""
-                                t["last_modified"] = now_str()
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                commit_and_rerun(st.session_state.crm_store, "Задача проверена и в архиве")
-                        with rc2:
-                            if st.button("Вернуть в работу", key=f"btn_rework_{key_prefix}", use_container_width=True):
-                                st.session_state[f"show_rework_{key_prefix}"] = True
-                                st.rerun()
-                        if st.session_state.get(f"show_rework_{key_prefix}", False):
-                            rework_comment = st.text_area("Комментарий к доработке (обязательно):", key=f"rework_comment_{key_prefix}", height=100, placeholder="Опишите, что нужно доработать")
-                            rw1, rw2 = st.columns(2)
-                            with rw1:
-                                if st.button("Отправить на доработку", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
-                                    if not rework_comment.strip():
-                                        st.warning("Напишите комментарий — без него нельзя отправить задачу на доработку")
-                                    else:
-                                        t["done"] = False
-                                        t["in_work"] = False
-                                        t["needs_rework"] = True
-                                        t["rework_comment"] = rework_comment.strip()
-                                        t.setdefault("task_comments", []).append({"author": st.session_state.get("user_login", ""), "text": rework_comment.strip(), "date": now_str()})
-                                        t["last_modified"] = now_str()
-                                        cl["last_modified"] = now_str()
-                                        if d: d["last_modified"] = now_str()
-                                        st.session_state[f"show_rework_{key_prefix}"] = False
-                                        add_notification(t.get("manager", ""), f"Задача возвращена на доработку: {t.get('task_number','')} — {cl.get('name','')} | Комментарий: {rework_comment.strip()}", f"\u26a0\ufe0f Задача на доработку: {t.get('task_number','')} — {cl.get('name','')} | Комментарий: {rework_comment.strip()}")
-                                        commit_and_rerun(st.session_state.crm_store, "Задача возвращена на доработку")
-                            with rw2:
-                                if st.button("Отмена", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
-                                    st.session_state[f"show_rework_{key_prefix}"] = False
-                                    st.rerun()
-                    else:
-                        st.info("Ожидает проверки автором")
-                else:
-                    st.success("Задача проверена")
-        with right_col:
-            if t.get("task_comments"):
-                st.markdown("**Комментарии задачи:**")
-                for tc in t["task_comments"]:
-                    st.markdown(f"- *{tc.get('time', '')}* ({tc.get('user', '')}): {tc.get('text', '')}")
-            tc_clr_key = f"clr_tc_{key_prefix}"
-            if st.session_state.get(tc_clr_key):
-                st.session_state[f"tc_input_{key_prefix}"] = ""
-                st.session_state[tc_clr_key] = False
-            ntc = st.text_input("Добавить комментарий:", key=f"tc_input_{key_prefix}", placeholder="Введите комментарий...")
-            if st.button("Добавить", key=f"tc_btn_{key_prefix}", use_container_width=True):
-                if ntc.strip():
-                    t.setdefault("task_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
-                    t["last_modified"] = now_str()
-                    st.session_state[tc_clr_key] = True
-                    commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
-                else: st.warning("Введите текст")
+                            st.session_state[f"show_delegate_{key_prefix}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "Задача делегирована")
+                        else: st.warning("Выберите сотрудника")
             st.markdown("---")
-            if t.get("task_files"):
-                st.markdown("**Файлы задачи:**")
-                render_file_thumbs(t["task_files"], f"{key_prefix}_files")
-            st.markdown("**Загрузить файлы в задачу:**")
-            ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}", accept_multiple_files=True, label_visibility="collapsed")
-            if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
-                if ntf_existing:
-                    fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
-                    if fi_list:
-                        t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
+            show_key = f"show_complete_{key_prefix}"
+            if st.button("Выполнить задачу", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
+                st.session_state[show_key] = not st.session_state.get(show_key, False)
+                st.rerun()
+            if st.session_state.get(show_key, False):
+                rt = st.text_area("Отчёт (обязательно):", key=f"rt_{key_prefix}", height=100)
+                uf = st.file_uploader("Файлы/фото отчёта:", key=f"uf_{key_prefix}", accept_multiple_files=True)
+                if st.button("Подтвердить", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
+                    if rt.strip():
+                        t["done"] = True
+                        t["completion_report"] = rt.strip()
                         t["last_modified"] = now_str()
+                        add_notification(t.get("created_by", ""), f"Задача на проверке: {t.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}", f"✅ Задача на проверке: {t.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}")
+                        fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
+                        if fi_list: t["completion_files"] = normalize_file_list(fi_list)
                         cl["last_modified"] = now_str()
                         if d: d["last_modified"] = now_str()
-                        commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
-                else: st.warning("Выберите файл(ы)")
+                        st.session_state[show_key] = False
+                        st.session_state[f"show_new_after_{key_prefix}"] = True
+                        commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
+                    else: st.warning("Введите отчёт")
+            if st.session_state.get(f"show_new_after_{key_prefix}", False):
+                st.markdown("---")
+                st.markdown("**Создать новую задачу:**")
+                nt_topic2 = st.text_input("Тема:", key=f"nat_topic_{key_prefix}")
+                nt_mgr2 = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                nt_dl2 = st.date_input("Срок:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
+                nt_comment2 = st.text_input("Комментарий:", key=f"nat_comment_{key_prefix}")
+                nt_files2 = st.file_uploader("Файлы:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
+                nc1, nc2 = st.columns(2)
+                with nc1:
+                    if st.button("Создать", key=f"nat_go_{key_prefix}", type="primary", use_container_width=True):
+                        if nt_topic2.strip():
+                            ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
+                            prefix2 = "ЗС" if d else "ЗК"
+                            tn2 = generate_task_number(prefix2)
+                            new_task = {
+                                "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "Связаться",
+                                "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
+                                "completion_report": "", "completion_files": [],
+                                "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
+                                "order_amount": 0, "last_modified": now_str(),
+                                "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
+                                "in_work": False, "ready_to_ship": False, "delegated_to": None,
+                                "needs_rework": False, "reviewed": False,
+                                "task_comments": [], "flagged": False,
+                                "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "",
+                                "ship_pay": "", "tk_num": ""
+                            }
+                            cl.setdefault("tasks", []).append(new_task)
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            add_notification(nt_mgr2, f"Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name','')} | Срок: {nt_dl2.isoformat()}", f"\U0001F4DD Новая задача: {nt_topic2.strip()} | Клиент: {cl.get('name','')} | Срок: {nt_dl2.isoformat()}")
+                            st.session_state[f"show_new_after_{key_prefix}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "Новая задача создана")
+                        else: st.warning("Введите тему")
+                with nc2:
+                    if st.button("Отмена", key=f"nat_cancel_{key_prefix}", use_container_width=True):
+                        st.session_state[f"show_new_after_{key_prefix}"] = False
+                        st.rerun()
+            st.markdown("---")
+            ndd = st.date_input("Изменить срок:", value=parse_deadline(t.get("deadline", "")), format="DD/MM/YYYY", key=f"dl_{key_prefix}")
+            if st.button("Обновить срок", key=f"dl_btn_{key_prefix}"):
+                t["deadline"] = ndd.isoformat()
+                t["last_modified"] = now_str()
+                cl["last_modified"] = now_str()
+                if d: d["last_modified"] = now_str()
+                commit_and_rerun(st.session_state.crm_store, "Срок обновлён")
+        else:
+            if t.get("needs_rework"):
+                st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">На доработке</span>', unsafe_allow_html=True)
+            if t.get("completion_report"): st.caption(f"Отчёт: {t['completion_report']}")
+            if t.get("rework_comment"): st.warning(f"Комментарий к доработке: {t['rework_comment']}")
+            if t.get("completion_files"):
+                st.markdown("**Файлы отчёта:**")
+                render_file_thumbs(t["completion_files"], f"{key_prefix}_cfiles")
+            if not t.get("reviewed", False):
+                is_author = (st.session_state.user_role == "admin") or (t.get("created_by", "") == st.session_state.get("user_login", ""))
+                if is_author:
+                    st.markdown("---")
+                    rc1, rc2 = st.columns(2)
+                    with rc1:
+                        if st.button("Проверка выполнена", key=f"btn_review_{key_prefix}", type="primary", use_container_width=True):
+                            t["reviewed"] = True
+                            t["needs_rework"] = False
+                            t["rework_comment"] = ""
+                            t["last_modified"] = now_str()
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            commit_and_rerun(st.session_state.crm_store, "Задача проверена и в архиве")
+                    with rc2:
+                        if st.button("Вернуть в работу", key=f"btn_rework_{key_prefix}", use_container_width=True):
+                            st.session_state[f"show_rework_{key_prefix}"] = True
+                            st.rerun()
+                    if st.session_state.get(f"show_rework_{key_prefix}", False):
+                        rework_comment = st.text_area("Комментарий к доработке (обязательно):", key=f"rework_comment_{key_prefix}", height=100, placeholder="Опишите, что нужно доработать")
+                        rw1, rw2 = st.columns(2)
+                        with rw1:
+                            if st.button("Отправить на доработку", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
+                                if not rework_comment.strip():
+                                    st.warning("Напишите комментарий — без него нельзя отправить задачу на доработку")
+                                else:
+                                    t["done"] = False
+                                    t["in_work"] = False
+                                    t["needs_rework"] = True
+                                    t["rework_comment"] = rework_comment.strip()
+                                    t.setdefault("task_comments", []).append({"author": st.session_state.get("user_login", ""), "text": rework_comment.strip(), "date": now_str()})
+                                    t["last_modified"] = now_str()
+                                    cl["last_modified"] = now_str()
+                                    if d: d["last_modified"] = now_str()
+                                    st.session_state[f"show_rework_{key_prefix}"] = False
+                                    add_notification(t.get("manager", ""), f"Задача возвращена на доработку: {t.get('task_number','')} — {cl.get('name','')} | Комментарий: {rework_comment.strip()}", f"⚠️ Задача на доработку: {t.get('task_number','')} — {cl.get('name','')} | Комментарий: {rework_comment.strip()}")
+                                    commit_and_rerun(st.session_state.crm_store, "Задача возвращена на доработку")
+                        with rw2:
+                            if st.button("Отмена", key=f"btn_rework_cancel_{key_prefix}", use_container_width=True):
+                                st.session_state[f"show_rework_{key_prefix}"] = False
+                                st.rerun()
+                else:
+                    st.info("Ожидает проверки автором")
+            else:
+                st.success("Задача проверена")
+
+
+@st.dialog("Детали задачи", width="large")
+def task_detail_dialog():
+    """Открытие деталей задачи во всплывающем окне."""
+    client_id = st.session_state.get('_dlg_client_id')
+    task_number = st.session_state.get('_dlg_task_number', '')
+    deal_id = st.session_state.get('_dlg_deal_id')
+    key_prefix = st.session_state.get('_dlg_key_prefix', '')
+    store = st.session_state.crm_store
+    cl = next((c for c in store.get("clients", []) if c.get("id") == client_id), None)
+    t = None
+    if cl:
+        for tk in cl.get("tasks", []):
+            if tk.get("task_number") == task_number:
+                t = tk
+                break
+    d = None
+    if deal_id:
+        for dd in store.get("deals", []):
+            if dd.get("id") == deal_id:
+                d = dd
+                break
+    if t and cl:
+        render_task_detail(t, cl, d, key_prefix)
+        st.markdown("---")
+        if st.button("Закрыть", key=f"dlg_close_{key_prefix}", use_container_width=True):
+            st.session_state.expanded_task_key = None
+            st.rerun()
+    else:
+        st.error("Задача не найдена")
+        st.session_state.expanded_task_key = None
+
 
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
@@ -893,10 +932,13 @@ def render_task_row(t, cl, d, task_key, key_prefix):
                 save_scroll_and_rerun()
             else:
                 st.session_state.expanded_task_key = task_key
+                st.session_state['_dlg_client_id'] = cl["id"]
+                st.session_state['_dlg_task_number'] = t.get("task_number", "")
+                st.session_state['_dlg_deal_id'] = d["id"] if d else None
+                st.session_state['_dlg_key_prefix'] = key_prefix
                 st.rerun()
         if not is_tk_exp:
             render_scroll_restore(f"tk_{task_key}")
-    if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
 
 def get_entity_border(tasks_list):
     has_overdue = any(not t.get("done") and is_task_overdue(t) for t in tasks_list)
@@ -1295,6 +1337,136 @@ if _auth_token and not st.session_state.authenticated:
 MGR_PLACEHOLDER = "Выбери ответственного"
 
 st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
+
+
+@st.dialog("Внутренняя задача", width="medium")
+def internal_task_dialog():
+    """Открытие внутренней задачи во всплывающем окне."""
+    it_id = st.session_state.get('_dlg_it_id')
+    store = st.session_state.crm_store
+    it = next((x for x in store.get("internal_tasks", []) if x.get("id") == it_id), None)
+    if not it:
+        st.error("Задача не найдена")
+        st.session_state.expanded_task_key = None
+        return
+    it_done = it.get("done", False)
+    with st.container(border=True):
+        st.markdown(f"**Задача №{it['id']}**")
+        st.markdown(f"**Тема:** {it.get('text', '')}")
+        st.markdown(f"**Срок:** {format_date(it.get('deadline', ''))}")
+        st.markdown(f"**Ответственный:** {it.get('manager', '—')}")
+        if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
+        if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
+        st.markdown("---")
+        if not it_done:
+            show_it_complete = f"show_it_complete_{it['id']}"
+            if st.button("Выполнить", key=f"it_complete_btn_{it['id']}", type="primary", use_container_width=True):
+                st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
+                st.rerun()
+            if st.session_state.get(show_it_complete, False):
+                it_report = st.text_area("Отчёт:", key=f"it_report_{it['id']}", height=80)
+                if st.button("Подтвердить", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
+                    if it_report.strip():
+                        it["done"] = True
+                        it["completed_report"] = it_report.strip()
+                        it["last_modified"] = now_str()
+                        st.session_state[show_it_complete] = False
+                        commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
+                    else:
+                        st.warning("Введите отчёт")
+            st.markdown("---")
+            show_it_edit = f"show_it_edit_{it['id']}"
+            if st.button("Редактировать", key=f"it_edit_btn_{it['id']}", use_container_width=True):
+                st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
+                st.rerun()
+            if st.session_state.get(show_it_edit, False):
+                with st.container(border=True):
+                    eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
+                    eit_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
+                    eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
+                    eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
+                    if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
+                        if not eit_mgr:
+                            st.warning("Выберите ответственного")
+                        else:
+                            it["text"] = eit_topic
+                            it["manager"] = eit_mgr
+                            it["deadline"] = eit_dl.isoformat()
+                            it["comment"] = eit_comment
+                            it["last_modified"] = now_str()
+                            st.session_state[show_it_edit] = False
+                            commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
+    if st.session_state.user_role == "admin":
+        st.markdown("---")
+        if st.button("Удалить задачу", key=f"it_del_{it['id']}", use_container_width=True):
+            st.session_state.crm_store["internal_tasks"] = [x for x in store.get("internal_tasks", []) if x["id"] != it["id"]]
+            st.session_state.expanded_task_key = None
+            commit_and_rerun(st.session_state.crm_store, "Задача удалена")
+    st.markdown("---")
+    if st.button("Закрыть", key="dlg_close_it", use_container_width=True):
+        st.session_state.expanded_task_key = None
+        st.rerun()
+
+
+@st.dialog("Поставщик", width="medium")
+def supplier_dialog():
+    """Открытие карточки поставщика во всплывающем окне."""
+    sup_id = st.session_state.get('_dlg_sup_id')
+    store = st.session_state.crm_store
+    s = next((x for x in store.get("suppliers", []) if x.get("id") == sup_id), None)
+    if not s:
+        st.error("Поставщик не найден")
+        st.session_state.expanded_task_key = None
+        return
+    with st.container(border=True):
+        st.markdown(f"**{s.get('name', '')}**")
+        st.markdown(format_created_date(s), unsafe_allow_html=True)
+        if s.get("phone"):
+            render_phone_inline(s["phone"], f"sup_{s['id']}")
+        info_c, comm_c = st.columns(2)
+        with info_c:
+            st.markdown(f"**Email:** {s.get('email', '—')}")
+            st.markdown(f"**Адрес:** {s.get('address', '—')}")
+            st.markdown(f"**Категория:** {s.get('category', '—')}")
+        with comm_c:
+            if s.get("comment"):
+                st.markdown(f"**Комментарий:** {s['comment']}")
+            else:
+                st.caption("Комментариев нет")
+        st.markdown("---")
+        show_sup_edit = f"show_sup_edit_{s['id']}"
+        if st.button("Редактировать" if not st.session_state.get(show_sup_edit, False) else "Скрыть", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
+            st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
+            st.rerun()
+        if st.session_state.get(show_sup_edit, False):
+            with st.container(border=True):
+                esn = st.text_input("Название:", value=s.get("name", ""), key=f"esn_{s['id']}")
+                esp = st.text_input("Телефон:", value=s.get("phone", ""), key=f"esp_{s['id']}")
+                ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
+                esa = st.text_input("Адрес:", value=s.get("address", ""), key=f"esa_{s['id']}")
+                esc = st.text_input("Категория:", value=s.get("category", ""), key=f"esc_{s['id']}")
+                escom = st.text_area("Комментарий:", value=s.get("comment", ""), key=f"escom_{s['id']}")
+                if st.button("Сохранить", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
+                    s["name"] = esn.strip()
+                    s["phone"] = format_phone(esp) if esp else ""
+                    s["email"] = ese.strip()
+                    s["address"] = esa.strip()
+                    s["category"] = esc.strip()
+                    s["comment"] = escom.strip()
+                    s["last_modified"] = now_str()
+                    st.session_state[show_sup_edit] = False
+                    commit_and_rerun(st.session_state.crm_store, "Поставщик обновлён")
+    if st.session_state.user_role == "admin":
+        st.markdown("---")
+        if st.button("Удалить поставщика", key=f"sup_del_{s['id']}", use_container_width=True):
+            st.session_state.crm_store["suppliers"] = [x for x in store.get("suppliers", []) if x["id"] != s["id"]]
+            st.session_state.expanded_task_key = None
+            commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
+    st.markdown("---")
+    if st.button("Закрыть", key="dlg_close_sup", use_container_width=True):
+        st.session_state.expanded_task_key = None
+        st.rerun()
+
 
 def check_login(username, password):
     for u in st.session_state.crm_store.get("users", []):
@@ -2382,11 +2554,13 @@ elif st.session_state.active_tab == "Задачи":
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = task_key
+                        st.session_state['_dlg_client_id'] = cl["id"]
+                        st.session_state['_dlg_task_number'] = task.get("task_number", "")
+                        st.session_state['_dlg_deal_id'] = task.get("deal_id")
+                        st.session_state['_dlg_key_prefix'] = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
                         st.rerun()
                 if not is_tk_exp:
                     render_scroll_restore(f"tb_{task_key}")
-            if is_tk_exp:
-                render_task_detail(task, cl, di.get(task.get("deal_id")), f"tb_{sk}_{t['client_id']}_{t['task_idx']}")
         col_new, col_today, col_future, col_review = st.columns(4)
         with col_new:
             with st.container(border=True):
@@ -2433,9 +2607,11 @@ elif st.session_state.active_tab == "Задачи":
                             save_scroll_and_rerun()
                         else:
                             st.session_state.expanded_task_key = task_key
+                            st.session_state['_dlg_client_id'] = cl["id"]
+                            st.session_state['_dlg_task_number'] = task.get("task_number", "")
+                            st.session_state['_dlg_deal_id'] = task.get("deal_id")
+                            st.session_state['_dlg_key_prefix'] = task_key
                             st.rerun()
-                    if is_tk_exp:
-                        render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
         else:
             st.caption("Архив пуст.")
 
@@ -2511,62 +2687,10 @@ elif st.session_state.active_tab == "Внутренние задачи":
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = it_key
+                        st.session_state['_dlg_it_id'] = it['id']
                         st.rerun()
                 if not it_exp:
                     render_scroll_restore(f"it_{it['id']}")
-            if it_exp:
-                with st.container(border=True):
-                    st.markdown(f"**Задача №{it['id']}**")
-                    st.markdown(f"**Тема:** {it.get('text', '')}")
-                    st.markdown(f"**Срок:** {format_date(it.get('deadline', ''))}")
-                    st.markdown(f"**Ответственный:** {it.get('manager', '—')}")
-                    if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
-                    if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
-                    st.markdown("---")
-                    if not it_done:
-                        show_it_complete = f"show_it_complete_{it['id']}"
-                        if st.button("Выполнить", key=f"it_complete_btn_{it['id']}", type="primary", use_container_width=True):
-                            st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
-                            st.rerun()
-                        if st.session_state.get(show_it_complete, False):
-                            it_report = st.text_area("Отчёт:", key=f"it_report_{it['id']}", height=80)
-                            if st.button("Подтвердить", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
-                                if it_report.strip():
-                                    it["done"] = True
-                                    it["completed_report"] = it_report.strip()
-                                    it["last_modified"] = now_str()
-                                    st.session_state[show_it_complete] = False
-                                    commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
-                                else:
-                                    st.warning("Введите отчёт")
-                        st.markdown("---")
-                        show_it_edit = f"show_it_edit_{it['id']}"
-                        if st.button("Редактировать", key=f"it_edit_btn_{it['id']}", use_container_width=True):
-                            st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
-                            st.rerun()
-                        if st.session_state.get(show_it_edit, False):
-                            with st.container(border=True):
-                                eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
-                                eit_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
-                                eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
-                                eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
-                                if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
-                                    if not eit_mgr:
-                                        st.warning("Выберите ответственного")
-                                    else:
-                                        it["text"] = eit_topic
-                                        it["manager"] = eit_mgr
-                                        it["deadline"] = eit_dl.isoformat()
-                                        it["comment"] = eit_comment
-                                        it["last_modified"] = now_str()
-                                        st.session_state[show_it_edit] = False
-                                        commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
-                    if st.session_state.user_role == "admin":
-                        st.markdown("---")
-                        if st.button("Удалить задачу", key=f"it_del_{it['id']}", use_container_width=True):
-                            st.session_state.crm_store["internal_tasks"] = [x for x in internal_tasks if x["id"] != it["id"]]
-                            st.session_state.expanded_task_key = None
-                            commit_and_rerun(st.session_state.crm_store, "Задача удалена")
     else:
         st.info("Внутренних задач нет.")
 
@@ -2632,53 +2756,19 @@ elif st.session_state.active_tab == "Поставщики":
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = sup_key
+                        st.session_state['_dlg_sup_id'] = s['id']
                         st.rerun()
                 if not sup_exp:
                     render_scroll_restore(f"sup_{s['id']}")
-            if sup_exp:
-                with st.container(border=True):
-                    st.markdown(f"**{s.get('name', '')}**")
-                    st.markdown(format_created_date(s), unsafe_allow_html=True)
-                    if s.get("phone"):
-                        render_phone_inline(s["phone"], f"sup_{s['id']}")
-                    info_c, comm_c = st.columns(2)
-                    with info_c:
-                        st.markdown(f"**Email:** {s.get('email', '—')}")
-                        st.markdown(f"**Адрес:** {s.get('address', '—')}")
-                        st.markdown(f"**Категория:** {s.get('category', '—')}")
-                    with comm_c:
-                        if s.get("comment"):
-                            st.markdown(f"**Комментарий:** {s['comment']}")
-                        else:
-                            st.caption("Комментариев нет")
-                    st.markdown("---")
-                    show_sup_edit = f"show_sup_edit_{s['id']}"
-                    if st.button("Редактировать" if not st.session_state.get(show_sup_edit, False) else "Скрыть", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
-                        st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
-                        st.rerun()
-                    if st.session_state.get(show_sup_edit, False):
-                        with st.container(border=True):
-                            esn = st.text_input("Название:", value=s.get("name", ""), key=f"esn_{s['id']}")
-                            esp = st.text_input("Телефон:", value=s.get("phone", ""), key=f"esp_{s['id']}")
-                            ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
-                            esa = st.text_input("Адрес:", value=s.get("address", ""), key=f"esa_{s['id']}")
-                            esc = st.text_input("Категория:", value=s.get("category", ""), key=f"esc_{s['id']}")
-                            escom = st.text_area("Комментарий:", value=s.get("comment", ""), key=f"escom_{s['id']}")
-                            if st.button("Сохранить", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
-                                s["name"] = esn.strip()
-                                s["phone"] = format_phone(esp) if esp else ""
-                                s["email"] = ese.strip()
-                                s["address"] = esa.strip()
-                                s["category"] = esc.strip()
-                                s["comment"] = escom.strip()
-                                s["last_modified"] = now_str()
-                                st.session_state[show_sup_edit] = False
-                                commit_and_rerun(st.session_state.crm_store, "Поставщик обновлён")
-                    if st.session_state.user_role == "admin":
-                        st.markdown("---")
-                        if st.button("Удалить поставщика", key=f"sup_del_{s['id']}", use_container_width=True):
-                            st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
-                            st.session_state.expanded_task_key = None
-                            commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
     else:
         st.info("Поставщиков нет. Добавьте первого.")
+
+# ===== Всплывающие окна для задач и поставщиков =====
+_exp_key = st.session_state.get('expanded_task_key')
+if _exp_key:
+    if _exp_key.startswith('it_'):
+        internal_task_dialog()
+    elif _exp_key.startswith('sup_'):
+        supplier_dialog()
+    else:
+        task_detail_dialog()
