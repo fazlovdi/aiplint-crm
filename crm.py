@@ -169,6 +169,13 @@ st.components.v1.html("""
 """, height=0)
 
 FILE_NAME = "web_crm_database_v2.json"
+
+def _safe_id(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
 YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
 MAX_URL = "https://max.ru"
 MAX_NUMBER = "+79003293300"
@@ -872,39 +879,6 @@ def render_task_detail(t, cl, d, key_prefix):
             else:
                 st.success("Задача проверена")
 
-
-@st.dialog("Детали задачи", width="large")
-def task_detail_dialog():
-    """Открытие деталей задачи во всплывающем окне."""
-    client_id = st.session_state.get('_dlg_client_id')
-    task_number = st.session_state.get('_dlg_task_number', '')
-    deal_id = st.session_state.get('_dlg_deal_id')
-    key_prefix = st.session_state.get('_dlg_key_prefix', '')
-    store = st.session_state.crm_store
-    cl = next((c for c in store.get("clients", []) if c.get("id") == client_id), None)
-    t = None
-    if cl:
-        for tk in cl.get("tasks", []):
-            if tk.get("task_number") == task_number:
-                t = tk
-                break
-    d = None
-    if deal_id:
-        for dd in store.get("deals", []):
-            if dd.get("id") == deal_id:
-                d = dd
-                break
-    if t and cl:
-        render_task_detail(t, cl, d, key_prefix)
-        st.markdown("---")
-        if st.button("Закрыть", key=f"dlg_close_{key_prefix}", use_container_width=True):
-            st.session_state.expanded_task_key = None
-            st.rerun()
-    else:
-        st.error("Задача не найдена")
-        st.session_state.expanded_task_key = None
-
-
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
     tk_done = t.get("done", False)
@@ -932,13 +906,10 @@ def render_task_row(t, cl, d, task_key, key_prefix):
                 save_scroll_and_rerun()
             else:
                 st.session_state.expanded_task_key = task_key
-                st.session_state['_dlg_client_id'] = cl["id"]
-                st.session_state['_dlg_task_number'] = t.get("task_number", "")
-                st.session_state['_dlg_deal_id'] = d["id"] if d else None
-                st.session_state['_dlg_key_prefix'] = key_prefix
                 st.rerun()
         if not is_tk_exp:
             render_scroll_restore(f"tk_{task_key}")
+    if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
 
 def get_entity_border(tasks_list):
     has_overdue = any(not t.get("done") and is_task_overdue(t) for t in tasks_list)
@@ -1337,136 +1308,6 @@ if _auth_token and not st.session_state.authenticated:
 MGR_PLACEHOLDER = "Выбери ответственного"
 
 st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
-
-
-@st.dialog("Внутренняя задача", width="medium")
-def internal_task_dialog():
-    """Открытие внутренней задачи во всплывающем окне."""
-    it_id = st.session_state.get('_dlg_it_id')
-    store = st.session_state.crm_store
-    it = next((x for x in store.get("internal_tasks", []) if x.get("id") == it_id), None)
-    if not it:
-        st.error("Задача не найдена")
-        st.session_state.expanded_task_key = None
-        return
-    it_done = it.get("done", False)
-    with st.container(border=True):
-        st.markdown(f"**Задача №{it['id']}**")
-        st.markdown(f"**Тема:** {it.get('text', '')}")
-        st.markdown(f"**Срок:** {format_date(it.get('deadline', ''))}")
-        st.markdown(f"**Ответственный:** {it.get('manager', '—')}")
-        if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
-        if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
-        st.markdown("---")
-        if not it_done:
-            show_it_complete = f"show_it_complete_{it['id']}"
-            if st.button("Выполнить", key=f"it_complete_btn_{it['id']}", type="primary", use_container_width=True):
-                st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
-                st.rerun()
-            if st.session_state.get(show_it_complete, False):
-                it_report = st.text_area("Отчёт:", key=f"it_report_{it['id']}", height=80)
-                if st.button("Подтвердить", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
-                    if it_report.strip():
-                        it["done"] = True
-                        it["completed_report"] = it_report.strip()
-                        it["last_modified"] = now_str()
-                        st.session_state[show_it_complete] = False
-                        commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
-                    else:
-                        st.warning("Введите отчёт")
-            st.markdown("---")
-            show_it_edit = f"show_it_edit_{it['id']}"
-            if st.button("Редактировать", key=f"it_edit_btn_{it['id']}", use_container_width=True):
-                st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
-                st.rerun()
-            if st.session_state.get(show_it_edit, False):
-                with st.container(border=True):
-                    eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
-                    eit_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
-                    eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
-                    eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
-                    if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
-                        if not eit_mgr:
-                            st.warning("Выберите ответственного")
-                        else:
-                            it["text"] = eit_topic
-                            it["manager"] = eit_mgr
-                            it["deadline"] = eit_dl.isoformat()
-                            it["comment"] = eit_comment
-                            it["last_modified"] = now_str()
-                            st.session_state[show_it_edit] = False
-                            commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
-    if st.session_state.user_role == "admin":
-        st.markdown("---")
-        if st.button("Удалить задачу", key=f"it_del_{it['id']}", use_container_width=True):
-            st.session_state.crm_store["internal_tasks"] = [x for x in store.get("internal_tasks", []) if x["id"] != it["id"]]
-            st.session_state.expanded_task_key = None
-            commit_and_rerun(st.session_state.crm_store, "Задача удалена")
-    st.markdown("---")
-    if st.button("Закрыть", key="dlg_close_it", use_container_width=True):
-        st.session_state.expanded_task_key = None
-        st.rerun()
-
-
-@st.dialog("Поставщик", width="medium")
-def supplier_dialog():
-    """Открытие карточки поставщика во всплывающем окне."""
-    sup_id = st.session_state.get('_dlg_sup_id')
-    store = st.session_state.crm_store
-    s = next((x for x in store.get("suppliers", []) if x.get("id") == sup_id), None)
-    if not s:
-        st.error("Поставщик не найден")
-        st.session_state.expanded_task_key = None
-        return
-    with st.container(border=True):
-        st.markdown(f"**{s.get('name', '')}**")
-        st.markdown(format_created_date(s), unsafe_allow_html=True)
-        if s.get("phone"):
-            render_phone_inline(s["phone"], f"sup_{s['id']}")
-        info_c, comm_c = st.columns(2)
-        with info_c:
-            st.markdown(f"**Email:** {s.get('email', '—')}")
-            st.markdown(f"**Адрес:** {s.get('address', '—')}")
-            st.markdown(f"**Категория:** {s.get('category', '—')}")
-        with comm_c:
-            if s.get("comment"):
-                st.markdown(f"**Комментарий:** {s['comment']}")
-            else:
-                st.caption("Комментариев нет")
-        st.markdown("---")
-        show_sup_edit = f"show_sup_edit_{s['id']}"
-        if st.button("Редактировать" if not st.session_state.get(show_sup_edit, False) else "Скрыть", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
-            st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
-            st.rerun()
-        if st.session_state.get(show_sup_edit, False):
-            with st.container(border=True):
-                esn = st.text_input("Название:", value=s.get("name", ""), key=f"esn_{s['id']}")
-                esp = st.text_input("Телефон:", value=s.get("phone", ""), key=f"esp_{s['id']}")
-                ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
-                esa = st.text_input("Адрес:", value=s.get("address", ""), key=f"esa_{s['id']}")
-                esc = st.text_input("Категория:", value=s.get("category", ""), key=f"esc_{s['id']}")
-                escom = st.text_area("Комментарий:", value=s.get("comment", ""), key=f"escom_{s['id']}")
-                if st.button("Сохранить", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
-                    s["name"] = esn.strip()
-                    s["phone"] = format_phone(esp) if esp else ""
-                    s["email"] = ese.strip()
-                    s["address"] = esa.strip()
-                    s["category"] = esc.strip()
-                    s["comment"] = escom.strip()
-                    s["last_modified"] = now_str()
-                    st.session_state[show_sup_edit] = False
-                    commit_and_rerun(st.session_state.crm_store, "Поставщик обновлён")
-    if st.session_state.user_role == "admin":
-        st.markdown("---")
-        if st.button("Удалить поставщика", key=f"sup_del_{s['id']}", use_container_width=True):
-            st.session_state.crm_store["suppliers"] = [x for x in store.get("suppliers", []) if x["id"] != s["id"]]
-            st.session_state.expanded_task_key = None
-            commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
-    st.markdown("---")
-    if st.button("Закрыть", key="dlg_close_sup", use_container_width=True):
-        st.session_state.expanded_task_key = None
-        st.rerun()
-
 
 def check_login(username, password):
     for u in st.session_state.crm_store.get("users", []):
@@ -2554,13 +2395,11 @@ elif st.session_state.active_tab == "Задачи":
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = task_key
-                        st.session_state['_dlg_client_id'] = cl["id"]
-                        st.session_state['_dlg_task_number'] = task.get("task_number", "")
-                        st.session_state['_dlg_deal_id'] = task.get("deal_id")
-                        st.session_state['_dlg_key_prefix'] = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
                         st.rerun()
                 if not is_tk_exp:
                     render_scroll_restore(f"tb_{task_key}")
+            if is_tk_exp:
+                render_task_detail(task, cl, di.get(task.get("deal_id")), f"tb_{sk}_{t['client_id']}_{t['task_idx']}")
         col_new, col_today, col_future, col_review = st.columns(4)
         with col_new:
             with st.container(border=True):
@@ -2607,11 +2446,9 @@ elif st.session_state.active_tab == "Задачи":
                             save_scroll_and_rerun()
                         else:
                             st.session_state.expanded_task_key = task_key
-                            st.session_state['_dlg_client_id'] = cl["id"]
-                            st.session_state['_dlg_task_number'] = task.get("task_number", "")
-                            st.session_state['_dlg_deal_id'] = task.get("deal_id")
-                            st.session_state['_dlg_key_prefix'] = task_key
                             st.rerun()
+                    if is_tk_exp:
+                        render_task_detail(task, cl, di.get(task.get("deal_id")), task_key)
         else:
             st.caption("Архив пуст.")
 
@@ -2636,7 +2473,7 @@ elif st.session_state.active_tab == "Внутренние задачи":
                     st.warning("Выберите ответственного")
                 else:
                     new_it = {
-                        "id": (max([t.get("id", 0) for t in internal_tasks], default=0)) + 1,
+                        "id": (max([_safe_id(t.get("id", 0)) for t in internal_tasks], default=0)) + 1,
                         "text": it_topic.strip(),
                         "deadline": it_dl.isoformat(),
                         "done": False,
@@ -2687,10 +2524,62 @@ elif st.session_state.active_tab == "Внутренние задачи":
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = it_key
-                        st.session_state['_dlg_it_id'] = it['id']
                         st.rerun()
                 if not it_exp:
                     render_scroll_restore(f"it_{it['id']}")
+            if it_exp:
+                with st.container(border=True):
+                    st.markdown(f"**Задача №{it['id']}**")
+                    st.markdown(f"**Тема:** {it.get('text', '')}")
+                    st.markdown(f"**Срок:** {format_date(it.get('deadline', ''))}")
+                    st.markdown(f"**Ответственный:** {it.get('manager', '—')}")
+                    if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
+                    if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
+                    st.markdown("---")
+                    if not it_done:
+                        show_it_complete = f"show_it_complete_{it['id']}"
+                        if st.button("Выполнить", key=f"it_complete_btn_{it['id']}", type="primary", use_container_width=True):
+                            st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
+                            st.rerun()
+                        if st.session_state.get(show_it_complete, False):
+                            it_report = st.text_area("Отчёт:", key=f"it_report_{it['id']}", height=80)
+                            if st.button("Подтвердить", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
+                                if it_report.strip():
+                                    it["done"] = True
+                                    it["completed_report"] = it_report.strip()
+                                    it["last_modified"] = now_str()
+                                    st.session_state[show_it_complete] = False
+                                    commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
+                                else:
+                                    st.warning("Введите отчёт")
+                        st.markdown("---")
+                        show_it_edit = f"show_it_edit_{it['id']}"
+                        if st.button("Редактировать", key=f"it_edit_btn_{it['id']}", use_container_width=True):
+                            st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
+                            st.rerun()
+                        if st.session_state.get(show_it_edit, False):
+                            with st.container(border=True):
+                                eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
+                                eit_mgr = st.selectbox("Ответственный:", [""] + get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else ([""] + get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
+                                eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD/MM/YYYY", key=f"eit_dl_{it['id']}")
+                                eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
+                                if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
+                                    if not eit_mgr:
+                                        st.warning("Выберите ответственного")
+                                    else:
+                                        it["text"] = eit_topic
+                                        it["manager"] = eit_mgr
+                                        it["deadline"] = eit_dl.isoformat()
+                                        it["comment"] = eit_comment
+                                        it["last_modified"] = now_str()
+                                        st.session_state[show_it_edit] = False
+                                        commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
+                    if st.session_state.user_role == "admin":
+                        st.markdown("---")
+                        if st.button("Удалить задачу", key=f"it_del_{it['id']}", use_container_width=True):
+                            st.session_state.crm_store["internal_tasks"] = [x for x in internal_tasks if x["id"] != it["id"]]
+                            st.session_state.expanded_task_key = None
+                            commit_and_rerun(st.session_state.crm_store, "Задача удалена")
     else:
         st.info("Внутренних задач нет.")
 
@@ -2756,19 +2645,53 @@ elif st.session_state.active_tab == "Поставщики":
                         save_scroll_and_rerun()
                     else:
                         st.session_state.expanded_task_key = sup_key
-                        st.session_state['_dlg_sup_id'] = s['id']
                         st.rerun()
                 if not sup_exp:
                     render_scroll_restore(f"sup_{s['id']}")
+            if sup_exp:
+                with st.container(border=True):
+                    st.markdown(f"**{s.get('name', '')}**")
+                    st.markdown(format_created_date(s), unsafe_allow_html=True)
+                    if s.get("phone"):
+                        render_phone_inline(s["phone"], f"sup_{s['id']}")
+                    info_c, comm_c = st.columns(2)
+                    with info_c:
+                        st.markdown(f"**Email:** {s.get('email', '—')}")
+                        st.markdown(f"**Адрес:** {s.get('address', '—')}")
+                        st.markdown(f"**Категория:** {s.get('category', '—')}")
+                    with comm_c:
+                        if s.get("comment"):
+                            st.markdown(f"**Комментарий:** {s['comment']}")
+                        else:
+                            st.caption("Комментариев нет")
+                    st.markdown("---")
+                    show_sup_edit = f"show_sup_edit_{s['id']}"
+                    if st.button("Редактировать" if not st.session_state.get(show_sup_edit, False) else "Скрыть", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
+                        st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
+                        st.rerun()
+                    if st.session_state.get(show_sup_edit, False):
+                        with st.container(border=True):
+                            esn = st.text_input("Название:", value=s.get("name", ""), key=f"esn_{s['id']}")
+                            esp = st.text_input("Телефон:", value=s.get("phone", ""), key=f"esp_{s['id']}")
+                            ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
+                            esa = st.text_input("Адрес:", value=s.get("address", ""), key=f"esa_{s['id']}")
+                            esc = st.text_input("Категория:", value=s.get("category", ""), key=f"esc_{s['id']}")
+                            escom = st.text_area("Комментарий:", value=s.get("comment", ""), key=f"escom_{s['id']}")
+                            if st.button("Сохранить", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
+                                s["name"] = esn.strip()
+                                s["phone"] = format_phone(esp) if esp else ""
+                                s["email"] = ese.strip()
+                                s["address"] = esa.strip()
+                                s["category"] = esc.strip()
+                                s["comment"] = escom.strip()
+                                s["last_modified"] = now_str()
+                                st.session_state[show_sup_edit] = False
+                                commit_and_rerun(st.session_state.crm_store, "Поставщик обновлён")
+                    if st.session_state.user_role == "admin":
+                        st.markdown("---")
+                        if st.button("Удалить поставщика", key=f"sup_del_{s['id']}", use_container_width=True):
+                            st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
+                            st.session_state.expanded_task_key = None
+                            commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
     else:
         st.info("Поставщиков нет. Добавьте первого.")
-
-# ===== Всплывающие окна для задач и поставщиков =====
-_exp_key = st.session_state.get('expanded_task_key')
-if _exp_key:
-    if _exp_key.startswith('it_'):
-        internal_task_dialog()
-    elif _exp_key.startswith('sup_'):
-        supplier_dialog()
-    else:
-        task_detail_dialog()
