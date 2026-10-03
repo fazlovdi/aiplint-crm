@@ -458,9 +458,9 @@ def get_task_sort_date(task):
 
 def format_date(ds):
     if not ds: return ""
-    try: return datetime.strptime(ds, "%Y-%m-%d").strftime("%d/%m/%Y")
+    try: return datetime.strptime(ds, "%Y-%m-%d").strftime("%d.%m.%Y")
     except:
-        try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").strftime("%d/%m/%Y")
+        try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").strftime("%d.%m.%Y")
         except: return ds
 
 def format_created_date(entity):
@@ -581,7 +581,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d/%m/%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -638,7 +638,10 @@ def render_entity_chat(entity, entity_type, entity_id):
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
-        # CSS to align print and edit buttons
+        # Top row: left column = header + print, right column = edit pencil
+        # Matches the two-column layout (left_col, right_col) below
+        _top_left, _top_right = st.columns(2)
+        # CSS to align print and edit buttons at same level
         st.markdown(f"""<style>
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stButton button,
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button {{
@@ -654,19 +657,8 @@ def render_task_detail(t, cl, d, key_prefix):
             display: flex !important;
             align-items: center !important;
         }}
-        /* Remove top gap in right column */
-        .st-key-task_detail_{key_prefix} > div > div:nth-child(2) > div > div:first-child {{
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-        }}
-        .st-key-task_detail_{key_prefix} > div > div:nth-child(2) {{
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-        }}
         </style>""", unsafe_allow_html=True)
-        # Two columns: left = everything, right = comments + files
-        left_col, right_col = st.columns(2)
-        with left_col:
+        with _top_left:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
@@ -690,8 +682,24 @@ def render_task_detail(t, cl, d, key_prefix):
                     st.subheader(_task_header)
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-            st.markdown(format_created_date(t), unsafe_allow_html=True)
+        with _top_right:
+            show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
+            if not show_edit:
+                pencil_key = f"btn_pencil_edit_{key_prefix}"
+                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
+                    st.session_state[f"show_edit_task_{key_prefix}"] = True
+                    st.rerun()
+        st.markdown(format_created_date(t), unsafe_allow_html=True)
+        
+        
+        
+        # Two columns: left = info + action buttons, right = comments + files
+        left_col, right_col = st.columns(2)
+        
+        with left_col:
             show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
+            
             if show_edit_task:
                 # Inline editing mode
                 et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
@@ -744,6 +752,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 # Display mode
                 st.markdown(f"**\u0422\u0435\u043c\u0430:** {t.get('text', '')}")
                 st.markdown(f"**\u0422\u0438\u043f:** {t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')}")
+                
                 # Deadline: clickable date, no pencil button
                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                 if show_edit_dl:
@@ -767,6 +776,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key, help="\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0447\u0442\u043e\u0431\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                         st.rerun()
+                
                 # Editable responsible person (replaces delegate button)
                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
                 mgr_options = get_managers_list()
@@ -780,6 +790,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     cl["last_modified"] = now_str()
                     if d: d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                
                 if t.get('in_work') and not t.get('done'):
                     st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
                 st.markdown("---")
@@ -792,12 +803,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
-                # Edit pencil button — same compact size, left-aligned, above action buttons
-                pencil_key = f"btn_pencil_edit_{key_prefix}"
-                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                    st.session_state[f"show_edit_task_{key_prefix}"] = True
-                    st.rerun()
+                
                 # Action buttons in left column (below task info)
                 st.markdown("---")
                 tk_done = t.get("done", False)
@@ -914,8 +920,10 @@ def render_task_detail(t, cl, d, key_prefix):
                             st.info("\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0432\u0442\u043e\u0440\u043e\u043c")
                     else:
                         st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
+        
         with right_col:
-            # Comments block (now above files) — no gap at top
+            st.markdown(f"""<style>.st-key-task_detail_{key_prefix} > div:nth-child(2) > div:nth-child(2) {{ margin-top: 0 !important; padding-top: 0 !important; }}</style>""", unsafe_allow_html=True)
+            # Comments block (now above files)
             if t.get("task_comments"):
                 st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 for tc in t["task_comments"]:
