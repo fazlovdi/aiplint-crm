@@ -520,7 +520,7 @@ def render_file_thumbs(files, prefix, allow_delete=False):
     if not files:
         st.caption("Файлов нет")
         return
-    # CSS to match download button and description height with primary action buttons
+    # CSS: download buttons + placeholder styling + base textarea height
     st.markdown("""<style>
     .stDownloadButton > button {
         min-height: 38px !important;
@@ -528,6 +528,20 @@ def render_file_thumbs(files, prefix, allow_delete=False):
         font-size: 0.95rem !important;
         font-weight: 600 !important;
         border-radius: 10px !important;
+    }
+    .st-key-fdesc textarea {
+        min-height: 28px !important;
+        padding: 0.35rem 0.6rem !important;
+        font-size: 0.85rem !important;
+        border-radius: 10px !important;
+        resize: none !important;
+        overflow: hidden !important;
+    }
+    .st-key-fdesc textarea::placeholder {
+        font-size: 0.68rem !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        overflow: hidden !important;
     }
     </style>""", unsafe_allow_html=True)
     all_files = files
@@ -550,47 +564,68 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
                     st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
 
-                # Description field (editable) - auto-grow via JS
+                # Description field: one line by default, auto-grow via JS in real time
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
-                # Default: 1 line (~28px). Pre-grow if saved text has explicit newlines.
-                _init_lines = max(1, cur_desc.count('\n') + 1) if cur_desc else 1
-                _init_height = 28 + (_init_lines - 1) * 20
+                # Per-field CSS: fixed one-line height, JS overrides with !important on input
                 st.markdown(f"""<style>
-                .st-key-{desc_key} .stTextArea > div > textarea {{
-                    min-height: 28px !important;
-                    height: {_init_height}px !important;
-                    padding: 0.35rem 0.6rem !important;
-                    font-size: 0.9rem !important;
-                    border-radius: 10px !important;
-                    resize: none !important;
-                    overflow: hidden !important;
-                    line-height: 1.4 !important;
-                }}
-                .st-key-{desc_key} .stTextArea > div > textarea::placeholder {{
-                    font-size: 0.68rem !important;
-                    white-space: nowrap !important;
-                    overflow: hidden !important;
-                    text-overflow: ellipsis !important;
-                }}
-                </style>""", unsafe_allow_html=True)
-                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_init_height)
-                # JavaScript: auto-grow textarea on every keystroke + on load
-                st.components.v1.html(f"""<script>(function() {{
-                    var w = window.parent || window;
-                    var ta = w.document.querySelector('.st-key-{desc_key} textarea');
-                    if (!ta) return;
-                    function resize() {{
-                        ta.style.height = '28px';
-                        ta.style.height = Math.max(28, ta.scrollHeight) + 'px';
-                    }}
-                    ta.addEventListener('input', resize);
-                    resize();
-                }})();</script>""", height=0)
+.st-key-{desc_key} .stTextArea > div > textarea {{
+    height: 28px !important;
+    min-height: 28px !important;
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.85rem !important;
+    border-radius: 10px !important;
+    resize: none !important;
+    overflow: hidden !important;
+    line-height: 1.4 !important;
+}}
+.st-key-{desc_key} .stTextArea > div > textarea::placeholder {{
+    font-size: 0.68rem !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+    overflow: hidden !important;
+}}
+</style>""", unsafe_allow_html=True)
+                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=28)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
                         save_data(st.session_state.crm_store)
+
+                # JS: real-time auto-resize — fires on every keystroke, no waiting for Streamlit rerun
+                st.components.v1.html(f"""<script>
+(function() {{
+    var w = window;
+    try {{ if (window.parent && window.parent !== window) w = window.parent; }} catch(e) {{}}
+    var doc = w.document;
+
+    function setupTextarea(key) {{
+        var ta = doc.querySelector('.st-key-' + key + ' textarea');
+        if (!ta) return false;
+        function resize() {{
+            ta.style.setProperty('height', '28px', 'important');
+            ta.style.setProperty('height', ta.scrollHeight + 'px', 'important');
+        }}
+        // Initial resize for pre-filled text
+        resize();
+        // Bind input listener (only once per element)
+        if (!ta.dataset.crmAutoSize) {{
+            ta.dataset.crmAutoSize = '1';
+            ta.addEventListener('input', resize);
+        }}
+        return true;
+    }}
+
+    // Try immediately, retry after short delays if DOM not ready yet
+    if (!setupTextarea('{desc_key}')) {{
+        var attempts = 0;
+        var timer = setInterval(function() {{
+            if (setupTextarea('{desc_key}') || ++attempts > 20) clearInterval(timer);
+        }}, 50);
+    }}
+}})();
+</script>""", height=0)
+
                 # Download button
                 dl_key = f"dl_{prefix}_{i}"
                 st.download_button(label="\u2B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, use_container_width=True)
