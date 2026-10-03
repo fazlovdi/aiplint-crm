@@ -122,6 +122,10 @@ st.markdown("""
         display: none !important;
     }
     /* Custom close button positioning */
+    [data-testid="stDialog"] [data-testid="stVerticalBlock"],
+    [data-testid="stDialog"] > div > div {
+        position: relative !important;
+    }
     .crm-dialog-close-btn button {
         position: absolute !important;
         top: 0.4rem !important;
