@@ -520,83 +520,46 @@ def render_file_thumbs(files, prefix, allow_delete=False):
     if not files:
         st.caption("Файлов нет")
         return
-    img_files, other_files = [], []
-    for ff in files:
-        fn = ff.get("file_name", ff.get("name", "файл"))
-        ext = os.path.splitext(fn)[1].lower()
-        if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]: img_files.append(ff)
-        else: other_files.append(ff)
-    if img_files:
-        ncols = min(len(img_files), 4)
-        cols = st.columns(ncols)
-        for i, ff in enumerate(img_files):
-            with cols[i % ncols]:
-                fp = ff.get("file_path", ff.get("path"))
-                fn = ff.get("file_name", ff.get("name", "файл"))
-                fb = get_file_bytes(fp)
-                if fb:
-                    ext = os.path.splitext(fn)[1].lower()
+    all_files = files
+    ncols = min(len(all_files), 4)
+    if ncols < 1: ncols = 1
+    cols = st.columns(ncols)
+    for i, ff in enumerate(all_files):
+        with cols[i % ncols]:
+            fp = ff.get("file_path", ff.get("path"))
+            fn = ff.get("file_name", ff.get("name", "файл"))
+            fb = get_file_bytes(fp)
+            if fb:
+                ext = os.path.splitext(fn)[1].lower()
+                # Show thumbnail for images
+                if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
                     b64 = base64.b64encode(fb).decode()
-                    mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+                    mt = f"image/{{'jpeg' if ext == '.jpg' else ext[1:]}}"
                     st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" onclick="window.crmOpenLightbox && window.crmOpenLightbox(this.src)" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
-                    # Download and Print buttons as small icons
-                    btn_col1, btn_col2 = st.columns(2)
-                    with btn_col1:
-                        dl_key = f"dl_{prefix}_{i}"
-                        st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;font-size:0.8rem!important;padding:2px 6px!important;min-height:26px!important;border-radius:6px!important; }}</style>", unsafe_allow_html=True)
-                        st.download_button("\U00002B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
-                    with btn_col2:
-                        pr_key = f"pr_{prefix}_{i}"
-                        pr_btn_id = f"prf_{prefix}_{i}"
-                        st.markdown(f'<button id="{pr_btn_id}" style="background:none;border:1px solid #DCE0E5;color:#5A6B7D;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:pointer;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
-                        st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pr_btn_id}');if(!b)return;var b64="{b64}";var mt="{mt}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0;text-align:center"><img src="data:'+mt+';base64,'+b64+'" style="max-width:100%;max-height:100%" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"/></body></html>');w.document.close();}});}})();</script>""", height=0)
-                    if allow_delete and st.session_state.user_role == "admin":
-                        del_key = f"del_{prefix}_{i}"
-                        st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
-                        if st.button("\U0001F5D1", key=del_key, help="Удалить"):
-                            files.pop(i)
-                            commit_and_rerun(st.session_state.crm_store, "Файл удалён")
-    for i, ff in enumerate(other_files):
-        fp = ff.get("file_path", ff.get("path"))
-        fn = ff.get("file_name", ff.get("name", "файл"))
-        fb = get_file_bytes(fp)
-        if fb:
-            ext = os.path.splitext(fn)[1].lower()
-            if ext == ".pdf":
-                b64 = base64.b64encode(fb).decode()
-                pdf_btn_id = f"pdf_view_{prefix}_{i}"
-                st.markdown(f'<button class="custom-print-btn" id="{pdf_btn_id}" style="background:#5A6B7D;margin-bottom:4px;">\U0001F4C4 {fn}</button>', unsafe_allow_html=True)
-                st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pdf_btn_id}');if(!b)return;var b64="{b64}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;var html='<html><head><title>{fn}</title></head><body style="margin:0"><iframe src="data:application/pdf;base64,'+b64+'" style="width:100vw;height:100vh;border:0"></iframe></body></html>';w.document.open();w.document.write(html);w.document.close();}});}})();</script>""", height=0)
-            else:
-                of_btn_id = f"of_view_{prefix}_{i}"
-                st.markdown(f'<button class="custom-print-btn" id="{of_btn_id}" style="background:#5A6B7D;margin-bottom:4px;">\U0001F4C4 {fn}</button>', unsafe_allow_html=True)
-                st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{of_btn_id}');if(!b)return;b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.write('<html><head><title>{fn}</title></head><body><pre style="padding:20px;white-space:pre-wrap;font-family:monospace;">{fn}</pre></body></html>');w.document.close();}});}})();</script>""", height=0)
-            # Download and Print buttons as small icons
-            btn_col1, btn_col2 = st.columns(2)
-            with btn_col1:
-                dl_key = f"dl_{prefix}_o_{i}"
+                else:
+                    # Non-image file: show icon + name
+                    icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
+                    st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
+                # Download button (clickable)
+                dl_key = f"dl_{prefix}_{i}"
                 st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;font-size:0.8rem!important;padding:2px 6px!important;min-height:26px!important;border-radius:6px!important; }}</style>", unsafe_allow_html=True)
                 st.download_button("\U00002B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
-            with btn_col2:
-                pr_btn_id = f"prf_o_{prefix}_{i}"
-                printable = ext in [".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp"]
-                if printable:
-                    b64 = base64.b64encode(fb).decode()
-                    if ext == ".pdf":
-                        st.markdown(f'<button id="{pr_btn_id}" style="background:none;border:1px solid #DCE0E5;color:#5A6B7D;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:pointer;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
-                        st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pr_btn_id}');if(!b)return;var b64="{b64}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0"><iframe src="data:application/pdf;base64,'+b64+'" style="width:100vw;height:100vh;border:0" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"></iframe></body></html>');w.document.close();}});}})();</script>""", height=0)
-                    else:
-                        mt = f"image/{{'jpeg' if ext == '.jpg' else ext[1:]}}"
-                        st.markdown(f'<button id="{pr_btn_id}" style="background:none;border:1px solid #DCE0E5;color:#5A6B7D;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:pointer;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
-                        st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pr_btn_id}');if(!b)return;var b64="{b64}";var mt="{mt}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;w.document.open();w.document.write('<html><head><title>{fn}</title></head><body style="margin:0;text-align:center"><img src="data:'+mt+';base64,'+b64+'" style="max-width:100%;max-height:100%" onload="setTimeout(function(){{try{{window.print()}}catch(e){{}}}},300)"/></body></html>');w.document.close();}});}})();</script>""", height=0)
-                else:
-                    st.markdown(f'<button disabled style="background:none;border:1px solid #E8EBEF;color:#C9CFD7;font-size:0.8rem;padding:2px 6px;min-height:26px;border-radius:6px;cursor:not-allowed;width:100%;">\U0001F5A8\uFE0F Печать</button>', unsafe_allow_html=True)
-            if allow_delete and st.session_state.user_role == "admin":
-                del_key = f"del_{prefix}_o_{i}"
-                st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
-                if st.button("\U0001F5D1 Удалить", key=del_key):
-                    files.pop(len(img_files) + i)
-                    commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+                # Description field (editable)
+                desc_key = f"fdesc_{prefix}_{i}"
+                cur_desc = ff.get("description", "")
+                new_desc = st.text_input("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...")
+                if new_desc != cur_desc:
+                    ff["description"] = new_desc
+                    if hasattr(st.session_state, 'crm_store'):
+                        save_data(st.session_state.crm_store)
+                # Delete button for admin
+                if allow_delete and st.session_state.user_role == "admin":
+                    del_key = f"del_{prefix}_{i}"
+                    st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
+                    if st.button("\U0001F5D1", key=del_key, help="Удалить"):
+                        files.pop(i)
+                        commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+
 
 
 def build_print_html(task, cl, tp, fd):
@@ -679,12 +642,7 @@ def render_task_detail(t, cl, d, key_prefix):
                     st.rerun()
         st.markdown(format_created_date(t), unsafe_allow_html=True)
         
-        # Print button (small printer icon)
-        _tp = t.get("type", "Связаться")
-        _fd = format_date(t.get("deadline", ""))
-        _print_key = f"task_print_{key_prefix}"
-        st.markdown(f"""<style>.st-key-{_print_key} button {{ padding: 2px 10px !important; font-size: 0.85rem !important; min-height: 28px !important; max-width: 40px !important; }}</style>""", unsafe_allow_html=True)
-        render_print_button(t, cl, _tp, _fd, _print_key)
+        
         
         # Two columns: left = info + action buttons, right = comments + files
         left_col, right_col = st.columns(2)
@@ -814,59 +772,53 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.rerun()
                     if st.session_state.get(show_key, False):
                         rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
-                        uf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b/\u0444\u043e\u0442\u043e \u043e\u0442\u0447\u0435\u0442\u0430:", key=f"uf_{key_prefix}", accept_multiple_files=True)
-                        if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
-                            if rt.strip():
-                                t["done"] = True
-                                t["completion_report"] = rt.strip()
-                                t["last_modified"] = now_str()
-                                add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
-                                fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
-                                if fi_list: t["completion_files"] = normalize_file_list(fi_list)
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                st.session_state[show_key] = False
-                                st.session_state[f"show_new_after_{key_prefix}"] = True
-                                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
-                            else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0435\u0442")
-                    if st.session_state.get(f"show_new_after_{key_prefix}", False):
-                        st.markdown("---")
-                        st.markdown("**\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0437\u0430\u0434\u0430\u0447\u0443:**")
-                        nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"nat_topic_{key_prefix}")
-                        nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"nat_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                        nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"nat_dl_{key_prefix}")
-                        nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"nat_comment_{key_prefix}")
-                        nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"nat_files_{key_prefix}", accept_multiple_files=True)
-                        nc1, nc2 = st.columns(2)
-                        with nc1:
-                            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c", key=f"nat_go_{key_prefix}", type="primary", use_container_width=True):
-                                if nt_topic2.strip():
-                                    ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
-                                    prefix2 = "\u0417\u0421" if d else "\u0417\u041a"
-                                    tn2 = generate_task_number(prefix2)
-                                    new_task = {
-                                        "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
-                                        "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
-                                        "completion_report": "", "completion_files": [],
-                                        "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
-                                        "order_amount": 0, "last_modified": now_str(),
-                                        "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
-                                        "in_work": False, "ready_to_ship": False, "delegated_to": None,
-                                        "needs_rework": False, "reviewed": False,
-                                        "task_comments": [], "flagged": False,
-                                        "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "",
-                                        "ship_pay": "", "tk_num": ""
-                                    }
-                                    cl.setdefault("tasks", []).append(new_task)
+                        uf_ver = st.session_state.get(f"uf_ver_{key_prefix}", 0)
+                        uf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b/\u0444\u043e\u0442\u043e \u043e\u0442\u0447\u0435\u0442\u0430:", key=f"uf_{key_prefix}_{uf_ver}", accept_multiple_files=True)
+                        create_new_task = st.checkbox("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u043d\u043e\u0432\u0443\u044e \u0437\u0430\u0434\u0430\u0447\u0443 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435", key=f"cnt_{key_prefix}")
+                        if create_new_task:
+                            with st.container(border=True):
+                                nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"cnt_topic_{key_prefix}")
+                                nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", [""] + get_managers_list(), index=0, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                                nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD/MM/YYYY", key=f"cnt_dl_{key_prefix}")
+                                nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"cnt_comment_{key_prefix}")
+                                nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"cnt_files_{key_prefix}", accept_multiple_files=True)
+                        pc1, pc2 = st.columns(2)
+                        with pc1:
+                            if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
+                                if rt.strip():
+                                    t["done"] = True
+                                    t["completion_report"] = rt.strip()
+                                    t["last_modified"] = now_str()
+                                    add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
+                                    fi_list = save_uploaded_files(uf, (d["client_id"] if d else cl["id"]), "task_report")
+                                    if fi_list: t["completion_files"] = normalize_file_list(fi_list)
                                     cl["last_modified"] = now_str()
                                     if d: d["last_modified"] = now_str()
-                                    add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
-                                    st.session_state[f"show_new_after_{key_prefix}"] = False
-                                    commit_and_rerun(st.session_state.crm_store, "\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
-                                else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043c\u0443")
-                        with nc2:
-                            if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"nat_cancel_{key_prefix}", use_container_width=True):
-                                st.session_state[f"show_new_after_{key_prefix}"] = False
+                                    st.session_state[show_key] = False
+                                    # Create new task if checkbox was checked
+                                    if create_new_task and nt_topic2.strip():
+                                        ntfi_list2 = save_uploaded_files(nt_files2, (d["client_id"] if d else cl["id"]), "task_file") if nt_files2 else []
+                                        prefix2 = "\u0417\u0421" if d else "\u0417\u041a"
+                                        tn2 = generate_task_number(prefix2)
+                                        new_task = {
+                                            "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
+                                            "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
+                                            "completion_report": "", "completion_files": [],
+                                            "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
+                                            "order_amount": 0, "last_modified": now_str(),
+                                            "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
+                                            "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
+                                            "task_comments": [], "flagged": False,
+                                            "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "tk_num": ""
+                                        }
+                                        cl.setdefault("tasks", []).append(new_task)
+                                        add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
+                                    st.session_state[f"uf_ver_{key_prefix}"] = uf_ver + 1
+                                    commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
+                                else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0435\u0442")
+                        with pc2:
+                            if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"cancel_complete_{key_prefix}", use_container_width=True):
+                                st.session_state[show_key] = False
                                 st.rerun()
                 else:
                     if t.get("needs_rework"):
@@ -946,7 +898,8 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 render_file_thumbs(t["task_files"], f"{key_prefix}_files")
             st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
-            ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}", accept_multiple_files=True, label_visibility="collapsed")
+            _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
+            ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
             if st.button("\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
                 if ntf_existing:
                     fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
@@ -955,6 +908,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         t["last_modified"] = now_str()
                         cl["last_modified"] = now_str()
                         if d: d["last_modified"] = now_str()
+                        st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
                         commit_and_rerun(st.session_state.crm_store, "\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b")
                 else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
 
@@ -1623,8 +1577,6 @@ def render_deal_card_expanded(d, cl):
         with dl_files_col:
             st.markdown("**Файлы сделки:**")
             render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
-            if d.get("deal_files"):
-                render_print_file_button(d["deal_files"], f"deal_{d['id']}")
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
             df_ver = st.session_state.deal_file_uploader_ver.get(d["id"], 0)
@@ -1823,8 +1775,6 @@ def render_deal_card_tab(d, cl, cu):
         with dl_files_col:
             st.markdown("**Файлы сделки:**")
             render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True)
-            if d.get("deal_files"):
-                render_print_file_button(d["deal_files"], f"dls_{deal_id}")
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
             df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
