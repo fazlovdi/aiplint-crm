@@ -99,6 +99,17 @@ st.markdown("""
     /* Scroll-to-top button */
     #crm-scroll-top { position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%; background: #bc1661; color: white; border: none; font-size: 20px; cursor: pointer; z-index: 999998; display: none; box-shadow: 0 2px 8px rgba(188,22,97,0.3); transition: opacity 0.2s; }
     #crm-scroll-top:hover { background: #9a1452; }
+    /* Compact task detail */
+    .task-detail-compact .stMarkdown { margin-top: 0.05rem !important; margin-bottom: 0.05rem !important; line-height: 1.3 !important; }
+    .task-detail-compact .stMarkdown p { line-height: 1.3 !important; margin-bottom: 0.1rem !important; }
+    .task-detail-compact .stButton > button { padding: 0.3rem 0.7rem !important; font-size: 0.85rem !important; min-height: 30px !important; margin-top: 0.05rem !important; margin-bottom: 0.05rem !important; }
+    .task-detail-compact .stTextInput > div > input, .task-detail-compact .stTextArea > div > textarea, .task-detail-compact .stSelectbox > div > div { padding: 0.35rem 0.6rem !important; font-size: 0.9rem !important; }
+    .task-detail-compact .stHorizontalBlock { gap: 0.2rem !important; }
+    .task-detail-compact hr { margin: 0.3rem 0 !important; }
+    .task-detail-compact .stFileUploader { padding: 0.4rem !important; }
+    .task-detail-compact .stContainer { margin-top: 0.05rem !important; margin-bottom: 0.05rem !important; }
+    .task-detail-compact [data-testid="stMetric"] { padding: 0.4rem 0.6rem !important; }
+
     /* Bell button compact */
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
 
@@ -528,9 +539,13 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                     b64 = base64.b64encode(fb).decode()
                     mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
                     st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" onclick="window.crmOpenLightbox && window.crmOpenLightbox(this.src)" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
-                    st.download_button("\U00002B07", data=fb, file_name=fn, key=f"dl_{prefix}_{i}")
+                    dl_key = f"dl_{prefix}_{i}"
+                    st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:none!important;color:#bc1661!important;font-size:0.75rem!important;padding:0!important;text-decoration:underline!important; }}</style>", unsafe_allow_html=True)
+                    st.download_button("\U00002B07", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
                     if allow_delete and st.session_state.user_role == "admin":
-                        if st.button("\U0001F5D1", key=f"del_{prefix}_{i}", help="Удалить"):
+                        del_key = f"del_{prefix}_{i}"
+                        st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
+                        if st.button("\U0001F5D1", key=del_key, help="Удалить"):
                             files.pop(i)
                             commit_and_rerun(st.session_state.crm_store, "Файл удалён")
     for i, ff in enumerate(other_files):
@@ -544,11 +559,13 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 pdf_btn_id = f"pdf_view_{prefix}_{i}"
                 st.markdown(f'<button class="custom-print-btn" id="{pdf_btn_id}" style="background:#5A6B7D;margin-bottom:4px;">\U0001F4C4 {fn}</button>', unsafe_allow_html=True)
                 st.components.v1.html(f"""<script>(function(){{var b=window.parent.document.getElementById('{pdf_btn_id}');if(!b)return;var b64="{b64}";b.addEventListener('click',function(){{var w=window.open('','_blank');if(!w)return;var html='<html><head><title>{fn}</title></head><body style="margin:0"><iframe src="data:application/pdf;base64,'+b64+'" style="width:100vw;height:100vh;border:0"></iframe></body></html>';w.document.open();w.document.write(html);w.document.close();}});}})();</script>""", height=0)
-                st.download_button(f"\U00002B07 {fn}", data=fb, file_name=fn, mime="application/pdf", key=f"dl_{prefix}_o_{i}")
-            else:
-                st.download_button(f"\U0001F4C4 {fn}", data=fb, file_name=fn, key=f"dl_{prefix}_o_{i}")
+            dl_key = f"dl_{prefix}_o_{i}"
+            st.markdown(f"<style>.st-key-{dl_key} button {{ background:none!important;border:none!important;color:#bc1661!important;font-size:0.85rem!important;padding:2px 0!important;text-decoration:underline!important;font-weight:500!important; }}</style>", unsafe_allow_html=True)
+            st.download_button(f"\U0001F4C4 {fn}", data=fb, file_name=fn, key=dl_key, help=f"Скачать {fn}")
             if allow_delete and st.session_state.user_role == "admin":
-                if st.button("\U0001F5D1 Удалить", key=f"del_{prefix}_o_{i}"):
+                del_key = f"del_{prefix}_o_{i}"
+                st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
+                if st.button("\U0001F5D1 Удалить", key=del_key):
                     files.pop(len(img_files) + i)
                     commit_and_rerun(st.session_state.crm_store, "Файл удалён")
 
@@ -615,18 +632,20 @@ def render_entity_chat(entity, entity_type, entity_id):
         else: st.warning("Введите текст")
 
 def render_task_detail(t, cl, d, key_prefix):
-    with st.container(border=True):
+    with st.container(border=True, key=f"task_detail_{key_prefix}"):
+        st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # Top row: task number + pencil edit button
         num_col, edit_col = st.columns([20, 1])
         with num_col:
             st.markdown(f"**\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}**")
         with edit_col:
             show_edit = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-            pencil_key = f"btn_pencil_edit_{key_prefix}"
-            st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 28px !important; }}</style>", unsafe_allow_html=True)
-            if st.button("\u270e" if not show_edit else "\u2714", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                st.session_state[f"show_edit_task_{key_prefix}"] = not show_edit
-                st.rerun()
+            if not show_edit:
+                pencil_key = f"btn_pencil_edit_{key_prefix}"
+                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 28px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
+                    st.session_state[f"show_edit_task_{key_prefix}"] = True
+                    st.rerun()
         st.markdown(format_created_date(t), unsafe_allow_html=True)
         
         # Two columns: left = info + action buttons, right = comments + files
@@ -682,34 +701,29 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown(f"**\u0422\u0435\u043c\u0430:** {t.get('text', '')}")
                 st.markdown(f"**\u0422\u0438\u043f:** {t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')}")
                 
-                # Deadline line with pencil button
-                dl_label_col, dl_pencil_col = st.columns([20, 1])
-                with dl_label_col:
-                    show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
-                    if show_edit_dl:
-                        ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD/MM/YYYY", key=f"dl_inline_{key_prefix}")
-                        dl_btn_col1, dl_btn_col2 = st.columns(2)
-                        with dl_btn_col1:
-                            if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
-                                t["deadline"] = ndd.isoformat()
-                                t["last_modified"] = now_str()
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                                commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
-                        with dl_btn_col2:
-                            if st.button("\u041e\u0442\u043c.", key=f"dl_cancel_{key_prefix}", use_container_width=True):
-                                st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                                st.rerun()
-                    else:
-                        st.markdown(f"**\u0421\u0440\u043e\u043a:** {format_date(t.get('deadline', ''))}")
-                with dl_pencil_col:
-                    if not show_edit_dl:
-                        dl_pencil_key = f"btn_pencil_dl_{key_prefix}"
-                        st.markdown(f"<style>.st-key-{dl_pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 28px !important; }}</style>", unsafe_allow_html=True)
-                        if st.button("\u270e", key=dl_pencil_key, help="\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
-                            st.session_state[f"show_edit_dl_{key_prefix}"] = True
+                # Deadline: clickable date, no pencil button
+                show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
+                if show_edit_dl:
+                    ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD/MM/YYYY", key=f"dl_inline_{key_prefix}")
+                    dl_btn_col1, dl_btn_col2 = st.columns(2)
+                    with dl_btn_col1:
+                        if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
+                            t["deadline"] = ndd.isoformat()
+                            t["last_modified"] = now_str()
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                    with dl_btn_col2:
+                        if st.button("\u041e\u0442\u043c.", key=f"dl_cancel_{key_prefix}", use_container_width=True):
+                            st.session_state[f"show_edit_dl_{key_prefix}"] = False
                             st.rerun()
+                else:
+                    dl_btn_key = f"btn_dl_click_{key_prefix}"
+                    st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:#2C3E50!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
+                    if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key, help="\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0447\u0442\u043e\u0431\u044b \u0438\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0441\u0440\u043e\u043a"):
+                        st.session_state[f"show_edit_dl_{key_prefix}"] = True
+                        st.rerun()
                 
                 # Editable responsible person (replaces delegate button)
                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
@@ -742,9 +756,6 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
-                    render_print_button(t, cl, t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f'), format_date(t.get('deadline', '')), f"{key_prefix}_print")
-                    if t.get("task_files"):
-                        render_print_file_button(t["task_files"], f"{key_prefix}_pfile")
                     st.markdown("---")
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
