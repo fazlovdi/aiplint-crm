@@ -842,7 +842,6 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["dialog_deal_key"] = _deal_id
                         st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("dialog_deal_key", None)
                         st.session_state["_in_dialog"] = False
                         st.rerun()
                 with _print_inner:
@@ -1962,7 +1961,7 @@ def render_deal_standalone(d, cl, cu):
 
 
 def render_deal_detail(d, cl, cu, key_prefix):
-    """Детали сделки в 2 колонки — для всплывающего окна."""
+    """Детали сделки в 2 колонки — как render_task_detail."""
     deal_id = d["id"]
     with st.container(border=True, key=f"deal_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-deal_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-deal_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
@@ -1999,13 +1998,13 @@ def render_deal_detail(d, cl, cu, key_prefix):
             st.subheader(num)
             if d.get("deal_title"):
                 st.markdown(f"**{d['deal_title']}**")
-            st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
             st.markdown(format_created_date(d), unsafe_allow_html=True)
+            st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
             st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
             ps = d.get("payment_status", "Не оплачено")
             inject_payment_container_css(deal_id, ps)
-            with st.container(key=f"ps_wrap_{key_prefix}"):
-                new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"dd_ps_{key_prefix}")
+            with st.container(key=f"ps_wrap_{deal_id}"):
+                new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"dls_ps_{deal_id}")
             if new_ps != ps:
                 d["payment_status"] = new_ps
                 d["last_modified"] = now_str()
@@ -2013,16 +2012,16 @@ def render_deal_detail(d, cl, cu, key_prefix):
             if d.get("manager"):
                 st.markdown(f"**Ответственный:** {d.get('manager')}")
             st.markdown("---")
-            show_edit_deal = st.session_state.get(f"dd_show_edit_{key_prefix}", False)
-            if st.button("Редактировать сделку" if not show_edit_deal else "Скрыть", key=f"dd_edit_toggle_{key_prefix}", use_container_width=True):
-                st.session_state[f"dd_show_edit_{key_prefix}"] = not show_edit_deal
+            show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
+            if st.button("Редактировать сделку" if not show_edit_deal else "Скрыть", key=f"dls_edit_toggle_{deal_id}", use_container_width=True):
+                st.session_state[f"dls_show_edit_{deal_id}"] = not show_edit_deal
                 _smart_rerun()
             if show_edit_deal:
                 with st.container(border=True):
-                    et = st.text_input("Название сделки:", value=d.get("deal_title", ""), key=f"dd_et_{key_prefix}")
-                    eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dd_eb_{key_prefix}", placeholder="Введите сумму")
-                    em = st.selectbox("Ответственный:", get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else (get_managers_list()).index(d.get('manager', '')), key=f"dd_em_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                    if st.button("Сохранить", key=f"dd_es_{key_prefix}", use_container_width=True, type="primary"):
+                    et = st.text_input("Название сделки:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
+                    eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
+                    em = st.selectbox("Ответственный:", get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else (get_managers_list()).index(d.get('manager', '')), key=f"dls_em_{deal_id}", placeholder=MGR_PLACEHOLDER)
+                    if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
                         if not em:
                             st.warning("Выберите ответственного")
                         else:
@@ -2030,14 +2029,14 @@ def render_deal_detail(d, cl, cu, key_prefix):
                             d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
                             d["manager"] = em
                             d["last_modified"] = now_str()
-                            st.session_state[f"dd_show_edit_{key_prefix}"] = False
+                            st.session_state[f"dls_show_edit_{deal_id}"] = False
                             commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
             st.markdown("---")
-            action_key = f"dd_action_{key_prefix}"
+            action_key = f"dls_action_{deal_id}"
             action = st.session_state.get(action_key)
             current_status = d.get("status", "Новый")
             if current_status == "Новый":
-                if st.button("Взять в работу", key=f"dd_take_{key_prefix}", use_container_width=True, type="primary"):
+                if st.button("Взять в работу", key=f"dls_take_{deal_id}", use_container_width=True, type="primary"):
                     d["status"] = "В работе"
                     if not d.get("manager"):
                         d["manager"] = cu
@@ -2046,15 +2045,15 @@ def render_deal_detail(d, cl, cu, key_prefix):
             elif current_status == "В работе":
                 cc1, cc2 = st.columns(2)
                 with cc1:
-                    if st.button("Успешно завершена", key=f"dd_close_{key_prefix}", use_container_width=True, type="primary"):
+                    if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
                         st.session_state[action_key] = "close"
                         _smart_rerun()
                 with cc2:
-                    if st.button("В архив", key=f"dd_arch_{key_prefix}", use_container_width=True):
+                    if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
                         st.session_state[action_key] = "archive"
                         _smart_rerun()
             elif current_status in ("Сделка закрыта", "Архив"):
-                if st.button("Вернуть в работу", key=f"dd_reopen_{key_prefix}", use_container_width=True):
+                if st.button("Вернуть в работу", key=f"dls_reopen_{deal_id}", use_container_width=True):
                     d["status"] = "В работе"
                     d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "Сделка возвращена")
@@ -2064,14 +2063,14 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 ex_files = d.get("close_files", []) if is_close else d.get("archive_files", [])
                 with st.container(border=True):
                     st.markdown(f"**{btn_label}: отчёт по сделке**")
-                    rep = st.text_area("Отчёт по сделке (обязательно):", key=f"dd_rep_{key_prefix}_{action}", height=100)
+                    rep = st.text_area("Отчёт по сделке (обязательно):", key=f"dls_rep_{deal_id}_{action}", height=100)
                     if ex_files:
                         st.markdown("**Ранее загруженный файл:**")
-                        render_file_thumbs(ex_files, f"dd_ex_{key_prefix}_{action}")
-                    up = st.file_uploader("Добавить файл:", key=f"dd_upf_{key_prefix}_{action}", accept_multiple_files=True)
+                        render_file_thumbs(ex_files, f"dls_ex_{deal_id}_{action}")
+                    up = st.file_uploader("Добавить файл:", key=f"dls_upf_{deal_id}_{action}", accept_multiple_files=True)
                     bc1, bc2 = st.columns(2)
                     with bc1:
-                        if st.button("Подтвердить", key=f"dd_conf_{key_prefix}_{action}", use_container_width=True, type="primary"):
+                        if st.button("Подтвердить", key=f"dls_conf_{deal_id}_{action}", use_container_width=True, type="primary"):
                             if not rep.strip():
                                 st.error("Заполните отчёт по сделке")
                             else:
@@ -2095,39 +2094,40 @@ def render_deal_detail(d, cl, cu, key_prefix):
                                 st.session_state[action_key] = None
                                 commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
                     with bc2:
-                        if st.button("Отмена", key=f"dd_cancel_{key_prefix}_{action}", use_container_width=True):
+                        if st.button("Отмена", key=f"dls_cancel_{deal_id}_{action}", use_container_width=True):
                             st.session_state[action_key] = None
                             _smart_rerun()
             if current_status == "Сделка закрыта" and d.get("close_report"):
                 st.markdown("---")
                 st.markdown(f"**Отчёт:** {d.get('close_report')}")
                 if d.get("close_files"):
-                    render_file_thumbs(d["close_files"], f"dd_cf_{key_prefix}")
+                    render_file_thumbs(d["close_files"], f"dls_cf_{deal_id}")
             if current_status == "Архив" and d.get("archive_report"):
                 st.markdown("---")
                 st.markdown(f"**Отчёт:** {d.get('archive_report')}")
                 if d.get("archive_files"):
-                    render_file_thumbs(d["archive_files"], f"dd_af_{key_prefix}")
+                    render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
             st.markdown("---")
             dl_tasks = [t for t in (cl.get("tasks", []) if cl else []) if t.get("deal_id") == deal_id]
             render_centered_title(f"Задачи по сделке ({len(dl_tasks)})")
-            show_ct_key = f"dd_show_ct_{key_prefix}"
-            if render_centered_button("Создать задачу по сделке", key=f"dd_btn_ct_{key_prefix}"):
+            show_ct_key = f"dls_show_ct_{deal_id}"
+            if render_centered_button("Создать задачу по сделке", key=f"dls_btn_ct_{deal_id}"):
                 st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
                 _smart_rerun()
             if st.session_state.get(show_ct_key, False):
                 with st.container(border=True):
-                    if render_task_form(deal_id, d["client_id"], f"dd_deal_{key_prefix}"):
+                    if render_task_form(deal_id, d["client_id"], f"dls_deal_{deal_id}"):
                         st.session_state[show_ct_key] = False
                         commit_and_rerun(st.session_state.crm_store, "Задача создана")
             if dl_tasks:
-                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
-                for ti, t in enumerate(dl_tasks):
-                    task_key = f"dd_{key_prefix}_{ti}"
-                    render_task_row(t, cl, d, task_key, f"dd_{key_prefix}_{ti}")
-            st.markdown("---")
+                for tk in dl_tasks:
+                    _tn = tk.get("task_number", "")
+                    _tdone = tk.get("done", False)
+                    _ticon = "\u2705" if _tdone else "\u23f3"
+                    st.markdown(f"- {_ticon} \u0417\u0430\u0434\u0430\u0447\u0430 {_tn} — {tk.get('text', '')} | {format_date(tk.get('deadline', ''))}")
             if st.session_state.user_role == "admin":
-                if st.button("Удалить сделку", key=f"dd_del_{key_prefix}", use_container_width=True):
+                st.markdown("---")
+                if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
                     st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state["_in_dialog"] = False
@@ -2137,12 +2137,12 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.markdown("**Комментарии:**")
                 for cm in d["deal_comments"]:
                     st.markdown(f"- *{cm.get('time', '')}*: {cm.get('text', '')}")
-            dc_clr_key = f"dd_clr_dc_{key_prefix}"
+            dc_clr_key = f"dls_clr_dc_{deal_id}"
             if st.session_state.get(dc_clr_key):
-                st.session_state[f"dd_dc_input_{key_prefix}"] = ""
+                st.session_state[f"dls_dc_input_{deal_id}"] = ""
                 st.session_state[dc_clr_key] = False
-            nc = st.text_input("Добавить комментарий:", key=f"dd_dc_input_{key_prefix}")
-            if st.button("Добавить", key=f"dd_dc_btn_{key_prefix}", use_container_width=True):
+            nc = st.text_input("Добавить комментарий:", key=f"dls_dc_input_{deal_id}")
+            if st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True):
                 if nc.strip():
                     d.setdefault("deal_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
                     d["last_modified"] = now_str()
@@ -2152,93 +2152,26 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.warning("Введите текст")
             st.markdown("---")
             st.markdown("**Файлы сделки:**")
-            render_file_thumbs(d.get("deal_files", []), f"dd_file_{key_prefix}", allow_delete=True)
+            render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True)
             st.markdown("**Загрузить файлы:**")
-            df_ver = st.session_state.deal_file_uploader_ver.get(f"dd_{deal_id}", 0)
-            udf = st.file_uploader("Выберите файлы:", key=f"dd_up_{key_prefix}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
-            if st.button("Загрузить", key=f"dd_upbtn_{key_prefix}", use_container_width=True):
+            df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
+            udf = st.file_uploader("Выберите файлы:", key=f"dls_up_{deal_id}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
+            if st.button("Загрузить", key=f"dls_upbtn_{deal_id}", use_container_width=True):
                 if udf:
                     with st.spinner("Загрузка файлов..."):
                         fi_list = save_uploaded_files(udf, d["client_id"], "deal_file")
                     if fi_list:
                         d.setdefault("deal_files", []).extend(normalize_file_list(fi_list))
                         d["last_modified"] = now_str()
-                        st.session_state.deal_file_uploader_ver[f"dd_{deal_id}"] = df_ver + 1
+                        st.session_state.deal_file_uploader_ver[f"tab_{deal_id}"] = df_ver + 1
                         save_data(st.session_state.crm_store)
                         st.toast("Файлы загружены", icon="\U0001F4C1")
                         _smart_rerun()
                 else:
                     st.warning("Выберите файл(ы)")
             st.markdown("---")
-            render_entity_chat(d, "deal", key_prefix)
+            render_entity_chat(d, "deal", deal_id)
 
-
-@st.dialog("Подробности сделки", width="large")
-def deal_detail_dialog(deal, cl, cu, key_prefix):
-    st.session_state["_in_dialog"] = True
-    _show_close_warning = st.session_state.get(f"_show_deal_close_warning_{key_prefix}", False)
-    _is_editing = st.session_state.get(f"dd_show_edit_{key_prefix}", False)
-
-    _close_btn_key = f"deal_close_btn_{key_prefix}"
-    _close_css_key = f"deal_close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_close_css_key):
-        _spacer_col, _close_col = st.columns([20, 1])
-        with _close_col:
-            if st.button("\u2715", key=_close_btn_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", use_container_width=True):
-                if _is_editing and not _show_close_warning:
-                    st.session_state[f"_show_deal_close_warning_{key_prefix}"] = True
-                    st.rerun(scope="fragment")
-                else:
-                    st.session_state[f"_show_deal_close_warning_{key_prefix}"] = False
-                    st.session_state[f"dd_show_edit_{key_prefix}"] = False
-                    st.session_state.pop("dialog_deal_key", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
-
-    if _show_close_warning:
-        _warn_key = f"deal_unsaved_warn_{key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }} .st-key-{_warn_key} .stMarkdown p {{ font-size: 0.85rem !important; margin-bottom: 0.2rem !important; }} .st-key-{_warn_key} .stButton > button {{ font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; }}</style>', unsafe_allow_html=True)
-        with st.container(key=_warn_key):
-            st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
-            st.markdown("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?")
-            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
-            _wcol1, _wcol2, _wcol3 = st.columns(3)
-            with _wcol1:
-                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"deal_warn_save_{key_prefix}", type="primary", use_container_width=True):
-                    _et_key = f"dd_et_{key_prefix}"
-                    _eb_key = f"dd_eb_{key_prefix}"
-                    _em_key = f"dd_em_{key_prefix}"
-                    if _et_key in st.session_state:
-                        deal["deal_title"] = st.session_state[_et_key]
-                    if _eb_key in st.session_state:
-                        _amt = st.session_state[_eb_key]
-                        deal["budget"] = int(_amt) if _amt and str(_amt).strip().isdigit() else 0
-                    if _em_key in st.session_state:
-                        _mgr_val = st.session_state[_em_key]
-                        if _mgr_val:
-                            deal["manager"] = _mgr_val
-                    deal["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store)
-                    st.session_state[f"_show_deal_close_warning_{key_prefix}"] = False
-                    st.session_state[f"dd_show_edit_{key_prefix}"] = False
-                    st.session_state.pop("dialog_deal_key", None)
-                    st.session_state["_in_dialog"] = False
-                    st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
-                    st.rerun()
-            with _wcol2:
-                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"deal_warn_nosave_{key_prefix}", use_container_width=True):
-                    st.session_state[f"_show_deal_close_warning_{key_prefix}"] = False
-                    st.session_state[f"dd_show_edit_{key_prefix}"] = False
-                    st.session_state.pop("dialog_deal_key", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
-            with _wcol3:
-                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"deal_warn_cancel_{key_prefix}", use_container_width=True):
-                    st.session_state[f"_show_deal_close_warning_{key_prefix}"] = False
-                    st.rerun(scope="fragment")
-
-    render_deal_detail(deal, cl, cu, key_prefix)
 
 def render_client_card_expanded(cl):
     with st.container(border=True):
@@ -2609,6 +2542,73 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.rerun(scope="fragment")
 
     render_task_detail(task, cl, d, key_prefix)
+
+@st.dialog("Подробности сделки", width="large")
+def deal_detail_dialog(d, cl, cu, key_prefix):
+    st.session_state["_in_dialog"] = True
+    deal_id = d["id"]
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
+    _is_editing = st.session_state.get(f"dls_show_edit_{deal_id}", False)
+
+    _close_btn_key = f"close_btn_{key_prefix}"
+    _close_css_key = f"close_row_{key_prefix}"
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("\u2715", key=_close_btn_key, help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", use_container_width=True):
+                if _is_editing and not _show_close_warning:
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = True
+                    st.rerun(scope="fragment")
+                else:
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state[f"dls_show_edit_{deal_id}"] = False
+                    st.session_state.pop("dialog_deal_key", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+
+    if _show_close_warning:
+        _warn_key = f"unsaved_warn_{key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }} .st-key-{_warn_key} .stMarkdown p {{ font-size: 0.85rem !important; margin-bottom: 0.2rem !important; }} .st-key-{_warn_key} .stButton > button {{ font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
+            st.markdown("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?")
+            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
+            _wcol1, _wcol2, _wcol3 = st.columns(3)
+            with _wcol1:
+                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
+                    _et_key = f"dls_et_{deal_id}"
+                    _eb_key = f"dls_eb_{deal_id}"
+                    _em_key = f"dls_em_{deal_id}"
+                    if _et_key in st.session_state: d["deal_title"] = st.session_state[_et_key]
+                    if _eb_key in st.session_state:
+                        _bv = st.session_state[_eb_key]
+                        d["budget"] = int(_bv) if _bv and str(_bv).strip().isdigit() else 0
+                    if _em_key in st.session_state:
+                        _mv = st.session_state[_em_key]
+                        if _mv: d["manager"] = _mv
+                    d["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state[f"dls_show_edit_{deal_id}"] = False
+                    st.session_state.pop("dialog_deal_key", None)
+                    st.session_state["_in_dialog"] = False
+                    st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
+                    st.rerun()
+            with _wcol2:
+                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state[f"dls_show_edit_{deal_id}"] = False
+                    st.session_state.pop("dialog_deal_key", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+            with _wcol3:
+                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.rerun(scope="fragment")
+
+    render_deal_detail(d, cl, cu, key_prefix)
+
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
     render_client_form(fv)
@@ -2763,6 +2763,14 @@ elif st.session_state.active_tab == "Сделки":
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
+    # Show deal detail dialog if requested
+    _dialog_deal_key = st.session_state.get("dialog_deal_key")
+    if _dialog_deal_key:
+        for _d in st.session_state.crm_store.get("deals", []):
+            if _d["id"] == _dialog_deal_key:
+                _cl = cid_map.get(_d.get("client_id"))
+                deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
+                break
 
 elif st.session_state.active_tab == "Задачи":
     now_time = datetime.now()
@@ -2771,20 +2779,6 @@ elif st.session_state.active_tab == "Задачи":
     active_sum = sum(d.get("budget", 0) for d in active_deals)
     overdue_count = sum(1 for c in st.session_state.crm_store.get("clients", []) for t in c.get("tasks", []) if is_task_overdue(t))
     total_clients = len(st.session_state.crm_store["clients"])
-
-    # Show deal detail dialog if requested
-    _deal_dialog_key = st.session_state.get("dialog_deal_key")
-    if _deal_dialog_key:
-        _deal_obj = None
-        _deal_client = None
-        for _d in st.session_state.crm_store.get("deals", []):
-            if _d["id"] == _deal_dialog_key:
-                _deal_obj = _d
-                _deal_client = cid_map.get(_d.get("client_id"))
-                break
-        if _deal_obj:
-            deal_detail_dialog(_deal_obj, _deal_client, cu, f"deal_{_deal_dialog_key}")
-
     d1, d2, d3 = st.columns(3)
     d1.metric("Активные сделки", len(active_deals), f"{active_sum:,.0f} руб.".replace(",", " "))
     d2.metric("Просрочено", overdue_count)
