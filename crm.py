@@ -692,11 +692,11 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 # Описание (редактируемое)
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
-                _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
+                _desc_lines = max(1, cur_desc.count("\n") + 1) if cur_desc else 1
                 _desc_height = 38 + (_desc_lines - 1) * 22
                 st.markdown(
                     f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ "
-                    f"min-height: 38px !important; height: {_desc_height}px !important; "
+                    f"min-height: 38px !important; height: {_desc_height}px !important; " background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important;
                     f"padding: 0.45rem 0.8rem !important; font-size: 0.82rem !important; "
                     f"border-radius: 10px !important; resize: none !important; }}</style>",
                     unsafe_allow_html=True)
@@ -1788,7 +1788,15 @@ def render_deal_card_expanded(d, cl):
             d["payment_status"] = new_ps
             d["last_modified"] = now_str()
             commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
-        if d.get("manager"): st.markdown(f"**Ответственный:** {d.get('manager')}")
+        st.markdown("**Ответственный:**")
+        _dce_mgr_options = get_managers_list()
+        _dce_current_mgr = d.get("manager", "")
+        _dce_current_idx = _dce_mgr_options.index(_dce_current_mgr) if _dce_current_mgr in _dce_mgr_options else 0
+        _dce_new_mgr = st.selectbox("Ответственный:", _dce_mgr_options, index=_dce_current_idx, key=f"dce_mgr_inline_{d['id']}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+        if _dce_new_mgr != _dce_current_mgr and _dce_new_mgr:
+            d["manager"] = _dce_new_mgr
+            d["last_modified"] = now_str()
+            commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
@@ -1831,24 +1839,26 @@ def render_deal_card_expanded(d, cl):
         render_entity_chat(d, "deal", d["id"])
         st.markdown("---")
         show_edit_deal = st.session_state.get(f"show_edit_deal_{d['id']}", False)
-        if st.button("Редактировать сделку" if not show_edit_deal else "Скрыть", key=f"edit_deal_toggle_{d['id']}", use_container_width=True):
-            st.session_state[f"show_edit_deal_{d['id']}"] = not show_edit_deal
+        _dce_pencil_key = f"dce_pencil_edit_{d['id']}"
+        st.markdown(f"<style>.st-key-{_dce_pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+        if st.button("\u270e", key=_dce_pencil_key, help="Редактировать сделку"):
+            st.session_state[f"show_edit_deal_{d['id']}"] = True
             st.rerun()
         if show_edit_deal:
-            with st.container(border=True):
-                et = st.text_input("Название сделки:", value=d.get("deal_title", ""), key=f"et_{d['id']}")
-                eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"eb_{d['id']}", placeholder="Введите сумму")
-                em = st.selectbox("Ответственный:", get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else (get_managers_list()).index(d.get('manager', '')), key=f"em_{d['id']}", placeholder=MGR_PLACEHOLDER)
+            et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"et_{d['id']}")
+            eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"eb_{d['id']}", placeholder="Введите сумму")
+            _dce_save, _dce_cancel = st.columns(2)
+            with _dce_save:
                 if st.button("Сохранить", key=f"es_{d['id']}", use_container_width=True, type="primary"):
-                    if not em:
-                        st.warning("Выберите ответственного")
-                    else:
-                        d["deal_title"] = et
-                        d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
-                        d["manager"] = em
-                        d["last_modified"] = now_str()
-                        st.session_state[f"show_edit_deal_{d['id']}"] = False
-                        commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
+                    d["deal_title"] = et
+                    d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
+                    d["last_modified"] = now_str()
+                    st.session_state[f"show_edit_deal_{d['id']}"] = False
+                    commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
+            with _dce_cancel:
+                if st.button("Отменить", key=f"ec_{d['id']}", use_container_width=True):
+                    st.session_state[f"show_edit_deal_{d['id']}"] = False
+                    st.rerun()
         st.markdown("---")
         current_status = d.get("status", "Новый")
         if current_status == "Новый":
@@ -1997,7 +2007,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 head += f" — {d['deal_title']}"
             st.subheader(num)
             if d.get("deal_title"):
-                st.markdown(f"**{d['deal_title']}**")
+                st.markdown(f"**Тема:** {d['deal_title']}")
             st.markdown(format_created_date(d), unsafe_allow_html=True)
             st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
             st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
@@ -2009,28 +2019,38 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 d["payment_status"] = new_ps
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
-            if d.get("manager"):
-                st.markdown(f"**Ответственный:** {d.get('manager')}")
+            st.markdown("**Ответственный:**")
+            _deal_mgr_options = get_managers_list()
+            _deal_current_mgr = d.get("manager", "")
+            _deal_current_idx = _deal_mgr_options.index(_deal_current_mgr) if _deal_current_mgr in _deal_mgr_options else 0
+            _deal_new_mgr = st.selectbox("Ответственный:", _deal_mgr_options, index=_deal_current_idx, key=f"deal_mgr_inline_{deal_id}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+            if _deal_new_mgr != _deal_current_mgr and _deal_new_mgr:
+                d["manager"] = _deal_new_mgr
+                d["last_modified"] = now_str()
+                commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
+
             st.markdown("---")
             show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
-            if st.button("Редактировать сделку" if not show_edit_deal else "Скрыть", key=f"dls_edit_toggle_{deal_id}", use_container_width=True):
-                st.session_state[f"dls_show_edit_{deal_id}"] = not show_edit_deal
+            _deal_pencil_key = f"dls_pencil_edit_{deal_id}"
+            st.markdown(f"<style>.st-key-{_deal_pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+            if st.button("\u270e", key=_deal_pencil_key, help="Редактировать сделку"):
+                st.session_state[f"dls_show_edit_{deal_id}"] = True
                 _smart_rerun()
             if show_edit_deal:
-                with st.container(border=True):
-                    et = st.text_input("Название сделки:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
-                    eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
-                    em = st.selectbox("Ответственный:", get_managers_list(), index=0 if d.get('manager', '') not in get_managers_list() else (get_managers_list()).index(d.get('manager', '')), key=f"dls_em_{deal_id}", placeholder=MGR_PLACEHOLDER)
+                et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
+                eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
+                _save_col, _cancel_col = st.columns(2)
+                with _save_col:
                     if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
-                        if not em:
-                            st.warning("Выберите ответственного")
-                        else:
-                            d["deal_title"] = et
-                            d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
-                            d["manager"] = em
-                            d["last_modified"] = now_str()
-                            st.session_state[f"dls_show_edit_{deal_id}"] = False
-                            commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
+                        d["deal_title"] = et
+                        d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
+                        d["last_modified"] = now_str()
+                        st.session_state[f"dls_show_edit_{deal_id}"] = False
+                        commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
+                with _cancel_col:
+                    if st.button("Отменить", key=f"dls_ec_{deal_id}", use_container_width=True):
+                        st.session_state[f"dls_show_edit_{deal_id}"] = False
+                        _smart_rerun()
             st.markdown("---")
             action_key = f"dls_action_{deal_id}"
             action = st.session_state.get(action_key)
@@ -2345,7 +2365,7 @@ def render_client_in_tree(cl):
             st.rerun()
         if st.session_state.get(show_cd_key, False):
             with st.container(border=True):
-                cd_title = st.text_input("Название сделки:", key=f"cd_title_{cl['id']}")
+                cd_title = st.text_input("Тема:", key=f"cd_title_{cl['id']}")
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
                 cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 if st.button("Создать", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
@@ -2355,7 +2375,7 @@ def render_client_in_tree(cl):
                         deals = st.session_state.crm_store.get("deals", [])
                         did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
                         dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "Новый", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "Не оплачено", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": []}
+                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "Новый", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "Не оплачено", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": [], "created_by": st.session_state.get("user_login", "")}
                         st.session_state.crm_store.setdefault("deals", []).append(new_deal)
                         cl["last_modified"] = now_str()
                         st.session_state[show_cd_key] = False
