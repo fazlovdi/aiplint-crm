@@ -115,6 +115,22 @@ st.markdown("""
     /* Bell button compact */
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
 
+    /* Hide dialog native title bar ("Подробности задачи") */
+    [data-testid="stDialog"] > div > header,
+    [data-testid="stEmotionCache"] [data-testid="stDialog"] > div > header {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        overflow: hidden !important;
+    }
+    /* Remove top padding from dialog content when header is hidden */
+    [data-testid="stDialog"] > div > div,
+    [data-testid="stEmotionCache"] [data-testid="stDialog"] > div > div {
+        padding-top: 0.5rem !important;
+    }
     /* Hide native dialog close button */
     [data-testid="stDialog"] [data-testid="stCloseButton"],
     [data-testid="stDialog"] button[aria-label="Close"],
@@ -122,15 +138,6 @@ st.markdown("""
     .stDialog button[kind="header"],
     [data-testid="stDialog"] > div > div > button:first-child {
         display: none !important;
-    }
-    /* Hide dialog title bar ("Подробности задачи") but keep content subheaders visible */
-    [data-testid="stDialog"] > div > header {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: none !important;
     }
     /* Make dialog content area the positioning context for the close button */
     [data-testid="stDialog"] [data-testid="stVerticalBlock"],
