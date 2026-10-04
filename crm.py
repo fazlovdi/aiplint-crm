@@ -1,6 +1,8 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
+from concurrent.futures import ThreadPoolExecutor
+from PIL import Image as PILImage
 import extra_streamlit_components as stx
 from datetime import datetime
 from collections import defaultdict
@@ -591,11 +593,41 @@ def get_file_bytes(fp):
     rp = normalize_remote_path(fp)
     return download_file_from_yandex(rp) if rp else None
 
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_thumbnail_base64(remote_path, size=220):
+    """Скачивает файл и возвращает data-URI миниатюры для изображений, None для остальных."""
+    fb = get_file_bytes(remote_path)
+    if not fb:
+        return None
+    ext = os.path.splitext(remote_path)[1].lower()
+    if ext not in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
+        return None
+    try:
+        img = PILImage.open(io.BytesIO(fb))
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        if img.mode == "RGBA":
+            img.save(buf, format="PNG", optimize=True)
+            mime = "image/png"
+        else:
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(buf, format="JPEG", quality=80)
+            mime = "image/jpeg"
+        return f"data:{mime};base64,{base64.b64encode(buf.getvalue()).decode()}"
+    except:
+        mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+        return f"data:{mt};base64,{base64.b64encode(fb).decode()}"
+
+
+BATCH_SIZE = 8
+
 def render_file_thumbs(files, prefix, allow_delete=False):
     if not files:
         st.caption("Файлов нет")
         return
-    # CSS to match download button and description height with primary action buttons
+
     st.markdown("""<style>
     .stDownloadButton > button {
         min-height: 38px !important;
@@ -605,48 +637,93 @@ def render_file_thumbs(files, prefix, allow_delete=False):
         border-radius: 10px !important;
     }
     </style>""", unsafe_allow_html=True)
-    all_files = files
+
+    # --- Пагинация: первые BATCH_SIZE файлов, остальные по кнопке ---
+    show_count_key = f"file_show_count_{prefix}"
+    show_count = st.session_state.get(show_count_key, BATCH_SIZE)
+    visible_files = files[:show_count]
+
+    # --- Параллельное скачивание ---
+    file_paths = [ff.get("file_path", ff.get("path")) for ff in visible_files]
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        file_bytes_list = list(executor.map(get_file_bytes, file_paths))
+
     ncols = 4
     cols = st.columns(ncols)
-    for i, ff in enumerate(all_files):
+    for i, (ff, fb) in enumerate(zip(visible_files, file_bytes_list)):
         with cols[i % ncols]:
             fp = ff.get("file_path", ff.get("path"))
             fn = ff.get("file_name", ff.get("name", "файл"))
-            fb = get_file_bytes(fp)
             if fb:
                 ext = os.path.splitext(fn)[1].lower()
-                # Show thumbnail for images
                 if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]:
-                    b64 = base64.b64encode(fb).decode()
-                    mt = f"image/{{'jpeg' if ext == '.jpg' else ext[1:]}}"
-                    st.markdown(f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" /><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
+                    # Миниатюра вместо полноразмерного base64
+                    thumb_src = get_thumbnail_base64(fp)
+                    if thumb_src:
+                        st.markdown(
+                            f'<div class="thumb-item"><img src="{thumb_src}" title="{fn}" />'
+                            f'<div class="thumb-name">{fn}</div></div>',
+                            unsafe_allow_html=True)
+                    else:
+                        b64 = base64.b64encode(fb).decode()
+                        mt = f"image/{'jpeg' if ext == '.jpg' else ext[1:]}"
+                        st.markdown(
+                            f'<div class="thumb-item"><img src="data:{mt};base64,{b64}" title="{fn}" />'
+                            f'<div class="thumb-name">{fn}</div></div>',
+                            unsafe_allow_html=True)
                 else:
-                    # Non-image file: show icon + name
                     icon = "\U0001F4C4" if ext == ".pdf" else "\U0001F4C1"
-                    st.markdown(f'<div class="thumb-item"><div style="width:110px;height:110px;display:flex;align-items:center;justify-content:center;border:1px solid #DCE0E5;border-radius:8px;font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div><div class="thumb-name">{fn}</div></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="thumb-item">'
+                        f'<div style="width:110px;height:110px;display:flex;align-items:center;'
+                        f'justify-content:center;border:1px solid #DCE0E5;border-radius:8px;'
+                        f'font-size:2rem;color:#5A6B7D;margin:0 auto;">{icon}</div>'
+                        f'<div class="thumb-name">{fn}</div></div>',
+                        unsafe_allow_html=True)
 
-                # Description field (editable) - multiline, auto height
+                # Описание (редактируемое)
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "")
                 _desc_lines = max(1, (len(cur_desc) // 40) + (1 if len(cur_desc) % 40 else 0)) if cur_desc else 1
                 _desc_height = 38 + (_desc_lines - 1) * 22
-                st.markdown(f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ min-height: 38px !important; height: {_desc_height}px !important; padding: 0.45rem 0.8rem !important; font-size: 0.82rem !important; border-radius: 10px !important; resize: none !important; }}</style>", unsafe_allow_html=True)
-                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key, max_chars=200, label_visibility="collapsed", placeholder="Описание файла...", height=_desc_height)
+                st.markdown(
+                    f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ "
+                    f"min-height: 38px !important; height: {_desc_height}px !important; "
+                    f"padding: 0.45rem 0.8rem !important; font-size: 0.82rem !important; "
+                    f"border-radius: 10px !important; resize: none !important; }}</style>",
+                    unsafe_allow_html=True)
+                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key,
+                                        max_chars=200, label_visibility="collapsed",
+                                        placeholder="Описание файла...", height=_desc_height)
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, 'crm_store'):
                         save_data(st.session_state.crm_store)
-                # Download button
+
+                # Кнопка скачивания
                 dl_key = f"dl_{prefix}_{i}"
-                st.download_button(label="\u2B07\uFE0F Скачать", data=fb, file_name=fn, key=dl_key, use_container_width=True)
-                # Delete button for admin
+                st.download_button(label="\u2B07\uFE0F Скачать", data=fb,
+                                   file_name=fn, key=dl_key, use_container_width=True)
+
+                # Кнопка удаления
                 if allow_delete and st.session_state.user_role == "admin":
                     del_key = f"del_{prefix}_{i}"
-                    st.markdown(f"<style>.st-key-{del_key} button {{ padding:2px 6px!important;font-size:0.75rem!important;min-height:24px!important; }}</style>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"<style>.st-key-{del_key} button {{ "
+                        f"padding:2px 6px!important;font-size:0.75rem!important;"
+                        f"min-height:24px!important; }}</style>",
+                        unsafe_allow_html=True)
                     if st.button("\U0001F5D1", key=del_key, help="Удалить"):
                         files.pop(i)
                         commit_and_rerun(st.session_state.crm_store, "Файл удалён")
 
+    # Кнопка "Показать ещё"
+    if len(files) > show_count:
+        remaining = len(files) - show_count
+        if st.button(f"Показать ещё ({remaining})",
+                     key=f"more_files_{prefix}", use_container_width=True):
+            st.session_state[show_count_key] = show_count + BATCH_SIZE
+            _smart_rerun()
 
 
 def build_print_html(task, cl, tp, fd):
