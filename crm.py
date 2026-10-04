@@ -123,6 +123,15 @@ st.markdown("""
     [data-testid="stDialog"] > div > div > button:first-child {
         display: none !important;
     }
+    /* Hide dialog header bar (title area) */
+    [data-testid="stDialog"] > div > header,
+    [data-testid="stDialog"] header {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
     /* Make dialog content area the positioning context for the close button */
     [data-testid="stDialog"] [data-testid="stVerticalBlock"],
     [data-testid="stDialog"] > div > div,
@@ -2411,7 +2420,7 @@ def render_client_form(fv):
                     st.toast(f"Клиент {cn} добавлен", icon="✅")
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
-@st.dialog("Подробности задачи", width="large")
+@st.dialog("", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
     st.session_state["_in_dialog"] = True
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
