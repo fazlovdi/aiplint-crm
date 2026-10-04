@@ -543,21 +543,13 @@ def format_date(ds):
 def format_created_date(entity):
     cd = entity.get("created_at") or entity.get("last_modified", "")
     if not cd or cd == "1970-01-01 00:00:00": return ""
-    # Resolve author name from created_by login
-    author_name = ""
-    cb = entity.get("created_by", "")
-    if cb:
-        u = get_user_by_login(cb)
-        if u: author_name = u.get("name", u.get("login", cb))
-        else: author_name = cb
-    author_part = f" | Автор: {author_name}" if author_name else ""
     try:
         dt = datetime.strptime(cd[:19], "%Y-%m-%d %H:%M:%S")
-        return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y %H:%M")}{author_part}</div>'
+        return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y %H:%M")}</div>'
     except:
         try:
             dt = datetime.strptime(cd[:10], "%Y-%m-%d")
-            return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y")}{author_part}</div>'
+            return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y")}</div>'
         except: return ""
 
 def get_managers_list():
@@ -943,6 +935,8 @@ def render_task_detail(t, cl, d, key_prefix):
                     cl["last_modified"] = now_str()
                     if d: d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                if t.get('in_work') and not t.get('done'):
+                    st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
                 st.markdown("---")
                 if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
@@ -963,7 +957,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
-                    if not t.get("in_work"):
+                    if not t.get("in_work") and not t.get("needs_rework"):
                         if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
                             t["in_work"] = True
                             t["last_modified"] = now_str()
@@ -1129,6 +1123,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
     if tk_rework and not tk_done: tk_label += ' | На доработке'
+    if t.get('in_work') and not tk_done and not tk_rework: tk_label += ' | В работе'
     if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
@@ -2411,7 +2406,7 @@ def render_client_form(fv):
                     st.toast(f"Клиент {cn} добавлен", icon="✅")
                     st.rerun()
             else: st.error("Заполните ФИО и телефон")
-@st.dialog("Подробности задачи", width="large")
+@st.dialog("", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
     st.session_state["_in_dialog"] = True
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
@@ -2728,6 +2723,7 @@ elif st.session_state.active_tab == "Задачи":
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
             if task.get('needs_rework'): exp_label += ' | На доработке'
+            elif task.get('in_work'): exp_label += ' | В работе'
             if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
             st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
