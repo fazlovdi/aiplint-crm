@@ -93,51 +93,6 @@ st.markdown("""
     .stHorizontalBlock .stButton button { font-size: 0.85rem !important; }
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
-    /* Universal white-background gray-border style for ALL input fields */
-    .stTextInput > div > input,
-    .stTextArea > div > textarea,
-    .stNumberInput > div > div > input,
-    .stTimeInput > div > div > input,
-    .stDateInput > div > div > input,
-    .stColorPicker > div > div > input,
-    [data-testid="stTimeInput"] input,
-    [data-testid="stDateInput"] input,
-    [data-testid="stNumberInput"] input,
-    [data-testid="stTextInput"] input,
-    [data-testid="stTextArea"] textarea,
-    [data-testid="stChatInput"] textarea,
-    input[type="text"],
-    input[type="number"],
-    input[type="date"],
-    input[type="time"],
-    textarea {
-        background-color: #FFFFFF !important;
-        border: 1.5px solid #DCE0E5 !important;
-        border-radius: 10px !important;
-        color: #2C3E50 !important;
-    }
-    .stSelectbox > div > div,
-    .stMultiSelect > div > div,
-    [data-testid="stSelectbox"] > div > div,
-    [data-testid="stMultiSelect"] > div > div,
-    [data-testid="stMultiInput"] > div > div {
-        background-color: #FFFFFF !important;
-        border: 1.5px solid #DCE0E5 !important;
-        border-radius: 10px !important;
-    }
-    /* Focus state — keep border gray, no blue glow */
-    .stTextInput > div > input:focus,
-    .stTextArea > div > textarea:focus,
-    .stNumberInput > div > div > input:focus,
-    .stTimeInput > div > div > input:focus,
-    .stDateInput > div > div > input:focus,
-    .stSelectbox > div > div:focus-within,
-    .stMultiSelect > div > div:focus-within,
-    [data-testid="stMultiInput"] > div > div:focus-within {
-        outline: none !important;
-        border-color: #C9CFD7 !important;
-        box-shadow: none !important;
-    }
 
     /* Sticky search bar for deals tab — JS-driven, no parent overflow changes */
     .st-key-deals_sticky_header { transition: none; }
@@ -588,13 +543,21 @@ def format_date(ds):
 def format_created_date(entity):
     cd = entity.get("created_at") or entity.get("last_modified", "")
     if not cd or cd == "1970-01-01 00:00:00": return ""
+    # Resolve author name from created_by login
+    author_name = ""
+    cb = entity.get("created_by", "")
+    if cb:
+        u = get_user_by_login(cb)
+        if u: author_name = u.get("name", u.get("login", cb))
+        else: author_name = cb
+    author_part = f" | Автор: {author_name}" if author_name else ""
     try:
         dt = datetime.strptime(cd[:19], "%Y-%m-%d %H:%M:%S")
-        return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y %H:%M")}</div>'
+        return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y %H:%M")}{author_part}</div>'
     except:
         try:
             dt = datetime.strptime(cd[:10], "%Y-%m-%d")
-            return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y")}</div>'
+            return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y")}{author_part}</div>'
         except: return ""
 
 def get_managers_list():
@@ -980,8 +943,6 @@ def render_task_detail(t, cl, d, key_prefix):
                     cl["last_modified"] = now_str()
                     if d: d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
-                if t.get('in_work') and not t.get('done'):
-                    st.markdown('<span class="in-work-badge">\u0412 \u0440\u0430\u0431\u043e\u0442\u0435</span>', unsafe_allow_html=True)
                 st.markdown("---")
                 if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
@@ -992,22 +953,17 @@ def render_task_detail(t, cl, d, key_prefix):
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {t['task_comment']}")
-                # Edit pencil button or "Режим редактирования" text — above action buttons
-                _is_editing_now = st.session_state.get(f"show_edit_task_{key_prefix}", False)
-                if _is_editing_now:
-                    # Show orange "Режим редактирования" text instead of the pencil button
-                    st.markdown('<p style="color: #FF9800; font-weight: 600; font-size: 0.85rem; margin: 0; padding: 2px 0;">\u270e Режим редактирования</p>', unsafe_allow_html=True)
-                else:
-                    pencil_key = f"btn_pencil_edit_{key_prefix}"
-                    st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                    if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
-                        st.session_state[f"show_edit_task_{key_prefix}"] = True
-                        _smart_rerun()
+                # Edit pencil button — same compact size, left-aligned, above action buttons
+                pencil_key = f"btn_pencil_edit_{key_prefix}"
+                st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e", key=pencil_key, help="\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"):
+                    st.session_state[f"show_edit_task_{key_prefix}"] = True
+                    _smart_rerun()
                 # Action buttons in left column (below task info)
                 st.markdown("---")
                 tk_done = t.get("done", False)
                 if not tk_done:
-                    if not t.get("in_work") and not t.get("needs_rework"):
+                    if not t.get("in_work"):
                         if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
                             t["in_work"] = True
                             t["last_modified"] = now_str()
@@ -1173,7 +1129,6 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
     if tk_rework and not tk_done: tk_label += ' | На доработке'
-    if t.get('in_work') and not tk_done and not tk_rework: tk_label += ' | В работе'
     if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
@@ -2747,7 +2702,9 @@ elif st.session_state.active_tab == "Задачи":
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
                 if tk.get("done", False) and not tk.get("reviewed", False):
-                    review_tasks.append(entry)
+                    is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
+                    if is_author:
+                        review_tasks.append(entry)
                 elif not tk.get("done", False):
                     if not tk.get("in_work", False):
                         new_tasks.append(entry)
@@ -2771,22 +2728,12 @@ elif st.session_state.active_tab == "Задачи":
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
             if task.get('needs_rework'): exp_label += ' | На доработке'
-            elif task.get('in_work'): exp_label += ' | В работе'
             if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
             st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
                     st.session_state["dialog_task_key"] = task_key
                     st.rerun()
-                # "Взять в работу" button only for new tasks (not in_work, not done, not needs_rework)
-                if sk == "new" and not task.get("in_work") and not task.get("done") and not task.get("needs_rework"):
-                    _take_key = f"tb_take_{task_key}"
-                    st.markdown(f"<style>.st-key-{_take_key} button {{ background-color: #bc1661 !important; color: #FFFFFF !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 0.8rem !important; padding: 0.3rem 0.6rem !important; min-height: 30px !important; margin-top: 0.2rem !important; }}</style>", unsafe_allow_html=True)
-                    if st.button("Взять в работу", key=_take_key, type="primary", use_container_width=True):
-                        task["in_work"] = True
-                        task["last_modified"] = now_str()
-                        cl["last_modified"] = now_str()
-                        commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
                 render_scroll_restore(f"tb_{task_key}")
         col_new, col_today, col_future, col_review = st.columns(4)
         with col_new:
@@ -2817,7 +2764,7 @@ elif st.session_state.active_tab == "Задачи":
         archived_tasks = []
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
-                if tk.get("done", False) and tk.get("reviewed", False):
+                if tk.get("done", False):
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
