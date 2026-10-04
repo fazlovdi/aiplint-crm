@@ -696,8 +696,9 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                 _desc_height = 38 + (_desc_lines - 1) * 22
                 st.markdown(
                     f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ "
-                    f"min-height: 38px !important; height: {_desc_height}px !important; " background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important;
+                    f"min-height: 38px !important; height: {_desc_height}px !important; "
                     f"padding: 0.45rem 0.8rem !important; font-size: 0.82rem !important; "
+                    f"background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; "
                     f"border-radius: 10px !important; resize: none !important; }}</style>",
                     unsafe_allow_html=True)
                 new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key,
@@ -1789,12 +1790,12 @@ def render_deal_card_expanded(d, cl):
             d["last_modified"] = now_str()
             commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
         st.markdown("**Ответственный:**")
-        _dce_mgr_options = get_managers_list()
-        _dce_current_mgr = d.get("manager", "")
-        _dce_current_idx = _dce_mgr_options.index(_dce_current_mgr) if _dce_current_mgr in _dce_mgr_options else 0
-        _dce_new_mgr = st.selectbox("Ответственный:", _dce_mgr_options, index=_dce_current_idx, key=f"dce_mgr_inline_{d['id']}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
-        if _dce_new_mgr != _dce_current_mgr and _dce_new_mgr:
-            d["manager"] = _dce_new_mgr
+        mgr_options_cd = get_managers_list()
+        current_mgr_cd = d.get("manager", "")
+        current_idx_cd = mgr_options_cd.index(current_mgr_cd) if current_mgr_cd in mgr_options_cd else 0
+        new_mgr_cd = st.selectbox("Ответственный:", mgr_options_cd, index=current_idx_cd, key=f"card_mgr_inline_{d['id']}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+        if new_mgr_cd != current_mgr_cd and new_mgr_cd:
+            d["manager"] = new_mgr_cd
             d["last_modified"] = now_str()
             commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
         st.markdown("---")
@@ -1839,26 +1840,27 @@ def render_deal_card_expanded(d, cl):
         render_entity_chat(d, "deal", d["id"])
         st.markdown("---")
         show_edit_deal = st.session_state.get(f"show_edit_deal_{d['id']}", False)
-        _dce_pencil_key = f"dce_pencil_edit_{d['id']}"
-        st.markdown(f"<style>.st-key-{_dce_pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-        if st.button("\u270e", key=_dce_pencil_key, help="Редактировать сделку"):
-            st.session_state[f"show_edit_deal_{d['id']}"] = True
-            st.rerun()
         if show_edit_deal:
             et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"et_{d['id']}")
             eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"eb_{d['id']}", placeholder="Введите сумму")
-            _dce_save, _dce_cancel = st.columns(2)
-            with _dce_save:
+            _ces_col, _cec_col = st.columns(2)
+            with _ces_col:
                 if st.button("Сохранить", key=f"es_{d['id']}", use_container_width=True, type="primary"):
                     d["deal_title"] = et
                     d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
                     d["last_modified"] = now_str()
                     st.session_state[f"show_edit_deal_{d['id']}"] = False
                     commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
-            with _dce_cancel:
+            with _cec_col:
                 if st.button("Отменить", key=f"ec_{d['id']}", use_container_width=True):
                     st.session_state[f"show_edit_deal_{d['id']}"] = False
                     st.rerun()
+        else:
+            pencil_card_key = f"btn_pencil_card_{d['id']}"
+            st.markdown(f"<style>.st-key-{pencil_card_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+            if st.button("\u270e", key=pencil_card_key, help="Редактировать сделку"):
+                st.session_state[f"show_edit_deal_{d['id']}"] = True
+                st.rerun()
         st.markdown("---")
         current_status = d.get("status", "Новый")
         if current_status == "Новый":
@@ -2020,37 +2022,36 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
             st.markdown("**Ответственный:**")
-            _deal_mgr_options = get_managers_list()
-            _deal_current_mgr = d.get("manager", "")
-            _deal_current_idx = _deal_mgr_options.index(_deal_current_mgr) if _deal_current_mgr in _deal_mgr_options else 0
-            _deal_new_mgr = st.selectbox("Ответственный:", _deal_mgr_options, index=_deal_current_idx, key=f"deal_mgr_inline_{deal_id}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
-            if _deal_new_mgr != _deal_current_mgr and _deal_new_mgr:
-                d["manager"] = _deal_new_mgr
+            mgr_options_dd = get_managers_list()
+            current_mgr_dd = d.get("manager", "")
+            current_idx_dd = mgr_options_dd.index(current_mgr_dd) if current_mgr_dd in mgr_options_dd else 0
+            new_mgr_dd = st.selectbox("Ответственный:", mgr_options_dd, index=current_idx_dd, key=f"deal_mgr_inline_{deal_id}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+            if new_mgr_dd != current_mgr_dd and new_mgr_dd:
+                d["manager"] = new_mgr_dd
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
-
-            st.markdown("---")
             show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
-            _deal_pencil_key = f"dls_pencil_edit_{deal_id}"
-            st.markdown(f"<style>.st-key-{_deal_pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-            if st.button("\u270e", key=_deal_pencil_key, help="Редактировать сделку"):
-                st.session_state[f"dls_show_edit_{deal_id}"] = True
-                _smart_rerun()
             if show_edit_deal:
                 et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
                 eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
-                _save_col, _cancel_col = st.columns(2)
-                with _save_col:
+                _dds_col, _ddc_col = st.columns(2)
+                with _dds_col:
                     if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
                         d["deal_title"] = et
                         d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
                         d["last_modified"] = now_str()
                         st.session_state[f"dls_show_edit_{deal_id}"] = False
                         commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
-                with _cancel_col:
+                with _ddc_col:
                     if st.button("Отменить", key=f"dls_ec_{deal_id}", use_container_width=True):
                         st.session_state[f"dls_show_edit_{deal_id}"] = False
                         _smart_rerun()
+            else:
+                pencil_deal_key = f"btn_pencil_deal_{deal_id}"
+                st.markdown(f"<style>.st-key-{pencil_deal_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e", key=pencil_deal_key, help="Редактировать сделку"):
+                    st.session_state[f"dls_show_edit_{deal_id}"] = True
+                    _smart_rerun()
             st.markdown("---")
             action_key = f"dls_action_{deal_id}"
             action = st.session_state.get(action_key)
@@ -2375,7 +2376,7 @@ def render_client_in_tree(cl):
                         deals = st.session_state.crm_store.get("deals", [])
                         did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
                         dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "Новый", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "Не оплачено", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "deal_chat": [], "created_by": st.session_state.get("user_login", "")}
+                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "Новый", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "Не оплачено", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "deal_chat": []}
                         st.session_state.crm_store.setdefault("deals", []).append(new_deal)
                         cl["last_modified"] = now_str()
                         st.session_state[show_cd_key] = False
