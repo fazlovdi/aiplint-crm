@@ -1595,7 +1595,10 @@ if _auth_token and not st.session_state.authenticated:
     if not st.session_state.authenticated:
         if "auth_token" in st.query_params:
             del st.query_params["auth_token"]
-        cookie_manager.delete("auth_token")
+        try:
+            cookie_manager.delete("auth_token")
+        except KeyError:
+            pass
 
 MGR_PLACEHOLDER = "Выбери ответственного"
 
@@ -1706,7 +1709,10 @@ with st.sidebar:
             save_data(st.session_state.crm_store)
             if "auth_token" in st.query_params:
                 del st.query_params["auth_token"]
-        cookie_manager.delete("auth_token")
+        try:
+            cookie_manager.delete("auth_token")
+        except KeyError:
+            pass
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
