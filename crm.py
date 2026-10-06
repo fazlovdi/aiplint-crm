@@ -393,22 +393,52 @@ def download_db_from_yandex():
         if res.status_code == 200:
             dl = requests.get(res.json().get("href"), timeout=30)
             if dl.status_code == 200:
-                with open(FILE_NAME, "w", encoding="utf-8") as f: f.write(dl.text)
+                new_text = dl.text
+                # Проверяем, не старше ли данные на Диске по сравнению с локальным файлом
+                if os.path.exists(FILE_NAME):
+                    try:
+                        old_data = json.loads(open(FILE_NAME, "r", encoding="utf-8").read())
+                        new_data = json.loads(new_text)
+                        # Собираем максимальный last_modified из клиентов и сделок
+                        old_max = max(
+                            [c.get("last_modified", "") for c in old_data.get("clients", [])] +
+                            [d.get("last_modified", "") for d in old_data.get("deals", [])],
+                            default=""
+                        )
+                        new_max = max(
+                            [c.get("last_modified", "") for c in new_data.get("clients", [])] +
+                            [d.get("last_modified", "") for d in new_data.get("deals", [])],
+                            default=""
+                        )
+                        if new_max < old_max:
+                            # Данные на Диске старее локальных — не перезаписываем
+                            return
+                    except:
+                        pass
+                with open(FILE_NAME, "w", encoding="utf-8") as f: f.write(new_text)
                 return
     except: pass
     if not os.path.exists(FILE_NAME):
         db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
         with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(db, f, ensure_ascii=False, indent=2)
 
-def upload_db_to_yandex_async():
+def upload_db_to_yandex_sync():
     if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
-    def _u():
+    for attempt in range(3):
         try:
-            res = requests.get(f"{YANDEX_API_URL}/upload", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=10)
+            res = requests.get(f"{YANDEX_API_URL}/upload", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=15)
             if res.status_code == 200:
-                with open(FILE_NAME, "rb") as f: requests.put(res.json().get("href"), data=f, timeout=30)
-        except: pass
-    threading.Thread(target=_u, daemon=True).start()
+                with open(FILE_NAME, "rb") as f:
+                    resp = requests.put(res.json().get("href"), data=f, timeout=30)
+                if resp.status_code in (200, 201):
+                    return True
+        except:
+            pass
+    return False
+
+def upload_db_to_yandex_async():
+    """Сохраняет async-интерфейс для обратной совместимости, но вызывает синхронную загрузку."""
+    upload_db_to_yandex_sync()
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN: return False
@@ -992,6 +1022,8 @@ def render_task_detail(t, cl, d, key_prefix):
                             if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"go_{key_prefix}", use_container_width=True, type="primary"):
                                 if rt.strip():
                                     t["done"] = True
+                                    t["in_work"] = False
+                                    t["needs_rework"] = False
                                     t["completion_report"] = rt.strip()
                                     t["last_modified"] = now_str()
                                     add_notification(t.get("created_by", ""), f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}", f"\u2705 \u0417\u0430\u0434\u0430\u0447\u0430 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435: {t.get('task_number','')} \u2014 {cl.get('name','')} | \u0412\u044b\u043f\u043e\u043b\u043d\u0438\u043b: {st.session_state.get('user_name','')}")
@@ -1265,7 +1297,7 @@ def load_data():
                 data = migrate_data(data)
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=4)
-                upload_db_to_yandex_async()
+                upload_db_to_yandex_sync()
             else:
                 for c in data.get("clients", []):
                     client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
@@ -1325,7 +1357,7 @@ def save_data(data):
     try:
         with open(FILE_NAME, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        upload_db_to_yandex_async()
+        upload_db_to_yandex_sync()
     except Exception as e:
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
@@ -2831,9 +2863,7 @@ elif st.session_state.active_tab == "Задачи":
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
                 if tk.get("done", False) and not tk.get("reviewed", False):
-                    is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
-                    if is_author:
-                        review_tasks.append(entry)
+                    review_tasks.append(entry)
                 elif not tk.get("done", False):
                     if not tk.get("in_work", False):
                         new_tasks.append(entry)
@@ -2893,7 +2923,7 @@ elif st.session_state.active_tab == "Задачи":
         archived_tasks = []
         for cl in st.session_state.crm_store.get("clients", []):
             for ti, tk in enumerate(cl.get("tasks", [])):
-                if tk.get("done", False):
+                if tk.get("done", False) and tk.get("reviewed", False):
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
