@@ -386,6 +386,17 @@ def init_yandex_folders():
         try: requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except: pass
 
+def _collect_all_timestamps(data):
+    """Собирает все last_modified из клиентов, сделок и задач для точного сравнения."""
+    timestamps = []
+    for c in data.get("clients", []):
+        timestamps.append(c.get("last_modified", ""))
+        for t in c.get("tasks", []):
+            timestamps.append(t.get("last_modified", ""))
+    for d in data.get("deals", []):
+        timestamps.append(d.get("last_modified", ""))
+    return [ts for ts in timestamps if ts]
+
 def download_db_from_yandex():
     if not YANDEX_TOKEN: return
     try:
@@ -394,27 +405,22 @@ def download_db_from_yandex():
             dl = requests.get(res.json().get("href"), timeout=30)
             if dl.status_code == 200:
                 new_text = dl.text
-                # Проверяем, не старше ли данные на Диске по сравнению с локальным файлом
+                # Проверяем, не старее ли данные на Диске по сравнению с локальным файлом
                 if os.path.exists(FILE_NAME):
                     try:
                         old_data = json.loads(open(FILE_NAME, "r", encoding="utf-8").read())
                         new_data = json.loads(new_text)
-                        # Собираем максимальный last_modified из клиентов и сделок
-                        old_max = max(
-                            [c.get("last_modified", "") for c in old_data.get("clients", [])] +
-                            [d.get("last_modified", "") for d in old_data.get("deals", [])],
-                            default=""
-                        )
-                        new_max = max(
-                            [c.get("last_modified", "") for c in new_data.get("clients", [])] +
-                            [d.get("last_modified", "") for d in new_data.get("deals", [])],
-                            default=""
-                        )
+                        # Собираем ВСЕ last_modified, включая задачи
+                        old_ts = _collect_all_timestamps(old_data)
+                        new_ts = _collect_all_timestamps(new_data)
+                        old_max = max(old_ts) if old_ts else ""
+                        new_max = max(new_ts) if new_ts else ""
                         if new_max < old_max:
                             # Данные на Диске старее локальных — не перезаписываем
                             return
                     except:
-                        pass
+                        # При любой ошибке сравнения — НЕ перезаписываем локальные данные
+                        return
                 with open(FILE_NAME, "w", encoding="utf-8") as f: f.write(new_text)
                 return
     except: pass
@@ -423,7 +429,7 @@ def download_db_from_yandex():
         with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(db, f, ensure_ascii=False, indent=2)
 
 def upload_db_to_yandex_sync():
-    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
+    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return False
     for attempt in range(3):
         try:
             res = requests.get(f"{YANDEX_API_URL}/upload", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=15)
@@ -432,7 +438,7 @@ def upload_db_to_yandex_sync():
                     resp = requests.put(res.json().get("href"), data=f, timeout=30)
                 if resp.status_code in (200, 201):
                     return True
-        except:
+        except Exception as e:
             pass
     return False
 
@@ -884,6 +890,8 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             st.markdown(format_created_date(t), unsafe_allow_html=True)
+            if t.get("needs_rework"):
+                st.markdown('<div style="color:#D32F2F;font-size:0.85rem;font-weight:700;margin-bottom:0.5rem;">На доработке</div>', unsafe_allow_html=True)
             show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if show_edit_task:
                 # Inline editing mode
@@ -1087,7 +1095,7 @@ def render_task_detail(t, cl, d, key_prefix):
                                 rework_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rework_comment_{key_prefix}", height=100, placeholder="\u041e\u043f\u0438\u0448\u0438\u0442\u0435, \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c")
                                 rw1, rw2 = st.columns(2)
                                 with rw1:
-                                    if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
+                                    if st.button("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
                                         if not rework_comment.strip():
                                             st.warning("\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u2014 \u0431\u0435\u0437 \u043d\u0435\u0433\u043e \u043d\u0435\u043b\u044c\u0437\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
                                         else:
@@ -1161,6 +1169,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
+    if tk_rework and not tk_done: tk_label += ' | На доработке'
     if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
@@ -1176,7 +1185,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
                 st.session_state.expanded_task_key = task_key
                 _smart_rerun()
         if tk_rework and not tk_done and not is_tk_exp:
-            st.markdown('<div style="color:#D32F2F;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:2px 0 0 4px;">▶ На доработке</div>', unsafe_allow_html=True)
+            st.markdown('<div style="color:#D32F2F;font-size:0.78rem;font-weight:700;padding:2px 6px 0 6px;">На доработке</div>', unsafe_allow_html=True)
         if not is_tk_exp:
             render_scroll_restore(f"tk_{task_key}")
     if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
@@ -1358,7 +1367,8 @@ def save_data(data):
     try:
         with open(FILE_NAME, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
-        upload_db_to_yandex_sync()
+        if not upload_db_to_yandex_sync():
+            st.sidebar.warning("Данные сохранены локально, но не загружены на Диск. При обновлении страницы изменения могут не сохраниться.")
     except Exception as e:
         st.sidebar.error(f"Ошибка сохранения: {e}")
 
@@ -2854,32 +2864,27 @@ elif st.session_state.active_tab == "Задачи":
                 tm = tk.get("manager", "")
                 dtm = tk.get("delegated_to", "")
                 _is_review = tk.get("done", False) and not tk.get("reviewed", False)
-                _is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
                 if _is_review:
-                    # Задачи на проверке отображаются только у автора задачи
-                    if not _is_author:
+                    # Tasks on review are shown only to the task author (not executor)
+                    _task_author = tk.get("created_by", "")
+                    _is_task_author = (st.session_state.user_role == "admin") or (_task_author == cu)
+                    if not _is_task_author:
                         continue
-                    # Автор видит задачи на проверке независимо от фильтра ответственного
-                    if task_search:
-                        search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
-                        if task_search not in search_text: continue
-                    task_deal = di.get(tk.get("deal_id"))
-                    mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
-                    entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
-                    review_tasks.append(entry)
-                    continue
-                # Обычный фильтр для остальных задач
-                if mf == "Мои задачи":
-                    if tm and tm != cu and dtm != cu: continue
-                elif mf != "Все":
-                    if tm != mf and dtm != mf: continue
+                else:
+                    # For non-review tasks, apply manager filter
+                    if mf == "Мои задачи":
+                        if tm and tm != cu and dtm != cu: continue
+                    elif mf != "Все":
+                        if tm != mf and dtm != mf: continue
                 if task_search:
                     search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                     if task_search not in search_text: continue
                 task_deal = di.get(tk.get("deal_id"))
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
-                if not tk.get("done", False):
+                if _is_review:
+                    review_tasks.append(entry)
+                elif not tk.get("done", False):
                     if not tk.get("in_work", False):
                         new_tasks.append(entry)
                     else:
@@ -2901,6 +2906,7 @@ elif st.session_state.active_tab == "Задачи":
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
+            if task.get('needs_rework'): exp_label += ' | На доработке'
             if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
             st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
@@ -2908,7 +2914,7 @@ elif st.session_state.active_tab == "Задачи":
                     st.session_state["dialog_task_key"] = task_key
                     st.rerun()
                 if task.get('needs_rework'):
-                    st.markdown('<div style="color:#D32F2F;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:2px 0 0 4px;">▶ На доработке</div>', unsafe_allow_html=True)
+                    st.markdown('<div style="color:#D32F2F;font-size:0.78rem;font-weight:700;padding:2px 6px 0 6px;">На доработке</div>', unsafe_allow_html=True)
                 render_scroll_restore(f"tb_{task_key}")
         col_new, col_today, col_future, col_review = st.columns(4)
         with col_new:
@@ -2948,8 +2954,8 @@ elif st.session_state.active_tab == "Задачи":
                 cl = at["client_obj"]
                 task_key = f"arch_{at['task_idx']}_{cl['id']}"
                 exp_label = f"✅ Задача №{task.get('task_number', '')} — {at['client_name']} — {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
-                st.markdown(f"<style>.st-key-arch_wrap_{task_key} button {{ text-align: left !important; justify-content: flex-start !important; }}</style>", unsafe_allow_html=True)
                 with st.container(key=f"arch_wrap_{task_key}"):
+                    st.markdown(f'<style>.st-key-arch_wrap_{task_key} button {{ text-align: left !important; justify-content: flex-start !important; }}</style>', unsafe_allow_html=True)
                     if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True):
                         st.session_state["dialog_task_key"] = task_key
                         st.rerun()
