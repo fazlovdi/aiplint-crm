@@ -1080,14 +1080,14 @@ def render_task_detail(t, cl, d, key_prefix):
                                     if d: d["last_modified"] = now_str()
                                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430 \u0438 \u0432 \u0430\u0440\u0445\u0438\u0432\u0435")
                             with rc2:
-                                if st.button("\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0432 \u0440\u0430\u0431\u043e\u0442\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
+                                if st.button("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443", key=f"btn_rework_{key_prefix}", use_container_width=True):
                                     st.session_state[f"show_rework_{key_prefix}"] = True
                                     _smart_rerun()
                             if st.session_state.get(f"show_rework_{key_prefix}", False):
                                 rework_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u043a \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rework_comment_{key_prefix}", height=100, placeholder="\u041e\u043f\u0438\u0448\u0438\u0442\u0435, \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c")
                                 rw1, rw2 = st.columns(2)
                                 with rw1:
-                                    if st.button("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
+                                    if st.button("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", key=f"btn_rework_send_{key_prefix}", type="primary", use_container_width=True):
                                         if not rework_comment.strip():
                                             st.warning("\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u2014 \u0431\u0435\u0437 \u043d\u0435\u0433\u043e \u043d\u0435\u043b\u044c\u0437\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443")
                                         else:
@@ -1161,7 +1161,6 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-    if tk_rework and not tk_done: tk_label += ' | На доработке'
     if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
@@ -1176,6 +1175,8 @@ def render_task_row(t, cl, d, task_key, key_prefix):
             else:
                 st.session_state.expanded_task_key = task_key
                 _smart_rerun()
+        if tk_rework and not tk_done and not is_tk_exp:
+            st.markdown('<div style="color:#D32F2F;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:2px 0 0 4px;">▶ На доработке</div>', unsafe_allow_html=True)
         if not is_tk_exp:
             render_scroll_restore(f"tk_{task_key}")
     if is_tk_exp: render_task_detail(t, cl, d, key_prefix)
@@ -2852,6 +2853,22 @@ elif st.session_state.active_tab == "Задачи":
             for ti, tk in enumerate(cl.get("tasks", [])):
                 tm = tk.get("manager", "")
                 dtm = tk.get("delegated_to", "")
+                _is_review = tk.get("done", False) and not tk.get("reviewed", False)
+                _is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
+                if _is_review:
+                    # Задачи на проверке отображаются только у автора задачи
+                    if not _is_author:
+                        continue
+                    # Автор видит задачи на проверке независимо от фильтра ответственного
+                    if task_search:
+                        search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
+                        if task_search not in search_text: continue
+                    task_deal = di.get(tk.get("deal_id"))
+                    mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
+                    entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
+                    review_tasks.append(entry)
+                    continue
+                # Обычный фильтр для остальных задач
                 if mf == "Мои задачи":
                     if tm and tm != cu and dtm != cu: continue
                 elif mf != "Все":
@@ -2862,9 +2879,7 @@ elif st.session_state.active_tab == "Задачи":
                 task_deal = di.get(tk.get("deal_id"))
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
-                if tk.get("done", False) and not tk.get("reviewed", False):
-                    review_tasks.append(entry)
-                elif not tk.get("done", False):
+                if not tk.get("done", False):
                     if not tk.get("in_work", False):
                         new_tasks.append(entry)
                     else:
@@ -2886,13 +2901,14 @@ elif st.session_state.active_tab == "Задачи":
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
-            if task.get('needs_rework'): exp_label += ' | На доработке'
             if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
             st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
                     st.session_state["dialog_task_key"] = task_key
                     st.rerun()
+                if task.get('needs_rework'):
+                    st.markdown('<div style="color:#D32F2F;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:2px 0 0 4px;">▶ На доработке</div>', unsafe_allow_html=True)
                 render_scroll_restore(f"tb_{task_key}")
         col_new, col_today, col_future, col_review = st.columns(4)
         with col_new:
@@ -2932,6 +2948,7 @@ elif st.session_state.active_tab == "Задачи":
                 cl = at["client_obj"]
                 task_key = f"arch_{at['task_idx']}_{cl['id']}"
                 exp_label = f"✅ Задача №{task.get('task_number', '')} — {at['client_name']} — {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
+                st.markdown(f"<style>.st-key-arch_wrap_{task_key} button {{ text-align: left !important; justify-content: flex-start !important; }}</style>", unsafe_allow_html=True)
                 with st.container(key=f"arch_wrap_{task_key}"):
                     if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True):
                         st.session_state["dialog_task_key"] = task_key
