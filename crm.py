@@ -876,7 +876,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _hdr_inner:
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
-                        st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0 0 0.5rem 0;">На доработке</p>', unsafe_allow_html=True)
+                        st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
                     if st.button(f"{_deal_num}", key=_deal_link_key, help="\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0441\u0434\u0435\u043b\u043a\u0435", type="secondary"):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["dialog_deal_key"] = _deal_id
@@ -890,7 +890,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 with _hdr_inner:
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
-                        st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0 0 0.5rem 0;">На доработке</p>', unsafe_allow_html=True)
+                        st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             st.markdown(format_created_date(t), unsafe_allow_html=True)
@@ -1178,7 +1178,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     tk_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if tk_selected else ""
     _rework_css = ""
     if tk_rework and not tk_done:
-        _rework_css = f".st-key-tk_btn_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.75rem; margin-top: 4px; }}"
+        _rework_css = f".st-key-tk_btn_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
     st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }} {_rework_css}</style>", unsafe_allow_html=True)
     with st.container(key=f"tk_btn_wrap_{task_key}"):
         if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
@@ -2867,12 +2867,21 @@ elif st.session_state.active_tab == "Задачи":
                 dtm = tk.get("delegated_to", "")
                 _is_review = tk.get("done", False) and not tk.get("reviewed", False)
                 if _is_review:
-                    _is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
-                    if not _is_author: continue
-                elif mf == "Мои задачи":
-                    if tm and tm != cu and dtm != cu: continue
-                elif mf != "Все":
-                    if tm != mf and dtm != mf: continue
+                    _tcb = tk.get("created_by", "")
+                    _tcb_name = ""
+                    if _tcb:
+                        _u = get_user_by_login(_tcb)
+                        if _u: _tcb_name = _u.get("name", _u.get("login", _tcb))
+                        else: _tcb_name = _tcb
+                    if mf == "Мои задачи":
+                        if st.session_state.user_role != "admin" and _tcb != st.session_state.get("user_login", "") and _tcb_name != cu: continue
+                    elif mf != "Все":
+                        if _tcb_name != mf and _tcb != mf: continue
+                else:
+                    if mf == "Мои задачи":
+                        if tm and tm != cu and dtm != cu: continue
+                    elif mf != "Все":
+                        if tm != mf and dtm != mf: continue
                 if task_search:
                     search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                     if task_search not in search_text: continue
@@ -2906,7 +2915,7 @@ elif st.session_state.active_tab == "Задачи":
             if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
             _rework_css = ""
             if task.get('needs_rework'):
-                _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.75rem; margin-top: 4px; }}"
+                _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
             st.markdown(f"<style>.st-key-tb_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_bc} !important; border-radius: 10px !important; }} {_rework_css}</style>", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
@@ -2946,25 +2955,16 @@ elif st.session_state.active_tab == "Задачи":
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
         archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
         if archived_tasks:
-            st.markdown("""<style>
-            .arch-task-btn button {
-                text-align: left !important;
-                justify-content: flex-start !important;
-                white-space: normal !important;
-                height: auto !important;
-            }
-            </style>""", unsafe_allow_html=True)
             for at in archived_tasks[:50]:
                 task = at["task_obj"]
                 cl = at["client_obj"]
                 task_key = f"arch_{at['task_idx']}_{cl['id']}"
                 exp_label = f"✅ Задача №{task.get('task_number', '')} — {at['client_name']} — {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
+                st.markdown(f"<style>.st-key-arch_wrap_{task_key} button {{ text-align: left !important; justify-content: flex-start !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
                 with st.container(key=f"arch_wrap_{task_key}"):
-                    st.markdown(f'<div class="arch-task-btn">', unsafe_allow_html=True)
                     if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True):
                         st.session_state["dialog_task_key"] = task_key
                         st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.caption("Архив пуст.")
     # Show task detail dialog if requested
