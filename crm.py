@@ -394,13 +394,24 @@ def download_db_from_yandex():
             dl = requests.get(res.json().get("href"), timeout=30)
             if dl.status_code == 200:
                 new_text = dl.text
+                # Проверяем, не старше ли данные на Диске по сравнению с локальным файлом
                 if os.path.exists(FILE_NAME):
                     try:
                         old_data = json.loads(open(FILE_NAME, "r", encoding="utf-8").read())
                         new_data = json.loads(new_text)
-                        old_max = max((c.get("last_modified", "") for c in old_data.get("clients", [])), default="")
-                        new_max = max((c.get("last_modified", "") for c in new_data.get("clients", [])), default="")
+                        # Собираем максимальный last_modified из клиентов и сделок
+                        old_max = max(
+                            [c.get("last_modified", "") for c in old_data.get("clients", [])] +
+                            [d.get("last_modified", "") for d in old_data.get("deals", [])],
+                            default=""
+                        )
+                        new_max = max(
+                            [c.get("last_modified", "") for c in new_data.get("clients", [])] +
+                            [d.get("last_modified", "") for d in new_data.get("deals", [])],
+                            default=""
+                        )
                         if new_max < old_max:
+                            # Данные на Диске старее локальных — не перезаписываем
                             return
                     except:
                         pass
@@ -412,7 +423,7 @@ def download_db_from_yandex():
         with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(db, f, ensure_ascii=False, indent=2)
 
 def upload_db_to_yandex_sync():
-    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return False
+    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
     for attempt in range(3):
         try:
             res = requests.get(f"{YANDEX_API_URL}/upload", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=15)
@@ -424,6 +435,10 @@ def upload_db_to_yandex_sync():
         except:
             pass
     return False
+
+def upload_db_to_yandex_async():
+    """Сохраняет async-интерфейс для обратной совместимости, но вызывает синхронную загрузку."""
+    upload_db_to_yandex_sync()
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN: return False
@@ -1282,7 +1297,7 @@ def load_data():
                 data = migrate_data(data)
                 with open(FILE_NAME, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=4)
-                upload_db_to_yandex_async()
+                upload_db_to_yandex_sync()
             else:
                 for c in data.get("clients", []):
                     client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
@@ -2837,16 +2852,10 @@ elif st.session_state.active_tab == "Задачи":
             for ti, tk in enumerate(cl.get("tasks", [])):
                 tm = tk.get("manager", "")
                 dtm = tk.get("delegated_to", "")
-                cu_login = st.session_state.get("user_login", "")
                 if mf == "Мои задачи":
-                    if tm and tm != cu and dtm != cu and tk.get("created_by", "") != cu_login: continue
+                    if tm and tm != cu and dtm != cu: continue
                 elif mf != "Все":
-                    mf_login = ""
-                    for u in st.session_state.crm_store.get("users", []):
-                        if u.get("name", "") == mf:
-                            mf_login = u.get("login", "")
-                            break
-                    if tm != mf and dtm != mf and tk.get("created_by", "") != mf_login: continue
+                    if tm != mf and dtm != mf: continue
                 if task_search:
                     search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                     if task_search not in search_text: continue
@@ -2854,9 +2863,7 @@ elif st.session_state.active_tab == "Задачи":
                 mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
                 entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
                 if tk.get("done", False) and not tk.get("reviewed", False):
-                    is_author = (st.session_state.user_role == "admin") or (tk.get("created_by", "") == st.session_state.get("user_login", ""))
-                    if is_author:
-                        review_tasks.append(entry)
+                    review_tasks.append(entry)
                 elif not tk.get("done", False):
                     if not tk.get("in_work", False):
                         new_tasks.append(entry)
