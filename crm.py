@@ -394,25 +394,15 @@ def download_db_from_yandex():
             dl = requests.get(res.json().get("href"), timeout=30)
             if dl.status_code == 200:
                 new_text = dl.text
-                # Проверяем, не старше ли данные на Диске по сравнению с локальным файлом
+                # Защита от перезаписи локальных данных более старыми с Диска
                 if os.path.exists(FILE_NAME):
                     try:
                         old_data = json.loads(open(FILE_NAME, "r", encoding="utf-8").read())
                         new_data = json.loads(new_text)
-                        # Собираем максимальный last_modified из клиентов и сделок
-                        old_max = max(
-                            [c.get("last_modified", "") for c in old_data.get("clients", [])] +
-                            [d.get("last_modified", "") for d in old_data.get("deals", [])],
-                            default=""
-                        )
-                        new_max = max(
-                            [c.get("last_modified", "") for c in new_data.get("clients", [])] +
-                            [d.get("last_modified", "") for d in new_data.get("deals", [])],
-                            default=""
-                        )
+                        old_max = max((c.get("last_modified", "") for c in old_data.get("clients", [])), default="")
+                        new_max = max((c.get("last_modified", "") for c in new_data.get("clients", [])), default="")
                         if new_max < old_max:
-                            # Данные на Диске старее локальных — не перезаписываем
-                            return
+                            return  # Данные на Диске старше локальных — не перезаписываем
                     except:
                         pass
                 with open(FILE_NAME, "w", encoding="utf-8") as f: f.write(new_text)
@@ -423,7 +413,7 @@ def download_db_from_yandex():
         with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(db, f, ensure_ascii=False, indent=2)
 
 def upload_db_to_yandex_sync():
-    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return
+    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return False
     for attempt in range(3):
         try:
             res = requests.get(f"{YANDEX_API_URL}/upload", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=15)
@@ -437,7 +427,6 @@ def upload_db_to_yandex_sync():
     return False
 
 def upload_db_to_yandex_async():
-    """Сохраняет async-интерфейс для обратной совместимости, но вызывает синхронную загрузку."""
     upload_db_to_yandex_sync()
 
 def upload_file_to_yandex(file_bytes, remote_name):
@@ -2853,7 +2842,8 @@ elif st.session_state.active_tab == "Задачи":
                 tm = tk.get("manager", "")
                 dtm = tk.get("delegated_to", "")
                 if mf == "Мои задачи":
-                    if tm and tm != cu and dtm != cu: continue
+                    cu_login = st.session_state.get("user_login", "")
+                    if tm and tm != cu and dtm != cu and tk.get("created_by", "") != cu_login: continue
                 elif mf != "Все":
                     if tm != mf and dtm != mf: continue
                 if task_search:
