@@ -189,6 +189,27 @@ st.markdown("""
     .client-row-text { cursor: pointer; font-size: 0.88rem; color: #2C3E50; padding: 2px 0; }
     .client-row-text:hover { color: #bc1661; }
     .client-divider { border-top: 1px solid #E8EBEF; margin: 0; padding: 0; height: 0; }
+    .st-key-search_input_key input,
+    .st-key-search_input_key input:focus {
+        border: 1.5px solid #C9CFD7 !important;
+        box-shadow: none !important;
+    }
+    /* Force white background for ALL inputs inside dialogs */
+    [data-testid="stDialog"] .stTextInput > div > input,
+    [data-testid="stDialog"] .stTextArea > div > textarea,
+    [data-testid="stDialog"] .stNumberInput > div > div > input,
+    [data-testid="stDialog"] .stSelectbox > div > div {
+        background-color: #FFFFFF !important;
+        border: 1.5px solid #DCE0E5 !important;
+        border-radius: 10px !important;
+    }
+    [data-testid="stDialog"] .stTextInput > div > input:focus,
+    [data-testid="stDialog"] .stTextArea > div > textarea:focus,
+    [data-testid="stDialog"] .stNumberInput > div > div > input:focus {
+        border-color: #DCE0E5 !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stTooltip"] { z-index: 999 !important; pointer-events: none !important; }
 
 </style>
 """, unsafe_allow_html=True)
@@ -834,15 +855,24 @@ def render_print_file_button(files, key_suffix):
 
 
 def linkify_text(text):
-    """Convert URLs in text to clickable HTML links that open in a new tab."""
+    """Convert URLs in text to clickable HTML links that open in a new tab.
+    Adds http:// prefix to bare domains (without protocol)."""
     if not text:
         return text
     import html as _html
-    # Escape HTML first
     safe = _html.escape(str(text))
-    # Replace URLs with clickable links
+    # Сначала — полные URL с протоколом
     url_pattern = r'(https?://[^\s<>"]+)'
-    return re.sub(url_pattern, r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">\1</a>', safe)
+    safe = re.sub(url_pattern, r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">\1</a>', safe)
+    # Затем — «голые» домены без протокола (example.com, www.example.com/path)
+    bare_domain_pattern = r'(?<!href=")(?<!<a href="https://)(?<!<a href="http://)(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>"]*)?'
+    def _add_http(m):
+        url = m.group(0)
+        if 'href' in url or url.startswith('http'):
+            return url
+        return f'<a href="http://{url}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{url}</a>'
+    safe = re.sub(bare_domain_pattern, _add_http, safe)
+    return safe
 
 def render_entity_chat(entity, entity_type, entity_id):
     chat_key = f"{entity_type}_chat"
@@ -2191,15 +2221,12 @@ def render_deal_in_tree(d, cl):
                 for ti, t in enumerate(dl_tasks):
                     task_key = f"dl_{d['id']}_{ti}"
                     render_task_row(t, cl, d, task_key, f"dl_{d['id']}_{ti}")
-            show_ct_key = f"show_ct_{d['id']}"
-            if render_centered_button("Создать задачу по сделке", key=f"btn_ct_dl_{d['id']}"):
-                st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
+            else:
+                st.caption("Задач по сделке нет")
+            if st.button("Создать задачу по сделке", key=f"btn_ct_dl_{d['id']}", use_container_width=True, type="primary"):
+                st.session_state["dialog_create_deal_task_deal_id"] = d["id"]
+                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
                 st.rerun()
-        if st.session_state.get(show_ct_key, False):
-            with st.container(border=True):
-                if render_task_form(d["id"], d["client_id"], f"deal_{d['id']}"):
-                    st.session_state[show_ct_key] = False
-                    commit_and_rerun(st.session_state.crm_store, "Задача создана")
 
 
 def render_deal_standalone(d, cl, cu):
@@ -2382,21 +2409,31 @@ def render_deal_detail(d, cl, cu, key_prefix):
             st.markdown("---")
             dl_tasks = [t for t in (cl.get("tasks", []) if cl else []) if t.get("deal_id") == deal_id]
             render_centered_title(f"Задачи по сделке ({len(dl_tasks)})")
-            show_ct_key = f"dls_show_ct_{deal_id}"
-            if render_centered_button("Создать задачу по сделке", key=f"dls_btn_ct_{deal_id}"):
-                st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
-                _smart_rerun()
-            if st.session_state.get(show_ct_key, False):
-                with st.container(border=True):
-                    if render_task_form(deal_id, d["client_id"], f"dls_deal_{deal_id}"):
-                        st.session_state[show_ct_key] = False
-                        commit_and_rerun(st.session_state.crm_store, "Задача создана")
             if dl_tasks:
-                for tk in dl_tasks:
-                    _tn = tk.get("task_number", "")
-                    _tdone = tk.get("done", False)
-                    _ticon = "\u2705" if _tdone else "\u23f3"
-                    st.markdown(f"- {_ticon} \u0417\u0430\u0434\u0430\u0447\u0430 {_tn} — {tk.get('text', '')} | {format_date(tk.get('deadline', ''))}")
+                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
+                for ti, t in enumerate(dl_tasks):
+                    _tk_key = f"dls_tk_btn_{deal_id}_{ti}"
+                    _fd = format_date(t.get("deadline", ""))
+                    _done = t.get("done", False)
+                    _icon = "\u2705" if _done else "\u23f3"
+                    _label = f"{_icon} \u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')} \u2014 {t.get('text', '')} | {_fd}"
+                    _bg, _bc = "#F5F6F8", "#C9CFD7"
+                    if not _done:
+                        if is_task_overdue(t): _bg, _bc = "#FFEBEE", "#C62828"
+                        elif t.get("in_work"): _bg, _bc = "#E8F5E9", "#4CAF50"
+                        else: _bg, _bc = "#E3F2FD", "#2196F3"
+                    st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
+                    with st.container(key=_tk_key):
+                        if st.button(_label, key=f"dls_tk_go_{deal_id}_{ti}", use_container_width=True, type="secondary"):
+                            task_key = f"dls_dl_{deal_id}_{ti}"
+                            st.session_state["dialog_deal_task_key"] = task_key
+                            st.rerun()
+            else:
+                st.caption("\u0417\u0430\u0434\u0430\u0447 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u043d\u0435\u0442")
+            if st.button("\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435", key=f"dls_btn_ct_{deal_id}", use_container_width=True, type="primary"):
+                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
+                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
+                st.rerun()
             if st.session_state.user_role == "admin":
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
@@ -3006,6 +3043,59 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
 
 
 
+
+@st.dialog("Создать задачу по сделке", width="large")
+def deal_create_task_dialog(deal_id, client_id):
+    st.session_state["_in_dialog"] = True
+    _key_prefix = f"cdt_{deal_id}"
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
+    _has_unsaved = (
+        st.session_state.get(f"nt_topic_cdt_{deal_id}", "").strip() or
+        st.session_state.get(f"nt_c_cdt_{deal_id}", "").strip()
+    )
+    # Кнопка закрытия
+    _close_css_key = f"close_row_{_key_prefix}"
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("\u2715", key=f"close_btn_{_key_prefix}", help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", use_container_width=True):
+                if _has_unsaved and not _show_close_warning:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = True
+                    st.rerun(scope="fragment")
+                else:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("dialog_create_deal_task_deal_id", None)
+                    st.session_state.pop("dialog_create_deal_task_client_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+    if _show_close_warning:
+        _warn_key = f"unsaved_warn_{_key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }} .st-key-{_warn_key} .stMarkdown p {{ font-size: 0.85rem !important; margin-bottom: 0.2rem !important; }} .st-key-{_warn_key} .stButton > button {{ font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
+            st.markdown("\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")
+            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
+            _wcol1, _wcol2 = st.columns(2)
+            with _wcol1:
+                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f", key=f"cdt_warn_nosave_{deal_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("dialog_create_deal_task_deal_id", None)
+                    st.session_state.pop("dialog_create_deal_task_client_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+            with _wcol2:
+                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.rerun(scope="fragment")
+    if render_task_form(deal_id, client_id, f"cdt_{deal_id}"):
+        st.session_state.pop("dialog_create_deal_task_deal_id", None)
+        st.session_state.pop("dialog_create_deal_task_client_id", None)
+        st.session_state["_in_dialog"] = False
+        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+
+
+
 @st.dialog("Карточка клиента", width="large")
 def client_detail_dialog(cl_id):
     st.session_state["_in_dialog"] = True
@@ -3171,6 +3261,102 @@ def client_deals_dialog(cl_id):
                     commit_and_rerun(st.session_state.crm_store, "Сделка создана")
 
 
+
+
+@st.dialog("Создать задачу по клиенту", width="large")
+def client_create_task_dialog(cl_id):
+    st.session_state["_in_dialog"] = True
+    _key_prefix = f"cct_{cl_id}"
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
+    _has_unsaved = (
+        st.session_state.get(f"nt_topic_cct_{cl_id}", "").strip() or
+        st.session_state.get(f"nt_c_cct_{cl_id}", "").strip()
+    )
+    _close_css_key = f"close_row_{_key_prefix}"
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("\u2715", key=f"close_btn_{_key_prefix}", help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", use_container_width=True):
+                if _has_unsaved and not _show_close_warning:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = True
+                    st.rerun(scope="fragment")
+                else:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("dialog_create_client_task_client_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+    if _show_close_warning:
+        _warn_key = f"unsaved_warn_{_key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }} .st-key-{_warn_key} .stMarkdown p {{ font-size: 0.85rem !important; margin-bottom: 0.2rem !important; }} .st-key-{_warn_key} .stButton > button {{ font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
+            st.markdown("\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")
+            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
+            _wcol1, _wcol2 = st.columns(2)
+            with _wcol1:
+                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f", key=f"cct_warn_nosave_{cl_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("dialog_create_client_task_client_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+            with _wcol2:
+                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"cct_warn_cancel_{cl_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.rerun(scope="fragment")
+    if render_task_form(None, cl_id, f"cct_{cl_id}"):
+        st.session_state.pop("dialog_create_client_task_client_id", None)
+        st.session_state["_in_dialog"] = False
+        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+
+
+@st.dialog("Создать задачу по сделке", width="large")
+def client_create_deal_task_dialog(cl_id):
+    st.session_state["_in_dialog"] = True
+    _key_prefix = f"ccdt_{cl_id}"
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
+    cl = get_client_by_id(cl_id)
+    cl_deals = [d for d in st.session_state.crm_store.get("deals", []) if d["client_id"] == cl_id] if cl else []
+    _close_css_key = f"close_row_{_key_prefix}"
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("\u2715", key=f"close_btn_{_key_prefix}", help="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", use_container_width=True):
+                if not _show_close_warning:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = True
+                    st.rerun(scope="fragment")
+                else:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+    if _show_close_warning:
+        _warn_key = f"unsaved_warn_{_key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }} .st-key-{_warn_key} .stMarkdown p {{ font-size: 0.85rem !important; margin-bottom: 0.2rem !important; }} .st-key-{_warn_key} .stButton > button {{ font-size: 0.78rem !important; padding: 0.25rem 0.5rem !important; min-height: 28px !important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
+            st.markdown("\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0431\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f?")
+            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
+            _wcol1, _wcol2 = st.columns(2)
+            with _wcol1:
+                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f", key=f"ccdt_warn_nosave_{cl_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+            with _wcol2:
+                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"ccdt_warn_cancel_{cl_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.rerun(scope="fragment")
+    deal_options = {d["id"]: d.get("deal_number", d.get("title", "")) for d in cl_deals}
+    selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"ccdt_deal_sel_{cl_id}")
+    if selected_deal_id and render_task_form(selected_deal_id, cl_id, f"ccdt_{cl_id}"):
+        st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+        st.session_state["_in_dialog"] = False
+        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0430")
+
+
 @st.dialog("Задачи клиента", width="large")
 def client_tasks_dialog(cl_id):
     st.session_state["_in_dialog"] = True
@@ -3224,16 +3410,11 @@ def client_tasks_dialog(cl_id):
     else:
         st.caption("Задач по клиенту нет")
 
-    # Кнопка создания задачи по клиенту
-    show_ct_key = f"show_ct_dlg_cl_{cl_id}"
+    # Кнопка создания задачи по клиенту — открывает popup
     if st.button("Создать задачу по клиенту", key=f"btn_ct_dlg_cl_{cl_id}", use_container_width=True, type="primary"):
-        st.session_state[show_ct_key] = not st.session_state.get(show_ct_key, False)
+        st.session_state["dialog_create_client_task_client_id"] = cl_id
+        st.session_state.pop("dialog_client_tasks_key", None)
         st.rerun()
-    if st.session_state.get(show_ct_key, False):
-        with st.container(border=True):
-            if render_task_form(None, cl_id, f"ct_dlg_cl_{cl_id}"):
-                st.session_state[show_ct_key] = False
-                commit_and_rerun(st.session_state.crm_store, "Задача создана")
 
     # Разделитель
     st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
@@ -3264,20 +3445,12 @@ def client_tasks_dialog(cl_id):
     else:
         st.caption("Задач по сделкам нет")
 
-    # Кнопка создания задачи по сделке
-    # Нужно выбрать сделку, если их несколько
+    # Кнопка создания задачи по сделке — открывает popup
     if cl_deals:
-        show_cdt_key = f"show_cdt_dlg_{cl_id}"
         if st.button("Создать задачу по сделке", key=f"btn_cdt_dlg_{cl_id}", use_container_width=True, type="primary"):
-            st.session_state[show_cdt_key] = not st.session_state.get(show_cdt_key, False)
+            st.session_state["dialog_create_client_task_deal_select_cl_id"] = cl_id
+            st.session_state.pop("dialog_client_tasks_key", None)
             st.rerun()
-        if st.session_state.get(show_cdt_key, False):
-            with st.container(border=True):
-                deal_options = {d["id"]: d.get("deal_number", d.get("title", "")) for d in cl_deals}
-                selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"cdt_deal_sel_{cl_id}")
-                if selected_deal_id and render_task_form(selected_deal_id, cl_id, f"cdt_dlg_{cl_id}"):
-                    st.session_state[show_cdt_key] = False
-                    commit_and_rerun(st.session_state.crm_store, "Задача создана")
     else:
         st.caption("Нет сделок для создания задачи по сделке")
 
@@ -3289,44 +3462,8 @@ if st.session_state.active_tab == "Клиенты":
     _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
     with _search_col:
         st.markdown("<style>.st-key-search_input_key input { background-color: #FFFFFF !important; border: 1.5px solid #C9CFD7 !important; border-radius: 10px !important; }</style>", unsafe_allow_html=True)
-        # Debounce: store the "committed" search value and only update it after a pause
-        _search_debounce_key = "search_debounce_value"
         _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="По имени, компании или телефону...")
-        _search_now = (_search_input_now or "").strip().lower()
-        _search_committed = st.session_state.get(_search_debounce_key, "")
-        if _search_now != _search_committed:
-            # Value changed — check if we should commit it now or wait
-            _last_change = st.session_state.get("search_last_change_time", 0)
-            _now_ts = datetime.now().timestamp()
-            if _now_ts - _last_change >= 0.3:
-                # Enough time passed — commit
-                st.session_state[_search_debounce_key] = _search_now
-                st.session_state["search_last_change_time"] = _now_ts
-                sq = _search_now
-            else:
-                # Not enough time — keep old value, but record the change time
-                st.session_state["search_last_change_time"] = _now_ts
-                sq = _search_committed
-                st.rerun()
-        else:
-            sq = _search_committed
-        # Живой поиск — rerun на каждое нажатие клавиши
-        st.components.v1.html("""<script>
-(function(){
-    var w=window;
-    try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}
-    var inp=w.document.querySelector('input[aria-label="Поиск"]');
-    if(!inp){inp=w.document.querySelector('[data-testid="stTextInput"] input');}
-    if(inp && !inp.dataset.liveSearch){
-        inp.dataset.liveSearch='1';
-        inp.addEventListener('input',function(){
-            // Simulate Enter to trigger Streamlit rerun
-            var ev=new KeyboardEvent('keydown',{bubbles:true,key:'Enter',code:'Enter'});
-            inp.dispatchEvent(ev);
-        });
-    }
-})();
-</script>""", height=0)
+        sq = (_search_input_now or "").strip().lower()
     with _sort_col:
         sort_options = ["По дате изменения", "По дате создания", "По алфавиту"]
         sort_mode = st.selectbox("Сортировка", sort_options, key="client_sort_select")
@@ -3396,7 +3533,7 @@ if st.session_state.active_tab == "Клиенты":
                 # Текст вместо кнопки с рамкой — прозрачный фон, без границ, кликабельный
                 _name_btn_key = f"tbl_name_{cl['id']}"
                 st.markdown(f"<style>.st-key-{_name_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; text-align: left !important; padding: 2px 0 !important; font-size: 0.88rem !important; color: #2C3E50 !important; font-weight: 600 !important; }} .st-key-{_name_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
-                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True, help="Открыть карточку клиента"):
+                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True):
                     st.session_state["dialog_client_key"] = cl["id"]
                     st.rerun()
             with _c2:
@@ -3405,7 +3542,7 @@ if st.session_state.active_tab == "Клиенты":
                 _deals_btn_key = f"tbl_deals_btn_{cl['id']}"
                 _deals_color = "#2E7D32" if has_active_deals else "#2C3E50"
                 st.markdown(f"<style>.st-key-{_deals_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_deals_color} !important; font-weight: {800 if _deals_color != '#2C3E50' else 600} !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_deals_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
-                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True, help="Открыть сделки"):
+                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True):
                     st.session_state["dialog_client_deals_key"] = cl["id"]
                     st.rerun()
             with _c4:
@@ -3417,7 +3554,7 @@ if st.session_state.active_tab == "Клиенты":
                 else:
                     _tasks_color = "#2C3E50"
                 st.markdown(f"<style>.st-key-{_tasks_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_tasks_color} !important; font-weight: {800 if _tasks_color != '#2C3E50' else 600} !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_tasks_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
-                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True, help="Открыть задачи"):
+                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True):
                     st.session_state["dialog_client_tasks_key"] = cl["id"]
                     st.rerun()
             with _c5:
@@ -3437,6 +3574,14 @@ if st.session_state.active_tab == "Клиенты":
     _dialog_ct_key = st.session_state.get("dialog_client_tasks_key")
     if _dialog_ct_key:
         client_tasks_dialog(_dialog_ct_key)
+    # Диалог создания задачи по клиенту (из всплывающего окна задач клиента)
+    _dlg_cct = st.session_state.get("dialog_create_client_task_client_id")
+    if _dlg_cct:
+        client_create_task_dialog(_dlg_cct)
+    # Диалог создания задачи по сделке (из всплывающего окна задач клиента)
+    _dlg_ccdt = st.session_state.get("dialog_create_client_task_deal_select_cl_id")
+    if _dlg_ccdt:
+        client_create_deal_task_dialog(_dlg_ccdt)
     # Показ диалога сделки (из всплывающего окна сделок клиента)
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
     if _dialog_deal_key and st.session_state.active_tab == "Клиенты":
@@ -3445,6 +3590,34 @@ if st.session_state.active_tab == "Клиенты":
                 _cl = get_client_by_id(_d.get("client_id"))
                 deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
                 break
+    # Диалог создания задачи по сделке (из всплывающего окна сделки)
+    _dlg_cdt_deal = st.session_state.get("dialog_create_deal_task_deal_id")
+    if _dlg_cdt_deal and st.session_state.active_tab == "Клиенты":
+        _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
+        deal_create_task_dialog(_dlg_cdt_deal, _cdt_client_id)
+    # Диалог задачи из всплывающего окна сделки (кликабельные задачи)
+    _dialog_deal_task_key = st.session_state.get("dialog_deal_task_key")
+    if _dialog_deal_task_key and st.session_state.active_tab == "Клиенты":
+        _found = False
+        for _cl in st.session_state.crm_store.get("clients", []):
+            if _found: break
+            _cl_deals = [d for d in st.session_state.crm_store.get("deals", []) if d.get("client_id") == _cl["id"]]
+            _deal_tasks_list = []
+            for _dd in _cl_deals:
+                for _tt in _cl.get("tasks", []):
+                    if _tt.get("deal_id") == _dd["id"]:
+                        _deal_tasks_list.append(_tt)
+            for dti, _tk in enumerate(_deal_tasks_list):
+                _expected_key = f"dls_dl_{_tk.get('deal_id')}_{dti}"
+                if _dialog_deal_task_key == _expected_key:
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, _dialog_deal_task_key)
+                    _found = True
+                    break
     # Показ диалога задачи (из всплывающего окна задач клиента)
     _dialog_task_key = st.session_state.get("dialog_task_key")
     if _dialog_task_key and st.session_state.get("dialog_client_tasks_key") or (_dialog_task_key and st.session_state.active_tab == "Клиенты"):
@@ -3601,6 +3774,34 @@ elif st.session_state.active_tab == "Сделки":
                 _cl = cid_map.get(_d.get("client_id"))
                 deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
                 break
+    # Диалог создания задачи по сделке (из всплывающего окна сделки)
+    _dlg_cdt_deal = st.session_state.get("dialog_create_deal_task_deal_id")
+    if _dlg_cdt_deal:
+        _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
+        deal_create_task_dialog(_dlg_cdt_deal, _cdt_client_id)
+    # Диалог задачи из всплывающего окна сделки (кликабельные задачи)
+    _dialog_deal_task_key = st.session_state.get("dialog_deal_task_key")
+    if _dialog_deal_task_key:
+        _found = False
+        for _cl in st.session_state.crm_store.get("clients", []):
+            if _found: break
+            _cl_deals = [d for d in st.session_state.crm_store.get("deals", []) if d.get("client_id") == _cl["id"]]
+            _deal_tasks_list = []
+            for _dd in _cl_deals:
+                for _tt in _cl.get("tasks", []):
+                    if _tt.get("deal_id") == _dd["id"]:
+                        _deal_tasks_list.append(_tt)
+            for dti, _tk in enumerate(_deal_tasks_list):
+                _expected_key = f"dls_dl_{_tk.get('deal_id')}_{dti}"
+                if _dialog_deal_task_key == _expected_key:
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, _dialog_deal_task_key)
+                    _found = True
+                    break
 
 elif st.session_state.active_tab == "Задачи":
     now_time = datetime.now()
