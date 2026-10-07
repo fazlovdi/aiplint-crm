@@ -178,11 +178,17 @@ st.markdown("""
     .clients-table tr:hover td { background: #F5F6F8; }
     .clients-table .link-cell { color: #bc1661; text-decoration: underline; cursor: pointer; font-weight: 600; }
     .clients-table .link-cell:hover { color: #9a1452; }
-    .clients-table .green-link { color: #2E7D32; text-decoration: underline; cursor: pointer; font-weight: 700; }
+    .clients-table .green-link { color: #2E7D32; text-decoration: none; cursor: pointer; font-weight: 700; }
     .clients-table .green-link:hover { color: #1B5E20; }
-    .clients-table .normal-link { color: #2C3E50; text-decoration: underline; cursor: pointer; font-weight: 600; }
+    .clients-table .red-link { color: #C62828; text-decoration: none; cursor: pointer; font-weight: 700; }
+    .clients-table .red-link:hover { color: #8E1B1B; }
+    .clients-table .normal-link { color: #2C3E50; text-decoration: none; cursor: pointer; font-weight: 600; }
     .clients-table .normal-link:hover { color: #bc1661; }
     .clients-table .sum-cell { text-align: right; font-weight: 600; white-space: nowrap; }
+    /* Compact client list rows */
+    .client-row-text { cursor: pointer; font-size: 0.88rem; color: #2C3E50; padding: 2px 0; }
+    .client-row-text:hover { color: #bc1661; }
+    .client-divider { border-top: 1px solid #E8EBEF; margin: 0; padding: 0; }
 
 </style>
 """, unsafe_allow_html=True)
@@ -2429,86 +2435,20 @@ def render_deal_detail(d, cl, cu, key_prefix):
 
 def render_client_card_expanded(cl):
     with st.container(border=True):
+        # Наименование клиента над датой создания
+        st.markdown(f"**{cl.get('name', '')}**")
         st.markdown(format_created_date(cl), unsafe_allow_html=True)
-        info_col, comm_col = st.columns(2)
-        with info_col:
-            st.markdown("**Информация о клиенте:**")
-            # Категория
-            st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
-            # Телефон без кнопок копирования
-            st.markdown(f"Телефон: **{cl.get('phone', '')}**")
-            # Способ связи
-            cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
-            cm = st.selectbox("Способ связи", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}")
-            if cm != cl.get('contact_method', ''):
-                cl['contact_method'] = cm
-                cl["last_modified"] = now_str()
-                save_data(st.session_state.crm_store)
-            st.markdown(f"{cl.get('email','')} | {cl.get('address','')}")
-            st.markdown(f"Скидка: **{cl.get('discount',0)}%** | Ответственный: **{cl.get('manager','—')}**")
-            cph = re.sub(r"\D", "", cl['phone'])
-            if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
-            elif not cph: cph = "79990000000"
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
-            mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
-            mc3.link_button("MAX", MAX_URL, use_container_width=True, help=f"Номер в MAX: {MAX_NUMBER}")
-            if cl.get("extra_phones"):
-                st.markdown("**Доп. телефоны:**")
-                for pi, p in enumerate(cl["extra_phones"]):
-                    st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
-            if cl.get("extra_addresses"):
-                st.markdown("**Доп. адреса:**")
-                for ea in cl["extra_addresses"]:
-                    if isinstance(ea, dict):
-                        st.markdown(f"- **{ea.get('address', '')}** {ea.get('resp_name', '')} {ea.get('resp_phone', '')}")
-        with comm_col:
-            st.markdown("**Комментарии:**")
-            for cc in cl.get("client_comments", []):
-                st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
-            if not cl.get("client_comments"): st.caption("Пока нет комментариев")
-            cc_clr_key = f"clr_cc_{cl['id']}"
-            if st.session_state.get(cc_clr_key):
-                st.session_state[f"new_cc_input_{cl['id']}"] = ""
-                st.session_state[cc_clr_key] = False
-            nci = st.text_input("Добавить комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите комментарий...")
-            if st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True):
-                if nci.strip():
-                    cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
-                    cl["last_modified"] = now_str()
-                    st.session_state[cc_clr_key] = True
-                    commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
-                else: st.warning("Введите текст")
-        st.markdown("---")
-        files_col, upload_col = st.columns(2)
-        with files_col:
-            st.markdown("**Файлы:**")
-            render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True)
-        with upload_col:
-            st.markdown("**Загрузить файлы:**")
-            ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}", accept_multiple_files=True, label_visibility="collapsed")
-            if st.button("Сохранить файлы", key=f"cf_btn_{cl['id']}", use_container_width=True):
-                if ucf:
-                    with st.spinner("Загрузка файлов..."):
-                        fi_list = save_uploaded_files(ucf, cl["id"], "profile")
-                    if fi_list:
-                        cl.setdefault("client_files", []).extend(normalize_file_list(fi_list))
-                        cl["last_modified"] = now_str()
-                        save_data(st.session_state.crm_store)
-                        st.toast("Файлы сохранены", icon="\U0001F4C1")
-                        st.rerun()
-                else: st.warning("Выберите файл(ы)")
-        st.markdown("---")
-        render_entity_chat(cl, "client", cl["id"])
-        st.markdown("---")
-        # Карандаш для редактирования (как в сделках и задачах)
         show_edit = st.session_state.get(f"show_edit_{cl['id']}", False)
-        if show_edit:
-            with st.container(border=True):
+        # Две колонки: левая — инфо+кнопка+чат, правая — комментарии+файлы
+        _left_col, _right_col = st.columns(2)
+        with _left_col:
+            st.markdown("**Информация о клиенте:**")
+            if show_edit:
+                # Inline editing — поля становятся редактируемыми
                 en = st.text_input("ФИО", value=cl['name'], key=f"en_{cl['id']}")
                 ep = st.text_input("Телефон", value=cl['phone'], key=f"ep_{cl['id']}")
                 cm_edit_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
-                cm_edit = st.selectbox("Способ связи", CONTACT_METHODS, index=cm_edit_idx, key=f"cm_edit_{cl['id']}")
+                cm_edit = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_edit_idx, key=f"cm_edit_{cl['id']}")
                 ee = st.text_input("Email", value=cl.get('email', ''), key=f"ee_{cl['id']}")
                 ea_val = st.text_input("Адрес", value=cl.get('address', ''), key=f"ea_{cl['id']}")
                 ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(cl.get('discount', 0)), key=f"ed_{cl['id']}")
@@ -2543,12 +2483,79 @@ def render_client_card_expanded(cl):
                         st.session_state.pop("dialog_client_key", None)
                         st.session_state["_in_dialog"] = False
                         commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
-        else:
-            pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
-            st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-            if st.button("\u270e", key=pencil_cli_key, help="Редактировать данные клиента"):
-                st.session_state[f"show_edit_{cl['id']}"] = True
-                st.rerun()
+            else:
+                # Статическое отображение
+                st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
+                st.markdown(f"Телефон: **{cl.get('phone', '')}**")
+                cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
+                cm = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}")
+                if cm != cl.get('contact_method', ''):
+                    cl['contact_method'] = cm
+                    cl["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                st.markdown(f"{cl.get('email','')} | {cl.get('address','')}")
+                st.markdown(f"Скидка: **{cl.get('discount',0)}%** | Ответственный: **{cl.get('manager','—')}**")
+                cph = re.sub(r"\D", "", cl['phone'])
+                if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
+                elif not cph: cph = "79990000000"
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
+                mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
+                mc3.link_button("MAX", MAX_URL, use_container_width=True, help=f"Номер в MAX: {MAX_NUMBER}")
+                if cl.get("extra_phones"):
+                    st.markdown("**Доп. телефоны:**")
+                    for pi, p in enumerate(cl["extra_phones"]):
+                        st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
+                if cl.get("extra_addresses"):
+                    st.markdown("**Доп. адреса:**")
+                    for ea in cl["extra_addresses"]:
+                        if isinstance(ea, dict):
+                            st.markdown(f"- **{ea.get('address', '')}** {ea.get('resp_name', '')} {ea.get('resp_phone', '')}")
+            # Кнопка редактирования между информацией и чатом
+            if not show_edit:
+                pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
+                st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("\u270e Редактировать", key=pencil_cli_key, help="Редактировать данные клиента"):
+                    st.session_state[f"show_edit_{cl['id']}"] = True
+                    st.rerun()
+            # Разделитель под кнопкой редактирования
+            st.markdown("---")
+            # Чат в левом столбце под информацией
+            render_entity_chat(cl, "client", cl["id"])
+        with _right_col:
+            st.markdown("**Комментарии:**")
+            for cc in cl.get("client_comments", []):
+                st.markdown(f"- *{cc.get('time', '')}*: {cc.get('text', '')}")
+            if not cl.get("client_comments"): st.caption("Пока нет комментариев")
+            cc_clr_key = f"clr_cc_{cl['id']}"
+            if st.session_state.get(cc_clr_key):
+                st.session_state[f"new_cc_input_{cl['id']}"] = ""
+                st.session_state[cc_clr_key] = False
+            nci = st.text_input("Добавить комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите комментарий...")
+            if st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True):
+                if nci.strip():
+                    cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
+                    cl["last_modified"] = now_str()
+                    st.session_state[cc_clr_key] = True
+                    commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
+                else: st.warning("Введите текст")
+            # Разделитель перед файлами
+            st.markdown("---")
+            st.markdown("**Файлы:**")
+            render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True)
+            st.markdown("**Загрузить файлы:**")
+            ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}", accept_multiple_files=True, label_visibility="collapsed")
+            if st.button("Сохранить файлы", key=f"cf_btn_{cl['id']}", use_container_width=True):
+                if ucf:
+                    with st.spinner("Загрузка файлов..."):
+                        fi_list = save_uploaded_files(ucf, cl["id"], "profile")
+                    if fi_list:
+                        cl.setdefault("client_files", []).extend(normalize_file_list(fi_list))
+                        cl["last_modified"] = now_str()
+                        save_data(st.session_state.crm_store)
+                        st.toast("Файлы сохранены", icon="\U0001F4C1")
+                        st.rerun()
+                else: st.warning("Выберите файл(ы)")
 
 def render_client_in_tree(cl):
     is_cl_exp = st.session_state.expanded_client_id == cl["id"]
@@ -2648,87 +2655,99 @@ def render_client_in_tree(cl):
                         commit_and_rerun(st.session_state.crm_store, "Сделка создана")
 
 def render_client_form(fv):
-    with st.expander("Добавить клиента", expanded=False, key=f"add_client_form_{fv}"):
-        acl, acr = st.columns(2)
-        with acl:
-            cn = st.text_input("ФИО / Компания", key=f"cn_{fv}")
-            cp = st.text_input("Основной телефон", key=f"cp_{fv}")
-            ce = st.text_input("Основной Email", key=f"ce_{fv}")
-            cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}")
-            cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
-        with acr:
-            ca = st.text_input("Основной адрес", key=f"ca_{fv}")
-            cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", placeholder="Выбери категорию")
-            with st.container(border=True):
-                st.markdown("**Комментарии:**")
-                cc_form_clr = f"clr_cc_form_{fv}"
-                if st.session_state.get(cc_form_clr):
-                    st.session_state[f"new_cc_form_{fv}"] = ""
-                    st.session_state[cc_form_clr] = False
-                ncc = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
-                if st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True):
-                    if ncc.strip():
-                        st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
-                        st.session_state[cc_form_clr] = True
-                        st.rerun()
-                    else: st.warning("Введите текст")
-                if st.session_state.get("pending_client_comments"):
-                    for pc in st.session_state["pending_client_comments"]:
-                        st.markdown(f"- *{pc['time']}*: {pc['text']}")
-        st.markdown("---")
-        ac_ph, ac_em, ac_ad = st.columns(3)
-        with ac_ph:
-            st.markdown("**Доп. телефоны**")
-            for i, ph in enumerate(st.session_state.f_ph):
-                st.session_state.f_ph[i]["phone"] = st.text_input(f"Телефон #{i+1}", value=ph["phone"], key=f"f_ph_{fv}_{i}")
-                st.session_state.f_ph[i]["name"] = st.text_input(f"ФИО #{i+1}", value=ph["name"], key=f"f_nm_{fv}_{i}")
-                st.session_state.f_ph[i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{fv}_{i}")
-            if st.button("Добавить телефон", key=f"add_ph_btn_{fv}"):
-                st.session_state.f_ph.append({"phone": "", "name": "", "role": ""})
-                st.rerun()
-        with ac_em:
-            st.markdown("**Доп. Email**")
-            for i, em in enumerate(st.session_state.f_em):
-                st.session_state.f_em[i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{fv}_{i}")
-            if st.button("Добавить Email", key=f"add_em_btn_{fv}"):
-                st.session_state.f_em.append("")
-                st.rerun()
-        with ac_ad:
-            st.markdown("**Доп. адреса**")
-            for i, ad in enumerate(st.session_state.f_ad):
-                st.session_state.f_ad[i]["address"] = st.text_input(f"Адрес #{i+1}", value=ad.get("address", ""), key=f"f_ad_addr_{fv}_{i}")
-                st.session_state.f_ad[i]["resp_name"] = st.text_input(f"Ответственный #{i+1}", value=ad.get("resp_name", ""), key=f"f_ad_rn_{fv}_{i}")
-                st.session_state.f_ad[i]["resp_role"] = st.text_input(f"Должность #{i+1}", value=ad.get("resp_role", ""), key=f"f_ad_rr_{fv}_{i}")
-                st.session_state.f_ad[i]["resp_phone"] = st.text_input(f"Телефон #{i+1}", value=ad.get("resp_phone", ""), key=f"f_ad_rp_{fv}_{i}")
-                st.session_state.f_ad[i]["resp_email"] = st.text_input(f"Email #{i+1}", value=ad.get("resp_email", ""), key=f"f_ad_re_{fv}_{i}")
-            if st.button("Добавить адрес", key=f"add_ad_btn_{fv}"):
-                st.session_state.f_ad.append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
-                st.rerun()
-        st.markdown("---")
-        cf = st.file_uploader("Прикрепить файлы:", key=f"cf_{fv}", accept_multiple_files=True)
-        if st.button("Внести клиента в базу", use_container_width=True, type="primary", key=f"add_client_btn_{fv}"):
-            if cn and cp:
-                if not cm: st.error("Выберите ответственного")
-                elif not cc: st.error("Выберите категорию")
-                else:
-                    clients = st.session_state.crm_store["clients"]
-                    nid = (max([c['id'] for c in clients]) if clients else 0) + 1
-                    nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": "", "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "client_chat": []}
-                    if cf:
-                        fi_list = save_uploaded_files(cf, nid, "profile")
-                        if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
-                    if st.session_state.get("pending_client_comments"):
-                        nc["client_comments"] = list(st.session_state["pending_client_comments"])
-                        st.session_state["pending_client_comments"] = []
-                    st.session_state.crm_store["clients"].append(nc)
-                    save_data(st.session_state.crm_store)
-                    st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
-                    st.session_state.last_id = nid
-                    st.session_state.client_form_version += 1
-                    st.session_state.expanded_client_id = nid
-                    st.toast(f"Клиент {cn} добавлен", icon="✅")
+    if st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False):
+        st.session_state[f"show_add_client_dialog_{fv}"] = True
+        st.rerun()
+    if st.session_state.get(f"show_add_client_dialog_{fv}", False):
+        add_client_dialog(fv)
+
+@st.dialog("Добавить клиента", width="large")
+def add_client_dialog(fv):
+    _dc_col1, _dc_col2 = st.columns([20, 1])
+    with _dc_col2:
+        if st.button("✕", key=f"add_client_close_{fv}", help="Закрыть"):
+            st.session_state[f"show_add_client_dialog_{fv}"] = False
+            st.rerun()
+    acl, acr = st.columns(2)
+    with acl:
+        cn = st.text_input("ФИО / Компания", key=f"cn_{fv}")
+        cp = st.text_input("Основной телефон", key=f"cp_{fv}")
+        ce = st.text_input("Основной Email", key=f"ce_{fv}")
+        cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}")
+        cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
+    with acr:
+        ca = st.text_input("Основной адрес", key=f"ca_{fv}")
+        cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", placeholder="Выбери категорию")
+        with st.container(border=True):
+            st.markdown("**Комментарии:**")
+            cc_form_clr = f"clr_cc_form_{fv}"
+            if st.session_state.get(cc_form_clr):
+                st.session_state[f"new_cc_form_{fv}"] = ""
+                st.session_state[cc_form_clr] = False
+            ncc = st.text_input("Добавить комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите комментарий...")
+            if st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True):
+                if ncc.strip():
+                    st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
+                    st.session_state[cc_form_clr] = True
                     st.rerun()
-            else: st.error("Заполните ФИО и телефон")
+                else: st.warning("Введите текст")
+            if st.session_state.get("pending_client_comments"):
+                for pc in st.session_state["pending_client_comments"]:
+                    st.markdown(f"- *{pc['time']}*: {pc['text']}")
+    st.markdown("---")
+    ac_ph, ac_em, ac_ad = st.columns(3)
+    with ac_ph:
+        st.markdown("**Доп. телефоны**")
+        for i, ph in enumerate(st.session_state.f_ph):
+            st.session_state.f_ph[i]["phone"] = st.text_input(f"Телефон #{i+1}", value=ph["phone"], key=f"f_ph_{fv}_{i}")
+            st.session_state.f_ph[i]["name"] = st.text_input(f"ФИО #{i+1}", value=ph["name"], key=f"f_nm_{fv}_{i}")
+            st.session_state.f_ph[i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{fv}_{i}")
+        if st.button("Добавить телефон", key=f"add_ph_btn_{fv}"):
+            st.session_state.f_ph.append({"phone": "", "name": "", "role": ""})
+            st.rerun()
+    with ac_em:
+        st.markdown("**Доп. Email**")
+        for i, em in enumerate(st.session_state.f_em):
+            st.session_state.f_em[i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{fv}_{i}")
+        if st.button("Добавить Email", key=f"add_em_btn_{fv}"):
+            st.session_state.f_em.append("")
+            st.rerun()
+    with ac_ad:
+        st.markdown("**Доп. адреса**")
+        for i, ad in enumerate(st.session_state.f_ad):
+            st.session_state.f_ad[i]["address"] = st.text_input(f"Адрес #{i+1}", value=ad.get("address", ""), key=f"f_ad_addr_{fv}_{i}")
+            st.session_state.f_ad[i]["resp_name"] = st.text_input(f"Ответственный #{i+1}", value=ad.get("resp_name", ""), key=f"f_ad_rn_{fv}_{i}")
+            st.session_state.f_ad[i]["resp_role"] = st.text_input(f"Должность #{i+1}", value=ad.get("resp_role", ""), key=f"f_ad_rr_{fv}_{i}")
+            st.session_state.f_ad[i]["resp_phone"] = st.text_input(f"Телефон #{i+1}", value=ad.get("resp_phone", ""), key=f"f_ad_rp_{fv}_{i}")
+            st.session_state.f_ad[i]["resp_email"] = st.text_input(f"Email #{i+1}", value=ad.get("resp_email", ""), key=f"f_ad_re_{fv}_{i}")
+        if st.button("Добавить адрес", key=f"add_ad_btn_{fv}"):
+            st.session_state.f_ad.append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
+            st.rerun()
+    st.markdown("---")
+    cf = st.file_uploader("Прикрепить файлы:", key=f"cf_{fv}", accept_multiple_files=True)
+    if st.button("Внести клиента в базу", use_container_width=True, type="primary", key=f"add_client_btn_{fv}"):
+        if cn and cp:
+            if not cm: st.error("Выберите ответственного")
+            elif not cc: st.error("Выберите категорию")
+            else:
+                clients = st.session_state.crm_store["clients"]
+                nid = (max([c['id'] for c in clients]) if clients else 0) + 1
+                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": "", "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "client_chat": []}
+                if cf:
+                    fi_list = save_uploaded_files(cf, nid, "profile")
+                    if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
+                if st.session_state.get("pending_client_comments"):
+                    nc["client_comments"] = list(st.session_state["pending_client_comments"])
+                    st.session_state["pending_client_comments"] = []
+                st.session_state.crm_store["clients"].append(nc)
+                save_data(st.session_state.crm_store)
+                st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
+                st.session_state.last_id = nid
+                st.session_state.client_form_version += 1
+                st.session_state.expanded_client_id = nid
+                st.toast(f"Клиент {cn} добавлен", icon="✅")
+                st.rerun()
+        else: st.error("Заполните ФИО и телефон")
 @st.dialog("Подробности задачи", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
     st.session_state["_in_dialog"] = True
@@ -3152,7 +3171,25 @@ if st.session_state.active_tab == "Клиенты":
     # Поиск и сортировки в один ряд
     _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
     with _search_col:
+        st.markdown("<style>.st-key-search_input_key input { background-color: #FFFFFF !important; border: 1.5px solid #C9CFD7 !important; border-radius: 10px !important; }</style>", unsafe_allow_html=True)
         sq = st.text_input("Поиск", key="search_input_key", placeholder="По имени, компании или телефону...").strip().lower()
+        # Живой поиск — rerun на каждое нажатие клавиши
+        st.components.v1.html("""<script>
+(function(){
+    var w=window;
+    try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}
+    var inp=w.document.querySelector('input[aria-label="Поиск"]');
+    if(!inp){inp=w.document.querySelector('[data-testid="stTextInput"] input');}
+    if(inp && !inp.dataset.liveSearch){
+        inp.dataset.liveSearch='1';
+        inp.addEventListener('input',function(){
+            // Simulate Enter to trigger Streamlit rerun
+            var ev=new KeyboardEvent('keydown',{bubbles:true,key:'Enter',code:'Enter'});
+            inp.dispatchEvent(ev);
+        });
+    }
+})();
+</script>""", height=0)
     with _sort_col:
         sort_options = ["По дате изменения", "По дате создания", "По алфавиту"]
         sort_mode = st.selectbox("Сортировка", sort_options, key="client_sort_select")
@@ -3186,11 +3223,11 @@ if st.session_state.active_tab == "Клиенты":
     if all_clients:
         # Таблица клиентов
         # Заголовок таблицы
-        _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns([3, 2, 1.2, 1.2, 1.5])
+        _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns([4, 1.2, 1.2, 1.2, 1.5])
         with _hc1:
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Наименование</div>", unsafe_allow_html=True)
         with _hc2:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Категория</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Категория</div>", unsafe_allow_html=True)
         with _hc3:
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сделки</div>", unsafe_allow_html=True)
         with _hc4:
@@ -3205,7 +3242,9 @@ if st.session_state.active_tab == "Клиенты":
             deals_sum = sum(d.get("budget", 0) for d in cl_deals)
             # Проверка актуальных сделок
             has_active_deals = any(d.get("status", "Новый") in ("Новый", "В работе") for d in cl_deals)
-            deals_color_class = "green-link" if has_active_deals else "normal-link"
+            # Проверка задач
+            has_overdue_tasks = any(not t.get("done") and is_task_overdue(t) for t in cl_tasks_all)
+            has_active_tasks = any(not t.get("done") for t in cl_tasks_all)
             # Кнопки-ссылки через st.button
             _name_key = f"tbl_name_{cl['id']}"
             _deals_key = f"tbl_deals_{cl['id']}"
@@ -3214,28 +3253,40 @@ if st.session_state.active_tab == "Клиенты":
             _tasks_count = all_tasks_count
             _category = cl.get("category", "Не определён")
             _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
-            # Рендерим строку таблицы через columns (5 колонок)
-            _c1, _c2, _c3, _c4, _c5 = st.columns([3, 2, 1.2, 1.2, 1.5])
+            # Рендерим строку таблицы через columns (5 колонок) — шире "Наименование", уже "Категория"
+            _c1, _c2, _c3, _c4, _c5 = st.columns([4, 1.2, 1.2, 1.2, 1.5])
             with _c1:
-                if st.button(cl.get("name", ""), key=_name_key, use_container_width=True, type="secondary", help="Открыть карточку клиента"):
+                # Текст вместо кнопки с рамкой — прозрачный фон, без границ, кликабельный
+                _name_btn_key = f"tbl_name_{cl['id']}"
+                st.markdown(f"<style>.st-key-{_name_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; text-align: left !important; padding: 2px 0 !important; font-size: 0.88rem !important; color: #2C3E50 !important; font-weight: 600 !important; }} .st-key-{_name_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
+                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True, help="Открыть карточку клиента"):
                     st.session_state["dialog_client_key"] = cl["id"]
                     st.rerun()
             with _c2:
-                st.markdown(f"<div style='padding:6px 0;font-size:0.88rem;color:#3C4A5A;'>{_category}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding:2px 0;font-size:0.88rem;color:#3C4A5A;text-align:center;'>{_category}</div>", unsafe_allow_html=True)
             with _c3:
                 _deals_btn_key = f"tbl_deals_btn_{cl['id']}"
-                if has_active_deals:
-                    st.markdown(f"<style>.st-key-{_deals_btn_key} button {{ color: #2E7D32 !important; font-weight: 700 !important; text-decoration: underline !important; }}</style>", unsafe_allow_html=True)
-                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True, type="secondary", help="Открыть сделки"):
+                _deals_color = "#2E7D32" if has_active_deals else "#2C3E50"
+                st.markdown(f"<style>.st-key-{_deals_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_deals_color} !important; font-weight: 700 !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_deals_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
+                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True, help="Открыть сделки"):
                     st.session_state["dialog_client_deals_key"] = cl["id"]
                     st.rerun()
             with _c4:
-                if st.button(str(_tasks_count), key=_tasks_key, use_container_width=True, type="secondary", help="Открыть задачи"):
+                _tasks_btn_key = f"tbl_tasks_{cl['id']}"
+                if has_overdue_tasks:
+                    _tasks_color = "#C62828"
+                elif has_active_tasks:
+                    _tasks_color = "#2E7D32"
+                else:
+                    _tasks_color = "#2C3E50"
+                st.markdown(f"<style>.st-key-{_tasks_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_tasks_color} !important; font-weight: 700 !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_tasks_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
+                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True, help="Открыть задачи"):
                     st.session_state["dialog_client_tasks_key"] = cl["id"]
                     st.rerun()
             with _c5:
-                st.markdown(f"<div style='padding:6px 0;text-align:right;font-weight:600;white-space:nowrap;'>{_sum_str}</div>", unsafe_allow_html=True)
-        st.markdown('<hr style="border:0;height:1px;background:#E8EBEF;margin:0.1rem 0;">', unsafe_allow_html=True)
+                st.markdown(f"<div style='padding:2px 0;text-align:right;font-weight:600;white-space:nowrap;'>{_sum_str}</div>", unsafe_allow_html=True)
+            # Разделитель между клиентами — минимальный отступ
+            st.markdown('<div class="client-divider"></div>', unsafe_allow_html=True)
 
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
