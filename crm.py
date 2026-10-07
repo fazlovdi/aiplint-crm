@@ -999,7 +999,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["dialog_deal_key"] = _deal_id
                         st.session_state.pop("dialog_task_key", None)
-                        _pop_dialog_return()
+                        st.session_state["_in_dialog"] = False
                         st.rerun()
                 with _print_inner:
                     render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
@@ -1660,38 +1660,35 @@ def commit_and_rerun(data=None, toast_msg=None):
 
 _in_dialog = False
 
+def _smart_rerun():
+    st.rerun()
+
+
 def _push_dialog_return():
-    """Save current dialog state to return stack before opening a new dialog."""
-    if "_dialog_return_stack" not in st.session_state:
-        st.session_state["_dialog_return_stack"] = []
+    """Сохранить текущий диалог в стек перед открытием нового."""
+    stack = st.session_state.get("_dialog_return_stack", [])
     current = {}
-    for _dk in ["dialog_client_key", "dialog_deal_key", "dialog_task_key",
+    for key in ["dialog_client_key", "dialog_deal_key", "dialog_task_key",
                 "dialog_client_deals_key", "dialog_client_tasks_key",
                 "dialog_deal_task_key"]:
-        _dv = st.session_state.get(_dk)
-        if _dv:
-            current[_dk] = _dv
+        val = st.session_state.get(key)
+        if val:
+            current[key] = val
     if current:
-        st.session_state["_dialog_return_stack"].append(current)
+        stack.append(current)
+        st.session_state["_dialog_return_stack"] = stack
+
 
 def _pop_dialog_return():
-    """Restore previous dialog from return stack. Returns True if restored."""
-    _stack = st.session_state.get("_dialog_return_stack", [])
-    if _stack:
-        _prev = _stack.pop()
-        st.session_state["_dialog_return_stack"] = _stack
-        for _dk, _dv in _prev.items():
-            st.session_state[_dk] = _dv
-        st.session_state["_in_dialog"] = True
+    """Восстановить предыдущий диалог из стека при закрытии текущего."""
+    stack = st.session_state.get("_dialog_return_stack", [])
+    if stack:
+        prev = stack.pop()
+        st.session_state["_dialog_return_stack"] = stack
+        for key, val in prev.items():
+            st.session_state[key] = val
         return True
-    st.session_state["_in_dialog"] = False
     return False
-
-def _smart_rerun():
-    if st.session_state.get("_in_dialog", False):
-        st.rerun()
-    else:
-        st.rerun()
 
 # ====== УВЕДОМЛЕНИЯ ======
 TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
@@ -1810,6 +1807,36 @@ def render_notifications_panel():
                     f'</div>',
                     unsafe_allow_html=True
                 )
+            render_centered_title(f"Задачи по сделке ({len(dl_tasks)})")
+            if dl_tasks:
+                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
+                for _dti, _dtk in enumerate(dl_tasks):
+                    _dtk_btn_key = f"dls_tk_btn_{deal_id}_{_dti}"
+                    _dfd = format_date(_dtk.get("deadline", ""))
+                    _ddone = _dtk.get("done", False)
+                    _dicon = "\u2705" if _ddone else "\u23f3"
+                    _dlabel = f"{_dicon} \u0417\u0430\u0434\u0430\u0447\u0430 {_dtk.get('task_number', '')} \u2014 {_dtk.get('text', '')} | {_dfd}"
+                    _dbg, _dbc = "#F5F6F8", "#C9CFD7"
+                    if not _ddone:
+                        if is_task_overdue(_dtk): _dbg, _dbc = "#FFEBEE", "#C62828"
+                        elif _dtk.get("in_work"): _dbg, _dbc = "#E8F5E9", "#4CAF50"
+                        else: _dbg, _dbc = "#E3F2FD", "#2196F3"
+                    st.markdown(f"<style>.st-key-{_dtk_btn_key} button {{ background-color: {_dbg} !important; color: #2C3E50 !important; border: 2px solid {_dbc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
+                    with st.container(key=_dtk_btn_key):
+                        if st.button(_dlabel, key=f"dls_tk_go_{deal_id}_{_dti}", use_container_width=True, type="secondary"):
+                            _task_key = f"dls_dl_{deal_id}_{_dti}"
+                            st.session_state["dialog_deal_task_key"] = _task_key
+                            st.rerun()
+            else:
+                st.caption("Задач по сделке нет")
+            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_{deal_id}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
+                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
+                st.rerun()
+
+
+
 @st.dialog("Завершить сделку", width="medium")
 def close_deal_dialog(deal_id):
     deal = None
@@ -1885,6 +1912,7 @@ if "client_sort_cat" not in st.session_state: st.session_state.client_sort_cat =
 if "expanded_tree_id" not in st.session_state: st.session_state.expanded_tree_id = None
 if "auto_expand_deal_id" not in st.session_state: st.session_state.auto_expand_deal_id = None
 if "scroll_to_deal" not in st.session_state: st.session_state.scroll_to_deal = None
+if "_dialog_return_stack" not in st.session_state: st.session_state._dialog_return_stack = []
 
 cookie_manager = stx.CookieManager()
 cookies = cookie_manager.get_all()
@@ -2036,47 +2064,42 @@ nc1, nc2, nc3, nc4, nc5 = st.columns(5)
 with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
+        st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_in_dialog"] = False
         st.rerun()
 with nc2:
     if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"
+        st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_in_dialog"] = False
         st.rerun()
 with nc3:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"
+        st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_in_dialog"] = False
         st.rerun()
 with nc4:
     if st.button("Внутренние задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
         st.session_state.active_tab = "Внутренние задачи"
+        st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_in_dialog"] = False
         st.rerun()
 with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
+        st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_in_dialog"] = False
         st.rerun()
 st.markdown("---")
 
@@ -2501,14 +2524,13 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.markdown(f"**Отчёт:** {d.get('archive_report')}")
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
-            st.markdown("---")
             render_entity_chat(d, "deal", deal_id)
             if st.session_state.user_role == "admin":
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
                     st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
                     st.session_state.pop("dialog_deal_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
         with right_col:
             if d.get("deal_comments"):
@@ -2547,36 +2569,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         _smart_rerun()
                 else:
                     st.warning("Выберите файл(ы)")
-            st.markdown("---")
-            dl_tasks = [t for t in (cl.get("tasks", []) if cl else []) if t.get("deal_id") == deal_id]
-            render_centered_title(f"Задачи по сделке ({len(dl_tasks)})")
-            if dl_tasks:
-                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
-                for _dti, _dtk in enumerate(dl_tasks):
-                    _dtk_btn_key = f"dls_tk_btn_{deal_id}_{_dti}"
-                    _dfd = format_date(_dtk.get("deadline", ""))
-                    _ddone = _dtk.get("done", False)
-                    _dicon = "\u2705" if _ddone else "\u23f3"
-                    _dlabel = f"{_dicon} \u0417\u0430\u0434\u0430\u0447\u0430 {_dtk.get('task_number', '')} \u2014 {_dtk.get('text', '')} | {_dfd}"
-                    _dbg, _dbc = "#F5F6F8", "#C9CFD7"
-                    if not _ddone:
-                        if is_task_overdue(_dtk): _dbg, _dbc = "#FFEBEE", "#C62828"
-                        elif _dtk.get("in_work"): _dbg, _dbc = "#E8F5E9", "#4CAF50"
-                        else: _dbg, _dbc = "#E3F2FD", "#2196F3"
-                    st.markdown(f"<style>.st-key-{_dtk_btn_key} button {{ background-color: {_dbg} !important; color: #2C3E50 !important; border: 2px solid {_dbc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
-                    with st.container(key=_dtk_btn_key):
-                        if st.button(_dlabel, key=f"dls_tk_go_{deal_id}_{_dti}", use_container_width=True, type="secondary"):
-                            _task_key = f"dls_dl_{deal_id}_{_dti}"
-                            _push_dialog_return()
-                            st.session_state["dialog_deal_task_key"] = _task_key
-                            st.rerun()
-            else:
-                st.caption("Задач по сделке нет")
-            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_{deal_id}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
-                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
-                st.rerun()
+
 
 
 def render_client_card_expanded(cl):
@@ -2666,7 +2659,7 @@ def render_client_card_expanded(cl):
                         st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
                         st.session_state.expanded_client_id = None
                         st.session_state.pop("dialog_client_key", None)
-                        _pop_dialog_return()
+                        st.session_state["_in_dialog"] = False
                         commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
             else:
                 # Статическое отображение
@@ -3009,9 +3002,9 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                    st.session_state.pop("dialog_task_key", None)
-                    st.session_state.pop("dialog_deal_task_key", None)
                     _pop_dialog_return()
+                    st.session_state.pop("dialog_task_key", None)
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
 
     # Unsaved changes warning
@@ -3070,8 +3063,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state.pop("dialog_task_key", None)
-                    st.session_state.pop("dialog_deal_task_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     st.rerun()
             with _wcol2:
@@ -3080,8 +3072,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state.pop("dialog_task_key", None)
-                    st.session_state.pop("dialog_deal_task_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol3:
                 if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
@@ -3110,8 +3101,9 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                 else:
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
-                    st.session_state.pop("dialog_deal_key", None)
                     _pop_dialog_return()
+                    st.session_state.pop("dialog_deal_key", None)
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
 
     if _show_close_warning:
@@ -3139,7 +3131,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state.pop("dialog_deal_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     st.rerun()
             with _wcol2:
@@ -3147,7 +3139,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state.pop("dialog_deal_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol3:
                 if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
@@ -3182,8 +3174,9 @@ def client_detail_dialog(cl_id):
                 else:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
-                    st.session_state.pop("dialog_client_key", None)
                     _pop_dialog_return()
+                    st.session_state.pop("dialog_client_key", None)
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
@@ -3241,7 +3234,7 @@ def client_detail_dialog(cl_id):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     st.session_state.pop("dialog_client_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.toast("Сохранено", icon="\u2705")
                     st.rerun()
             with _wcol2:
@@ -3249,7 +3242,7 @@ def client_detail_dialog(cl_id):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     st.session_state.pop("dialog_client_key", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol3:
                 if st.button("Отмена", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
@@ -3258,7 +3251,7 @@ def client_detail_dialog(cl_id):
     render_client_card_expanded(cl)
 
 
-@st.dialog("", width="large")
+@st.dialog("Сделки клиента", width="large")
 def client_deals_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     cl = get_client_by_id(cl_id)
@@ -3273,10 +3266,11 @@ def client_deals_dialog(cl_id):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
             if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                st.session_state.pop("dialog_client_deals_key", None)
                 _pop_dialog_return()
+                st.session_state.pop("dialog_client_deals_key", None)
+                st.session_state["_in_dialog"] = False
                 st.rerun()
-    st.subheader(f"{cl.get('name', '')}")
+    st.subheader(cl.get('name', ''))
     cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl_id]
     if cl_deals:
         cl_deals.sort(key=lambda d: get_sort_key(d), reverse=True)
@@ -3331,9 +3325,10 @@ def deal_create_task_dialog(deal_id, client_id):
                     st.rerun()
                 else:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    _pop_dialog_return()
                     st.session_state.pop("dialog_create_deal_task_deal_id", None)
                     st.session_state.pop("dialog_create_deal_task_client_id", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
@@ -3345,18 +3340,20 @@ def deal_create_task_dialog(deal_id, client_id):
             with _wcol1:
                 if st.button("Без сохранения", key=f"cdt_warn_nosave_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    _pop_dialog_return()
                     st.session_state.pop("dialog_create_deal_task_deal_id", None)
                     st.session_state.pop("dialog_create_deal_task_client_id", None)
-                    _pop_dialog_return()
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.rerun()
     if render_task_form(deal_id, client_id, f"cdt_{deal_id}"):
+        _pop_dialog_return()
         st.session_state.pop("dialog_create_deal_task_deal_id", None)
         st.session_state.pop("dialog_create_deal_task_client_id", None)
-        _pop_dialog_return()
+        st.session_state["_in_dialog"] = False
         commit_and_rerun(st.session_state.crm_store, "Задача создана")
 
 
@@ -3383,8 +3380,9 @@ def client_create_task_dialog(cl_id):
                     st.rerun()
                 else:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.session_state.pop("dialog_create_client_task_client_id", None)
                     _pop_dialog_return()
+                    st.session_state.pop("dialog_create_client_task_client_id", None)
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
@@ -3396,8 +3394,9 @@ def client_create_task_dialog(cl_id):
             with _wcol1:
                 if st.button("Без сохранения", key=f"cct_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.session_state.pop("dialog_create_client_task_client_id", None)
                     _pop_dialog_return()
+                    st.session_state.pop("dialog_create_client_task_client_id", None)
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"cct_warn_cancel_{cl_id}", use_container_width=True):
@@ -3405,7 +3404,7 @@ def client_create_task_dialog(cl_id):
                     st.rerun()
     if render_task_form(None, cl_id, f"cct_{cl_id}"):
         st.session_state.pop("dialog_create_client_task_client_id", None)
-        _pop_dialog_return()
+        st.session_state["_in_dialog"] = False
         commit_and_rerun(st.session_state.crm_store, "Задача создана")
 
 
@@ -3437,8 +3436,9 @@ def client_create_deal_task_dialog(cl_id):
             with _wcol1:
                 if st.button("Без сохранения", key=f"ccdt_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
                     _pop_dialog_return()
+                    st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                    st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"ccdt_warn_cancel_{cl_id}", use_container_width=True):
@@ -3448,10 +3448,10 @@ def client_create_deal_task_dialog(cl_id):
     selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"ccdt_deal_sel_{cl_id}")
     if selected_deal_id and render_task_form(selected_deal_id, cl_id, f"ccdt_{cl_id}"):
         st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
-        _pop_dialog_return()
+        st.session_state["_in_dialog"] = False
         commit_and_rerun(st.session_state.crm_store, "Задача создана")
 
-@st.dialog("", width="large")
+@st.dialog("Задачи клиента", width="large")
 def client_tasks_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     cl = get_client_by_id(cl_id)
@@ -3466,10 +3466,11 @@ def client_tasks_dialog(cl_id):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
             if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                st.session_state.pop("dialog_client_tasks_key", None)
                 _pop_dialog_return()
+                st.session_state.pop("dialog_client_tasks_key", None)
+                st.session_state["_in_dialog"] = False
                 st.rerun()
-    st.subheader(f"{cl.get('name', '')}")
+    st.subheader(cl.get('name', ''))
     # Задачи по клиенту
     client_tasks = [t for t in cl.get("tasks", []) if not t.get("deal_id")]
     cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl_id]
@@ -3559,7 +3560,7 @@ if st.session_state.active_tab == "Клиенты":
     # Поиск и сортировки в один ряд
     _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
     with _search_col:
-        _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="По имени, компании или телефону...", label_visibility="collapsed")
+        _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
         sq = (_search_input_now or "").strip().lower()
     with _sort_col:
         sort_options = ["По дате изменения", "По дате создания", "По алфавиту"]
