@@ -272,6 +272,7 @@ MAX_NUMBER = "+79003293300"
 CATEGORIES = ["Не определён", "Дизайнер", "Строитель", "Дилер", "Покупатель"]
 TASK_TYPES = ["Связаться", "Отправить заказ", "Отправить образцы"]
 SHIP_PAY_OPTIONS = ["", "Включено в счёт", "Клиентом при получении"]
+COMM_METHODS = ["Телефон", "WhatsApp", "Telegram", "MAX", "Директ", "eMail"]
 
 raw_token = st.secrets.get("YANDEX_DISK_TOKEN", "")
 if isinstance(raw_token, str):
@@ -618,16 +619,14 @@ def render_phone_inline(phone, uid):
     cph = re.sub(r"\D", "", phone)
     if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
     elif not cph: cph = "79990000000"
-    btn_id = f"ph_btn_{uid}_{secrets.token_hex(4)}"
-    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;"><span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span><button onclick="window.crmCopy(\'{phone}\',\'{btn_id}\')" class="phone-btn" id="{btn_id}" title="Скопировать">\U0001F4CB</button><a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;"><span style="font-size:1rem;font-weight:600;color:#2C3E50;">{phone}</span><a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a></div>', unsafe_allow_html=True)
 
 def render_extra_phone_inline(phone, name, role, uid):
     cph = re.sub(r"\D", "", phone)
     if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
     elif not cph: cph = "79990000000"
     info = f"{phone} — {name} ({role})" if name else phone
-    btn_id = f"ep_btn_{uid}_{secrets.token_hex(4)}"
-    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;"><span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span><button onclick="window.crmCopy(\'{phone}\',\'{btn_id}\')" class="phone-btn" id="{btn_id}" title="Скопировать">\U0001F4CB</button><a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="phone-action-group" style="padding:4px 0;flex-wrap:wrap;gap:8px;white-space:normal;"><span style="font-size:0.9rem;color:#3C4A5A;flex:1 1 auto;min-width:0;word-break:break-word;">{info}</span><a href="tel:+{cph}" class="phone-btn" title="Позвонить">\U0001F4DE</a></div>', unsafe_allow_html=True)
 
 def render_track_inline(track_num, uid):
     btn_id = f"trk_btn_{uid}_{secrets.token_hex(4)}"
@@ -1262,7 +1261,7 @@ def migrate_data(data):
     for c in data.get("clients", []):
         client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
         first_deal_id = client_deals[0]["id"] if client_deals else None
-        for k, v in [("email",""),("address",""),("base_comment",""),("category","Не определён"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[]),("last_modified","1970-01-01 00:00:00"),("client_chat",[]),("created_at","")]:
+        for k, v in [("email",""),("address",""),("base_comment",""),("category","Не определён"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[]),("last_modified","1970-01-01 00:00:00"),("client_chat",[]),("created_at",""),("communication_method","")]:
             if k not in c or c[k] == "-": c[k] = v
         for ea in c.get("extra_addresses", []):
             if isinstance(ea, str):
@@ -1890,6 +1889,7 @@ with nc1:
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("dialog_it_key", None)
         st.rerun()
 with nc2:
     if st.button("Сделки", use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
@@ -1897,6 +1897,7 @@ with nc2:
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("dialog_it_key", None)
         st.rerun()
 with nc3:
     if st.button("Задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
@@ -1904,6 +1905,7 @@ with nc3:
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("dialog_it_key", None)
         st.rerun()
 with nc4:
     if st.button("Внутренние задачи", use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
@@ -1911,6 +1913,7 @@ with nc4:
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("dialog_it_key", None)
         st.rerun()
 with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
@@ -1918,6 +1921,7 @@ with nc5:
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("dialog_it_key", None)
         st.rerun()
 st.markdown("---")
 
@@ -2415,6 +2419,7 @@ def render_client_card_expanded(cl):
         with info_col:
             st.markdown("**Информация о клиенте:**")
             render_phone_inline(cl['phone'], cl['id'])
+            st.markdown(f"**Способ общения:** {cl.get('communication_method', '—')}")
             st.markdown(f"{cl.get('email','')} | {cl.get('address','')}")
             st.markdown(f"Скидка: **{cl.get('discount',0)}%** | Ответственный: **{cl.get('manager','—')}**")
             cph = re.sub(r"\D", "", cl['phone'])
@@ -2480,6 +2485,8 @@ def render_client_card_expanded(cl):
             with st.container(border=True):
                 en = st.text_input("ФИО", value=cl['name'], key=f"en_{cl['id']}")
                 ep = st.text_input("Телефон", value=cl['phone'], key=f"ep_{cl['id']}")
+                ecm_idx = COMM_METHODS.index(cl.get('communication_method', '')) if cl.get('communication_method', '') in COMM_METHODS else 0
+                ecm = st.selectbox("Способ общения:", COMM_METHODS, index=ecm_idx, key=f"ecm_{cl['id']}")
                 ee = st.text_input("Email", value=cl.get('email', ''), key=f"ee_{cl['id']}")
                 ea_val = st.text_input("Адрес", value=cl.get('address', ''), key=f"ea_{cl['id']}")
                 ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(cl.get('discount', 0)), key=f"ed_{cl['id']}")
@@ -2487,7 +2494,7 @@ def render_client_card_expanded(cl):
                 ec = st.selectbox("Категория", CATEGORIES, index=ec_idx, key=f"ec_{cl['id']}")
                 em = st.selectbox("Ответственный:", get_managers_list(), index=0 if cl.get('manager', '') not in get_managers_list() else (get_managers_list()).index(cl.get('manager', '')), key=f"em_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 if st.button("Сохранить", key=f"es_{cl['id']}", use_container_width=True, type="primary"):
-                    cl['name'], cl['phone'], cl['email'], cl['address'], cl['discount'], cl['category'], cl['manager'] = en, format_phone(ep), ee, ea_val, int(ed), ec, em
+                    cl['name'], cl['phone'], cl['communication_method'], cl['email'], cl['address'], cl['discount'], cl['category'], cl['manager'] = en, format_phone(ep), ecm, ee, ea_val, int(ed), ec, em
                     cl["last_modified"] = now_str()
                     st.session_state[f"show_edit_{cl['id']}"] = False
                     commit_and_rerun(st.session_state.crm_store, "Данные клиента сохранены")
@@ -2603,6 +2610,7 @@ def render_client_form(fv):
         with acl:
             cn = st.text_input("ФИО / Компания", key=f"cn_{fv}")
             cp = st.text_input("Основной телефон", key=f"cp_{fv}")
+            ccm = st.selectbox("Способ общения:", COMM_METHODS, index=0, key=f"ccm_{fv}")
             ce = st.text_input("Основной Email", key=f"ce_{fv}")
             cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}")
             cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
@@ -2663,7 +2671,7 @@ def render_client_form(fv):
                 else:
                     clients = st.session_state.crm_store["clients"]
                     nid = (max([c['id'] for c in clients]) if clients else 0) + 1
-                    nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "client_chat": []}
+                    nc = {"id": nid, "name": cn, "phone": format_phone(cp), "communication_method": ccm, "email": ce, "address": ca, "category": cc, "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "client_chat": []}
                     if cf:
                         fi_list = save_uploaded_files(cf, nid, "profile")
                         if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
@@ -2843,6 +2851,74 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.rerun(scope="fragment")
 
     render_deal_detail(d, cl, cu, key_prefix)
+
+
+@st.dialog("Внутренняя задача", width="large")
+def internal_task_dialog(it, key_prefix):
+    st.session_state["_in_dialog"] = True
+    it_id = it['id']
+    it_done = it.get("done", False)
+    
+    # Custom close button
+    with st.container(key=f"itdlg_close_{it_id}", css_class="crm-dialog-close-btn"):
+        if st.button("\u2715", key=f"itdlg_close_btn_{it_id}"):
+            st.session_state.pop("dialog_it_key", None)
+            st.session_state["_in_dialog"] = False
+            st.rerun()
+    
+    with st.container(border=True):
+        st.markdown(f"**Задача №{it_id}**")
+        st.markdown(f"**Тема:** {it.get('text', '')}")
+        st.markdown(f"**Срок:** {format_date(it.get('deadline', ''))}")
+        st.markdown(f"**Ответственный:** {it.get('manager', '—')}")
+        if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
+        if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
+        st.markdown("---")
+        if not it_done:
+            show_it_complete = f"show_it_complete_dlg_{it_id}"
+            if st.button("Выполнить", key=f"it_complete_btn_dlg_{it_id}", type="primary", use_container_width=True):
+                st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
+                st.rerun()
+            if st.session_state.get(show_it_complete, False):
+                it_report = st.text_area("Отчёт:", key=f"it_report_dlg_{it_id}", height=80)
+                if st.button("Подтвердить", key=f"it_complete_go_dlg_{it_id}", type="primary", use_container_width=True):
+                    if it_report.strip():
+                        it["done"] = True
+                        it["completed_report"] = it_report.strip()
+                        it["last_modified"] = now_str()
+                        st.session_state[show_it_complete] = False
+                        st.session_state.pop("dialog_it_key", None)
+                        commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
+                    else:
+                        st.warning("Введите отчёт")
+            st.markdown("---")
+            show_it_edit = f"show_it_edit_dlg_{it_id}"
+            if st.button("Редактировать", key=f"it_edit_btn_dlg_{it_id}", use_container_width=True):
+                st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
+                st.rerun()
+            if st.session_state.get(show_it_edit, False):
+                with st.container(border=True):
+                    eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_dlg_{it_id}")
+                    eit_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else (get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_dlg_{it_id}", placeholder=MGR_PLACEHOLDER)
+                    eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD.MM.YYYY", key=f"eit_dl_dlg_{it_id}")
+                    eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_dlg_{it_id}")
+                    if st.button("Сохранить", key=f"eit_save_dlg_{it_id}", type="primary", use_container_width=True):
+                        if not eit_mgr:
+                            st.warning("Выберите ответственного")
+                        else:
+                            it["text"] = eit_topic
+                            it["manager"] = eit_mgr
+                            it["deadline"] = eit_dl.isoformat()
+                            it["comment"] = eit_comment
+                            it["last_modified"] = now_str()
+                            st.session_state[show_it_edit] = False
+                            commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
+        if st.session_state.user_role == "admin":
+            st.markdown("---")
+            if st.button("Удалить задачу", key=f"it_del_dlg_{it_id}", use_container_width=True):
+                st.session_state.crm_store["internal_tasks"] = [x for x in st.session_state.crm_store.get("internal_tasks", []) if x["id"] != it["id"]]
+                st.session_state.pop("dialog_it_key", None)
+                commit_and_rerun(st.session_state.crm_store, "Задача удалена")
 
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
@@ -3042,10 +3118,13 @@ elif st.session_state.active_tab == "Задачи":
                         _u = get_user_by_login(_tcb)
                         if _u: _tcb_name = _u.get("name", _u.get("login", _tcb))
                         else: _tcb_name = _tcb
+                    # Если created_by пустой, используем manager как fallback
+                    if not _tcb and not _tcb_name:
+                        _tcb_name = tm
                     if mf == "Мои задачи":
-                        if st.session_state.user_role != "admin" and _tcb != st.session_state.get("user_login", "") and _tcb_name != cu: continue
+                        if st.session_state.user_role != "admin" and _tcb != st.session_state.get("user_login", "") and _tcb_name != cu and tm != cu and dtm != cu: continue
                     elif mf != "Все":
-                        if _tcb_name != mf and _tcb != mf: continue
+                        if _tcb_name != mf and _tcb != mf and tm != mf and dtm != mf: continue
                 else:
                     if mf == "Мои задачи":
                         if tm and tm != cu and dtm != cu: continue
@@ -3221,69 +3300,19 @@ elif st.session_state.active_tab == "Внутренние задачи":
             st.markdown(f"<style>.st-key-it_wrap_{it['id']} button {{ background-color: {it_bg} !important; color: #2C3E50 !important; border: 2px solid {it_border} !important; border-radius: 10px !important; {it_shadow} }}</style>", unsafe_allow_html=True)
             with st.container(key=f"it_wrap_{it['id']}"):
                 if st.button(it_label, key=f"it_card_{it['id']}", use_container_width=True, type="primary" if it_exp else "secondary"):
-                    if it_exp:
-                        st.session_state.expanded_task_key = None
-                        save_scroll_and_rerun()
-                    else:
-                        st.session_state.expanded_task_key = it_key
-                        st.rerun()
+                    st.session_state["dialog_it_key"] = it["id"]
+                    st.rerun()
                 if not it_exp:
                     render_scroll_restore(f"it_{it['id']}")
-            if it_exp:
-                with st.container(border=True):
-                    st.markdown(f"**Задача №{it['id']}**")
-                    st.markdown(f"**Тема:** {it.get('text', '')}")
-                    st.markdown(f"**Срок:** {format_date(it.get('deadline', ''))}")
-                    st.markdown(f"**Ответственный:** {it.get('manager', '—')}")
-                    if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
-                    if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
-                    st.markdown("---")
-                    if not it_done:
-                        show_it_complete = f"show_it_complete_{it['id']}"
-                        if st.button("Выполнить", key=f"it_complete_btn_{it['id']}", type="primary", use_container_width=True):
-                            st.session_state[show_it_complete] = not st.session_state.get(show_it_complete, False)
-                            st.rerun()
-                        if st.session_state.get(show_it_complete, False):
-                            it_report = st.text_area("Отчёт:", key=f"it_report_{it['id']}", height=80)
-                            if st.button("Подтвердить", key=f"it_complete_go_{it['id']}", type="primary", use_container_width=True):
-                                if it_report.strip():
-                                    it["done"] = True
-                                    it["completed_report"] = it_report.strip()
-                                    it["last_modified"] = now_str()
-                                    st.session_state[show_it_complete] = False
-                                    commit_and_rerun(st.session_state.crm_store, "Задача выполнена")
-                                else:
-                                    st.warning("Введите отчёт")
-                        st.markdown("---")
-                        show_it_edit = f"show_it_edit_{it['id']}"
-                        if st.button("Редактировать", key=f"it_edit_btn_{it['id']}", use_container_width=True):
-                            st.session_state[show_it_edit] = not st.session_state.get(show_it_edit, False)
-                            st.rerun()
-                        if st.session_state.get(show_it_edit, False):
-                            with st.container(border=True):
-                                eit_topic = st.text_input("Тема:", value=it.get("text", ""), key=f"eit_topic_{it['id']}")
-                                eit_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0 if it.get("manager", "") not in get_managers_list() else (get_managers_list()).index(it.get("manager", "")), key=f"eit_mgr_{it['id']}", placeholder=MGR_PLACEHOLDER)
-                                eit_dl = st.date_input("Срок:", value=parse_deadline(it.get("deadline", "")), format="DD.MM.YYYY", key=f"eit_dl_{it['id']}")
-                                eit_comment = st.text_area("Комментарий:", value=it.get("comment", ""), key=f"eit_comment_{it['id']}")
-                                if st.button("Сохранить", key=f"eit_save_{it['id']}", type="primary", use_container_width=True):
-                                    if not eit_mgr:
-                                        st.warning("Выберите ответственного")
-                                    else:
-                                        it["text"] = eit_topic
-                                        it["manager"] = eit_mgr
-                                        it["deadline"] = eit_dl.isoformat()
-                                        it["comment"] = eit_comment
-                                        it["last_modified"] = now_str()
-                                        st.session_state[show_it_edit] = False
-                                        commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
-                    if st.session_state.user_role == "admin":
-                        st.markdown("---")
-                        if st.button("Удалить задачу", key=f"it_del_{it['id']}", use_container_width=True):
-                            st.session_state.crm_store["internal_tasks"] = [x for x in internal_tasks if x["id"] != it["id"]]
-                            st.session_state.expanded_task_key = None
-                            commit_and_rerun(st.session_state.crm_store, "Задача удалена")
     else:
         st.info("Внутренних задач нет.")
+    # Show internal task dialog if requested
+    _dialog_it_key = st.session_state.get("dialog_it_key")
+    if _dialog_it_key:
+        for _it in internal_tasks:
+            if _it["id"] == _dialog_it_key:
+                internal_task_dialog(_it, f"it_{_it['id']}")
+                break
 
 elif st.session_state.active_tab == "Поставщики":
     st.markdown("### Поставщики")
