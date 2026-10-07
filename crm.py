@@ -1807,33 +1807,6 @@ def render_notifications_panel():
                     f'</div>',
                     unsafe_allow_html=True
                 )
-            render_centered_title(f"Задачи по сделке ({len(dl_tasks)})")
-            if dl_tasks:
-                dl_tasks.sort(key=lambda t: get_sort_key(t), reverse=True)
-                for _dti, _dtk in enumerate(dl_tasks):
-                    _dtk_btn_key = f"dls_tk_btn_{deal_id}_{_dti}"
-                    _dfd = format_date(_dtk.get("deadline", ""))
-                    _ddone = _dtk.get("done", False)
-                    _dicon = "\u2705" if _ddone else "\u23f3"
-                    _dlabel = f"{_dicon} \u0417\u0430\u0434\u0430\u0447\u0430 {_dtk.get('task_number', '')} \u2014 {_dtk.get('text', '')} | {_dfd}"
-                    _dbg, _dbc = "#F5F6F8", "#C9CFD7"
-                    if not _ddone:
-                        if is_task_overdue(_dtk): _dbg, _dbc = "#FFEBEE", "#C62828"
-                        elif _dtk.get("in_work"): _dbg, _dbc = "#E8F5E9", "#4CAF50"
-                        else: _dbg, _dbc = "#E3F2FD", "#2196F3"
-                    st.markdown(f"<style>.st-key-{_dtk_btn_key} button {{ background-color: {_dbg} !important; color: #2C3E50 !important; border: 2px solid {_dbc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
-                    with st.container(key=_dtk_btn_key):
-                        if st.button(_dlabel, key=f"dls_tk_go_{deal_id}_{_dti}", use_container_width=True, type="secondary"):
-                            _task_key = f"dls_dl_{deal_id}_{_dti}"
-                            st.session_state["dialog_deal_task_key"] = _task_key
-                            st.rerun()
-            else:
-                st.caption("Задач по сделке нет")
-            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_{deal_id}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
-                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
-                st.rerun()
 
 
 
@@ -2460,15 +2433,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
             elif current_status == "В работе":
-                cc1, cc2 = st.columns(2)
-                with cc1:
-                    if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
-                        st.session_state[action_key] = "close"
-                        _smart_rerun()
-                with cc2:
-                    if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
-                        st.session_state[action_key] = "archive"
-                        _smart_rerun()
+                st.markdown("*Статус: В работе*")
             elif current_status in ("Сделка закрыта", "Архив"):
                 if st.button("Вернуть в работу", key=f"dls_reopen_{deal_id}", use_container_width=True):
                     d["status"] = "В работе"
@@ -2525,6 +2490,17 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
             render_entity_chat(d, "deal", deal_id)
+            if current_status == "В работе":
+                st.markdown("---")
+                cc1, cc2 = st.columns(2)
+                with cc1:
+                    if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
+                        st.session_state[action_key] = "close"
+                        _smart_rerun()
+                with cc2:
+                    if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
+                        st.session_state[action_key] = "archive"
+                        _smart_rerun()
             if st.session_state.user_role == "admin":
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
@@ -2569,7 +2545,13 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         _smart_rerun()
                 else:
                     st.warning("Выберите файл(ы)")
-
+            st.markdown("---")
+            _dls_ct_key = f"dls_show_ct_{deal_id}"
+            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
+                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
+                st.rerun()
 
 
 def render_client_card_expanded(cl):
@@ -2834,14 +2816,15 @@ def render_client_in_tree(cl):
                 cd_title = st.text_input("Тема:", key=f"cd_title_{cl['id']}")
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
                 cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cd_ps_{cl['id']}")
                 if st.button("Создать", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
                     if not cd_mgr:
                         st.warning("Выберите ответственного")
                     else:
                         deals = st.session_state.crm_store.get("deals", [])
-                        did = (max([dd["id"] for dd in deals]) if deals else 0) + 1
+                        did = f"deal_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
                         dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "Новый", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": "Не оплачено", "close_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "deal_chat": []}
+                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "deal_chat": []}
                         st.session_state.crm_store.setdefault("deals", []).append(new_deal)
                         cl["last_modified"] = now_str()
                         st.session_state[show_cd_key] = False
@@ -3303,6 +3286,82 @@ def client_deals_dialog(cl_id):
 
 
 # ============================================================
+# Dialog: Создать сделку (из карточки клиента / окна сделок)
+# ============================================================
+@st.dialog("Создать сделку", width="large")
+def create_deal_dialog(cl_id):
+    st.session_state["_in_dialog"] = True
+    _key_prefix = f"cdlg_{cl_id}"
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
+    _has_unsaved = (
+        st.session_state.get(f"cdlg_title_{cl_id}", "").strip() or
+        st.session_state.get(f"cdlg_budget_{cl_id}", "").strip()
+    )
+    _close_css_key = f"close_row_{_key_prefix}"
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=_close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+                if _has_unsaved and not _show_close_warning:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = True
+                    st.rerun()
+                else:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    _pop_dialog_return()
+                    st.session_state.pop("dialog_create_deal_from_client", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+    if _show_close_warning:
+        _warn_key = f"unsaved_warn_{_key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border: 2px solid #FF9800 !important; border-radius: 10px !important; background-color: #FFF8E1 !important; padding: 0.5rem 0.8rem !important; margin: 0.3rem 0 !important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
+            st.markdown("Закрыть без сохранения?")
+            _wcol1, _wcol2 = st.columns(2)
+            with _wcol1:
+                if st.button("Без сохранения", key=f"cdlg_warn_nosave_{cl_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    _pop_dialog_return()
+                    st.session_state.pop("dialog_create_deal_from_client", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
+            with _wcol2:
+                if st.button("Отмена", key=f"cdlg_warn_cancel_{cl_id}", use_container_width=True):
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.rerun()
+    _cl = get_client_by_id(cl_id)
+    if not _cl:
+        st.error("Клиент не найден")
+        return
+    st.markdown(f"**Клиент:** {_cl.get('name', '')}")
+    st.markdown("---")
+    cd_title = st.text_input("Тема:", key=f"cdlg_title_{cl_id}")
+    cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cdlg_budget_{cl_id}", placeholder="Введите сумму")
+    cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
+    cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
+    st.markdown("---")
+    if st.button("Создать", key=f"cdlg_go_{cl_id}", use_container_width=True, type="primary"):
+        if not cd_mgr:
+            st.warning("Выберите ответственного")
+        else:
+            deals = st.session_state.crm_store.get("deals", [])
+            did = f"deal_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+            dn = generate_deal_number()
+            new_deal = {"id": did, "client_id": cl_id, "title": dn, "deal_number": dn, "deal_title": cd_title.strip(),
+                        "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0,
+                        "status": "В работе", "manager": cd_mgr, "payment_status": cd_ps,
+                        "deal_comments": [], "deal_files": [], "close_files": [], "archive_files": [],
+                        "last_modified": now_str(), "created_at": now_str(),
+                        "created_by": st.session_state.get("user_login", ""), "deal_chat": []}
+            st.session_state.crm_store.setdefault("deals", []).append(new_deal)
+            _cl["last_modified"] = now_str()
+            st.session_state.pop("dialog_create_deal_from_client", None)
+            st.session_state["_in_dialog"] = False
+            commit_and_rerun(st.session_state.crm_store, "Сделка создана")
+
+
+# ============================================================
 # Dialog: Создать задачу по сделке (из всплывающего окна сделки)
 # ============================================================
 @st.dialog("Создать задачу по сделке", width="large")
@@ -3683,22 +3742,7 @@ if st.session_state.active_tab == "Клиенты":
     elif _dlg_ccdt:
         client_create_deal_task_dialog(_dlg_ccdt)
     elif _dlg_create_deal:
-        # Create deal from client card
-        st.session_state["dialog_deal_key"] = None
-        _cd_cl = get_client_by_id(_dlg_create_deal)
-        if _cd_cl:
-            _new_deal_id = f"deal_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
-            _new_deal = {"id": _new_deal_id, "client_id": _dlg_create_deal, "deal_number": "", "title": "Новая сделка",
-                         "budget": 0, "status": "В работе", "payment_status": "Не оплачено",
-                         "deal_files": [], "close_files": [], "archive_files": [], "deal_comments": [],
-                         "created_at": now_str(), "last_modified": now_str(),
-                         "created_by": st.session_state.get("user_login", "")}
-            st.session_state.crm_store.setdefault("deals", []).append(_new_deal)
-            assign_deal_numbers(st.session_state.crm_store)
-            save_data(st.session_state.crm_store)
-            st.session_state.pop("dialog_create_deal_from_client", None)
-            st.session_state["dialog_deal_key"] = _new_deal_id
-            st.rerun()
+        create_deal_dialog(_dlg_create_deal)
     elif _dialog_deal_task_key and st.session_state.active_tab == "Клиенты":
         _found = False
         for _cl in st.session_state.crm_store.get("clients", []):
