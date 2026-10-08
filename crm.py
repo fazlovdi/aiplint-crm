@@ -803,7 +803,7 @@ def get_thumbnail_base64(remote_path, size=220):
 
 BATCH_SIZE = 8
 
-def render_file_thumbs(files, prefix, allow_delete=False):
+def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     if not files:
         st.caption("Файлов нет")
         return
@@ -861,25 +861,27 @@ def render_file_thumbs(files, prefix, allow_delete=False):
                         f'<div class="thumb-name">{fn}</div></div>',
                         unsafe_allow_html=True)
 
-                # Описание (редактируемое)
-                desc_key = f"fdesc_{prefix}_{i}"
-                cur_desc = ff.get("description", "")
-                _desc_lines = max(1, cur_desc.count("\n") + 1) if cur_desc else 1
-                _desc_height = 38 + (_desc_lines - 1) * 22
-                st.markdown(
-                    f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ "
-                    f"min-height: 38px !important; height: {_desc_height}px !important; "
-                    f"padding: 0.45rem 0.8rem !important; font-size: 0.82rem !important; "
-                    f"background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; "
-                    f"border-radius: 10px !important; resize: none !important; }}</style>",
-                    unsafe_allow_html=True)
-                new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key,
-                                        max_chars=200, label_visibility="collapsed",
-                                        placeholder="Описание файла...", height=_desc_height)
-                if new_desc != cur_desc:
-                    ff["description"] = new_desc
-                    if hasattr(st.session_state, 'crm_store'):
-                        save_data(st.session_state.crm_store)
+                if show_desc:
+                    # Описание (редактируемое)
+                    desc_key = f"fdesc_{prefix}_{i}"
+                    cur_desc = ff.get("description", "")
+                    _desc_lines = max(1, cur_desc.count("\n") + 1) if cur_desc else 1
+                    _desc_height = 38 + (_desc_lines - 1) * 22
+                    st.markdown(
+                        f"<style>.st-key-{desc_key} .stTextArea > div > textarea {{ "
+                        f"min-height: 38px !important; height: {_desc_height}px !important; "
+                        f"padding: 0.45rem 0.8rem !important; font-size: 0.82rem !important; "
+                        f"background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; "
+                        f"border-radius: 10px !important; resize: none !important; }}</style>",
+                        unsafe_allow_html=True)
+                    new_desc = st.text_area("Описание:", value=cur_desc, key=desc_key,
+                                            max_chars=200, label_visibility="collapsed",
+                                            placeholder="Описание файла...", height=_desc_height)
+                    if new_desc != cur_desc:
+                        ff["description"] = new_desc
+                        if hasattr(st.session_state, 'crm_store'):
+                            save_data(st.session_state.crm_store)
+
 
                 # Кнопка скачивания
                 dl_key = f"dl_{prefix}_{i}"
@@ -2125,10 +2127,7 @@ def internal_task_detail_dialog(it_id):
     _it_files = it.get("it_files", [])
     if _it_files:
         st.markdown("**Файлы:**")
-        for _f in _it_files:
-            _fn = _f.get("file_name", _f.get("name", ""))
-            _fp = _f.get("file_path", _f.get("path", ""))
-            st.markdown(f"- {_fn}")
+        render_file_thumbs(_it_files, f"itdlg_files_{it['id']}", allow_delete=True, show_desc=False)
     st.markdown(format_created_date(it), unsafe_allow_html=True)
     st.markdown("---")
     _status = it.get("it_status", "new")
