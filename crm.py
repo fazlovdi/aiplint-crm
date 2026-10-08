@@ -1037,6 +1037,7 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.session_state.active_tab = "Сделки"
                         st.session_state["dialog_deal_key"] = _deal_id
                         st.session_state.pop("dialog_task_key", None)
+                        st.session_state.pop("_open_created_task", None)
                         st.session_state["_in_dialog"] = False
                         st.rerun()
                 with _print_inner:
@@ -2375,7 +2376,9 @@ with nc1:
         st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
+        st.session_state.pop("_open_created_task", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("_open_created_deal", None)
         st.rerun()
 with nc2:
     _deals_label = f"Сделки ({_new_deals_count})" if _new_deals_count > 0 else "Сделки"
@@ -2384,7 +2387,9 @@ with nc2:
         st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
+        st.session_state.pop("_open_created_task", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("_open_created_deal", None)
         st.rerun()
 with nc3:
     _tasks_label = f"Задачи ({_new_tasks_count})" if _new_tasks_count > 0 else "Задачи"
@@ -2393,7 +2398,9 @@ with nc3:
         st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
+        st.session_state.pop("_open_created_task", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("_open_created_deal", None)
         st.rerun()
 with nc4:
     _it_label = f"Внутренние ({_new_it_count})" if _new_it_count > 0 else "Внутренние"
@@ -2402,7 +2409,9 @@ with nc4:
         st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
+        st.session_state.pop("_open_created_task", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("_open_created_deal", None)
         st.rerun()
 with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
@@ -2410,7 +2419,9 @@ with nc5:
         st.session_state["_dialog_return_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
+        st.session_state.pop("_open_created_task", None)
         st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("_open_created_deal", None)
         st.rerun()
 st.markdown("---")
 
@@ -2846,6 +2857,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
                     st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
                     st.session_state.pop("dialog_deal_key", None)
+                    st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
                     commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
         with right_col:
@@ -3327,6 +3339,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     _pop_dialog_return()
                     st.session_state.pop("dialog_task_key", None)
+                    st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
 
@@ -3386,6 +3399,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state.pop("dialog_task_key", None)
+                    st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     st.rerun()
@@ -3395,6 +3409,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state.pop("dialog_task_key", None)
+                    st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol3:
@@ -3426,6 +3441,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     _pop_dialog_return()
                     st.session_state.pop("dialog_deal_key", None)
+                    st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
 
@@ -3454,6 +3470,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state.pop("dialog_deal_key", None)
+                    st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     st.rerun()
@@ -3462,6 +3479,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state.pop("dialog_deal_key", None)
+                    st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol3:
