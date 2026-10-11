@@ -3711,55 +3711,14 @@ def render_deal_detail(d, cl, cu, key_prefix):
             render_entity_chat(d, "deal", deal_id)
             if current_status == "В работе":
                 st.markdown("---")
-                _report_mode = st.session_state.get(f"dls_report_mode_{deal_id}")
-                if _report_mode in ("close", "archive"):
-                    _is_close_report = _report_mode == "close"
-                    st.markdown(f"**{'Успешно завершена' if _is_close_report else 'В архив'} — отчёт по сделке**")
-                    _report_text = st.text_area("Отчёт по сделке (обязательно):", key=f"dls_rep_{deal_id}_{_report_mode}", height=100)
-                    _existing_report_files = d.get("close_files", []) if _is_close_report else d.get("archive_files", [])
-                    if _existing_report_files:
-                        st.caption("Ранее загруженные файлы:")
-                        render_file_thumbs(_existing_report_files, f"dls_ex_{deal_id}_{_report_mode}")
-                    _report_uploads = st.file_uploader("Добавить файл:", key=f"dls_upf_{deal_id}_{_report_mode}", accept_multiple_files=True)
-                    _rc1, _rc2 = st.columns(2)
-                    with _rc1:
-                        if st.button("Подтвердить", key=f"dls_conf_{deal_id}_{_report_mode}", use_container_width=True, type="primary"):
-                            if not _report_text.strip():
-                                st.error("Заполните отчёт по сделке")
-                            else:
-                                _new_report_files = normalize_file_list(save_uploaded_files(_report_uploads, d["client_id"], "deal_close" if _is_close_report else "deal_archive")) if _report_uploads else []
-                                _merged_report_files = list(_existing_report_files)
-                                _seen_report_hashes = {f.get("file_hash") for f in _merged_report_files if isinstance(f, dict)}
-                                for _rf in _new_report_files:
-                                    if _rf.get("file_hash") not in _seen_report_hashes:
-                                        _merged_report_files.append(_rf)
-                                        _seen_report_hashes.add(_rf.get("file_hash"))
-                                if _is_close_report:
-                                    d["status"] = "Сделка закрыта"
-                                    d["closed_date"] = datetime.now().strftime("%Y-%m-%d")
-                                    d["close_report"] = _report_text.strip()
-                                    d["close_files"] = _merged_report_files
-                                else:
-                                    d["status"] = "Архив"
-                                    d["archive_report"] = _report_text.strip()
-                                    d["archive_files"] = _merged_report_files
-                                d["last_modified"] = now_str()
-                                st.session_state.pop(f"dls_report_mode_{deal_id}", None)
-                                commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
-                    with _rc2:
-                        if st.button("Отмена", key=f"dls_cancel_{deal_id}_{_report_mode}", use_container_width=True):
-                            st.session_state.pop(f"dls_report_mode_{deal_id}", None)
-                            _smart_rerun()
-                else:
-                    cc1, cc2 = st.columns(2)
-                    with cc1:
-                        if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
-                            st.session_state[f"dls_report_mode_{deal_id}"] = "close"
-                            _smart_rerun()
-                    with cc2:
-                        if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
-                            st.session_state[f"dls_report_mode_{deal_id}"] = "archive"
-                            _smart_rerun()
+                if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
+                    _push_dialog_return()
+                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
+                    st.rerun()
+                if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
+                    _push_dialog_return()
+                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
+                    st.rerun()
             if st.session_state.user_role == "admin":
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
@@ -5168,9 +5127,13 @@ if st.session_state.active_tab == "Клиенты":
     _dialog_task_key = st.session_state.get("dialog_task_key")
     _deal_report_dialog = st.session_state.get("dialog_deal_report")
     
-    if _dlg_cdt_deal and st.session_state.active_tab == "Клиенты":
+    if _deal_report_dialog:
+        deal_report_dialog(_deal_report_dialog.get("deal_id"), _deal_report_dialog.get("action", "close"))
+    elif _dlg_cdt_deal:
         _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
         deal_create_task_dialog(_dlg_cdt_deal, _cdt_client_id)
+    elif _dialog_client_key and st.session_state.get("_dialog_return_stack"):
+        client_detail_dialog(_dialog_client_key)
     elif _dlg_cct:
         client_create_task_dialog(_dlg_cct)
     elif _dlg_ccdt:
@@ -5238,7 +5201,7 @@ if st.session_state.active_tab == "Клиенты":
                 break
     elif _dialog_client_key:
         client_detail_dialog(_dialog_client_key)
-    elif _dialog_deal_key and st.session_state.active_tab == "Клиенты":
+    elif not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))) and _dialog_deal_key and st.session_state.active_tab == "Клиенты":
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _dialog_deal_key:
                 _cl = get_client_by_id(_d.get("client_id"))
@@ -5250,7 +5213,7 @@ if st.session_state.active_tab == "Клиенты":
         client_tasks_dialog(_dialog_ct_key)
     # Показ диалога сделки (из всплывающего окна сделок клиента)
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
-    if _dialog_deal_key and st.session_state.active_tab == "Клиенты":
+    if _dialog_deal_key and st.session_state.active_tab == "Клиенты" and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))):
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _dialog_deal_key:
                 _cl = get_client_by_id(_d.get("client_id"))
@@ -5258,7 +5221,7 @@ if st.session_state.active_tab == "Клиенты":
                 break
     # Показ диалога задачи (из всплывающего окна задач клиента)
     _dialog_task_key = st.session_state.get("dialog_task_key")
-    if _dialog_task_key and st.session_state.get("dialog_client_tasks_key") or (_dialog_task_key and st.session_state.active_tab == "Клиенты"):
+    if (_dialog_task_key and st.session_state.get("dialog_client_tasks_key") or (_dialog_task_key and st.session_state.active_tab == "Клиенты")) and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))):
         _found = False
         for _cl in st.session_state.crm_store.get("clients", []):
             if _found: break
@@ -5416,7 +5379,7 @@ elif st.session_state.active_tab == "Сделки":
                 st.caption("Сделок в работе нет.")
     # Show deal detail dialog if requested
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
-    if _dialog_deal_key:
+    if _dialog_deal_key and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))):
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _dialog_deal_key:
                 _cl = cid_map.get(_d.get("client_id"))
@@ -5424,7 +5387,7 @@ elif st.session_state.active_tab == "Сделки":
                 break
     # Show created deal dialog
     _created_deal_id = st.session_state.get("_open_created_deal")
-    if _created_deal_id:
+    if _created_deal_id and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or st.session_state.get("dialog_client_key")):
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _created_deal_id:
                 _cl = cid_map.get(_d.get("client_id"))
