@@ -2922,7 +2922,14 @@ if not st.session_state.authenticated:
 
 MGR_PLACEHOLDER = "Выбери ответственного"
 
-st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
+st.markdown("""<style>
+.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }
+/* Keep login/PIN primary actions in the CRM brand color on every theme. */
+.st-key-remembered_pin_login_form button[kind="primary"],
+.st-key-switch_to_password_login,
+div[data-testid="stForm"] button[kind="primary"],
+.stButton button[kind="primary"] { background: #bc1661 !important; background-color: #bc1661 !important; border-color: #bc1661 !important; color: #ffffff !important; }
+</style>""", unsafe_allow_html=True)
 
 def check_login(username, password):
     for u in st.session_state.crm_store.get("users", []):
@@ -2947,19 +2954,37 @@ if not st.session_state.authenticated:
                 # Put focus in the PIN field automatically. The form also lets Enter submit.
                 components.html("""<script>
                 (() => {
-                  const focusPin = () => {
+                  const preparePinInputs = () => {
                     try {
                       const doc = window.parent.document;
-                      const input = doc.querySelector('input[aria-label="PIN-код:"]');
-                      if (input) { input.focus(); input.select(); return true; }
+                      const selectors = [
+                        'input[aria-label="PIN-код:"]',
+                        'input[aria-label="Создайте PIN-код (4–8 цифр):"]',
+                        'input[aria-label="Повторите PIN-код:"]'
+                      ];
+                      let focused = false;
+                      for (const selector of selectors) {
+                        const input = doc.querySelector(selector);
+                        if (!input) continue;
+                        // iOS Safari displays the numeric keypad for inputmode=numeric.
+                        input.setAttribute('inputmode', 'numeric');
+                        input.setAttribute('pattern', '[0-9]*');
+                        input.setAttribute('autocomplete', 'one-time-code');
+                        input.setAttribute('enterkeyhint', 'go');
+                        if (selector.includes('PIN-код:') && !focused) {
+                          input.focus();
+                          focused = true;
+                        }
+                      }
+                      return focused;
                     } catch (e) {}
                     return false;
                   };
-                  focusPin();
+                  preparePinInputs();
                   let attempts = 0;
                   const timer = setInterval(() => {
                     attempts += 1;
-                    if (focusPin() || attempts > 20) clearInterval(timer);
+                    if (preparePinInputs() || attempts > 20) clearInterval(timer);
                   }, 150);
                 })();
                 </script>""", height=0, width=0)
