@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid
+import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image as PILImage
 import extra_streamlit_components as stx
@@ -584,8 +584,81 @@ def upload_db_to_yandex_sync():
     return False
 
 def upload_db_to_yandex_async():
-    """Сохраняет async-интерфейс для обратной совместимости, но вызывает синхронную загрузку."""
-    upload_db_to_yandex_sync()
+    """Совместимый интерфейс: ставит актуальный снимок базы в очередь фоновой синхронизации."""
+    try:
+        with open(FILE_NAME, "r", encoding="utf-8") as f:
+            _queue_yandex_snapshot(f.read())
+    except Exception:
+        pass
+
+# Облачная синхронизация не должна блокировать обработчик нажатия кнопки.
+# Очередь хранит только самый свежий снимок: если пользователь быстро сделал
+# несколько изменений, промежуточные полные копии не отправляются на Диск.
+_cloud_sync_lock = threading.Lock()
+_cloud_sync_pending_snapshot = None
+_cloud_sync_worker_running = False
+_cloud_sync_last_ok = None
+_cloud_sync_last_error = ""
+_cloud_sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-yandex-sync")
+
+def _upload_yandex_snapshot(snapshot_text):
+    """Загружает переданный снимок JSON на Яндекс Диск с ограниченными повторами."""
+    if not YANDEX_TOKEN:
+        return True  # Облачная синхронизация не настроена; локальное сохранение работает.
+    payload = snapshot_text.encode("utf-8")
+    last_error = "Не удалось загрузить базу на Яндекс Диск"
+    for attempt in range(3):
+        try:
+            res = requests.get(
+                f"{YANDEX_API_URL}/upload",
+                params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"},
+                headers=yandex_headers(), timeout=10)
+            if res.status_code == 200:
+                href = res.json().get("href")
+                if href:
+                    resp = requests.put(href, data=payload, timeout=20)
+                    if resp.status_code in (200, 201, 202):
+                        return True
+                    last_error = f"HTTP {resp.status_code} при загрузке файла"
+            else:
+                last_error = f"HTTP {res.status_code} при запросе ссылки загрузки"
+        except Exception as exc:
+            last_error = str(exc)[:300]
+        if attempt < 2:
+            # Короткая пауза только в фоновом потоке, не в обработчике UI.
+            import time
+            time.sleep(0.5 * (attempt + 1))
+    raise RuntimeError(last_error)
+
+def _cloud_sync_worker():
+    global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
+    global _cloud_sync_last_ok, _cloud_sync_last_error
+    while True:
+        with _cloud_sync_lock:
+            snapshot = _cloud_sync_pending_snapshot
+            _cloud_sync_pending_snapshot = None
+            if snapshot is None:
+                _cloud_sync_worker_running = False
+                return
+        try:
+            ok = _upload_yandex_snapshot(snapshot)
+            _cloud_sync_last_ok = bool(ok)
+            _cloud_sync_last_error = "" if ok else "Не удалось загрузить базу на Яндекс Диск"
+        except Exception as exc:
+            _cloud_sync_last_ok = False
+            _cloud_sync_last_error = str(exc)[:300]
+        # Если во время загрузки пришёл новый снимок, цикл отправит только
+        # последний из ожидающих снимков.
+
+def _queue_yandex_snapshot(snapshot_text):
+    global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
+    if not YANDEX_TOKEN:
+        return
+    with _cloud_sync_lock:
+        _cloud_sync_pending_snapshot = snapshot_text
+        if not _cloud_sync_worker_running:
+            _cloud_sync_worker_running = True
+            _cloud_sync_executor.submit(_cloud_sync_worker)
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN: return False
@@ -1469,7 +1542,8 @@ def migrate_data(data):
     data["_migrated"] = "v2"
     return data
 
-def load_data():
+def _load_data_from_json():
+    """Старый загрузчик JSON/Яндекс Диска; используется только при первичной миграции в SQLite."""
     download_db_from_yandex()
     db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
     if os.path.exists(FILE_NAME):
@@ -1535,6 +1609,67 @@ def load_data():
         except Exception:
             return db
     return db
+
+# SQLite — локальное основное хранилище с транзакциями. JSON сохраняется как
+# совместимая копия/экспорт, а Яндекс Диск используется как резервная копия.
+SQLITE_FILE = FILE_NAME + ".sqlite3"
+_sqlite_init_lock = threading.Lock()
+
+def _sqlite_connect():
+    conn = sqlite3.connect(SQLITE_FILE, timeout=30, isolation_level=None)
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = FULL")
+    return conn
+
+def _ensure_sqlite_store():
+    """Создаёт SQLite и переносит существующую JSON-базу только один раз."""
+    with _sqlite_init_lock:
+        conn = _sqlite_connect()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
+            row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
+            if row is None:
+                # При первой инициализации берём текущую рабочую базу, включая
+                # существующую загрузку с Яндекс Диска и миграции старого формата.
+                initial_data = _load_data_from_json()
+                initial_json = json.dumps(initial_data, ensure_ascii=False, separators=(",", ":"))
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    conn.execute("INSERT OR IGNORE INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, 1, ?)", (initial_json, now_str()))
+                    conn.execute("COMMIT")
+                except Exception:
+                    conn.execute("ROLLBACK")
+                    raise
+                # Обновляем JSON-зеркало безопасно.
+                tmp_name = FILE_NAME + ".tmp"
+                with open(tmp_name, "w", encoding="utf-8") as f:
+                    f.write(initial_json)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_name, FILE_NAME)
+        finally:
+            conn.close()
+
+def load_data():
+    """Читает данные из локальной SQLite; сетевой запрос не выполняется при каждом входе."""
+    try:
+        _ensure_sqlite_store()
+        conn = _sqlite_connect()
+        try:
+            row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
+            if row and row[0]:
+                return json.loads(row[0])
+        finally:
+            conn.close()
+    except Exception as exc:
+        # Безопасный fallback для восстановления доступа к существующей JSON-базе.
+        try:
+            st.sidebar.error(f"SQLite недоступна, используется резервная загрузка JSON: {exc}")
+        except Exception:
+            pass
+        return _load_data_from_json()
+    return _load_data_from_json()
 
 _save_lock = threading.Lock()
 
@@ -1691,18 +1826,59 @@ def _merge_data(local_data, disk_data):
     return merged
 
 def save_data(data):
+    """Транзакционно сохраняет состояние в SQLite, обновляет JSON-зеркало и ставит облачный бэкап в очередь.
+
+    SQLite сериализует записи разных пользовательских сессий на одном сервере.
+    Слияние по сущностям сохраняет несвязанные изменения, если у сущностей
+    корректно обновляется last_modified.
+    """
     with _save_lock:
+        conn = None
         try:
-            # Перед записью — сливаем с данными с Диска, чтобы не затереть чужие изменения
-            disk_data = _download_disk_data()
-            if disk_data:
-                data = _merge_data(data, disk_data)
-            with open(FILE_NAME, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            if not upload_db_to_yandex_sync():
-                st.sidebar.warning("Данные сохранены локально, но не загружены на Диск. При обновлении страницы изменения могут не сохраниться.")
+            _ensure_sqlite_store()
+            conn = _sqlite_connect()
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT data, revision FROM crm_state WHERE id = 1").fetchone()
+            latest_data = json.loads(row[0]) if row and row[0] else {}
+            revision = int(row[1]) if row else 0
+            merged_data = _merge_data(data, latest_data) if latest_data else data
+            snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
+            conn.execute(
+                "INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at",
+                (snapshot, revision + 1, now_str()))
+            conn.execute("COMMIT")
+            conn.close()
+            conn = None
+
+            # Очередь бэкапа получает подтверждённый транзакцией снимок сразу.
+            _queue_yandex_snapshot(snapshot)
+
+            # JSON остаётся переносимым зеркалом и источником восстановления.
+            # Ошибка зеркала не отменяет уже сохранённую транзакцию SQLite.
+            try:
+                tmp_name = FILE_NAME + ".tmp"
+                with open(tmp_name, "w", encoding="utf-8") as f:
+                    f.write(snapshot)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_name, FILE_NAME)
+            except Exception as mirror_exc:
+                try:
+                    st.sidebar.warning(f"Основная база сохранена, но JSON-копия не обновлена: {mirror_exc}")
+                except Exception:
+                    pass
         except Exception as e:
-            st.sidebar.error(f"Ошибка сохранения: {e}")
+            if conn is not None:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
+                conn.close()
+            try:
+                st.sidebar.error(f"Ошибка сохранения: {e}")
+            except Exception:
+                pass
 
 def commit_and_rerun(data=None, toast_msg=None):
     if data is not None:
@@ -1744,7 +1920,11 @@ def _pop_dialog_return():
     return False
 
 # ====== УВЕДОМЛЕНИЯ ======
-TELEGRAM_BOT_TOKEN = "8997365571:AAHgrPDcL-Oi8Ew5L81Dm4w7xQPF3uUkpcc"
+# Токен берётся из Streamlit secrets или переменной окружения, не хранится в исходнике.
+try:
+    TELEGRAM_BOT_TOKEN = (st.secrets.get("TELEGRAM_BOT_TOKEN", "") or os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
+except Exception:
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
 def get_user_by_login(login):
     for u in st.session_state.crm_store.get("users", []):
