@@ -1359,7 +1359,12 @@ def render_task_detail(t, cl, d, key_prefix):
                             commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
-                        st.session_state[show_key] = not st.session_state.get(show_key, False)
+                        st.session_state["dialog_task_completion"] = {
+                            "client_id": cl.get("id"),
+                            "task_number": t.get("task_number"),
+                            "key_prefix": key_prefix,
+                        }
+                        st.session_state[show_key] = False
                         _smart_rerun()
                     if st.session_state.get(show_key, False):
                         rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
@@ -4367,6 +4372,87 @@ def task_detail_dialog(task, cl, d, key_prefix):
 
     render_task_detail(task, cl, d, key_prefix)
 
+@st.dialog("Отчёт о выполнении задачи", width="large")
+def task_completion_report_dialog(client_id, task_number, key_prefix):
+    """Отдельное всплывающее окно отчёта; подробности задачи остаются в состоянии для возврата."""
+    cl = next((c for c in st.session_state.crm_store.get("clients", []) if c.get("id") == client_id), None)
+    if not cl:
+        st.error("Клиент не найден")
+        if st.button("Закрыть", key=f"task_report_missing_close_{client_id}_{task_number}"):
+            st.session_state.pop("dialog_task_completion", None)
+            st.rerun()
+        return
+    task = next((t for t in cl.get("tasks", []) if str(t.get("task_number", "")) == str(task_number)), None)
+    if not task:
+        st.error("Задача не найдена")
+        if st.button("Закрыть", key=f"task_report_missing_task_close_{client_id}_{task_number}"):
+            st.session_state.pop("dialog_task_completion", None)
+            st.rerun()
+        return
+    deal = next((d for d in st.session_state.crm_store.get("deals", []) if d.get("id") == task.get("deal_id")), None)
+    report_key = f"task_completion_report_text_{key_prefix}"
+    file_ver_key = f"task_completion_file_ver_{key_prefix}"
+    report = st.text_area("Отчёт (обязательно):", key=report_key, height=110)
+    file_ver = st.session_state.get(file_ver_key, 0)
+    files = st.file_uploader("Файлы/фото отчёта:", key=f"task_completion_files_{key_prefix}_{file_ver}", accept_multiple_files=True)
+    create_next = st.checkbox("Создать новую задачу по сделке" if deal else "Создать новую задачу по клиенту", key=f"task_completion_next_{key_prefix}")
+    next_values = {}
+    if create_next:
+        with st.container(border=True):
+            next_values["topic"] = st.text_input("Тема новой задачи:", key=f"task_completion_next_topic_{key_prefix}")
+            managers = get_managers_list()
+            next_values["manager"] = st.selectbox("Ответственный:", managers, index=0 if task.get("manager") not in managers else managers.index(task.get("manager")), key=f"task_completion_next_manager_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+            next_values["deadline"] = st.date_input("Срок:", format="DD.MM.YYYY", key=f"task_completion_next_deadline_{key_prefix}")
+            next_values["comment"] = st.text_input("Комментарий:", key=f"task_completion_next_comment_{key_prefix}")
+            next_values["files"] = st.file_uploader("Файлы новой задачи:", key=f"task_completion_next_files_{key_prefix}", accept_multiple_files=True)
+    col_ok, col_cancel = st.columns(2)
+    with col_ok:
+        if st.button("Подтвердить выполнение", key=f"task_completion_confirm_{key_prefix}", type="primary", use_container_width=True):
+            if not report.strip():
+                st.warning("Введите отчёт")
+            elif create_next and not next_values.get("topic", "").strip():
+                st.warning("Введите тему новой задачи")
+            elif create_next and not next_values.get("manager"):
+                st.warning("Выберите ответственного для новой задачи")
+            else:
+                task["done"] = True
+                task["in_work"] = False
+                task["needs_rework"] = False
+                task["completion_report"] = report.strip()
+                task["last_modified"] = now_str()
+                report_files = save_uploaded_files(files, (deal["client_id"] if deal else cl["id"]), "task_report") if files else []
+                if report_files:
+                    task["completion_files"] = normalize_file_list(report_files)
+                add_notification(task.get("created_by", ""), f"Задача на проверке: {task.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}", f"✅ Задача на проверке: {task.get('task_number','')} — {cl.get('name','')} | Выполнил: {st.session_state.get('user_name','')}")
+                cl["last_modified"] = now_str()
+                if deal:
+                    deal["last_modified"] = now_str()
+                if create_next:
+                    next_files = save_uploaded_files(next_values.get("files"), (deal["client_id"] if deal else cl["id"]), "task_file") if next_values.get("files") else []
+                    prefix = "ЗС" if deal else "ЗК"
+                    new_task = {
+                        "text": next_values["topic"].strip(), "deadline": next_values["deadline"].isoformat(), "done": False,
+                        "type": "Связаться", "task_files": normalize_file_list(next_files), "manager": next_values["manager"],
+                        "completion_report": "", "completion_files": [], "deal_id": deal["id"] if deal else None,
+                        "task_comment": next_values.get("comment", "").strip(), "order_amount": 0, "last_modified": now_str(),
+                        "task_number": generate_task_number(prefix), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
+                        "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
+                        "task_comments": [], "flagged": False, "products": "", "ship_addr": "", "receiver": "",
+                        "receiver_phone": "", "ship_pay": "", "tk_num": ""
+                    }
+                    cl.setdefault("tasks", []).append(new_task)
+                    add_notification(next_values["manager"], f"Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
+                save_data(st.session_state.crm_store)
+                st.session_state[file_ver_key] = file_ver + 1
+                st.session_state.pop("dialog_task_completion", None)
+                st.toast("Задача отправлена на проверку", icon="✅")
+                st.rerun()
+    with col_cancel:
+        if st.button("Отмена", key=f"task_completion_cancel_{key_prefix}", use_container_width=True):
+            st.session_state.pop("dialog_task_completion", None)
+            st.rerun()
+
+
 @st.dialog("Отчёт по сделке", width="large")
 def deal_report_dialog(deal_id, action):
     d = get_deal_by_id(deal_id)
@@ -5140,7 +5226,10 @@ if st.session_state.active_tab == "Клиенты":
     _dialog_task_key = st.session_state.get("dialog_task_key")
     _deal_report_dialog = st.session_state.get("dialog_deal_report")
     
-    if _deal_report_dialog:
+    _task_completion_state = st.session_state.get("dialog_task_completion")
+    if _task_completion_state:
+        task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
+    elif _deal_report_dialog:
         deal_report_dialog(_deal_report_dialog.get("deal_id"), _deal_report_dialog.get("action", "close"))
     elif _dlg_cdt_deal:
         _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
@@ -5360,7 +5449,10 @@ elif st.session_state.active_tab == "Сделки":
     _deal_report_state = st.session_state.get("dialog_deal_report")
     _deal_task_dialog_id = st.session_state.get("dialog_create_deal_task_deal_id")
 
-    if _deal_report_state:
+    _task_completion_state = st.session_state.get("dialog_task_completion")
+    if _task_completion_state:
+        task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
+    elif _deal_report_state:
         deal_report_dialog(_deal_report_state.get("deal_id"), _deal_report_state.get("action", "close"))
     elif _deal_task_dialog_id:
         _task_client_id = st.session_state.get("dialog_create_deal_task_client_id")
@@ -5497,8 +5589,13 @@ elif st.session_state.active_tab == "Задачи":
                         st.rerun()
         else:
             st.caption("Архив пуст.")
+    # Completion report dialog takes precedence over task details to avoid nested dialogs.
+    _task_completion_state = st.session_state.get("dialog_task_completion")
+    _dialog_key = st.session_state.get("dialog_task_key")
+    if _task_completion_state:
+        task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
     # Show created task dialog if requested
-    if st.session_state.get("_open_created_task"):
+    elif st.session_state.get("_open_created_task"):
         _created_tk = st.session_state["_open_created_task"]
         for _cl in st.session_state.crm_store.get("clients", []):
             for _tk in _cl.get("tasks", []):
@@ -5511,8 +5608,7 @@ elif st.session_state.active_tab == "Задачи":
                     task_detail_dialog(_tk, _cl, _deal, f"created_{_tk.get('task_number', '')}")
                     break
     # Show task detail dialog if requested
-    _dialog_key = st.session_state.get("dialog_task_key")
-    if _dialog_key:
+    elif _dialog_key:
         _found = False
         for _cl in st.session_state.crm_store.get("clients", []):
             if _found: break
