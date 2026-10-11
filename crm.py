@@ -5969,4 +5969,4 @@ elif st.session_state.active_tab == "Поставщики":
                             st.session_state.expanded_task_key = None
                             commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
     else:
-        st.info("Поставщиков нет. Добавьте первого.")м
+        st.info("Поставщиков нет. Добавьте первого.")
