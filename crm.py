@@ -2451,8 +2451,10 @@ def _create_browser_session(user, remember=True):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = bool(remember)
-    # The auth cookie is session-only; a remembered browser must still enter its PIN after reload.
-    cookie_manager.set("auth_token", token)
+    # Do not set auth_token here: this app deliberately requires PIN after reload,
+    # and CookieManager.set uses a shared Streamlit key that conflicts when called twice
+    # in the same run (remembered_user + auth_token). The server-side session record is
+    # retained for revocation/audit, while remembered_user is the only persistent cookie.
 
 
 def _passkey_b64url_encode(value):
@@ -2547,7 +2549,8 @@ def _passkey_create_login_session(user):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = True
-    cookie_manager.set("auth_token", token)
+    # Do not set auth_token: a fresh page session must require PIN/Passkey, and setting
+    # it here can collide with another CookieManager.set call in the same Streamlit run.
 
 
 def _passkey_process_login_result(result, pending):
