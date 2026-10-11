@@ -291,6 +291,68 @@ st.markdown("""
     .clients-table .red-link { font-size: 1.05rem !important; }
     .clients-table .normal-link { font-size: 1.05rem !important; }
 
+
+    /* Мгновенная визуальная обратная связь при нажатии кнопок */
+    .stButton > button, button[kind="primary"], button[kind="secondary"] {
+        transform-origin: center center;
+        transition: transform 100ms ease, filter 100ms ease, box-shadow 120ms ease, outline-color 120ms ease !important;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .stButton > button:active, button[kind="primary"]:active, button[kind="secondary"]:active {
+        transform: scale(0.965) translateY(1px) !important;
+        filter: brightness(0.90) !important;
+        box-shadow: inset 0 2px 5px rgba(0,0,0,0.18) !important;
+        transition-duration: 45ms !important;
+    }
+    /* После клика кнопка остаётся слегка выделенной, пока фокус не перейдёт дальше */
+    .stButton > button:focus, button[kind="primary"]:focus, button[kind="secondary"]:focus {
+        outline: 3px solid rgba(188, 22, 97, 0.28) !important;
+        outline-offset: 2px !important;
+    }
+    .stButton > button:focus:not(:active) {
+        animation: crm-click-confirm 260ms ease-out;
+    }
+    @keyframes crm-click-confirm {
+        0% { transform: scale(0.975); }
+        65% { transform: scale(1.015); }
+        100% { transform: scale(1); }
+    }
+    /* Обратная связь и для ссылок: переходы между разделами, ссылки в таблицах и тексте */
+    a[href] {
+        -webkit-tap-highlight-color: transparent;
+        transition: color 100ms ease, filter 80ms ease, opacity 80ms ease, outline-color 120ms ease !important;
+        text-underline-offset: 3px;
+    }
+    a[href]:hover {
+        filter: brightness(0.88);
+        text-decoration-thickness: 2px;
+    }
+    a[href]:active {
+        opacity: 0.62 !important;
+        filter: brightness(0.78) !important;
+        text-decoration: underline !important;
+        text-decoration-thickness: 2px !important;
+        transition-duration: 35ms !important;
+    }
+    a[href]:focus-visible {
+        outline: 3px solid rgba(188, 22, 97, 0.30) !important;
+        outline-offset: 3px;
+        border-radius: 3px;
+    }
+    a[href]:focus:not(:active) {
+        animation: crm-link-click-confirm 260ms ease-out;
+    }
+    @keyframes crm-link-click-confirm {
+        0% { opacity: 0.65; filter: brightness(0.78); }
+        65% { opacity: 1; filter: brightness(1.08); }
+        100% { opacity: 1; filter: brightness(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .stButton > button, button[kind="primary"], button[kind="secondary"], a[href] {
+            transition: none !important;
+            animation: none !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
