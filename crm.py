@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time
+import json, os, re, html, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time
 from pathlib import Path
 
 # WebAuthn / Passkeys. Если зависимость ещё не установлена, парольный вход продолжает работать.
@@ -3843,7 +3843,8 @@ def render_client_card_expanded(cl):
                 cm_edit_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
                 cm_edit = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_edit_idx, key=f"cm_edit_{cl['id']}", placeholder="Выбери вариант...")
                 ee = st.text_input("Email", value=cl.get('email', ''), key=f"ee_{cl['id']}")
-                ea_val = st.text_input("Адрес", value=cl.get('address', ''), key=f"ea_{cl['id']}")
+                city_val = st.text_input("Город", value=cl.get('city', ''), key=f"city_{cl['id']}")
+                ea_val = st.text_input("Основной адрес", value=cl.get('address', ''), key=f"ea_{cl['id']}")
                 ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(cl.get('discount', 0)), key=f"ed_{cl['id']}")
                 _cat_col, _promo_col = st.columns(2)
                 with _cat_col:
@@ -3897,6 +3898,7 @@ def render_client_card_expanded(cl):
                         cl['phone'] = format_phone(ep)
                         cl['contact_method'] = cm_edit
                         cl['email'] = ee
+                        cl['city'] = city_val.strip()
                         cl['address'] = ea_val
                         cl['discount'] = int(ed)
                         cl['category'] = ec
@@ -3941,7 +3943,8 @@ def render_client_card_expanded(cl):
                     cl["last_modified"] = now_str()
                     save_data(st.session_state.crm_store)
                 st.markdown(f"Email: **{cl.get('email','')}**")
-                st.markdown(f"Адрес: **{cl.get('address','')}**")
+                st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
+                st.markdown(f"Основной адрес: **{cl.get('address','')}**")
                 st.markdown(f"Скидка: **{cl.get('discount',0)}%**")
                 st.markdown(f"Ответственный: **{cl.get('manager','—')}**")
                 cph = re.sub(r"\D", "", cl['phone'])
@@ -4159,6 +4162,7 @@ def add_client_dialog(fv):
                 st.session_state.get(f"cp_{fv}", "").strip() or
                 st.session_state.get(f"cpromo_{fv}", "").strip() or
                 st.session_state.get(f"ce_{fv}", "").strip() or
+                st.session_state.get(f"city_new_{fv}", "").strip() or
                 st.session_state.get(f"ca_{fv}", "").strip() or
                 st.session_state.get(f"new_cc_form_{fv}", "").strip() or
                 st.session_state.get("pending_client_comments") or
@@ -4207,6 +4211,7 @@ def add_client_dialog(fv):
             cpromo = st.text_input("Промокод", key=f"cpromo_{fv}", placeholder="Введите промокод")
         cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
         contact_method_new = st.selectbox("Предпочтительный способ связи:", [""] + CONTACT_METHODS, index=0, key=f"new_contact_method_{fv}", placeholder="Выберите способ связи")
+        city_new = st.text_input("Город", key=f"city_new_{fv}", placeholder="Введите город")
         ca = st.text_area("Основной адрес", key=f"ca_{fv}", height=68)
     with acr:
         with st.container(border=True):
@@ -4270,7 +4275,7 @@ def add_client_dialog(fv):
             else:
                 clients = st.session_state.crm_store["clients"]
                 nid = (max([c['id'] for c in clients]) if clients else 0) + 1
-                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
+                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "city": city_new.strip(), "address": ca, "category": cc, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
                 if cf:
                     fi_list = save_uploaded_files(cf, nid, "profile")
                     if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
@@ -4980,10 +4985,15 @@ if st.session_state.active_tab == "Клиенты":
     # Поиск и сортировки в один ряд
     _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
     with _search_col:
-        _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
+        _search_input_col, _search_clear_col = st.columns([12, 1])
+        with _search_input_col:
+            _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
+        with _search_clear_col:
+            st.markdown("<style>.st-key-client_search_clear button{padding:0!important;min-height:38px!important;font-size:20px!important;line-height:1!important;color:#808B98!important;border:0!important;background:transparent!important;box-shadow:none!important}</style>", unsafe_allow_html=True)
+            st.button("×", key="client_search_clear", help="Очистить поиск", on_click=lambda: st.session_state.__setitem__("search_input_key", ""), use_container_width=True)
         sq = (_search_input_now or "").strip().lower()
     with _sort_col:
-        sort_options = ["По дате изменения", "По дате создания", "По алфавиту"]
+        sort_options = ["По дате изменения", "По дате создания", "По алфавиту", "По городу"]
         sort_mode = st.selectbox("Сортировка", sort_options, key="client_sort_select", label_visibility="collapsed")
         st.session_state.client_sort_mode = sort_mode
     with _sort_cat_col:
@@ -4996,7 +5006,7 @@ if st.session_state.active_tab == "Клиенты":
     for cl in all_clients:
         if ctf != "Все" and cl.get("category", "Не определён") != ctf: continue
         if sq:
-            ct = f"{cl['name']} {cl.get('email','')} {cl.get('address','')} {cl.get('base_comment','')}".lower()
+            ct = f"{cl['name']} {cl.get('city','')} {cl.get('phone','')} {cl.get('email','')} {cl.get('address','')} {cl.get('base_comment','')}".lower()
             mb = sq in ct
             acd = re.sub(r"\D", "", cl['phone'])
             for p in cl.get("extra_phones", []):
@@ -5012,19 +5022,24 @@ if st.session_state.active_tab == "Клиенты":
         fcl.sort(key=lambda c: c.get("created_at", ""), reverse=True)
     elif sort_mode == "По алфавиту":
         fcl.sort(key=lambda c: c.get("name", "").lower())
+    elif sort_mode == "По городу":
+        fcl.sort(key=lambda c: (c.get("city", "") or "").strip().lower())
     if all_clients:
-        # Таблица клиентов
-        # Заголовок таблицы
-        _hc1, _hc2, _hc3, _hc4, _hc5 = st.columns([4, 1.2, 1.2, 1.2, 1.5])
+        # Таблица клиентов: город и телефон сразу после наименования
+        _hc1, _hc2, _hc3, _hc4, _hc5, _hc6, _hc7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
         with _hc1:
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Наименование</div>", unsafe_allow_html=True)
         with _hc2:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Категория</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Город</div>", unsafe_allow_html=True)
         with _hc3:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сделки</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Телефон</div>", unsafe_allow_html=True)
         with _hc4:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Задачи</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Категория</div>", unsafe_allow_html=True)
         with _hc5:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сделки</div>", unsafe_allow_html=True)
+        with _hc6:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Задачи</div>", unsafe_allow_html=True)
+        with _hc7:
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сумма сделок</div>", unsafe_allow_html=True)
         st.markdown('<div style="border-top:1px solid #DCE0E5;margin-bottom:4px;"></div>', unsafe_allow_html=True)
         for cl in fcl:
@@ -5045,8 +5060,8 @@ if st.session_state.active_tab == "Клиенты":
             _tasks_count = all_tasks_count
             _category = cl.get("category", "Не определён")
             _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
-            # Рендерим строку таблицы через columns (5 колонок) — шире "Наименование", уже "Категория"
-            _c1, _c2, _c3, _c4, _c5 = st.columns([4, 1.2, 1.2, 1.2, 1.5])
+            # Рендерим строку таблицы: название, город, телефон, категория, сделки, задачи, сумма
+            _c1, _c2, _c3, _c4, _c5, _c6, _c7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
             with _c1:
                 # Текст вместо кнопки с рамкой — прозрачный фон, без границ, кликабельный
                 _name_btn_key = f"tbl_name_{cl['id']}"
@@ -5055,15 +5070,21 @@ if st.session_state.active_tab == "Клиенты":
                     st.session_state["dialog_client_key"] = cl["id"]
                     st.rerun()
             with _c2:
-                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.88rem;color:#3C4A5A;'>{_category}</div>", unsafe_allow_html=True)
+                _city = html.escape(str(cl.get("city", "") or "—"))
+                st.markdown(f"<div title='{_city}' style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.84rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_city}</div>", unsafe_allow_html=True)
             with _c3:
+                _phone = html.escape(str(cl.get("phone", "") or "—"))
+                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.82rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_phone}</div>", unsafe_allow_html=True)
+            with _c4:
+                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.88rem;color:#3C4A5A;'>{html.escape(str(_category))}</div>", unsafe_allow_html=True)
+            with _c5:
                 _deals_btn_key = f"tbl_deals_btn_{cl['id']}"
                 _deals_color = "#2E7D32" if has_active_deals else "#2C3E50"
                 st.markdown(f"<style>.st-key-{_deals_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_deals_color} !important; font-weight: {800 if _deals_color != '#2C3E50' else 600} !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_deals_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
                 if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True, ):
                     st.session_state["dialog_client_deals_key"] = cl["id"]
                     st.rerun()
-            with _c4:
+            with _c6:
                 _tasks_btn_key = f"tbl_tasks_{cl['id']}"
                 if has_overdue_tasks:
                     _tasks_color = "#C62828"
@@ -5075,7 +5096,7 @@ if st.session_state.active_tab == "Клиенты":
                 if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True, ):
                     st.session_state["dialog_client_tasks_key"] = cl["id"]
                     st.rerun()
-            with _c5:
+            with _c7:
                 st.markdown(f"<div style='display:flex;align-items:center;justify-content:flex-end;min-height:32px;font-weight:600;white-space:nowrap;'>{_sum_str}</div>", unsafe_allow_html=True)
             # Разделитель между клиентами — минимальный отступ
             st.markdown('<div class="client-divider"></div>', unsafe_allow_html=True)
