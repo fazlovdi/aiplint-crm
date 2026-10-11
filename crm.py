@@ -5352,19 +5352,22 @@ elif st.session_state.active_tab == "Сделки":
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
-    # Show deal detail dialog if requested
+    # Единая диспетчеризация окон сделок: сначала дочернее окно, затем карточка сделки.
+    # Streamlit должен отрисовать только один @st.dialog за один проход.
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
-    if _dialog_deal_key and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")):
-        for _d in st.session_state.crm_store.get("deals", []):
-            if _d["id"] == _dialog_deal_key:
-                _cl = cid_map.get(_d.get("client_id"))
-                deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
-                break
-    # Show created deal dialog
     _created_deal_id = st.session_state.get("_open_created_deal")
-    if _created_deal_id and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or st.session_state.get("dialog_client_key")):
+    _active_deal_dialog_id = _dialog_deal_key or _created_deal_id
+    _deal_report_state = st.session_state.get("dialog_deal_report")
+    _deal_task_dialog_id = st.session_state.get("dialog_create_deal_task_deal_id")
+
+    if _deal_report_state:
+        deal_report_dialog(_deal_report_state.get("deal_id"), _deal_report_state.get("action", "close"))
+    elif _deal_task_dialog_id:
+        _task_client_id = st.session_state.get("dialog_create_deal_task_client_id")
+        deal_create_task_dialog(_deal_task_dialog_id, _task_client_id)
+    elif _active_deal_dialog_id and not st.session_state.get("dialog_client_key"):
         for _d in st.session_state.crm_store.get("deals", []):
-            if _d["id"] == _created_deal_id:
+            if _d["id"] == _active_deal_dialog_id:
                 _cl = cid_map.get(_d.get("client_id"))
                 deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
                 break
