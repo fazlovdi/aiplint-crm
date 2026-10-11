@@ -2944,8 +2944,29 @@ if not st.session_state.authenticated:
         lc, mc, rc = st.columns([1, 2, 1])
         with mc:
             with st.container(border=True):
-                _pin_input = st.text_input("PIN-код:", type="password", max_chars=8, placeholder="Введите PIN-код", key="remembered_pin_input")
-                if st.button("Войти по PIN-коду", use_container_width=True, type="primary"):
+                # Put focus in the PIN field automatically. The form also lets Enter submit.
+                components.html("""<script>
+                (() => {
+                  const focusPin = () => {
+                    try {
+                      const doc = window.parent.document;
+                      const input = doc.querySelector('input[aria-label="PIN-код:"]');
+                      if (input) { input.focus(); input.select(); return true; }
+                    } catch (e) {}
+                    return false;
+                  };
+                  focusPin();
+                  let attempts = 0;
+                  const timer = setInterval(() => {
+                    attempts += 1;
+                    if (focusPin() || attempts > 20) clearInterval(timer);
+                  }, 150);
+                })();
+                </script>""", height=0, width=0)
+                with st.form("remembered_pin_login_form", clear_on_submit=False):
+                    _pin_input = st.text_input("PIN-код:", type="password", max_chars=8, placeholder="Введите PIN-код", key="remembered_pin_input")
+                    _pin_submit = st.form_submit_button("Войти по PIN-коду", use_container_width=True, type="primary")
+                if _pin_submit:
                     if _pin_verify(_remembered_user, _pin_input):
                         _create_browser_session(_remembered_user, remember=True)
                         st.toast("Успешный вход", icon="🔓")
