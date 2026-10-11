@@ -2958,6 +2958,32 @@ if not st.session_state.authenticated:
                     st.session_state["_force_password_login"] = True
                     st.session_state.pop("remembered_pin_input", None)
                     st.rerun()
+        # Keep Face ID / Passkey available even when this browser is remembered for PIN login.
+        st.markdown("---")
+        st.markdown("**Или войдите по Face ID / Passkey**")
+        if st.session_state.get("_passkey_login_message"):
+            st.warning(st.session_state.pop("_passkey_login_message"))
+        if not PASSKEY_AVAILABLE:
+            st.info("Вход по Face ID пока недоступен: проверьте зависимость `webauthn>=2.2,<3` и повторную публикацию приложения.")
+        else:
+            _pin_pk_pending = st.session_state.get("_passkey_login_pending")
+            if not _pin_pk_pending or not _passkey_pending_is_fresh(_pin_pk_pending):
+                try:
+                    _pin_pk_pending = _passkey_make_authentication_pending()
+                    st.session_state["_passkey_login_pending"] = _pin_pk_pending
+                except Exception as _pin_pk_exc:
+                    _pin_pk_pending = None
+                    st.warning(f"Не удалось подготовить вход по Face ID: {str(_pin_pk_exc)[:180]}")
+            if _pin_pk_pending:
+                _pin_pk_result = crm_passkey_component(
+                    mode="login",
+                    options_json=_pin_pk_pending["options_json"],
+                    event_id=_pin_pk_pending["event_id"],
+                    button_label="Войти с Face ID / Passkey",
+                    key="crm_passkey_login_component_remembered",
+                    default=None,
+                )
+                _passkey_process_login_result(_pin_pk_result, _pin_pk_pending)
         st.stop()
 
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
@@ -2975,27 +3001,32 @@ if not st.session_state.authenticated:
             else:
                 _new_pin = _confirm_pin = ""
             if st.button("Войти", use_container_width=True, type="primary"):
-                _user_for_login = next((u for u in st.session_state.crm_store.get("users", []) if u.get("login") == iu.strip()), None)
-                if _user_for_login and verify_password(ip, _user_for_login.get("password", "")):
-                    if remember_login and (not re.fullmatch(r"\d{4,8}", _new_pin or "") or _new_pin != _confirm_pin):
-                        st.error("Для запоминания браузера задайте одинаковый PIN-код из 4–8 цифр.")
-                    else:
-                        st.session_state.pop("_force_password_login", None)
-                        if remember_login:
-                            _user_for_login["login_pin"] = _pin_hash(_new_pin)
-                            # Long-lived, non-secret browser marker; authentication still requires PIN.
-                            cookie_manager.set("remembered_user", _user_for_login["login"], expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650))
+                try:
+                    _user_for_login = next((u for u in st.session_state.crm_store.get("users", []) if u.get("login") == iu.strip()), None)
+                    if _user_for_login and verify_password(ip, _user_for_login.get("password", "")):
+                        if remember_login and (not re.fullmatch(r"\d{4,8}", _new_pin or "") or _new_pin != _confirm_pin):
+                            st.error("Для запоминания браузера задайте одинаковый PIN-код из 4–8 цифр.")
                         else:
-                            try:
-                                cookie_manager.delete("remembered_user")
-                            except Exception:
-                                pass
-                        _create_browser_session(_user_for_login, remember=bool(remember_login))
-                        time.sleep(0.3)
-                        st.toast("Успешный вход", icon="🔓")
-                        st.rerun()
-                else:
-                    st.error("Неверный логин или пароль.")
+                            st.session_state.pop("_force_password_login", None)
+                            if remember_login:
+                                _user_for_login["login_pin"] = _pin_hash(_new_pin)
+                                # Persist the PIN hash before issuing cookies/session.
+                                save_data(st.session_state.crm_store)
+                                cookie_manager.set("remembered_user", _user_for_login["login"], expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650))
+                            else:
+                                try:
+                                    cookie_manager.delete("remembered_user")
+                                except Exception:
+                                    pass
+                            _create_browser_session(_user_for_login, remember=bool(remember_login))
+                            time.sleep(0.3)
+                            st.toast("Успешный вход", icon="🔓")
+                            st.rerun()
+                    else:
+                        st.error("Неверный логин или пароль.")
+                except Exception as _login_exc:
+                    st.error(f"Не удалось завершить вход. Ошибка: {type(_login_exc).__name__}: {str(_login_exc)[:240]}")
+                    st.caption("Попробуйте ещё раз. Если ошибка повторится, пришлите этот текст — он поможет исправить причину.")
     st.markdown("---")
     st.markdown("**Или войдите без пароля**")
     if st.session_state.get("_passkey_login_message"):
