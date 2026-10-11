@@ -380,6 +380,16 @@ st.markdown("""
             animation: none !important;
         }
     }
+    /* PIN login button must keep the requested burgundy color regardless of browser theme. */
+    .st-key-remembered_pin_login_btn button,
+    .st-key-remembered_pin_login_form button[kind="primary"] {
+        background: #bc1661 !important; background-color: #bc1661 !important;
+        color: #ffffff !important; border-color: #bc1661 !important;
+    }
+    .st-key-remembered_pin_login_btn button:hover,
+    .st-key-remembered_pin_login_form button[kind="primary"]:hover {
+        background: #a31353 !important; background-color: #a31353 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -2922,14 +2932,7 @@ if not st.session_state.authenticated:
 
 MGR_PLACEHOLDER = "Выбери ответственного"
 
-st.markdown("""<style>
-.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }
-/* Keep login/PIN primary actions in the CRM brand color on every theme. */
-.st-key-remembered_pin_login_form button[kind="primary"],
-.st-key-switch_to_password_login,
-div[data-testid="stForm"] button[kind="primary"],
-.stButton button[kind="primary"] { background: #bc1661 !important; background-color: #bc1661 !important; border-color: #bc1661 !important; color: #ffffff !important; }
-</style>""", unsafe_allow_html=True)
+st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
 
 def check_login(username, password):
     for u in st.session_state.crm_store.get("users", []):
@@ -2951,47 +2954,43 @@ if not st.session_state.authenticated:
         lc, mc, rc = st.columns([1, 2, 1])
         with mc:
             with st.container(border=True):
-                # Put focus in the PIN field automatically. The form also lets Enter submit.
-                components.html("""<script>
-                (() => {
-                  const preparePinInputs = () => {
-                    try {
-                      const doc = window.parent.document;
-                      const selectors = [
-                        'input[aria-label="PIN-код:"]',
-                        'input[aria-label="Создайте PIN-код (4–8 цифр):"]',
-                        'input[aria-label="Повторите PIN-код:"]'
-                      ];
-                      let focused = false;
-                      for (const selector of selectors) {
-                        const input = doc.querySelector(selector);
-                        if (!input) continue;
-                        // iOS Safari displays the numeric keypad for inputmode=numeric.
-                        input.setAttribute('inputmode', 'numeric');
-                        input.setAttribute('pattern', '[0-9]*');
-                        input.setAttribute('autocomplete', 'one-time-code');
-                        input.setAttribute('enterkeyhint', 'go');
-                        if (selector.includes('PIN-код:') && !focused) {
-                          input.focus();
-                          focused = true;
-                        }
-                      }
-                      return focused;
-                    } catch (e) {}
-                    return false;
-                  };
-                  preparePinInputs();
-                  let attempts = 0;
-                  const timer = setInterval(() => {
-                    attempts += 1;
-                    if (preparePinInputs() || attempts > 20) clearInterval(timer);
-                  }, 150);
+                # PIN input is outside a form so Streamlit reruns as the value changes.
+                # Verify on every complete candidate length (4–8 digits) and sign in
+                # immediately when the entered PIN matches, including on iPhone.
+                _pin_input = st.text_input(
+                    "PIN-код:", type="password", max_chars=8,
+                    placeholder="Введите PIN-код", key="remembered_pin_input",
+                    help="Введите PIN из 4–8 цифр. При правильном PIN вход выполнится автоматически."
+                )
+                st.markdown("""<script>
+                (function(){
+                  function tunePin(){
+                    const inputs = parent.document.querySelectorAll('input[placeholder="Введите PIN-код"]');
+                    inputs.forEach(function(el){
+                      el.setAttribute('inputmode','numeric');
+                      el.setAttribute('pattern','[0-9]*');
+                      el.setAttribute('enterkeyhint','go');
+                      el.setAttribute('autocomplete','current-password');
+                    });
+                  }
+                  tunePin();
+                  const root = parent.document.querySelector('[data-testid="stAppViewContainer"]') || parent.document.body;
+                  if (root && !root.__pinInputModeObserver) {
+                    root.__pinInputModeObserver = new MutationObserver(tunePin);
+                    root.__pinInputModeObserver.observe(root, {childList:true, subtree:true});
+                  }
                 })();
-                </script>""", height=0, width=0)
-                with st.form("remembered_pin_login_form", clear_on_submit=False):
-                    _pin_input = st.text_input("PIN-код:", type="password", max_chars=8, placeholder="Введите PIN-код", key="remembered_pin_input")
-                    _pin_submit = st.form_submit_button("Войти по PIN-коду", use_container_width=True, type="primary")
-                if _pin_submit:
+                </script>""", unsafe_allow_html=True)
+                _pin_submit = st.button(
+                    "Войти по PIN-коду", use_container_width=True, type="primary",
+                    key="remembered_pin_login_btn",
+                )
+                _pin_attempt = bool(_pin_input and re.fullmatch(r"\d{4,8}", _pin_input or ""))
+                if _pin_attempt and _pin_verify(_remembered_user, _pin_input):
+                    _create_browser_session(_remembered_user, remember=True)
+                    st.toast("Успешный вход", icon="🔓")
+                    st.rerun()
+                elif _pin_submit:
                     if _pin_verify(_remembered_user, _pin_input):
                         _create_browser_session(_remembered_user, remember=True)
                         st.toast("Успешный вход", icon="🔓")
@@ -3061,7 +3060,12 @@ if not st.session_state.authenticated:
                                 _user_for_login["login_pin"] = _pin_hash(_new_pin)
                                 # Persist the PIN hash before issuing cookies/session.
                                 save_data(st.session_state.crm_store)
-                                cookie_manager.set("remembered_user", _user_for_login["login"], expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650))
+                                # Persistent first-party cookie: remember this browser for 10 years.
+                                cookie_manager.set(
+                                    "remembered_user", _user_for_login["login"],
+                                    expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650),
+                                    key="set_remembered_user_cookie",
+                                )
                             else:
                                 try:
                                     cookie_manager.delete("remembered_user")
@@ -3162,7 +3166,7 @@ with st.sidebar:
                             "expires_at": (datetime.now() + timedelta(days=_session_days)).isoformat(timespec="seconds"),
                         }]
                 save_data(st.session_state.crm_store)
-                cookie_manager.set("auth_token", _new_token)
+                cookie_manager.set("auth_token", _new_token, key="set_auth_token_cookie")
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else: st.error("Пароли не совпадают")
