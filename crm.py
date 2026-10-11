@@ -1217,6 +1217,8 @@ def render_task_detail(t, cl, d, key_prefix):
                     if t.get("needs_rework") and not t.get("done"):
                         st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
                     if st.button(f"{_deal_num}", key=_deal_link_key, type="secondary"):
+                        # Сохраняем окно задачи, чтобы кнопка закрытия сделки вернула пользователя к задаче.
+                        _push_dialog_return()
                         st.session_state.active_tab = "Сделки"
                         st.session_state["dialog_deal_key"] = _deal_id
                         st.session_state.pop("dialog_task_key", None)
@@ -2153,11 +2155,13 @@ def _push_dialog_return():
     current = {}
     for key in ["dialog_client_key", "dialog_deal_key", "dialog_task_key",
                 "dialog_client_deals_key", "dialog_client_tasks_key",
-                "dialog_deal_task_key"]:
+                "dialog_deal_task_key", "_open_created_task"]:
         val = st.session_state.get(key)
         if val:
             current[key] = val
     if current:
+        # Возвращаем не только идентификатор окна, но и вкладку, в которой оно открывалось.
+        current["__active_tab__"] = st.session_state.get("active_tab")
         stack.append(current)
         st.session_state["_dialog_return_stack"] = stack
 
@@ -2169,7 +2173,11 @@ def _pop_dialog_return():
         prev = stack.pop()
         st.session_state["_dialog_return_stack"] = stack
         for key, val in prev.items():
-            st.session_state[key] = val
+            if key == "__active_tab__":
+                if val:
+                    st.session_state["active_tab"] = val
+            else:
+                st.session_state[key] = val
         return True
     return False
 
@@ -3630,7 +3638,10 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _client_link_col, _client_link_spacer = st.columns([3, 5])
                 with _client_link_col:
                     if st.button(f"Клиент: {cl.get('name', '—')}", key=f"deal_client_link_{deal_id}", type="secondary"):
+                        # Открываем карточку клиента поверх логики навигации:
+                        # сделка сохраняется в стеке и будет восстановлена при закрытии клиента.
                         _push_dialog_return()
+                        st.session_state["active_tab"] = "Клиенты"
                         st.session_state["dialog_client_key"] = cl.get("id")
                         st.rerun()
             else:
@@ -4564,6 +4575,7 @@ def client_detail_dialog(cl_id):
                     save_data(st.session_state.crm_store)
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
+                    _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("Сохранено", icon="\u2705")
@@ -4572,6 +4584,7 @@ def client_detail_dialog(cl_id):
                 if st.button("Без сохр.", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
+                    _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
@@ -5211,44 +5224,6 @@ if st.session_state.active_tab == "Клиенты":
         client_deals_dialog(_dialog_cd_key)
     elif _dialog_ct_key:
         client_tasks_dialog(_dialog_ct_key)
-    # Показ диалога сделки (из всплывающего окна сделок клиента)
-    _dialog_deal_key = st.session_state.get("dialog_deal_key")
-    if _dialog_deal_key and st.session_state.active_tab == "Клиенты" and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")):
-        for _d in st.session_state.crm_store.get("deals", []):
-            if _d["id"] == _dialog_deal_key:
-                _cl = get_client_by_id(_d.get("client_id"))
-                deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
-                break
-    # Показ диалога задачи (из всплывающего окна задач клиента)
-    _dialog_task_key = st.session_state.get("dialog_task_key")
-    if (_dialog_task_key and st.session_state.get("dialog_client_tasks_key") or (_dialog_task_key and st.session_state.active_tab == "Клиенты")) and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")):
-        _found = False
-        for _cl in st.session_state.crm_store.get("clients", []):
-            if _found: break
-            for _ti, _tk in enumerate(_cl.get("tasks", [])):
-                # Generate possible keys matching what was set in client_tasks_dialog
-                _tk_keys = []
-                # Keys from client tasks dialog (by client)
-                _client_tasks = [t for t in _cl.get("tasks", []) if not t.get("deal_id")]
-                _cl_deals_list = [d for d in st.session_state.crm_store.get("deals", []) if d.get("client_id") == _cl["id"]]
-                _deal_tasks_list = []
-                for _dd in _cl_deals_list:
-                    for _tt in _cl.get("tasks", []):
-                        if _tt.get("deal_id") == _dd["id"]:
-                            _deal_tasks_list.append(_tt)
-                for cti, _ in enumerate(_client_tasks):
-                    _tk_keys.append(f"ct_cl_{_cl['id']}_{cti}")
-                for dti, _ in enumerate(_deal_tasks_list):
-                    _tk_keys.append(f"ct_dl_{_cl['id']}_{dti}")
-                if _dialog_task_key in _tk_keys:
-                    _deal = None
-                    for _d in st.session_state.crm_store.get("deals", []):
-                        if _d["id"] == _tk.get("deal_id"):
-                            _deal = _d
-                            break
-                    task_detail_dialog(_tk, _cl, _deal, _dialog_task_key)
-                    _found = True
-                    break
 
 elif st.session_state.active_tab == "Сделки":
     all_deals = st.session_state.crm_store.get("deals", [])
