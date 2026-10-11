@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy
+import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time
 from pathlib import Path
 
 # WebAuthn / Passkeys. Если зависимость ещё не установлена, парольный вход продолжает работать.
@@ -2410,6 +2410,51 @@ if "_dialog_return_stack" not in st.session_state: st.session_state._dialog_retu
 if "dialog_it_key" not in st.session_state: st.session_state.dialog_it_key = None
 if "dialog_close_deal_id" not in st.session_state: st.session_state.dialog_close_deal_id = None
 
+def _pin_hash(pin, salt=None):
+    """Store a salted PBKDF2 hash; never store a PIN in plain text."""
+    salt_bytes = secrets.token_bytes(16) if salt is None else base64.urlsafe_b64decode(str(salt) + "=" * (-len(str(salt)) % 4))
+    digest = hashlib.pbkdf2_hmac("sha256", str(pin).encode("utf-8"), salt_bytes, 240000)
+    return {
+        "salt": base64.urlsafe_b64encode(salt_bytes).decode("ascii").rstrip("="),
+        "hash": base64.urlsafe_b64encode(digest).decode("ascii").rstrip("="),
+    }
+
+
+def _pin_verify(user, pin):
+    saved = user.get("login_pin")
+    if not isinstance(saved, dict) or not saved.get("salt") or not saved.get("hash"):
+        return False
+    try:
+        candidate = _pin_hash(pin, saved["salt"])["hash"]
+        return secrets.compare_digest(candidate, str(saved["hash"]))
+    except Exception:
+        return False
+
+
+def _create_browser_session(user, remember=True):
+    """Create a revocable per-browser session cookie for the current authenticated run."""
+    token = secrets.token_urlsafe(32)
+    sessions = user.setdefault("auth_sessions", [])
+    if not isinstance(sessions, list):
+        sessions = []
+        user["auth_sessions"] = sessions
+    sessions.append({
+        "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        "created_at": now_str(),
+        "expires_at": (datetime.now() + timedelta(days=3650 if remember else 1)).isoformat(timespec="seconds"),
+    })
+    user.pop("auth_token", None)
+    user["auth_sessions"] = sessions[-30:]
+    save_data(st.session_state.crm_store)
+    st.session_state.authenticated = True
+    st.session_state.user_role = user.get("role")
+    st.session_state.user_login = user.get("login")
+    st.session_state.user_name = user.get("name", user.get("login", ""))
+    st.session_state.remember_login = bool(remember)
+    # The auth cookie is session-only; a remembered browser must still enter its PIN after reload.
+    cookie_manager.set("auth_token", token)
+
+
 def _passkey_b64url_encode(value):
     return base64.urlsafe_b64encode(bytes(value)).decode("ascii").rstrip("=")
 
@@ -2502,10 +2547,7 @@ def _passkey_create_login_session(user):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = True
-    cookie_manager.set(
-        "auth_token", token,
-        expires_at=datetime.now().replace(microsecond=0) + timedelta(days=30),
-    )
+    cookie_manager.set("auth_token", token)
 
 
 def _passkey_process_login_result(result, pending):
@@ -2625,15 +2667,11 @@ def _user_has_auth_token(user, token):
     return False
 
 _auth_token = cookies.get("auth_token")
-if _auth_token and not st.session_state.get("authenticated"):
-    for u in st.session_state.crm_store.get("users", []):
-        if _user_has_auth_token(u, _auth_token):
-            st.session_state.authenticated = True
-            st.session_state.user_role = u["role"]
-            st.session_state.user_login = u["login"]
-            st.session_state.user_name = u.get("name", u["login"])
-            st.session_state.setdefault("remember_login", False)
-            break
+_remembered_login = str(cookies.get("remembered_user") or "").strip()
+if st.session_state.get("_force_password_login"):
+    _remembered_login = ""
+# Deliberately do not restore an authenticated state from auth_token on a fresh
+# Streamlit session: remembered browsers must enter their PIN, other browsers need password.
     
 def _render_it_edit(it):
     """Inline edit form for internal task."""
@@ -2894,72 +2932,95 @@ def check_login(username, password):
     return False
 
 if not st.session_state.authenticated:
+    # A remembered browser is identified by a non-secret login cookie, but must prove
+    # knowledge of the PIN on every fresh page session.
+    _remembered_user = get_user_by_login(_remembered_login) if _remembered_login else None
+    if _remembered_user and isinstance(_remembered_user.get("login_pin"), dict):
+        st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Введите PIN-код для входа</p>", unsafe_allow_html=True)
+        lc, mc, rc = st.columns([1, 2, 1])
+        with mc:
+            with st.container(border=True):
+                _pin_input = st.text_input("PIN-код:", type="password", max_chars=8, placeholder="Введите PIN-код", key="remembered_pin_input")
+                if st.button("Войти по PIN-коду", use_container_width=True, type="primary"):
+                    if _pin_verify(_remembered_user, _pin_input):
+                        _create_browser_session(_remembered_user, remember=True)
+                        st.toast("Успешный вход", icon="🔓")
+                        st.rerun()
+                    else:
+                        st.error("Неверный PIN-код.")
+                if st.button("Войти по логину и паролю", use_container_width=True, key="switch_to_password_login"):
+                    try:
+                        cookie_manager.delete("remembered_user")
+                        cookie_manager.delete("auth_token")
+                    except Exception:
+                        pass
+                    st.session_state["_force_password_login"] = True
+                    st.session_state.pop("remembered_pin_input", None)
+                    st.rerun()
+        st.stop()
+
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Авторизуйтесь для входа в систему</p>", unsafe_allow_html=True)
     lc, mc, rc = st.columns([1, 2, 1])
     with mc:
         with st.container(border=True):
-            iu = st.text_input("Логин:", placeholder="Введите логин")
-            ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
-            remember_login = st.checkbox("Запомнить меня на этом устройстве", value=False, key="remember_login_checkbox")
-            st.caption("Если галочка снята, вход сохранится только до закрытия браузера.")
+            iu = st.text_input("Логин:", placeholder="Введите логин", key="login_username")
+            ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
+            remember_login = st.checkbox("Запомнить меня в этом браузере", value=False, key="remember_login_checkbox")
+            if remember_login:
+                st.caption("После первого входа браузер будет помнить аккаунт, но при каждом новом открытии CRM потребуется PIN-код.")
+                _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="password", max_chars=8, key="new_login_pin")
+                _confirm_pin = st.text_input("Повторите PIN-код:", type="password", max_chars=8, key="confirm_login_pin")
+            else:
+                _new_pin = _confirm_pin = ""
             if st.button("Войти", use_container_width=True, type="primary"):
-                if check_login(iu, ip):
-                    _token = secrets.token_urlsafe(32)
-                    for u in st.session_state.crm_store["users"]:
-                        if u["login"] == iu.strip():
-                            # Отдельный токен на каждое устройство: вход на телефоне
-                            # не завершает вход на компьютере.
-                            sessions = u.setdefault("auth_sessions", [])
-                            if not isinstance(sessions, list):
-                                sessions = []
-                                u["auth_sessions"] = sessions
-                            _session_days = 30 if remember_login else 1
-                            sessions.append({
-                                "token_hash": hashlib.sha256(_token.encode("utf-8")).hexdigest(),
-                                "created_at": now_str(),
-                                "expires_at": (datetime.now() + timedelta(days=_session_days)).isoformat(timespec="seconds"),
-                            })
-                            # Удаляем устаревший одиночный токен после успешного входа.
-                            if u.get("auth_token"):
-                                u.pop("auth_token", None)
-                            break
-                    save_data(st.session_state.crm_store)
-                    st.session_state.remember_login = bool(remember_login)
-                    if remember_login:
-                        cookie_manager.set("auth_token", _token, expires_at=datetime.now().replace(microsecond=0) + timedelta(days=30))
+                _user_for_login = next((u for u in st.session_state.crm_store.get("users", []) if u.get("login") == iu.strip()), None)
+                if _user_for_login and verify_password(ip, _user_for_login.get("password", "")):
+                    if remember_login and (not re.fullmatch(r"\d{4,8}", _new_pin or "") or _new_pin != _confirm_pin):
+                        st.error("Для запоминания браузера задайте одинаковый PIN-код из 4–8 цифр.")
                     else:
-                        # Cookie без expires_at — сеансовая cookie браузера.
-                        cookie_manager.set("auth_token", _token)
-                    st.toast("Успешный вход", icon="\U0001F513")
-                    st.rerun()
+                        st.session_state.pop("_force_password_login", None)
+                        if remember_login:
+                            _user_for_login["login_pin"] = _pin_hash(_new_pin)
+                            # Long-lived, non-secret browser marker; authentication still requires PIN.
+                            cookie_manager.set("remembered_user", _user_for_login["login"], expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650))
+                        else:
+                            try:
+                                cookie_manager.delete("remembered_user")
+                            except Exception:
+                                pass
+                        _create_browser_session(_user_for_login, remember=bool(remember_login))
+                        time.sleep(0.3)
+                        st.toast("Успешный вход", icon="🔓")
+                        st.rerun()
                 else:
                     st.error("Неверный логин или пароль.")
-        st.markdown("---")
-        st.markdown("**Или войдите без пароля**")
-        if st.session_state.get("_passkey_login_message"):
-            st.warning(st.session_state.pop("_passkey_login_message"))
-        if not PASSKEY_AVAILABLE:
-            st.info("Вход по Face ID пока не подключён: добавьте зависимость `webauthn>=2.2,<3` в requirements.txt и опубликуйте приложение заново.")
-        else:
-            _pk_pending = st.session_state.get("_passkey_login_pending")
-            if not _pk_pending or not _passkey_pending_is_fresh(_pk_pending):
-                try:
-                    _pk_pending = _passkey_make_authentication_pending()
-                    st.session_state["_passkey_login_pending"] = _pk_pending
-                except Exception as _pk_exc:
-                    _pk_pending = None
-                    st.caption(f"Вход по Passkey временно недоступен: {str(_pk_exc)[:180]}")
-            if _pk_pending:
-                _pk_result = crm_passkey_component(
-                    mode="login",
-                    options_json=_pk_pending["options_json"],
-                    event_id=_pk_pending["event_id"],
-                    button_label="Войти с Face ID / Passkey",
-                    key="crm_passkey_login_component",
-                    default=None,
-                )
-                _passkey_process_login_result(_pk_result, _pk_pending)
+    st.markdown("---")
+    st.markdown("**Или войдите без пароля**")
+    if st.session_state.get("_passkey_login_message"):
+        st.warning(st.session_state.pop("_passkey_login_message"))
+    if not PASSKEY_AVAILABLE:
+        st.info("Вход по Face ID пока не подключён: добавьте зависимость `webauthn>=2.2,<3` в requirements.txt и опубликуйте приложение заново.")
+    else:
+        _pk_pending = st.session_state.get("_passkey_login_pending")
+        if not _pk_pending or not _passkey_pending_is_fresh(_pk_pending):
+            try:
+                _pk_pending = _passkey_make_authentication_pending()
+                st.session_state["_passkey_login_pending"] = _pk_pending
+            except Exception as _pk_exc:
+                _pk_pending = None
+                st.caption(f"Вход по Passkey временно недоступен: {str(_pk_exc)[:180]}")
+        if _pk_pending:
+            _pk_result = crm_passkey_component(
+                mode="login",
+                options_json=_pk_pending["options_json"],
+                event_id=_pk_pending["event_id"],
+                button_label="Войти с Face ID / Passkey",
+                key="crm_passkey_login_component",
+                default=None,
+            )
+            _passkey_process_login_result(_pk_result, _pk_pending)
     st.stop()
 
 st.markdown(f"""<div class="greeting-block" style="margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important;"><h1 style='text-align: center; margin-top: 0!important; margin-bottom: 0!important; padding-top: 0!important; padding-bottom: 0!important;'>Айплинт CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0; padding-top: 0!important; padding-bottom: 0!important;'>Продуктивного тебе дня, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
@@ -3021,10 +3082,7 @@ with st.sidebar:
                             "expires_at": (datetime.now() + timedelta(days=_session_days)).isoformat(timespec="seconds"),
                         }]
                 save_data(st.session_state.crm_store)
-                if st.session_state.get("remember_login", False):
-                    cookie_manager.set("auth_token", _new_token, expires_at=datetime.now().replace(microsecond=0) + timedelta(days=30))
-                else:
-                    cookie_manager.set("auth_token", _new_token)
+                cookie_manager.set("auth_token", _new_token)
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else: st.error("Пароли не совпадают")
@@ -3094,8 +3152,10 @@ with st.sidebar:
                 save_data(st.session_state.crm_store)
         try:
             cookie_manager.delete("auth_token")
-        except (KeyError, TypeError):
+            cookie_manager.delete("remembered_user")
+        except Exception:
             pass
+        st.session_state["_force_password_login"] = True
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
