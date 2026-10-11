@@ -2214,16 +2214,40 @@ def resolve_login(name_or_login):
     return name_or_login
 
 def send_telegram(chat_id, text):
-    if not TELEGRAM_BOT_TOKEN or not chat_id:
-        return
+    """Отправляет сообщение в Telegram и возвращает безопасный результат без токена."""
+    if not TELEGRAM_BOT_TOKEN:
+        return False, "Токен не найден. Проверьте TELEGRAM_BOT_TOKEN в Streamlit Secrets."
+    if not str(chat_id or "").strip():
+        return False, "Chat ID не заполнен в профиле пользователя."
     try:
-        requests.post(
+        response = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
-            timeout=5
+            json={"chat_id": str(chat_id).strip(), "text": str(text), "parse_mode": "HTML"},
+            timeout=10
         )
-    except:
-        pass
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+        if response.ok and payload.get("ok") is True:
+            return True, "Сообщение успешно отправлено в Telegram."
+        description = str(payload.get("description") or "")
+        error_code = payload.get("error_code", response.status_code)
+        if error_code == 401:
+            detail = "Telegram отклонил токен. Проверьте новый TELEGRAM_BOT_TOKEN в Streamlit Secrets."
+        elif error_code == 400 and "chat not found" in description.lower():
+            detail = "Telegram не нашёл этот Chat ID. Проверьте ID и нажмите Start в чате с ботом."
+        elif error_code == 403:
+            detail = "Бот не может написать этому пользователю. Откройте бота в Telegram и нажмите Start."
+        else:
+            detail = f"Telegram вернул ошибку {error_code}: {description or 'подробности не предоставлены'}"
+        return False, detail
+    except requests.exceptions.Timeout:
+        return False, "Истекло время ожидания ответа Telegram. Попробуйте ещё раз."
+    except requests.exceptions.RequestException as exc:
+        return False, f"Сетевая ошибка при обращении к Telegram: {str(exc)[:180]}"
+    except Exception as exc:
+        return False, f"Не удалось отправить сообщение: {str(exc)[:180]}"
 
 def add_notification(to_login, text, tg_text=None):
     """Создаёт уведомление: внутреннее (колокольчик) + Telegram"""
@@ -3220,6 +3244,12 @@ with st.sidebar:
                 save_data(st.session_state.crm_store)
                 st.toast("Chat ID сохранён", icon="✅")
                 st.rerun()
+        if st.button("Отправить тестовое сообщение", key="btn_test_telegram", use_container_width=True):
+            ok, message = send_telegram(tg_id.strip(), "✅ Тестовое сообщение из CRM. Telegram уведомления настроены.")
+            if ok:
+                st.success(message)
+            else:
+                st.error(message)
     st.markdown("---")
     if st.button("Выйти", use_container_width=True):
         _tok = cookies.get("auth_token")
