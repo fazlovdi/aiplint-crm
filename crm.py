@@ -4985,13 +4985,42 @@ if st.session_state.active_tab == "Клиенты":
     # Поиск и сортировки в один ряд
     _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
     with _search_col:
-        _search_input_col, _search_clear_col = st.columns([12, 1])
-        with _search_input_col:
-            _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
-        with _search_clear_col:
-            st.markdown("<style>.st-key-client_search_clear button{padding:0!important;min-height:38px!important;font-size:20px!important;line-height:1!important;color:#808B98!important;border:0!important;background:transparent!important;box-shadow:none!important}</style>", unsafe_allow_html=True)
-            st.button("×", key="client_search_clear", help="Очистить поиск", on_click=lambda: st.session_state.__setitem__("search_input_key", ""), use_container_width=True)
-        sq = (_search_input_now or "").strip().lower()
+        # Поиск обновляет список на каждом изменении текста; очистка синхронно сбрасывает значение.
+        def _clear_client_search():
+            st.session_state["search_input_key"] = ""
+            st.session_state["client_search_live"] = ""
+        def _update_client_search():
+            st.session_state["client_search_live"] = st.session_state.get("search_input_key", "")
+        if "search_input_key" not in st.session_state:
+            st.session_state["search_input_key"] = ""
+        if "client_search_live" not in st.session_state:
+            st.session_state["client_search_live"] = st.session_state.get("search_input_key", "")
+        with st.container(key="client_search_wrap"):
+            _search_input_now = st.text_input(
+                "Поиск", key="search_input_key", placeholder="Поиск...",
+                label_visibility="collapsed", on_change=_update_client_search
+            )
+            st.button("×", key="client_search_clear", help="Очистить поиск", on_click=_clear_client_search)
+        st.markdown("""
+        <style>
+        .st-key-client_search_wrap { position: relative !important; }
+        .st-key-client_search_wrap .st-key-search_input_key input { padding-right: 2.6rem !important; }
+        .st-key-client_search_wrap .st-key-client_search_clear {
+            position: absolute !important; right: 5px !important; top: 0px !important;
+            width: 34px !important; z-index: 10 !important; margin: 0 !important;
+        }
+        .st-key-client_search_wrap .st-key-client_search_clear button {
+            min-height: 38px !important; height: 38px !important; width: 34px !important;
+            padding: 0 !important; margin: 0 !important; font-size: 22px !important;
+            line-height: 1 !important; color: #808B98 !important; border: 0 !important;
+            background: transparent !important; box-shadow: none !important;
+        }
+        .st-key-client_search_wrap .st-key-client_search_clear button:hover {
+            color: #bc1661 !important; background: transparent !important; border: 0 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        sq = (st.session_state.get("client_search_live", _search_input_now) or "").strip().lower()
     with _sort_col:
         sort_options = ["По дате изменения", "По дате создания", "По алфавиту", "По городу"]
         sort_mode = st.selectbox("Сортировка", sort_options, key="client_sort_select", label_visibility="collapsed")
@@ -5025,11 +5054,6 @@ if st.session_state.active_tab == "Клиенты":
     elif sort_mode == "По городу":
         fcl.sort(key=lambda c: (c.get("city", "") or "").strip().lower())
     if all_clients:
-        # Индекс сделок строится один раз за запуск, а не повторно для каждого клиента.
-        # Это заметно ускоряет повторные перерисовки списка при поиске.
-        _deals_by_client = {}
-        for _deal in st.session_state.crm_store.get("deals", []):
-            _deals_by_client.setdefault(_deal.get("client_id"), []).append(_deal)
         # Таблица клиентов: город и телефон сразу после наименования
         _hc1, _hc2, _hc3, _hc4, _hc5, _hc6, _hc7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
         with _hc1:
@@ -5048,7 +5072,7 @@ if st.session_state.active_tab == "Клиенты":
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сумма сделок</div>", unsafe_allow_html=True)
         st.markdown('<div style="border-top:1px solid #DCE0E5;margin-bottom:4px;"></div>', unsafe_allow_html=True)
         for cl in fcl:
-            cl_deals = _deals_by_client.get(cl["id"], [])
+            cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl["id"]]
             cl_tasks_all = cl.get("tasks", [])
             all_tasks_count = len(cl_tasks_all)
             deals_sum = sum(d.get("budget", 0) for d in cl_deals)
