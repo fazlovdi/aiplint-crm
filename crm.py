@@ -5025,6 +5025,11 @@ if st.session_state.active_tab == "Клиенты":
     elif sort_mode == "По городу":
         fcl.sort(key=lambda c: (c.get("city", "") or "").strip().lower())
     if all_clients:
+        # Индекс сделок строится один раз за запуск, а не повторно для каждого клиента.
+        # Это заметно ускоряет повторные перерисовки списка при поиске.
+        _deals_by_client = {}
+        for _deal in st.session_state.crm_store.get("deals", []):
+            _deals_by_client.setdefault(_deal.get("client_id"), []).append(_deal)
         # Таблица клиентов: город и телефон сразу после наименования
         _hc1, _hc2, _hc3, _hc4, _hc5, _hc6, _hc7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
         with _hc1:
@@ -5043,7 +5048,7 @@ if st.session_state.active_tab == "Клиенты":
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сумма сделок</div>", unsafe_allow_html=True)
         st.markdown('<div style="border-top:1px solid #DCE0E5;margin-bottom:4px;"></div>', unsafe_allow_html=True)
         for cl in fcl:
-            cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl["id"]]
+            cl_deals = _deals_by_client.get(cl["id"], [])
             cl_tasks_all = cl.get("tasks", [])
             all_tasks_count = len(cl_tasks_all)
             deals_sum = sum(d.get("budget", 0) for d in cl_deals)
