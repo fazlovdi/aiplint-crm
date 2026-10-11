@@ -3775,7 +3775,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             if st.session_state.get(dc_clr_key):
                 st.session_state[f"dls_dc_input_{deal_id}"] = ""
                 st.session_state[dc_clr_key] = False
-            nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий", height=68, label_visibility="collapsed")
+            nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
             _dcc1, _dcc_btn, _dcc2 = st.columns([1, 2, 1])
             with _dcc_btn:
                 _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
@@ -3828,16 +3828,16 @@ def render_deal_detail(d, cl, cu, key_prefix):
 
 def render_client_card_expanded(cl):
     with st.container(border=True):
-        # Наименование клиента как заголовок (как номер задачи)
-        st.subheader(cl.get('name', ''))
-        st.markdown(format_created_date(cl), unsafe_allow_html=True)
+        # Две колонки: заголовок и информация слева, комментарии и файлы справа
         show_edit = st.session_state.get(f"show_edit_{cl['id']}", False)
-        # Две колонки: левая — инфо+кнопка+чат, правая — комментарии+файлы
         _left_col, _right_col = st.columns(2)
         with _left_col:
+            st.subheader(cl.get('name', ''))
+            st.markdown(format_created_date(cl), unsafe_allow_html=True)
             if show_edit:
                 # Inline editing — поля становятся редактируемыми
                 en = st.text_input("ФИО / Компания", value=cl['name'], key=f"en_{cl['id']}")
+                st.markdown("---")
                 st.markdown("**Информация о клиенте:**")
                 ep = st.text_input("Телефон", value=cl['phone'], key=f"ep_{cl['id']}")
                 cm_edit_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
@@ -3929,6 +3929,7 @@ def render_client_card_expanded(cl):
                     st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
                 with _promo_view:
                     st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
+                st.markdown("---")
                 st.markdown("**Информация о клиенте:**")
                 st.markdown(f"Телефон: **{cl.get('phone', '')}**")
                 cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
@@ -3980,7 +3981,7 @@ def render_client_card_expanded(cl):
             if st.session_state.get(cc_clr_key):
                 st.session_state[f"new_cc_input_{cl['id']}"] = ""
                 st.session_state[cc_clr_key] = False
-            nci = st.text_area("Комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите новый комментарий", height=68, label_visibility="collapsed")
+            nci = st.text_area("Комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
             _cc_sp1, _cc_btn_col, _cc_sp2 = st.columns([1, 2, 1])
             with _cc_btn_col:
                 _cc_clicked = st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True)
@@ -4011,6 +4012,7 @@ def render_client_card_expanded(cl):
                         st.toast("Файлы сохранены", icon="\U0001F4C1")
                         st.rerun()
                 else: st.warning("Выберите файл(ы)")
+            st.markdown("---")
             # Кнопки создания сделки и задачи
             _bc1, _bc2 = st.columns(2)
             with _bc1:
@@ -4155,6 +4157,7 @@ def add_client_dialog(fv):
             _has_unsaved = (
                 st.session_state.get(f"cn_{fv}", "").strip() or
                 st.session_state.get(f"cp_{fv}", "").strip() or
+                st.session_state.get(f"cpromo_{fv}", "").strip() or
                 st.session_state.get(f"ce_{fv}", "").strip() or
                 st.session_state.get(f"ca_{fv}", "").strip() or
                 st.session_state.get(f"new_cc_form_{fv}", "").strip() or
@@ -4195,11 +4198,13 @@ def add_client_dialog(fv):
         cn = st.text_input("ФИО / Компания", key=f"cn_{fv}")
         cp = st.text_input("Основной телефон", key=f"cp_{fv}")
         ce = st.text_input("Основной Email", key=f"ce_{fv}")
-        cd_cc1, cd_cc2 = st.columns(2)
+        cd_cc1, cd_cc2, cd_cc3 = st.columns([1, 1.2, 1])
         with cd_cc1:
             cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}", label_visibility="visible")
         with cd_cc2:
             cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", placeholder="Выбери категорию")
+        with cd_cc3:
+            cpromo = st.text_input("Промокод", key=f"cpromo_{fv}", placeholder="Введите промокод")
         cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
         contact_method_new = st.selectbox("Предпочтительный способ связи:", [""] + CONTACT_METHODS, index=0, key=f"new_contact_method_{fv}", placeholder="Выберите способ связи")
         ca = st.text_area("Основной адрес", key=f"ca_{fv}", height=68)
@@ -4210,7 +4215,7 @@ def add_client_dialog(fv):
             if st.session_state.get(cc_form_clr):
                 st.session_state[f"new_cc_form_{fv}"] = ""
                 st.session_state[cc_form_clr] = False
-            ncc = st.text_area("Комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите новый комментарий", height=68, label_visibility="collapsed")
+            ncc = st.text_area("Комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
             _fcc1, _fcc_btn, _fcc2 = st.columns([1, 2, 1])
             with _fcc_btn:
                 _fcc_clicked = st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True)
@@ -4265,7 +4270,7 @@ def add_client_dialog(fv):
             else:
                 clients = st.session_state.crm_store["clients"]
                 nid = (max([c['id'] for c in clients]) if clients else 0) + 1
-                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
+                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "address": ca, "category": cc, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
                 if cf:
                     fi_list = save_uploaded_files(cf, nid, "profile")
                     if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
@@ -4467,6 +4472,8 @@ def client_detail_dialog(cl_id):
     _key_prefix = f"client_{cl_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
     _is_editing = st.session_state.get(f"show_edit_{cl_id}", False)
+    # Compact spacing below the dialog title and above the close button
+    st.markdown("<style>[data-testid='stDialog'] [data-testid='stDialogContent']{padding-top:0.1rem!important}[data-testid='stDialog'] [data-testid='stVerticalBlock']{gap:0.08rem!important}[data-testid='stDialog'] h2{margin-top:0!important;margin-bottom:0.05rem!important;padding-top:0!important;padding-bottom:0!important}.st-key-close_row_client_" + str(cl_id) + "{margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important}</style>", unsafe_allow_html=True)
     # Close button
     _close_btn_key = f"close_btn_{_key_prefix}"
     _close_css_key = f"close_row_{_key_prefix}"
@@ -4509,6 +4516,8 @@ def client_detail_dialog(cl_id):
                     if _ea_key in st.session_state: cl['address'] = st.session_state[_ea_key]
                     if _ed_key in st.session_state: cl['discount'] = int(st.session_state[_ed_key])
                     if _ec_key in st.session_state: cl['category'] = st.session_state[_ec_key]
+                    _promo_key = f"promo_code_{cl_id}"
+                    if _promo_key in st.session_state: cl['promo_code'] = str(st.session_state[_promo_key]).strip()
                     if _em_key in st.session_state: cl['manager'] = st.session_state[_em_key]
                     # Сохраняем доп. телефоны, email, адреса из session_state
                     _ep_list = cl.get('extra_phones', [])
@@ -4668,7 +4677,7 @@ def create_deal_dialog(cl_id):
         cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
     with _deal_create_right:
         st.markdown("**Комментарии**")
-        cd_comment = st.text_area("Комментарий:", key=f"cdlg_comment_{cl_id}", placeholder="Введите новый комментарий", height=68, label_visibility="collapsed")
+        cd_comment = st.text_area("Комментарий:", key=f"cdlg_comment_{cl_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
         cd_files = st.file_uploader("Файлы сделки:", key=f"cdlg_files_{cl_id}", accept_multiple_files=True)
     if st.button("Создать", key=f"cdlg_go_{cl_id}", use_container_width=True, type="primary"):
         if not cd_mgr:
