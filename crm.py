@@ -101,9 +101,10 @@ st.markdown("""
     .stHtml { display: none !important; }
     .custom-print-btn { width: 100%; padding: 10px; background: #bc1661; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; transition: background 0.15s; }
     .custom-print-btn:hover { background: #9a1452; }
-    .chat-msg { padding: 8px 12px; border-radius: 10px; margin-bottom: 6px; max-width: 80%; }
-    .chat-msg-me { background-color: #bc1661; color: white; margin-left: auto; }
-    .chat-msg-other { background-color: #EEF0F3; color: #2C3E50; }
+    .chat-msg { padding: 5px 8px; border-radius: 8px; margin-bottom: 4px; max-width: 80%; font-size: 0.88rem; line-height: 1.35; }
+    .chat-msg-me { background-color: #D978A4; color: #FFFFFF; margin-left: auto; }
+    .chat-msg-other { background-color: #F4F5F7; color: #2C3E50; }
+    .stTextArea textarea::placeholder, .stTextInput input::placeholder { font-size: 0.875rem !important; color: #808B98 !important; opacity: 1 !important; }
     .qa-card { background: #FFFFFF; border: 1px solid #E8EBEF; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
     #crm-lightbox { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999999; display:none; align-items:center; justify-content:center; cursor:pointer; }
     #crm-lightbox img { max-width:90%; max-height:90%; border-radius:8px; }
@@ -3834,18 +3835,22 @@ def render_client_card_expanded(cl):
         # Две колонки: левая — инфо+кнопка+чат, правая — комментарии+файлы
         _left_col, _right_col = st.columns(2)
         with _left_col:
-            st.markdown("**Информация о клиенте:**")
             if show_edit:
                 # Inline editing — поля становятся редактируемыми
                 en = st.text_input("ФИО / Компания", value=cl['name'], key=f"en_{cl['id']}")
+                st.markdown("**Информация о клиенте:**")
                 ep = st.text_input("Телефон", value=cl['phone'], key=f"ep_{cl['id']}")
                 cm_edit_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
                 cm_edit = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_edit_idx, key=f"cm_edit_{cl['id']}", placeholder="Выбери вариант...")
                 ee = st.text_input("Email", value=cl.get('email', ''), key=f"ee_{cl['id']}")
                 ea_val = st.text_input("Адрес", value=cl.get('address', ''), key=f"ea_{cl['id']}")
                 ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(cl.get('discount', 0)), key=f"ed_{cl['id']}")
-                ec_idx = CATEGORIES.index(cl.get('category', 'Не определён')) if cl.get('category', 'Не определён') in CATEGORIES else 0
-                ec = st.selectbox("Категория", CATEGORIES, index=ec_idx, key=f"ec_{cl['id']}")
+                _cat_col, _promo_col = st.columns(2)
+                with _cat_col:
+                    ec_idx = CATEGORIES.index(cl.get('category', 'Не определён')) if cl.get('category', 'Не определён') in CATEGORIES else 0
+                    ec = st.selectbox("Категория", CATEGORIES, index=ec_idx, key=f"ec_{cl['id']}")
+                with _promo_col:
+                    promo_code = st.text_input("Промокод", value=cl.get('promo_code', ''), key=f"promo_code_{cl['id']}")
                 em = st.selectbox("Ответственный:", get_managers_list(), index=0 if cl.get('manager', '') not in get_managers_list() else (get_managers_list()).index(cl.get('manager', '')), key=f"em_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 st.markdown("---")
                 # Доп. телефоны, Email, адреса — те же, что в окне создания клиента
@@ -3895,6 +3900,7 @@ def render_client_card_expanded(cl):
                         cl['address'] = ea_val
                         cl['discount'] = int(ed)
                         cl['category'] = ec
+                        cl['promo_code'] = promo_code.strip()
                         cl['manager'] = em
                         # Доп. телефоны, email, адреса уже обновлены через session_state
                         cl["last_modified"] = now_str()
@@ -3917,9 +3923,13 @@ def render_client_card_expanded(cl):
                         st.session_state["_in_dialog"] = False
                         commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
             else:
-                # Статическое отображение
-                st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
-                st.markdown("---")
+                # Категория и промокод в одной строке
+                _cat_view, _promo_view = st.columns(2)
+                with _cat_view:
+                    st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
+                with _promo_view:
+                    st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
+                st.markdown("**Информация о клиенте:**")
                 st.markdown(f"Телефон: **{cl.get('phone', '')}**")
                 cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
                 _cm_left, _cm_right = st.columns(2)
@@ -3953,7 +3963,8 @@ def render_client_card_expanded(cl):
             if not show_edit:
                 pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
                 st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("\u270e Редактировать", key=pencil_cli_key):
+                if st.button("✎", key=pencil_cli_key, help="Редактировать карточку клиента"):
+
                     st.session_state[f"show_edit_{cl['id']}"] = True
                     st.rerun()
             # Разделитель под кнопкой редактирования
@@ -4000,17 +4011,7 @@ def render_client_card_expanded(cl):
                         st.toast("Файлы сохранены", icon="\U0001F4C1")
                         st.rerun()
                 else: st.warning("Выберите файл(ы)")
-            # История изменений карточки клиента
-            st.markdown("---")
-            st.markdown("**Внесённые изменения**")
-            _client_changes = cl.get("change_log", [])
-            if _client_changes:
-                for _chg in reversed(_client_changes[-20:]):
-                    st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
-            else:
-                st.caption("История изменений появится после редактирования карточки.")
-            # Разделитель и кнопки создания
-            st.markdown("---")
+            # Кнопки создания сделки и задачи
             _bc1, _bc2 = st.columns(2)
             with _bc1:
                 if st.button("Создать задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
@@ -4024,6 +4025,15 @@ def render_client_card_expanded(cl):
                     st.session_state["dialog_create_deal_from_client"] = cl["id"]
                     st.session_state.pop("dialog_client_key", None)
                     st.rerun()
+            # История изменений — после кнопок создания сделки и задачи
+            st.markdown("---")
+            st.markdown("**Внесённые изменения**")
+            _client_changes = cl.get("change_log", [])
+            if _client_changes:
+                for _chg in reversed(_client_changes[-20:]):
+                    st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
+            else:
+                st.caption("История изменений появится после редактирования карточки.")
 
 def render_client_in_tree(cl):
     is_cl_exp = st.session_state.expanded_client_id == cl["id"]
