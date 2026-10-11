@@ -4392,10 +4392,54 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
     deal = next((d for d in st.session_state.crm_store.get("deals", []) if d.get("id") == task.get("deal_id")), None)
     report_key = f"task_completion_report_text_{key_prefix}"
     file_ver_key = f"task_completion_file_ver_{key_prefix}"
-    report = st.text_area("Отчёт (обязательно):", key=report_key, height=110)
     file_ver = st.session_state.get(file_ver_key, 0)
-    files = st.file_uploader("Файлы/фото отчёта:", key=f"task_completion_files_{key_prefix}_{file_ver}", accept_multiple_files=True)
-    create_next = st.checkbox("Создать новую задачу по сделке" if deal else "Создать новую задачу по клиенту", key=f"task_completion_next_{key_prefix}")
+    files_key = f"task_completion_files_{key_prefix}_{file_ver}"
+    next_key = f"task_completion_next_{key_prefix}"
+    close_warning_key = f"_task_completion_close_warning_{key_prefix}"
+
+    # Кнопка закрытия отчёта с предупреждением о незаписанных данных.
+    close_css_key = f"task_report_close_row_{key_prefix}"
+    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("✕", key=f"task_report_close_btn_{key_prefix}", use_container_width=True):
+                _has_unsaved = bool(
+                    str(st.session_state.get(report_key, "") or "").strip()
+                    or st.session_state.get(files_key)
+                    or st.session_state.get(next_key, False)
+                    or str(st.session_state.get(f"task_completion_next_topic_{key_prefix}", "") or "").strip()
+                    or str(st.session_state.get(f"task_completion_next_comment_{key_prefix}", "") or "").strip()
+                    or st.session_state.get(f"task_completion_next_files_{key_prefix}")
+                )
+                if _has_unsaved:
+                    st.session_state[close_warning_key] = True
+                    st.rerun()
+                else:
+                    st.session_state.pop("dialog_task_completion", None)
+                    st.session_state.pop(close_warning_key, None)
+                    st.rerun()
+
+    if st.session_state.get(close_warning_key):
+        _warn_key = f"task_report_unsaved_warn_{key_prefix}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background:#FFF8E1!important;padding:0.7rem 0.9rem!important;margin:0.4rem 0!important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**⚠️ Есть несохранённые изменения**")
+            st.markdown("Закрыть отчёт и потерять введённые данные?")
+            _discard_col, _continue_col = st.columns(2)
+            with _discard_col:
+                if st.button("Закрыть без сохранения", key=f"task_report_discard_{key_prefix}", use_container_width=True):
+                    st.session_state.pop("dialog_task_completion", None)
+                    st.session_state.pop(close_warning_key, None)
+                    st.rerun()
+            with _continue_col:
+                if st.button("Продолжить заполнение", key=f"task_report_continue_{key_prefix}", use_container_width=True):
+                    st.session_state.pop(close_warning_key, None)
+                    st.rerun()
+
+    report = st.text_area("Отчёт (обязательно):", key=report_key, height=110)
+    files = st.file_uploader("Файлы/фото отчёта:", key=files_key, accept_multiple_files=True)
+    create_next = st.checkbox("Создать новую задачу по сделке" if deal else "Создать новую задачу по клиенту", key=next_key)
     next_values = {}
     if create_next:
         with st.container(border=True):
@@ -4449,8 +4493,21 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                 st.rerun()
     with col_cancel:
         if st.button("Отмена", key=f"task_completion_cancel_{key_prefix}", use_container_width=True):
-            st.session_state.pop("dialog_task_completion", None)
-            st.rerun()
+            _has_unsaved = bool(
+                str(st.session_state.get(report_key, "") or "").strip()
+                or st.session_state.get(files_key)
+                or st.session_state.get(next_key, False)
+                or str(st.session_state.get(f"task_completion_next_topic_{key_prefix}", "") or "").strip()
+                or str(st.session_state.get(f"task_completion_next_comment_{key_prefix}", "") or "").strip()
+                or st.session_state.get(f"task_completion_next_files_{key_prefix}")
+            )
+            if _has_unsaved:
+                st.session_state[close_warning_key] = True
+                st.rerun()
+            else:
+                st.session_state.pop("dialog_task_completion", None)
+                st.session_state.pop(close_warning_key, None)
+                st.rerun()
 
 
 @st.dialog("Отчёт по сделке", width="large")
@@ -4462,12 +4519,50 @@ def deal_report_dialog(deal_id, action):
     is_close = action == "close"
     btn_label = "Успешно завершена" if is_close else "В архив"
     ex_files = d.get("close_files", []) if is_close else d.get("archive_files", [])
+    report_key = f"dls_rep_{deal_id}_{action}"
+    upload_key = f"dls_upf_{deal_id}_{action}"
+    close_warning_key = f"_deal_report_close_warning_{deal_id}_{action}"
     st.markdown(f"**{btn_label}: отчёт по сделке**")
-    rep = st.text_area("Отчёт по сделке (обязательно):", key=f"dls_rep_{deal_id}_{action}", height=100)
+
+    close_css_key = f"deal_report_close_row_{deal_id}_{action}"
+    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }}</style>', unsafe_allow_html=True)
+    with st.container(key=close_css_key):
+        _spacer_col, _close_col = st.columns([20, 1])
+        with _close_col:
+            if st.button("✕", key=f"deal_report_close_btn_{deal_id}_{action}", use_container_width=True):
+                _has_unsaved = bool(str(st.session_state.get(report_key, "") or "").strip() or st.session_state.get(upload_key))
+                if _has_unsaved:
+                    st.session_state[close_warning_key] = True
+                    st.rerun()
+                else:
+                    st.session_state.pop("dialog_deal_report", None)
+                    st.session_state.pop(close_warning_key, None)
+                    _pop_dialog_return()
+                    st.rerun()
+
+    if st.session_state.get(close_warning_key):
+        _warn_key = f"deal_report_unsaved_warn_{deal_id}_{action}"
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background:#FFF8E1!important;padding:0.7rem 0.9rem!important;margin:0.4rem 0!important; }}</style>', unsafe_allow_html=True)
+        with st.container(key=_warn_key):
+            st.markdown("**⚠️ Есть несохранённые изменения**")
+            st.markdown("Закрыть отчёт и потерять введённые данные?")
+            _discard_col, _continue_col = st.columns(2)
+            with _discard_col:
+                if st.button("Закрыть без сохранения", key=f"deal_report_discard_{deal_id}_{action}", use_container_width=True):
+                    st.session_state.pop("dialog_deal_report", None)
+                    st.session_state.pop(close_warning_key, None)
+                    _pop_dialog_return()
+                    st.rerun()
+            with _continue_col:
+                if st.button("Продолжить заполнение", key=f"deal_report_continue_{deal_id}_{action}", use_container_width=True):
+                    st.session_state.pop(close_warning_key, None)
+                    st.rerun()
+
+    rep = st.text_area("Отчёт по сделке (обязательно):", key=report_key, height=100)
     if ex_files:
         st.markdown("**Ранее загруженный файл:**")
         render_file_thumbs(ex_files, f"dls_ex_{deal_id}_{action}")
-    up = st.file_uploader("Добавить файл:", key=f"dls_upf_{deal_id}_{action}", accept_multiple_files=True)
+    up = st.file_uploader("Добавить файл:", key=upload_key, accept_multiple_files=True)
     bc1, bc2 = st.columns(2)
     with bc1:
         if st.button("Подтвердить", key=f"dls_conf_{deal_id}_{action}", use_container_width=True, type="primary"):
@@ -4492,13 +4587,20 @@ def deal_report_dialog(deal_id, action):
                     d["archive_files"] = merged
                 d["last_modified"] = now_str()
                 st.session_state.pop("dialog_deal_report", None)
+                st.session_state.pop(close_warning_key, None)
                 _pop_dialog_return()
                 commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
     with bc2:
         if st.button("Отмена", key=f"dls_cancel_{deal_id}_{action}", use_container_width=True):
-            st.session_state.pop("dialog_deal_report", None)
-            _pop_dialog_return()
-            st.rerun()
+            _has_unsaved = bool(str(st.session_state.get(report_key, "") or "").strip() or st.session_state.get(upload_key))
+            if _has_unsaved:
+                st.session_state[close_warning_key] = True
+                st.rerun()
+            else:
+                st.session_state.pop("dialog_deal_report", None)
+                st.session_state.pop(close_warning_key, None)
+                _pop_dialog_return()
+                st.rerun()
 
 
 @st.dialog("Подробности сделки", width="large")
@@ -5867,4 +5969,4 @@ elif st.session_state.active_tab == "Поставщики":
                             st.session_state.expanded_task_key = None
                             commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
     else:
-        st.info("Поставщиков нет. Добавьте первого.")
+        st.info("Поставщиков нет. Добавьте первого.")м
