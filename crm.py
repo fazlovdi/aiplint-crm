@@ -5201,7 +5201,7 @@ if st.session_state.active_tab == "Клиенты":
                 break
     elif _dialog_client_key:
         client_detail_dialog(_dialog_client_key)
-    elif not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))) and _dialog_deal_key and st.session_state.active_tab == "Клиенты":
+    elif not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")) and _dialog_deal_key and st.session_state.active_tab == "Клиенты":
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _dialog_deal_key:
                 _cl = get_client_by_id(_d.get("client_id"))
@@ -5213,7 +5213,7 @@ if st.session_state.active_tab == "Клиенты":
         client_tasks_dialog(_dialog_ct_key)
     # Показ диалога сделки (из всплывающего окна сделок клиента)
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
-    if _dialog_deal_key and st.session_state.active_tab == "Клиенты" and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))):
+    if _dialog_deal_key and st.session_state.active_tab == "Клиенты" and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")):
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _dialog_deal_key:
                 _cl = get_client_by_id(_d.get("client_id"))
@@ -5221,7 +5221,7 @@ if st.session_state.active_tab == "Клиенты":
                 break
     # Показ диалога задачи (из всплывающего окна задач клиента)
     _dialog_task_key = st.session_state.get("dialog_task_key")
-    if (_dialog_task_key and st.session_state.get("dialog_client_tasks_key") or (_dialog_task_key and st.session_state.active_tab == "Клиенты")) and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))):
+    if (_dialog_task_key and st.session_state.get("dialog_client_tasks_key") or (_dialog_task_key and st.session_state.active_tab == "Клиенты")) and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")):
         _found = False
         for _cl in st.session_state.crm_store.get("clients", []):
             if _found: break
@@ -5379,7 +5379,7 @@ elif st.session_state.active_tab == "Сделки":
                 st.caption("Сделок в работе нет.")
     # Show deal detail dialog if requested
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
-    if _dialog_deal_key and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id") or (st.session_state.get("dialog_client_key") and st.session_state.get("_dialog_return_stack"))):
+    if _dialog_deal_key and not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")):
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _dialog_deal_key:
                 _cl = cid_map.get(_d.get("client_id"))
