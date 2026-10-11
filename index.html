@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 4px 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: transparent; }
+  button { width: 100%; border: 0; border-radius: 10px; padding: 11px 14px; background: #bc1661; color: #fff; font-weight: 650; font-size: 14px; cursor: pointer; transition: transform .12s ease, opacity .12s ease, background .12s ease; }
+  button:hover { background: #9a1452; }
+  button:active { transform: scale(.985); opacity: .85; }
+  button:disabled { opacity: .6; cursor: wait; }
+  #status { min-height: 18px; margin-top: 6px; font-size: 12px; color: var(--text-color, #667085); line-height: 1.4; }
+</style>
+</head>
+<body>
+  <button id="action" type="button">Продолжить</button>
+  <div id="status" role="status" aria-live="polite"></div>
+<script>
+(() => {
+  const button = document.getElementById('action');
+  const status = document.getElementById('status');
+  let args = {};
+  let busy = false;
+
+  function sendValue(value) {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: 'streamlit:setComponentValue',
+      value,
+      dataType: 'json'
+    }, '*');
+  }
+  function toBytes(value) {
+    const padded = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(padded + '='.repeat((4 - padded.length % 4) % 4));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+  function toBase64Url(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+  function decodeOptions(json, mode) {
+    const options = JSON.parse(json);
+    options.challenge = toBytes(options.challenge);
+    if (mode === 'register' && options.user && options.user.id) options.user.id = toBytes(options.user.id);
+    for (const key of ['allowCredentials', 'excludeCredentials']) {
+      if (Array.isArray(options[key])) options[key] = options[key].map(item => ({...item, id: toBytes(item.id)}));
+    }
+    return options;
+  }
+  function serializeCredential(credential, mode) {
+    const response = credential.response;
+    const serializedResponse = {
+      clientDataJSON: toBase64Url(response.clientDataJSON)
+    };
+    if (mode === 'register') {
+      serializedResponse.attestationObject = toBase64Url(response.attestationObject);
+      try { serializedResponse.transports = response.getTransports ? response.getTransports() : []; } catch (_) { serializedResponse.transports = []; }
+    } else {
+      serializedResponse.authenticatorData = toBase64Url(response.authenticatorData);
+      serializedResponse.signature = toBase64Url(response.signature);
+      serializedResponse.userHandle = response.userHandle ? toBase64Url(response.userHandle) : null;
+    }
+    return {
+      id: credential.id,
+      rawId: toBase64Url(credential.rawId),
+      type: credential.type,
+      response: serializedResponse,
+      clientExtensionResults: credential.getClientExtensionResults ? credential.getClientExtensionResults() : {}
+    };
+  }
+  async function runAction() {
+    if (busy) return;
+    busy = true;
+    button.disabled = true;
+    status.textContent = 'Ожидаем подтверждение на устройстве…';
+    try {
+      if (!window.isSecureContext || !navigator.credentials || !window.PublicKeyCredential) {
+        throw new Error('Браузер не поддерживает Passkeys в этом контексте. Откройте CRM по HTTPS в актуальном браузере.');
+      }
+      const mode = args.mode;
+      const publicKey = decodeOptions(args.options_json, mode);
+      const credential = mode === 'register'
+        ? await navigator.credentials.create({publicKey})
+        : await navigator.credentials.get({publicKey});
+      if (!credential) throw new Error('Операция отменена. Попробуйте ещё раз.');
+      status.textContent = 'Проверяем ответ…';
+      sendValue({
+        eventId: args.event_id,
+        action: mode,
+        credential: serializeCredential(credential, mode)
+      });
+    } catch (error) {
+      sendValue({
+        eventId: args.event_id,
+        action: args.mode,
+        error: (error && error.message) ? error.message : 'Операция Passkey не выполнена.'
+      });
+      status.textContent = 'Не получилось. Возвращаемся в CRM…';
+    } finally {
+      setTimeout(() => { busy = false; button.disabled = false; }, 1200);
+    }
+  }
+  button.addEventListener('click', runAction);
+  window.addEventListener('message', event => {
+    const data = event.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === 'streamlit:render') {
+      args = data.args || {};
+      button.textContent = args.button_label || (args.mode === 'register' ? 'Добавить Face ID / Passkey' : 'Войти с Face ID / Passkey');
+      status.textContent = '';
+    }
+  });
+  window.parent.postMessage({isStreamlitMessage: true, type: 'streamlit:componentReady', apiVersion: 1}, '*');
+  window.parent.postMessage({isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: 68}, '*');
+})();
+</script>
+</body>
+</html>
