@@ -1,10 +1,37 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy
+from pathlib import Path
+
+# WebAuthn / Passkeys. Если зависимость ещё не установлена, парольный вход продолжает работать.
+try:
+    from webauthn import (
+        generate_registration_options,
+        verify_registration_response,
+        generate_authentication_options,
+        verify_authentication_response,
+    )
+    from webauthn.helpers import options_to_json
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria,
+        ResidentKeyRequirement,
+        UserVerificationRequirement,
+    )
+    PASSKEY_AVAILABLE = True
+except Exception:
+    PASSKEY_AVAILABLE = False
+
+PASSKEY_RP_ID = "iplinth-crm.streamlit.app"
+PASSKEY_ORIGIN = "https://iplinth-crm.streamlit.app"
+PASSKEY_RP_NAME = "Айплинт CRM"
+_PASSKEY_COMPONENT_DIR = Path(__file__).resolve().parent / "passkey_component"
+crm_passkey_component = components.declare_component(
+    "crm_passkey_component", path=str(_PASSKEY_COMPONENT_DIR)
+)
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image as PILImage
 import extra_streamlit_components as stx
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 
 def _safe_id(v):
@@ -2383,23 +2410,229 @@ if "_dialog_return_stack" not in st.session_state: st.session_state._dialog_retu
 if "dialog_it_key" not in st.session_state: st.session_state.dialog_it_key = None
 if "dialog_close_deal_id" not in st.session_state: st.session_state.dialog_close_deal_id = None
 
+def _passkey_b64url_encode(value):
+    return base64.urlsafe_b64encode(bytes(value)).decode("ascii").rstrip("=")
+
+
+def _passkey_b64url_decode(value):
+    value = str(value or "")
+    return base64.urlsafe_b64decode(value + ("=" * (-len(value) % 4)))
+
+
+def _passkey_user_id(login):
+    # Stable opaque WebAuthn user ID; does not expose the user's login as userHandle.
+    return hashlib.sha256(("iplinth-crm:" + str(login)).encode("utf-8")).digest()
+
+
+def _passkey_find_user_and_credential(credential_id):
+    for user in st.session_state.crm_store.get("users", []):
+        for item in user.get("passkeys", []):
+            if not isinstance(item, dict):
+                continue
+            saved_id = str(item.get("credential_id", ""))
+            if saved_id and secrets.compare_digest(saved_id, str(credential_id or "")):
+                return user, item
+    return None, None
+
+
+def _passkey_make_authentication_pending():
+    options = generate_authentication_options(
+        rp_id=PASSKEY_RP_ID,
+        user_verification=UserVerificationRequirement.REQUIRED,
+        timeout=60000,
+    )
+    return {
+        "kind": "login",
+        "challenge": _passkey_b64url_encode(options.challenge),
+        "options_json": options_to_json(options),
+        "event_id": secrets.token_urlsafe(18),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def _passkey_make_registration_pending(user):
+    options = generate_registration_options(
+        rp_id=PASSKEY_RP_ID,
+        rp_name=PASSKEY_RP_NAME,
+        user_id=_passkey_user_id(user.get("login", "")),
+        user_name=str(user.get("login", "user")),
+        user_display_name=str(user.get("name", user.get("login", "user"))),
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            resident_key=ResidentKeyRequirement.REQUIRED,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
+        timeout=60000,
+    )
+    return {
+        "kind": "register",
+        "challenge": _passkey_b64url_encode(options.challenge),
+        "options_json": options_to_json(options),
+        "event_id": secrets.token_urlsafe(18),
+        "login": str(user.get("login", "")),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def _passkey_pending_is_fresh(pending):
+    try:
+        created = datetime.fromisoformat(str(pending.get("created_at", "")))
+        return datetime.now() - created <= timedelta(minutes=2)
+    except (TypeError, ValueError):
+        return False
+
+
+def _passkey_create_login_session(user):
+    # Same server-side session model as password login; each device receives its own token.
+    token = secrets.token_urlsafe(32)
+    sessions = user.setdefault("auth_sessions", [])
+    if not isinstance(sessions, list):
+        sessions = []
+        user["auth_sessions"] = sessions
+    sessions.append({
+        "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        "created_at": now_str(),
+        "expires_at": (datetime.now() + timedelta(days=30)).isoformat(timespec="seconds"),
+    })
+    user.pop("auth_token", None)
+    # Limit unbounded growth while keeping recent device sessions.
+    user["auth_sessions"] = sessions[-30:]
+    save_data(st.session_state.crm_store)
+    st.session_state.authenticated = True
+    st.session_state.user_role = user.get("role")
+    st.session_state.user_login = user.get("login")
+    st.session_state.user_name = user.get("name", user.get("login", ""))
+    st.session_state.remember_login = True
+    cookie_manager.set(
+        "auth_token", token,
+        expires_at=datetime.now().replace(microsecond=0) + timedelta(days=30),
+    )
+
+
+def _passkey_process_login_result(result, pending):
+    if not isinstance(result, dict) or not pending:
+        return False
+    if result.get("eventId") != pending.get("event_id") or result.get("action") != "login":
+        return False
+    try:
+        if not _passkey_pending_is_fresh(pending):
+            raise ValueError("Срок действия запроса истёк. Нажмите кнопку входа ещё раз.")
+        if result.get("error"):
+            raise ValueError(str(result.get("error"))[:300])
+        credential = result.get("credential")
+        if not isinstance(credential, dict):
+            raise ValueError("Браузер не вернул данные Passkey.")
+        user, passkey = _passkey_find_user_and_credential(credential.get("id", ""))
+        if not user or not passkey:
+            raise ValueError("Этот Passkey не зарегистрирован в CRM.")
+        verified = verify_authentication_response(
+            credential=credential,
+            expected_challenge=_passkey_b64url_decode(pending["challenge"]),
+            expected_rp_id=PASSKEY_RP_ID,
+            expected_origin=PASSKEY_ORIGIN,
+            credential_public_key=_passkey_b64url_decode(passkey["public_key"]),
+            credential_current_sign_count=int(passkey.get("sign_count", 0)),
+            require_user_verification=True,
+        )
+        if not getattr(verified, "user_verified", True):
+            raise ValueError("Устройство не подтвердило пользователя.")
+        passkey["sign_count"] = int(getattr(verified, "new_sign_count", passkey.get("sign_count", 0)))
+        passkey["last_used_at"] = now_str()
+        _passkey_create_login_session(user)
+        st.session_state.pop("_passkey_login_pending", None)
+        st.session_state["_passkey_login_message"] = ""
+        st.rerun()
+    except Exception as exc:
+        st.session_state.pop("_passkey_login_pending", None)
+        st.session_state["_passkey_login_message"] = f"Не удалось войти по Passkey: {str(exc)[:250]}"
+        st.rerun()
+    return True
+
+
+def _passkey_process_registration_result(result, pending, current_user):
+    if not isinstance(result, dict) or not pending:
+        return False
+    if result.get("eventId") != pending.get("event_id") or result.get("action") != "register":
+        return False
+    try:
+        if not _passkey_pending_is_fresh(pending):
+            raise ValueError("Срок действия запроса истёк. Попробуйте добавить Passkey ещё раз.")
+        if result.get("error"):
+            raise ValueError(str(result.get("error"))[:300])
+        credential = result.get("credential")
+        if not isinstance(credential, dict):
+            raise ValueError("Браузер не вернул данные Passkey.")
+        verified = verify_registration_response(
+            credential=credential,
+            expected_challenge=_passkey_b64url_decode(pending["challenge"]),
+            expected_rp_id=PASSKEY_RP_ID,
+            expected_origin=PASSKEY_ORIGIN,
+            require_user_verification=True,
+        )
+        registration_info = verified
+        credential_id = _passkey_b64url_encode(registration_info.credential_id)
+        public_key = _passkey_b64url_encode(registration_info.credential_public_key)
+        current_user.setdefault("passkeys", [])
+        if not isinstance(current_user["passkeys"], list):
+            current_user["passkeys"] = []
+        if any(isinstance(p, dict) and p.get("credential_id") == credential_id for p in current_user["passkeys"]):
+            raise ValueError("Этот Passkey уже добавлен.")
+        current_user["passkeys"].append({
+            "credential_id": credential_id,
+            "public_key": public_key,
+            "sign_count": int(registration_info.sign_count),
+            "created_at": now_str(),
+            "label": "Passkey / Face ID",
+        })
+        save_data(st.session_state.crm_store)
+        st.session_state.pop("_passkey_register_pending", None)
+        st.session_state["_passkey_register_message"] = "Passkey успешно добавлен. Теперь можно входить с Face ID, Touch ID или кодом устройства."
+        st.rerun()
+    except Exception as exc:
+        st.session_state.pop("_passkey_register_pending", None)
+        st.session_state["_passkey_register_message"] = f"Не удалось добавить Passkey: {str(exc)[:250]}"
+        st.rerun()
+    return True
+
+
 cookie_manager = stx.CookieManager()
 cookies = cookie_manager.get_all()
 
-if not st.session_state.get("authenticated") and not st.query_params.get("auth_token"):
-    stored_token = cookies.get("auth_token")
-    if stored_token:
-        st.query_params["auth_token"] = stored_token
-        st.rerun()
+# Авторизация по cookie без токена в URL. Поддерживаем старый auth_token
+# для плавного обновления существующих установок и новые независимые сеансы устройств.
+def _user_has_auth_token(user, token):
+    if not token:
+        return False
+    if secrets.compare_digest(str(user.get("auth_token", "")), str(token)):
+        return True
+    token_hash = hashlib.sha256(str(token).encode("utf-8")).hexdigest()
+    for auth_session in user.get("auth_sessions", []):
+        if isinstance(auth_session, dict):
+            saved_hash = auth_session.get("token_hash", "")
+            saved_token = auth_session.get("token", "")  # совместимость с ранними тестовыми/старыми записями
+            expires_at = auth_session.get("expires_at")
+            if expires_at:
+                try:
+                    if datetime.fromisoformat(str(expires_at)) < datetime.now():
+                        continue
+                except (TypeError, ValueError):
+                    continue
+            if saved_hash and secrets.compare_digest(str(saved_hash), token_hash):
+                return True
+        else:
+            saved_token = auth_session
+        if saved_token and secrets.compare_digest(str(saved_token), str(token)):
+            return True
+    return False
 
-_auth_token = st.query_params.get("auth_token")
-if _auth_token and not st.session_state.authenticated:
+_auth_token = cookies.get("auth_token")
+if _auth_token and not st.session_state.get("authenticated"):
     for u in st.session_state.crm_store.get("users", []):
-        if u.get("auth_token") == _auth_token:
+        if _user_has_auth_token(u, _auth_token):
             st.session_state.authenticated = True
             st.session_state.user_role = u["role"]
             st.session_state.user_login = u["login"]
             st.session_state.user_name = u.get("name", u["login"])
+            st.session_state.setdefault("remember_login", False)
             break
     
 def _render_it_edit(it):
@@ -2639,11 +2872,11 @@ def internal_task_detail_dialog(it_id):
 
 
 if not st.session_state.authenticated:
-        if "auth_token" in st.query_params:
-            del st.query_params["auth_token"]
+        # Не оставляем токены авторизации в адресной строке.
         try:
-            cookie_manager.delete("auth_token")
-        except KeyError:
+            if cookies.get("auth_token"):
+                cookie_manager.delete("auth_token")
+        except (KeyError, TypeError):
             pass
 
 MGR_PLACEHOLDER = "Выбери ответственного"
@@ -2668,20 +2901,65 @@ if not st.session_state.authenticated:
         with st.container(border=True):
             iu = st.text_input("Логин:", placeholder="Введите логин")
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль")
+            remember_login = st.checkbox("Запомнить меня на этом устройстве", value=False, key="remember_login_checkbox")
+            st.caption("Если галочка снята, вход сохранится только до закрытия браузера.")
             if st.button("Войти", use_container_width=True, type="primary"):
                 if check_login(iu, ip):
-                    _token = secrets.token_hex(16)
+                    _token = secrets.token_urlsafe(32)
                     for u in st.session_state.crm_store["users"]:
                         if u["login"] == iu.strip():
-                            u["auth_token"] = _token
+                            # Отдельный токен на каждое устройство: вход на телефоне
+                            # не завершает вход на компьютере.
+                            sessions = u.setdefault("auth_sessions", [])
+                            if not isinstance(sessions, list):
+                                sessions = []
+                                u["auth_sessions"] = sessions
+                            _session_days = 30 if remember_login else 1
+                            sessions.append({
+                                "token_hash": hashlib.sha256(_token.encode("utf-8")).hexdigest(),
+                                "created_at": now_str(),
+                                "expires_at": (datetime.now() + timedelta(days=_session_days)).isoformat(timespec="seconds"),
+                            })
+                            # Удаляем устаревший одиночный токен после успешного входа.
+                            if u.get("auth_token"):
+                                u.pop("auth_token", None)
                             break
                     save_data(st.session_state.crm_store)
-                    st.query_params["auth_token"] = _token
-                    cookie_manager.set("auth_token", _token, expires_at=datetime(2027, 12, 31))
+                    st.session_state.remember_login = bool(remember_login)
+                    if remember_login:
+                        cookie_manager.set("auth_token", _token, expires_at=datetime.now().replace(microsecond=0) + timedelta(days=30))
+                    else:
+                        # Cookie без expires_at — сеансовая cookie браузера.
+                        cookie_manager.set("auth_token", _token)
                     st.toast("Успешный вход", icon="\U0001F513")
                     st.rerun()
                 else:
                     st.error("Неверный логин или пароль.")
+        st.markdown("---")
+        st.markdown("**Или войдите без пароля**")
+        if st.session_state.get("_passkey_login_message"):
+            st.warning(st.session_state.pop("_passkey_login_message"))
+        if not PASSKEY_AVAILABLE:
+            st.info("Вход по Face ID пока не подключён: добавьте зависимость `webauthn>=2.2,<3` в requirements.txt и опубликуйте приложение заново.")
+        else:
+            _pk_pending = st.session_state.get("_passkey_login_pending")
+            if not _pk_pending or not _passkey_pending_is_fresh(_pk_pending):
+                try:
+                    _pk_pending = _passkey_make_authentication_pending()
+                    st.session_state["_passkey_login_pending"] = _pk_pending
+                except Exception as _pk_exc:
+                    _pk_pending = None
+                    st.caption(f"Вход по Passkey временно недоступен: {str(_pk_exc)[:180]}")
+            if _pk_pending:
+                _pk_result = crm_passkey_component(
+                    mode="login",
+                    options_json=_pk_pending["options_json"],
+                    event_id=_pk_pending["event_id"],
+                    button_label="Войти с Face ID / Passkey",
+                    key="crm_passkey_login_component",
+                    default=None,
+                )
+                _passkey_process_login_result(_pk_result, _pk_pending)
     st.stop()
 
 st.markdown(f"""<div class="greeting-block" style="margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important;"><h1 style='text-align: center; margin-top: 0!important; margin-bottom: 0!important; padding-top: 0!important; padding-bottom: 0!important;'>Айплинт CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0; padding-top: 0!important; padding-bottom: 0!important;'>Продуктивного тебе дня, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
@@ -2692,20 +2970,61 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"**{st.session_state.user_name}**")
     st.markdown(f"Роль: `{st.session_state.user_role}`")
+    with st.expander("Вход по Face ID / Passkey"):
+        if not PASSKEY_AVAILABLE:
+            st.warning("Для Passkeys добавьте `webauthn>=2.2,<3` в requirements.txt и опубликуйте приложение заново.")
+        else:
+            _pk_current_user = next((u for u in st.session_state.crm_store.get("users", []) if u.get("login") == st.session_state.get("user_login")), None)
+            if _pk_current_user is not None:
+                _pk_existing = _pk_current_user.get("passkeys", [])
+                if not isinstance(_pk_existing, list):
+                    _pk_existing = []
+                st.caption(f"Подключено ключей доступа: {len(_pk_existing)}")
+                st.caption("На iPhone система предложит Face ID, Touch ID или код-пароль устройства. Код не хранится в CRM.")
+                if st.session_state.get("_passkey_register_message"):
+                    st.success(st.session_state.pop("_passkey_register_message"))
+                _pk_reg_pending = st.session_state.get("_passkey_register_pending")
+                if not _pk_reg_pending or _pk_reg_pending.get("login") != st.session_state.get("user_login") or not _passkey_pending_is_fresh(_pk_reg_pending):
+                    try:
+                        _pk_reg_pending = _passkey_make_registration_pending(_pk_current_user)
+                        st.session_state["_passkey_register_pending"] = _pk_reg_pending
+                    except Exception as _pk_reg_exc:
+                        _pk_reg_pending = None
+                        st.caption(f"Не удалось подготовить Passkey: {str(_pk_reg_exc)[:180]}")
+                if _pk_reg_pending:
+                    _pk_reg_result = crm_passkey_component(
+                        mode="register",
+                        options_json=_pk_reg_pending["options_json"],
+                        event_id=_pk_reg_pending["event_id"],
+                        button_label="Добавить Face ID / Passkey",
+                        key="crm_passkey_register_component",
+                        default=None,
+                    )
+                    _passkey_process_registration_result(_pk_reg_result, _pk_reg_pending, _pk_current_user)
     with st.expander("Сменить пароль"):
         cul = st.session_state.user_login
         np = st.text_input("Новый пароль:", type="password", key="self_new_pwd")
         cp = st.text_input("Повторите пароль:", type="password", key="self_conf_pwd")
         if st.button("Обновить", key="btn_save_self_pwd", use_container_width=True):
             if np and np == cp:
-                _new_token = secrets.token_hex(16)
+                _new_token = secrets.token_urlsafe(32)
                 for u in st.session_state.crm_store["users"]:
                     if u["login"] == cul:
                         u["password"] = hash_password(np)
-                        u["auth_token"] = _new_token
+                        # При смене пароля отзываем старые устройства и создаём
+                        # новый сеанс только для текущего браузера.
+                        u.pop("auth_token", None)
+                        _session_days = 30 if st.session_state.get("remember_login", False) else 1
+                        u["auth_sessions"] = [{
+                            "token_hash": hashlib.sha256(_new_token.encode("utf-8")).hexdigest(),
+                            "created_at": now_str(),
+                            "expires_at": (datetime.now() + timedelta(days=_session_days)).isoformat(timespec="seconds"),
+                        }]
                 save_data(st.session_state.crm_store)
-                st.query_params["auth_token"] = _new_token
-                cookie_manager.set("auth_token", _new_token, expires_at=datetime(2027, 12, 31))
+                if st.session_state.get("remember_login", False):
+                    cookie_manager.set("auth_token", _new_token, expires_at=datetime.now().replace(microsecond=0) + timedelta(days=30))
+                else:
+                    cookie_manager.set("auth_token", _new_token)
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else: st.error("Пароли не совпадают")
@@ -2747,22 +3066,41 @@ with st.sidebar:
                 st.rerun()
     st.markdown("---")
     if st.button("Выйти", use_container_width=True):
-        _tok = st.query_params.get("auth_token")
+        _tok = cookies.get("auth_token")
         if _tok:
+            _changed = False
             for u in st.session_state.crm_store.get("users", []):
-                if u.get("auth_token") == _tok:
+                old_sessions = u.get("auth_sessions", [])
+                if isinstance(old_sessions, list):
+                    new_sessions = []
+                    for auth_session in old_sessions:
+                        if isinstance(auth_session, dict):
+                            saved_hash = auth_session.get("token_hash", "")
+                            saved_token = auth_session.get("token", "")
+                            token_hash = hashlib.sha256(str(_tok).encode("utf-8")).hexdigest()
+                            matches = bool(saved_hash and secrets.compare_digest(str(saved_hash), token_hash)) or bool(saved_token and secrets.compare_digest(str(saved_token), str(_tok)))
+                        else:
+                            matches = bool(auth_session and secrets.compare_digest(str(auth_session), str(_tok)))
+                        if matches:
+                            _changed = True
+                        else:
+                            new_sessions.append(auth_session)
+                    if len(new_sessions) != len(old_sessions):
+                        u["auth_sessions"] = new_sessions
+                if u.get("auth_token") and secrets.compare_digest(str(u.get("auth_token")), str(_tok)):
                     u.pop("auth_token", None)
-            save_data(st.session_state.crm_store)
-            if "auth_token" in st.query_params:
-                del st.query_params["auth_token"]
+                    _changed = True
+            if _changed:
+                save_data(st.session_state.crm_store)
         try:
             cookie_manager.delete("auth_token")
-        except KeyError:
+        except (KeyError, TypeError):
             pass
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
         st.session_state.user_name = None
+        st.session_state.remember_login = False
         st.rerun()
 
 # Compute counters for tabs — only by authorized user
