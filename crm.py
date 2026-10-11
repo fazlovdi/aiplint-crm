@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3
+import json, os, re, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image as PILImage
 import extra_streamlit_components as stx
@@ -1651,25 +1651,157 @@ def _ensure_sqlite_store():
         finally:
             conn.close()
 
+def _remember_session_base(data, revision):
+    """Сохраняет неизменяемую базовую копию, относительно которой сравниваются правки сессии."""
+    try:
+        st.session_state["crm_base_snapshot"] = copy.deepcopy(data)
+        st.session_state["crm_base_revision"] = int(revision or 0)
+    except Exception:
+        pass
+
 def load_data():
-    """Читает данные из локальной SQLite; сетевой запрос не выполняется при каждом входе."""
+    """Читает данные из SQLite и запоминает ревизию для безопасного слияния правок сессии."""
     try:
         _ensure_sqlite_store()
         conn = _sqlite_connect()
         try:
-            row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
+            row = conn.execute("SELECT data, revision FROM crm_state WHERE id = 1").fetchone()
             if row and row[0]:
-                return json.loads(row[0])
+                data = json.loads(row[0])
+                _remember_session_base(data, row[1])
+                return data
         finally:
             conn.close()
     except Exception as exc:
-        # Безопасный fallback для восстановления доступа к существующей JSON-базе.
+        # JSON fallback нужен только для аварийного восстановления; при его использовании
+        # базовая ревизия неизвестна, поэтому следующий save применит консервативную политику.
         try:
             st.sidebar.error(f"SQLite недоступна, используется резервная загрузка JSON: {exc}")
         except Exception:
             pass
-        return _load_data_from_json()
-    return _load_data_from_json()
+        data = _load_data_from_json()
+        _remember_session_base(data, 0)
+        return data
+    data = _load_data_from_json()
+    _remember_session_base(data, 0)
+    return data
+
+_MISSING = object()
+
+def _stable_list_key(items):
+    """Возвращает стабильный ключ списка только если он уникален у каждого элемента."""
+    if not items or not all(isinstance(x, dict) for x in items):
+        return None
+    for field in ("id", "login", "task_number", "uuid"):
+        values = [x.get(field, _MISSING) for x in items]
+        if all(v is not _MISSING and v is not None and v != "" for v in values):
+            try:
+                if len(set(values)) == len(values):
+                    return field
+            except TypeError:
+                continue
+    return None
+
+def _three_way_merge(base, ours, latest, path="", conflicts=None):
+    """Трёхстороннее слияние: объединяет независимые правки и не воскрешает удалённые записи."""
+    if conflicts is None:
+        conflicts = []
+    if ours == base:
+        return copy.deepcopy(latest), conflicts
+    if latest == base:
+        return copy.deepcopy(ours), conflicts
+    if ours == latest:
+        return copy.deepcopy(ours), conflicts
+
+    if isinstance(base, dict) and isinstance(ours, dict) and isinstance(latest, dict):
+        result = {}
+        keys = set(base) | set(ours) | set(latest)
+        for key in keys:
+            b = base.get(key, _MISSING)
+            o = ours.get(key, _MISSING)
+            n = latest.get(key, _MISSING)
+            subpath = f"{path}.{key}" if path else str(key)
+            if o is _MISSING:
+                if b is _MISSING:
+                    if n is not _MISSING:
+                        result[key] = copy.deepcopy(n)
+                elif n is _MISSING:
+                    continue
+                elif n == b:
+                    continue  # наше удаление, запись с другой стороны не менялась
+                else:
+                    result[key] = copy.deepcopy(n)  # не удаляем более свежую правку коллеги
+                    conflicts.append(subpath + " (удаление против изменения)")
+                continue
+            if n is _MISSING:
+                if b is _MISSING:
+                    result[key] = copy.deepcopy(o)
+                elif o == b:
+                    continue  # коллега удалил запись, а наша копия не менялась
+                else:
+                    # Удаление в актуальной базе приоритетнее устаревшей правки.
+                    conflicts.append(subpath + " (изменение против удаления)")
+                continue
+            result[key], conflicts = _three_way_merge(b, o, n, subpath, conflicts)
+        return result, conflicts
+
+    if isinstance(base, list) and isinstance(ours, list) and isinstance(latest, list):
+        key = None
+        # Проверяем уникальность ключей отдельно в каждом снимке; одинаковые ID
+        # между снимками ожидаемы и не должны отключать поэлементное слияние.
+        for candidate in ("id", "login", "task_number", "uuid"):
+            valid = True
+            for sequence in (base, ours, latest):
+                values = []
+                for item in sequence:
+                    if not isinstance(item, dict) or item.get(candidate, _MISSING) in (_MISSING, None, ""):
+                        valid = False
+                        break
+                    values.append(item[candidate])
+                if not valid:
+                    break
+                try:
+                    if len(set(values)) != len(values):
+                        valid = False
+                        break
+                except TypeError:
+                    valid = False
+                    break
+            if valid:
+                key = candidate
+                break
+        if key:
+            def to_map(seq):
+                return {item[key]: item for item in seq}
+            bm, om, nm = to_map(base), to_map(ours), to_map(latest)
+            merged_map, conflicts = _three_way_merge(bm, om, nm, path, conflicts)
+            # Стабильный порядок: сначала актуальный список, затем новые элементы из нашей сессии.
+            ordered_keys = [item[key] for item in latest]
+            seen_order = set(ordered_keys)
+            for item in ours:
+                if item[key] not in seen_order:
+                    ordered_keys.append(item[key])
+                    seen_order.add(item[key])
+            for item_key in merged_map:
+                if item_key not in seen_order:
+                    ordered_keys.append(item_key)
+                    seen_order.add(item_key)
+            return [merged_map[k] for k in ordered_keys if k in merged_map], conflicts
+        # Для списков-комментариев и истории сохраняем независимые добавления, если
+        # обе стороны только дописали элементы в конец и не меняли старые.
+        if ours[:len(base)] == base and latest[:len(base)] == base:
+            combined = copy.deepcopy(latest)
+            for item in ours[len(base):]:
+                if item not in combined:
+                    combined.append(copy.deepcopy(item))
+            return combined, conflicts
+        # При сложном конфликте в списке без стабильных ID не затираем последнюю версию.
+        conflicts.append((path or "список") + " (одновременное изменение списка без стабильных ID)")
+        return copy.deepcopy(latest), conflicts
+
+    # Оба участника поменяли одно и то же поле по-разному: сохраняем последнее подтверждённое значение.
+    conflicts.append(path or "корневое значение")
+    return copy.deepcopy(latest), conflicts
 
 _save_lock = threading.Lock()
 
@@ -1826,12 +1958,7 @@ def _merge_data(local_data, disk_data):
     return merged
 
 def save_data(data):
-    """Транзакционно сохраняет состояние в SQLite, обновляет JSON-зеркало и ставит облачный бэкап в очередь.
-
-    SQLite сериализует записи разных пользовательских сессий на одном сервере.
-    Слияние по сущностям сохраняет несвязанные изменения, если у сущностей
-    корректно обновляется last_modified.
-    """
+    """Транзакционно сохраняет изменения, сливая их с актуальной ревизией без воскрешения удалений."""
     with _save_lock:
         conn = None
         try:
@@ -1841,21 +1968,42 @@ def save_data(data):
             row = conn.execute("SELECT data, revision FROM crm_state WHERE id = 1").fetchone()
             latest_data = json.loads(row[0]) if row and row[0] else {}
             revision = int(row[1]) if row else 0
-            merged_data = _merge_data(data, latest_data) if latest_data else data
+            base_data = st.session_state.get("crm_base_snapshot")
+            base_revision = int(st.session_state.get("crm_base_revision", 0) or 0)
+            conflicts = []
+
+            if base_data is None:
+                # Неизвестная база сравнения: не перезаписываем общую базу устаревшей сессией.
+                merged_data = latest_data if latest_data else copy.deepcopy(data)
+                conflicts.append("базовая версия сессии неизвестна; сохранена актуальная база")
+            elif base_revision < revision:
+                merged_data, conflicts = _three_way_merge(base_data, data, latest_data, conflicts=conflicts)
+            else:
+                merged_data = copy.deepcopy(data)
+
             snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
+            new_revision = revision + 1
             conn.execute(
                 "INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at",
-                (snapshot, revision + 1, now_str()))
+                (snapshot, new_revision, now_str()))
             conn.execute("COMMIT")
             conn.close()
             conn = None
 
-            # Очередь бэкапа получает подтверждённый транзакцией снимок сразу.
+            # После commit обновляем рабочую сессию и её базу сравнения.
+            try:
+                if st.session_state.get("crm_store") is data:
+                    st.session_state["crm_store"] = copy.deepcopy(merged_data)
+                _remember_session_base(merged_data, new_revision)
+                if conflicts:
+                    st.session_state["crm_last_save_conflicts"] = conflicts[:20]
+            except Exception:
+                pass
+
             _queue_yandex_snapshot(snapshot)
 
-            # JSON остаётся переносимым зеркалом и источником восстановления.
-            # Ошибка зеркала не отменяет уже сохранённую транзакцию SQLite.
+            # JSON — только переносимое зеркало. Основная подтверждённая запись уже в SQLite.
             try:
                 tmp_name = FILE_NAME + ".tmp"
                 with open(tmp_name, "w", encoding="utf-8") as f:
@@ -1866,6 +2014,12 @@ def save_data(data):
             except Exception as mirror_exc:
                 try:
                     st.sidebar.warning(f"Основная база сохранена, но JSON-копия не обновлена: {mirror_exc}")
+                except Exception:
+                    pass
+
+            if conflicts:
+                try:
+                    st.warning("Обнаружены параллельные изменения. Чтобы не потерять данные коллег, конфликтующие поля оставлены в последней сохранённой версии. Проверьте запись и при необходимости внесите изменение повторно.")
                 except Exception:
                     pass
         except Exception as e:
@@ -1965,7 +2119,7 @@ def add_notification(to_login, text, tg_text=None):
     if "notifications" not in store:
         store["notifications"] = []
     notif = {
-        "id": len(store["notifications"]) + 1,
+        "id": uuid.uuid4().hex,
         "to": to_login,
         "text": text,
         "date": now_str(),
@@ -2122,6 +2276,13 @@ def close_deal_dialog(deal_id):
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
+# Показываем конфликт уже после rerun, чтобы предупреждение не исчезало сразу.
+_saved_conflicts = st.session_state.pop("crm_last_save_conflicts", None)
+if _saved_conflicts:
+    st.warning("При параллельном редактировании часть конфликтующих изменений не применена, чтобы не затереть данные коллеги. Проверьте нужную запись и повторите изменение.")
+    with st.expander("Подробнее о конфликте сохранения"):
+        for _conflict_path in _saved_conflicts:
+            st.caption(str(_conflict_path))
 if "f_ph" not in st.session_state: st.session_state.f_ph = []
 if "f_em" not in st.session_state: st.session_state.f_em = []
 if "f_ad" not in st.session_state: st.session_state.f_ad = []
