@@ -1188,7 +1188,13 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         return
 
     close_css_key = f"rem_close_row_{key_suffix}"
-    st.markdown(f'''<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div {{ gap:0!important; }}</style>''', unsafe_allow_html=True)
+    st.markdown(f'''<style>
+    .st-key-{close_css_key} {{ display:flex!important;justify-content:flex-end!important;margin-top:-0.5rem!important;margin-bottom:0.2rem!important; }}
+    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
+    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }}
+    .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ justify-content:flex-end!important; }}
+    .st-key-{close_css_key} [data-testid="column"]:first-child {{ display:none!important; }}
+    </style>''', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -1234,8 +1240,10 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     c1, c2 = st.columns(2)
     with c1:
         due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
+        st.caption("Выберите дату: день, месяц и год")
     with c2:
-        due_time = st.time_input("Время", value=datetime.now().time().replace(second=0, microsecond=0), key=time_key, help=None)
+        due_time = st.time_input("Время", value=None, key=time_key, help=None)
+        st.caption("Выберите часы и минуты")
     recipient_options = [""] + logins
     recipient = st.selectbox("Получатель", recipient_options, index=0,
         format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
@@ -1290,7 +1298,7 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
         rec = users.get(r.get("recipient"), {})
         txt = html.escape(str(r.get("text", ""))).replace("\n", "<br>")
         text_style = "text-decoration:line-through;color:#7F8C9A;" if past else ""
-        with st.container():
+        with st.container(border=True):
             st.markdown(format_created_date(r), unsafe_allow_html=True)
             _msg_col, _del_col = st.columns([12, 1], gap="small", vertical_alignment="top")
             with _msg_col:
