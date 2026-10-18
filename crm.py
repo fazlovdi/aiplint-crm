@@ -3446,9 +3446,12 @@ st.markdown("""<style>
 }
 .st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button,
 .st-key-crm_sidebar_toggle_btn button {
-    height: 44px !important;
-    min-height: 44px !important;
-    max-height: 44px !important;
+    width: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
     padding: 0 !important;
     margin: 0 !important;
     display: flex !important;
@@ -3456,10 +3459,22 @@ st.markdown("""<style>
     justify-content: center !important;
     box-sizing: border-box !important;
     line-height: 1 !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+.st-key-crm_sidebar_toggle_btn button:hover,
+.st-key-crm_sidebar_toggle_btn button:focus,
+.st-key-crm_sidebar_toggle_btn button:active {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
 }
 .st-key-crm_sidebar_toggle_btn button p,
 .st-key-crm_sidebar_toggle_btn button span {
-    font-size: 2.35rem !important;
+    font-size: 1.175rem !important;
     font-weight: 700 !important;
     line-height: 1 !important;
     margin: 0 !important;
