@@ -65,6 +65,9 @@ st.markdown("""
     .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
     .stTextArea textarea { overflow-wrap:anywhere !important; white-space:pre-wrap !important; resize:vertical !important; }
     .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
+    /* Date/time pickers match the white comment input fields */
+    [data-testid="stDateInput"] input, [data-testid="stTimeInput"] input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; color: #2C3E50 !important; box-shadow: none !important; }
+    [data-testid="stDateInput"] [data-baseweb="input"], [data-testid="stTimeInput"] [data-baseweb="input"] { background-color: #FFFFFF !important; border-radius: 10px !important; }
     input[placeholder*="Поиск"], .stTextInput input[aria-label="Поиск"] { background-color:#FFFFFF !important; }
     .stNumberInput button { display:none !important; }
     .stNumberInput input { -moz-appearance:textfield !important; }
@@ -1457,20 +1460,33 @@ def render_task_detail(t, cl, d, key_prefix):
                 # Deadline: clickable date, no pencil button
                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                 if show_edit_dl:
-                    ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
-                    dl_btn_col1, dl_btn_col2 = st.columns(2)
-                    with dl_btn_col1:
-                        if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
-                            t["deadline"] = ndd.isoformat()
-                            t["last_modified"] = now_str()
-                            cl["last_modified"] = now_str()
-                            if d: d["last_modified"] = now_str()
-                            st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                            commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
-                    with dl_btn_col2:
-                        if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
-                            st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                            _smart_rerun()
+                    deadline_edit_wrap = f"deadline_edit_controls_{key_prefix}"
+                    st.markdown(f'''<style>
+                    .st-key-{deadline_edit_wrap} .stButton > button {{
+                        width:100% !important; min-height:44px !important; height:44px !important;
+                        padding:0.55rem 1rem !important; font-size:0.95rem !important;
+                        line-height:1.2 !important; border-radius:10px !important;
+                    }}
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] input {{
+                        background:#FFFFFF !important; border:1.5px solid #DCE0E5 !important;
+                        border-radius:10px !important; color:#2C3E50 !important;
+                    }}
+                    </style>''', unsafe_allow_html=True)
+                    with st.container(key=deadline_edit_wrap):
+                        ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
+                        dl_btn_col1, dl_btn_col2 = st.columns(2)
+                        with dl_btn_col1:
+                            if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
+                                t["deadline"] = ndd.isoformat()
+                                t["last_modified"] = now_str()
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                                commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                        with dl_btn_col2:
+                            if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
+                                st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                                _smart_rerun()
                 else:
                     dl_btn_key = f"btn_dl_click_{key_prefix}"
                     _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
