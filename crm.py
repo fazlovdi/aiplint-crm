@@ -1190,8 +1190,10 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     close_css_key = f"rem_close_row_{key_suffix}"
     st.markdown(f'''<style>
     .st-key-{close_css_key} {{ display:flex!important;justify-content:flex-end!important;margin-top:-0.5rem!important;margin-bottom:0.2rem!important; }}
-    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
-    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }}
+    .st-key-{close_css_key} {{ position:relative!important; z-index:10000!important; width:100%!important; }}
+    .st-key-{close_css_key} .stButton {{ display:flex!important; justify-content:flex-end!important; }}
+    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;font-weight:700!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#344054!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; position:relative!important; z-index:10001!important; }}
+    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#98A2B3!important;color:#101828!important; }}
     .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ justify-content:flex-end!important; }}
     .st-key-{close_css_key} [data-testid="column"]:first-child {{ display:none!important; }}
     </style>''', unsafe_allow_html=True)
@@ -1242,7 +1244,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
         st.caption("Выберите дату: день, месяц и год")
     with c2:
-        due_time = st.time_input("Время", value=None, key=time_key, help=None)
+        due_time = st.time_input("Время", value=datetime.now().time().replace(second=0, microsecond=0), key=time_key, help=None)
         st.caption("Выберите часы и минуты")
     recipient_options = [""] + logins
     recipient = st.selectbox("Получатель", recipient_options, index=0,
@@ -1303,7 +1305,7 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
             _msg_col, _del_col = st.columns([12, 1], gap="small", vertical_alignment="top")
             with _msg_col:
                 st.markdown(f"<div class='chat-msg chat-msg-other' style='margin:0 0 2px 0;max-width:100%;{text_style}overflow-wrap:anywhere'>{txt}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size:0.75rem;opacity:0.7;margin:2px 0 4px 0;'>Срок: {html.escape(due_label)} · Получатель: {html.escape(str(rec.get('name') or r.get('recipient','—')))}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:0.75rem;opacity:0.7;margin:6px 0 4px 0;'>Срок: {html.escape(due_label)} · Получатель: {html.escape(str(rec.get('name') or r.get('recipient','—')))}</div>", unsafe_allow_html=True)
             with _del_col:
                 if st.button("🗑", key=f"rem_del_{r.get('id')}", help="Удалить напоминание"):
                     st.session_state[f"rem_confirm_del_{r.get('id')}"] = True
