@@ -1203,8 +1203,8 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         margin:0.35rem 0 0.65rem!important;
     }
     [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] [data-testid="stMarkdownContainer"] p {
-        color:#5D4037!important;font-size:0.88rem!important;line-height:1.4!important;
-        margin:0.1rem 0 0.35rem!important;
+        color:#5D4037!important;font-size:0.88rem!important;line-height:1.6!important;
+        margin:0.15rem 0 0.45rem!important;
     }
     [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] [data-testid="stHorizontalBlock"] {
         gap:0.5rem!important;align-items:center!important;
