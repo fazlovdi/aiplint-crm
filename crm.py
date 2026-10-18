@@ -403,10 +403,32 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# При закрытой боковой панели освобождаем всю ширину для содержимого CRM.
-if not st.session_state.get("_crm_sidebar_visible", True):
+# Явно управляем отображением боковой панели через состояние CRM.
+# Важно принудительно задавать параметры и для открытого, и для закрытого состояния:
+# стандартная кнопка Streamlit скрыта вместе с верхней панелью.
+if st.session_state.get("_crm_sidebar_visible", True):
     st.markdown("""<style>
-        section[data-testid="stSidebar"] { display: none !important; }
+        section[data-testid="stSidebar"] {
+            display: block !important;
+            visibility: visible !important;
+            width: 21rem !important;
+            min-width: 21rem !important;
+            max-width: 21rem !important;
+            transform: translateX(0) !important;
+            margin-left: 0 !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+        section[data-testid="stSidebar"] > div { width: 21rem !important; }
+    </style>""", unsafe_allow_html=True)
+else:
+    st.markdown("""<style>
+        section[data-testid="stSidebar"] {
+            display: none !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+        }
         section[data-testid="stMain"] { margin-left: 0 !important; width: 100% !important; }
         [data-testid="stAppViewContainer"] > .main { margin-left: 0 !important; width: 100% !important; }
     </style>""", unsafe_allow_html=True)
