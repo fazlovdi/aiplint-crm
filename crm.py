@@ -3478,14 +3478,6 @@ st.markdown("""<style>
     line-height: 1 !important;
 }
 </style>""", unsafe_allow_html=True)
-# Нажатие на ссылку заголовка перечитывает базу, не меняя внешний вид заголовка.
-if st.query_params.get("crm_refresh_db") == "1":
-    with st.spinner("⟳ Обновляем базу данных…"):
-        st.session_state.crm_store = load_data()
-    st.query_params.pop("crm_refresh_db", None)
-    st.toast("База данных обновлена", icon="🔄")
-    st.rerun()
-
 _header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
 with _header_left:
     _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
@@ -3497,26 +3489,62 @@ with _header_left:
     with _bell_col:
         render_notifications_bell()
 with _header_center:
+    # Нативное действие Streamlit вместо ссылки с href: без перехода/перезагрузки браузера.
     st.markdown("""<style>
-    /* Ссылка сохраняет внешний вид обычного заголовка h1, без оформления кнопки. */
-    .crm-title-link,
-    .crm-title-link:link,
-    .crm-title-link:visited,
-    .crm-title-link:hover,
-    .crm-title-link:active {
-        color: inherit !important;
-        font: inherit !important;
-        text-decoration: none !important;
+    .st-key-crm_refresh_db_title {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-crm_refresh_db_title [data-testid="stButton"] {
+        width: auto !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+    }
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button {
+        all: unset !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        color: var(--text-color) !important;
+        font-family: inherit !important;
+        font-size: 2.75rem !important;
+        font-weight: 600 !important;
+        line-height: 1.2 !important;
+        text-align: center !important;
+        cursor: pointer !important;
         background: transparent !important;
         border: 0 !important;
         box-shadow: none !important;
-        outline-offset: 3px;
-        cursor: pointer !important;
+        white-space: nowrap !important;
     }
-    </style>""" + f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
-<h1 style="text-align:center;margin:0!important;padding:0!important;"><a class="crm-title-link" href="?crm_refresh_db=1" title="Нажмите, чтобы обновить данные CRM">Айплинт CRM</a></h1>
-<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
-</div>""", unsafe_allow_html=True)
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button:hover,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button:focus,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button:active {
+        color: var(--text-color) !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        text-decoration: none !important;
+    }
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button p {
+        margin: 0 !important;
+        padding: 0 !important;
+        font: inherit !important;
+        line-height: inherit !important;
+    }
+    </style>""", unsafe_allow_html=True)
+    if st.button("Айплинт CRM", key="crm_refresh_db_title", help="Нажмите, чтобы обновить данные CRM"):
+        with st.spinner("⟳ Обновляем базу данных…"):
+            st.session_state.crm_store = load_data()
+        st.toast("База данных обновлена", icon="🔄")
+    st.markdown(
+        f'<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>',
+        unsafe_allow_html=True,
+    )
 with _header_right:
     components.html("""
     <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
