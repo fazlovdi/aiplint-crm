@@ -2901,7 +2901,20 @@ def _passkey_process_registration_result(result, pending, current_user):
 
 
 cookie_manager = stx.CookieManager()
-cookies = cookie_manager.get_all()
+# CookieManager is a frontend component: immediately after F5 its get_all() can
+# temporarily return an incomplete cookie set. Streamlit's request cookies are
+# available synchronously on supported versions, so use them as the first source
+# and merge the component result as a fallback.
+try:
+    _request_cookies = dict(st.context.cookies)
+except Exception:
+    _request_cookies = {}
+try:
+    _component_cookies = cookie_manager.get_all() or {}
+except Exception:
+    _component_cookies = {}
+cookies = dict(_request_cookies)
+cookies.update(_component_cookies)
 
 # Авторизация по cookie без токена в URL. Поддерживаем старый auth_token
 # для плавного обновления существующих установок и новые независимые сеансы устройств.
