@@ -150,13 +150,14 @@ st.markdown("""
 
     /* Notification dialog full width */
     [data-testid="stDialog"] [aria-label~="Уведомления"],
-    [data-testid="stDialog"]:has(.st-key-notif_dlg) { 
-        max-width: 95vw !important; 
-        max-height: 80vh !important; 
+    [data-testid="stDialog"]:has(.st-key-notif_dlg) {
+        width: 48vw !important;
+        max-width: 48vw !important;
+        max-height: 50vh !important;
     }
-    .st-key-notif_dlg { 
-        max-height: 80vh !important; 
-        overflow-y: auto !important; 
+    .st-key-notif_dlg {
+        max-height: 50vh !important;
+        overflow-y: auto !important;
     }
     #crm-scroll-top { position: fixed; bottom: 24px; right: 24px; width: 44px; height: 44px; border-radius: 50%; background: #bc1661; color: white; border: none; font-size: 20px; cursor: pointer; z-index: 999998; display: none; box-shadow: 0 2px 8px rgba(188,22,97,0.3); transition: opacity 0.2s; }
     #crm-scroll-top:hover { background: #9a1452; }
@@ -175,7 +176,12 @@ st.markdown("""
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
     /* Notification dialog sizing */
     [data-testid="stDialog"] [aria-label="🔔 Уведомления"] ~ div,
-    .st-key-notif_dlg { max-width: 95vw !important; max-height: 80vh !important; overflow-y: auto !important; }
+    .st-key-notif_dlg { width: 48vw !important; max-width: 48vw !important; max-height: 50vh !important; overflow-y: auto !important; }
+    /* Compact notification list with minimal spacing */
+    .st-key-notif_dlg [data-testid="stMarkdown"] { margin-top: 0 !important; margin-bottom: 0 !important; }
+    .st-key-notif_dlg p { margin-top: 0 !important; margin-bottom: 2px !important; line-height: 1.2 !important; }
+    .st-key-notif_dlg hr { margin: 3px 0 !important; }
+    .st-key-notif_dlg [data-testid="stVerticalBlock"] { gap: 0.2rem !important; }
     /* Kanban column scroll for internal tasks */
     .st-key-it_col_new, .st-key-it_col_work, .st-key-it_col_review { min-height: 100px; }
 
@@ -2517,7 +2523,7 @@ def notifications_dialog():
     _key_prefix = "notif_dlg"
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -2550,9 +2556,9 @@ def notifications_dialog():
             bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
             border = "1px solid #BBDEFB" if not n.get("read", False) else "1px solid #E8EBEF"
             st.markdown(
-                f'<div style="background:{bg};border:{border};border-radius:10px;padding:10px 14px;margin-bottom:8px;">'
-                f'<span style="font-size:0.75rem;color:#95A5B7;">{n.get("date","")}</span><br>'
-                f'<span style="font-size:0.95rem;color:#2C3E50;">{n.get("text","")}</span>'
+                f'<div style="background:{bg};border:{border};border-radius:10px;padding:5px 7px;margin-bottom:3px;line-height:1.2;">'
+                f'<span style="font-size:0.65rem;color:#95A5B7;">{n.get("date","")}</span><br>'
+                f'<span style="font-size:0.82rem;color:#2C3E50;">{n.get("text","")}</span>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -2602,7 +2608,7 @@ def close_deal_dialog(deal_id):
     _key_prefix = f"close_deal_{deal_id}"
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -3046,7 +3052,7 @@ def create_internal_task_dialog():
     _show_warning = st.session_state.get(_close_warning_key, False)
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -3134,7 +3140,7 @@ def internal_task_detail_dialog(it_id):
     _is_admin = st.session_state.user_role == "admin"
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -4769,7 +4775,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
     # Close button — right-aligned row under the header
     _close_btn_key = f"close_btn_{key_prefix}"
     _close_css_key = f"close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5103,7 +5109,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
 
     _close_btn_key = f"close_btn_{key_prefix}"
     _close_css_key = f"close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5182,7 +5188,7 @@ def client_detail_dialog(cl_id):
     # Close button
     _close_btn_key = f"close_btn_{_key_prefix}"
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5284,7 +5290,7 @@ def client_deals_dialog(cl_id):
     _key_prefix = f"cli_deals_{cl_id}"
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5338,7 +5344,7 @@ def create_deal_dialog(cl_id):
         st.session_state.get(f"cdlg_budget_{cl_id}", "").strip()
     )
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5423,7 +5429,7 @@ def deal_create_task_dialog(deal_id, client_id):
         st.session_state.get(f"nt_c_cdt_{deal_id}", "").strip()
     )
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5483,7 +5489,7 @@ def client_create_task_dialog(cl_id):
         st.session_state.get(f"nt_c_cct_{cl_id}", "").strip()
     )
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5538,7 +5544,7 @@ def client_create_deal_task_dialog(cl_id):
     cl = get_client_by_id(cl_id)
     cl_deals = [d for d in st.session_state.crm_store.get("deals", []) if d["client_id"] == cl_id] if cl else []
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -5588,7 +5594,7 @@ def client_tasks_dialog(cl_id):
     _key_prefix = f"cli_tasks_{cl_id}"
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
