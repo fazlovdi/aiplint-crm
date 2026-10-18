@@ -3513,8 +3513,7 @@ with _header_center:
         outline-offset: 3px;
         cursor: pointer !important;
     }
-    </style>
-    """ + f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
+    </style>""" + f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
 <h1 style="text-align:center;margin:0!important;padding:0!important;"><a class="crm-title-link" href="?crm_refresh_db=1" title="Нажмите, чтобы обновить данные CRM">Айплинт CRM</a></h1>
 <p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
 </div>""", unsafe_allow_html=True)
