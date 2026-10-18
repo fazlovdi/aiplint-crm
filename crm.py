@@ -3380,7 +3380,36 @@ if not st.session_state.authenticated:
 
 process_due_reminders()
 
-st.markdown(f"""<div class="greeting-block" style="margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important;"><h1 style='text-align: center; margin-top: 0!important; margin-bottom: 0!important; padding-top: 0!important; padding-bottom: 0!important;'>Айплинт CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0; padding-top: 0!important; padding-bottom: 0!important;'>Продуктивного тебе дня, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
+# Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
+_header_left, _header_center, _header_right = st.columns([1, 4, 1], vertical_alignment="center")
+with _header_left:
+    render_notifications_bell()
+with _header_center:
+    st.markdown(f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
+        <h1 style="text-align:center;margin:0!important;padding:0!important;">Айплинт CRM</h1>
+        <p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
+    </div>""", unsafe_allow_html=True)
+with _header_right:
+    components.html("""
+    <div id="crm-live-clock" style="text-align:right;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;">
+      <div id="crm-live-date" style="font-size:0.82rem;color:#7F8C9A;"></div>
+      <div id="crm-live-time" style="font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums;"></div>
+    </div>
+    <script>
+    (function(){
+      function updateClock(){
+        const now = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/Moscow'}));
+        const pad = n => String(n).padStart(2,'0');
+        document.getElementById('crm-live-date').textContent =
+          pad(now.getDate())+'.'+pad(now.getMonth()+1)+'.'+now.getFullYear();
+        document.getElementById('crm-live-time').textContent =
+          pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+      }
+      updateClock();
+      setInterval(updateClock, 1000);
+    })();
+    </script>
+    """, height=48, scrolling=False)
 
 with st.sidebar:
     if st.session_state.cloud_ok: st.success("Облако активно")
