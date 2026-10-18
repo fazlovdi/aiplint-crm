@@ -2520,21 +2520,30 @@ def notifications_dialog():
             )
 
 def render_notifications_bell():
-    """Колокольчик и количество непрочитанных уведомлений по центру колонки."""
+    """Кнопка уведомлений на всю ширину левой колонки, счётчик внутри справа от колокольчика."""
     unread = get_unread_count()
     bell_key = "show_notifications_dialog"
+    bell_label = f"🔔   {unread}"
     st.markdown("""<style>
-    .st-key-crm_bell_wrap { width:100%!important; text-align:center!important; }
-    .st-key-crm_bell_wrap [data-testid="stVerticalBlock"] { width:100%!important; align-items:center!important; }
-    .st-key-crm_bell_wrap [data-testid="stButton"] { width:100%!important; display:flex!important; justify-content:center!important; }
-    .st-key-crm_bell_wrap [data-testid="stButton"] > button { width:52px!important; min-width:52px!important; padding:0.25rem 0!important; margin-left:auto!important; margin-right:auto!important; justify-content:center!important; }
-    .st-key-crm_bell_wrap .crm-unread-count { display:block!important; width:100%!important; text-align:center!important; white-space:nowrap!important; font-size:1.05rem!important; font-weight:700!important; line-height:1.25!important; color:#5A6B7D!important; font-variant-numeric:tabular-nums; }
+    .st-key-crm_bell_wrap { width:100%!important; }
+    .st-key-crm_bell_wrap [data-testid="stVerticalBlock"] { width:100%!important; }
+    .st-key-crm_bell_wrap [data-testid="stButton"] { width:100%!important; }
+    .st-key-crm_bell_wrap [data-testid="stButton"] > button {
+        width:100%!important; min-width:100%!important; box-sizing:border-box!important;
+        padding:0.45rem 0.5rem!important; display:flex!important;
+        align-items:center!important; justify-content:center!important;
+        white-space:nowrap!important; font-size:1.15rem!important; font-weight:700!important;
+        font-variant-numeric:tabular-nums!important;
+    }
+    .st-key-crm_bell_wrap [data-testid="stButton"] > button p {
+        white-space:nowrap!important; font-size:1.15rem!important; font-weight:700!important;
+        margin:0!important; line-height:1.2!important;
+    }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_bell_wrap"):
-        if st.button("🔔", key="btn_bell", help="Уведомления"):
+        if st.button(bell_label, key="btn_bell", help="Уведомления", use_container_width=True):
             st.session_state[bell_key] = True
             st.rerun()
-        st.markdown(f'<div class="crm-unread-count">{unread}</div>', unsafe_allow_html=True)
 
 def render_notifications_panel():
     """Показ диалога уведомлений"""
