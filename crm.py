@@ -42,14 +42,15 @@ def _safe_id(v):
     except (TypeError, ValueError):
         return 0
 
+st.set_page_config(
+    page_title="Айплинт CRM",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-
-st.set_page_config(page_title="Айплинт CRM", layout="wide")
-
-# Видимость боковой панели управляется собственной кнопкой CRM.
+# При первом входе боковая панель по умолчанию свернута.
 if "_crm_sidebar_visible" not in st.session_state:
-    st.session_state["_crm_sidebar_visible"] = True
-
+    st.session_state["_crm_sidebar_visible"] = False
 st.markdown("""
 <style>
     .stApp { background-color: #F5F6F8; color: #2C3E50; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
