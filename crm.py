@@ -3522,7 +3522,7 @@ with _header_center:
         color: var(--text-color) !important;
         font-family: inherit !important;
         font-size: 2.75rem !important;
-        font-weight: 600 !important;
+        font-weight: 700 !important;
         line-height: 1.2 !important;
         text-align: center !important;
         text-decoration: none !important;
@@ -3540,13 +3540,17 @@ with _header_center:
         text-decoration: none !important;
         transform: none !important;
     }
-    .st-key-crm_refresh_db_title button p,
-    .st-key-crm_refresh_db_title button span {
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button p,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button span,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button div {
+        font-family: inherit !important;
+        font-size: 2.75rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
         margin: 0 !important;
         padding: 0 !important;
         color: inherit !important;
-        font: inherit !important;
-        line-height: inherit !important;
         text-decoration: none !important;
     }
     </style>""", unsafe_allow_html=True)
