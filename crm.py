@@ -3498,8 +3498,21 @@ with _header_left:
         render_notifications_bell()
 with _header_center:
     st.markdown("""<style>
-    .crm-title-link { color:inherit!important; text-decoration:none!important; cursor:pointer; }
-    .crm-title-link:hover { color:inherit!important; text-decoration:none!important; }
+    /* Ссылка сохраняет внешний вид обычного заголовка h1, без оформления кнопки. */
+    .crm-title-link,
+    .crm-title-link:link,
+    .crm-title-link:visited,
+    .crm-title-link:hover,
+    .crm-title-link:active {
+        color: inherit !important;
+        font: inherit !important;
+        text-decoration: none !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        outline-offset: 3px;
+        cursor: pointer !important;
+    }
     </style>
     """ + f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
         <h1 style="text-align:center;margin:0!important;padding:0!important;"><a class="crm-title-link" href="?crm_refresh_db=1" title="Нажмите, чтобы обновить данные CRM">Айплинт CRM</a></h1>
