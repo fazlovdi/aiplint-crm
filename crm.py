@@ -3567,7 +3567,6 @@ for _c in st.session_state.crm_store.get("clients", []):
                 _new_tasks_count += 1
 _new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks", []) if not it.get("done", False) and it.get("it_status", "new") == "new" and (it.get("manager", "") == _cu_name_count or st.session_state.get("user_role") == "admin"))
 
-render_notifications_bell()
 nc1, nc2, nc3, nc4, nc5 = st.columns(5)
 with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
