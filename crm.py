@@ -3246,7 +3246,7 @@ if not st.session_state.authenticated:
                       el.setAttribute('inputmode','numeric');
                       el.setAttribute('pattern','[0-9]*');
                       el.setAttribute('enterkeyhint','go');
-                      el.setAttribute('autocomplete','current-password');
+                      el.setAttribute('autocomplete','new-password');
                     });
                   }
                   tunePin();
