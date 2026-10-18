@@ -177,6 +177,22 @@ st.markdown("""
     /* Notification dialog sizing */
     [data-testid="stDialog"] [aria-label="🔔 Уведомления"] ~ div,
     .st-key-notif_dlg { width: 48vw !important; max-width: 48vw !important; max-height: 50vh !important; overflow-y: auto !important; }
+    /* Read and clear notification buttons: half-size, without changing close button */
+    .st-key-btn_read_all_dlg button,
+    .st-key-btn_clear_read_dlg button {
+        width: 50% !important;
+        min-height: 24px !important;
+        height: 24px !important;
+        padding: 0.1rem 0.25rem !important;
+        font-size: 0.65rem !important;
+        line-height: 1.1 !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
+    .st-key-btn_read_all_dlg > div,
+    .st-key-btn_clear_read_dlg > div {
+        align-items: center !important;
+    }
     /* Compact notification list with minimal spacing */
     .st-key-notif_dlg [data-testid="stMarkdown"] { margin-top: 0 !important; margin-bottom: 0 !important; }
     .st-key-notif_dlg p { margin-top: 0 !important; margin-bottom: 2px !important; line-height: 1.2 !important; }
@@ -2523,7 +2539,7 @@ def notifications_dialog():
     _key_prefix = "notif_dlg"
     # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:26px!important;height:26px!important;min-height:26px!important;padding:0!important;font-size:0.85rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
