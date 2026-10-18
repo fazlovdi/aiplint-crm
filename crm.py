@@ -148,11 +148,11 @@ st.markdown("""
     .deals-sticky-placeholder { height: 0; }
     /* Scroll-to-top button */
 
-    /* Notification dialog full width */
+    /* Notification dialog: width reduced by half */
     [data-testid="stDialog"] [aria-label~="Уведомления"],
     [data-testid="stDialog"]:has(.st-key-notif_dlg) {
-        width: 48vw !important;
-        max-width: 48vw !important;
+        width: 24vw !important;
+        max-width: 24vw !important;
         max-height: 50vh !important;
     }
     .st-key-notif_dlg {
@@ -176,7 +176,7 @@ st.markdown("""
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
     /* Notification dialog sizing */
     [data-testid="stDialog"] [aria-label="🔔 Уведомления"] ~ div,
-    .st-key-notif_dlg { width: 48vw !important; max-width: 48vw !important; max-height: 50vh !important; overflow-y: auto !important; }
+    .st-key-notif_dlg { width: 24vw !important; max-width: 24vw !important; max-height: 50vh !important; overflow-y: auto !important; }
     /* Read and clear notification buttons: half-size, without changing close button */
     .st-key-btn_read_all_dlg button,
     .st-key-btn_clear_read_dlg button {
