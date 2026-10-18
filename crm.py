@@ -2520,17 +2520,20 @@ def notifications_dialog():
             )
 
 def render_notifications_bell():
-    """Колокольчик с уведомлениями — компактная кнопка с счётчиком справа"""
+    """Колокольчик и количество непрочитанных уведомлений по центру колонки."""
     unread = get_unread_count()
     bell_key = "show_notifications_dialog"
-    bell_label = f"🔔 ({unread})" if unread > 0 else "🔔"
-    bc_col, _spacer = st.columns([1, 20])
-    with bc_col:
-        _bell_btn_key = "btn_bell"
-        with st.container(key="crm_bell_wrap"):
-            if st.button(bell_label, key=_bell_btn_key, help="Уведомления"):
-                st.session_state[bell_key] = True
-                st.rerun()
+    st.markdown("""<style>
+    .st-key-crm_bell_wrap { width:100%; text-align:center; }
+    .st-key-crm_bell_wrap [data-testid="stButton"] { display:flex; justify-content:center; }
+    .st-key-crm_bell_wrap [data-testid="stButton"] button { width:52px!important; min-width:52px!important; padding:0.25rem 0!important; margin:0 auto!important; justify-content:center!important; }
+    .st-key-crm_bell_wrap .crm-unread-count { text-align:center; white-space:nowrap; font-size:0.82rem; line-height:1.2; color:#7F8C9A; font-variant-numeric:tabular-nums; }
+    </style>""", unsafe_allow_html=True)
+    with st.container(key="crm_bell_wrap"):
+        if st.button("🔔", key="btn_bell", help="Уведомления"):
+            st.session_state[bell_key] = True
+            st.rerun()
+        st.markdown(f'<div class="crm-unread-count">{unread}</div>', unsafe_allow_html=True)
 
 def render_notifications_panel():
     """Показ диалога уведомлений"""
@@ -3381,7 +3384,7 @@ if not st.session_state.authenticated:
 process_due_reminders()
 
 # Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
-_header_left, _header_center, _header_right = st.columns([1, 4, 1], vertical_alignment="center")
+_header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
 with _header_left:
     render_notifications_bell()
 with _header_center:
@@ -3391,7 +3394,7 @@ with _header_center:
     </div>""", unsafe_allow_html=True)
 with _header_right:
     components.html("""
-    <div id="crm-live-clock" style="text-align:right;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;">
+    <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
       <div id="crm-live-date" style="font-size:0.82rem;color:#7F8C9A;"></div>
       <div id="crm-live-time" style="font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums;"></div>
     </div>
