@@ -66,8 +66,20 @@ st.markdown("""
     .stTextArea textarea { overflow-wrap:anywhere !important; white-space:pre-wrap !important; resize:vertical !important; }
     .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
     /* Date/time pickers match the white comment input fields */
-    [data-testid="stDateInput"] input, [data-testid="stTimeInput"] input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; color: #2C3E50 !important; box-shadow: none !important; }
-    [data-testid="stDateInput"] [data-baseweb="input"], [data-testid="stTimeInput"] [data-baseweb="input"] { background-color: #FFFFFF !important; border-radius: 10px !important; }
+    /* Force white background on Streamlit date/time widgets and every BaseWeb layer */
+    div[data-testid="stDateInput"], div[data-testid="stTimeInput"] { background: #FFFFFF !important; }
+    div[data-testid="stDateInput"] > div, div[data-testid="stTimeInput"] > div,
+    div[data-testid="stDateInput"] [data-baseweb="input"], div[data-testid="stTimeInput"] [data-baseweb="input"],
+    div[data-testid="stDateInput"] [data-baseweb="input"] > div, div[data-testid="stTimeInput"] [data-baseweb="input"] > div,
+    div[data-testid="stDateInput"] input, div[data-testid="stTimeInput"] input {
+        background: #FFFFFF !important; background-color: #FFFFFF !important;
+        color: #2C3E50 !important; border-color: #DCE0E5 !important;
+        border-radius: 10px !important; box-shadow: none !important;
+    }
+    div[data-testid="stDateInput"] [data-baseweb="input"], div[data-testid="stTimeInput"] [data-baseweb="input"] {
+        border: 1.5px solid #DCE0E5 !important; overflow: hidden !important;
+    }
+    div[data-testid="stDateInput"] button, div[data-testid="stTimeInput"] button { background: #FFFFFF !important; color: #475467 !important; }
     input[placeholder*="Поиск"], .stTextInput input[aria-label="Поиск"] { background-color:#FFFFFF !important; }
     .stNumberInput button { display:none !important; }
     .stNumberInput input { -moz-appearance:textfield !important; }
@@ -1173,15 +1185,21 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     st.markdown(f'''<style>
     .st-key-{close_css_key} {{ position:relative!important; z-index:10000!important; width:100%!important; margin-top:-0.35rem!important; margin-bottom:0.25rem!important; }}
     .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ display:flex!important; justify-content:flex-end!important; gap:0!important; }}
-    .st-key-{close_css_key} [data-testid="column"] {{ flex:0 0 40px!important; width:40px!important; min-width:40px!important; }}
-    .st-key-{close_css_key} .stButton {{ width:40px!important; min-width:40px!important; }}
-    .st-key-{close_css_key} .stButton > button {{ box-sizing:border-box!important; width:36px!important;height:36px!important;min-width:36px!important;max-width:36px!important;min-height:36px!important;max-height:36px!important;padding:0!important;font-size:1.15rem!important;font-weight:600!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:9px!important;color:#475467!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0 auto!important;box-shadow:0 1px 2px rgba(16,24,40,.06)!important; position:relative!important; z-index:10001!important; }}
+    .st-key-{close_css_key} [data-testid="column"] {{ flex:0 0 44px!important; width:44px!important; min-width:44px!important; max-width:44px!important; padding:0!important; }}
+    .st-key-{close_css_key} [data-testid="column"] > div, .st-key-{close_css_key} .stButton {{ width:44px!important; min-width:44px!important; max-width:44px!important; }}
+    .st-key-{close_css_key} .stButton > button {{ box-sizing:border-box!important; width:36px!important;height:36px!important;min-width:36px!important;max-width:36px!important;min-height:36px!important;max-height:36px!important;padding:0!important;font-size:1.15rem!important;font-weight:600!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:9px!important;color:#475467!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;box-shadow:0 1px 2px rgba(16,24,40,.06)!important; position:relative!important; z-index:10001!important; }}
     .st-key-{close_css_key} .stButton > button:hover {{ background:#F8F9FB!important;border-color:#98A2B3!important;color:#101828!important; }}
     .st-key-{close_css_key} .stButton > button p {{ margin:0!important;line-height:1!important; }}
-    .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] input,
-    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] input,
+    .st-key-reminder_fields_{key_suffix} div[data-testid="stDateInput"],
+    .st-key-reminder_fields_{key_suffix} div[data-testid="stTimeInput"],
     .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] [data-baseweb="input"],
-    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"] {{ background:#FFFFFF!important;background-color:#FFFFFF!important;color:#2C3E50!important;border:1.5px solid #DCE0E5!important;border-radius:10px!important;box-shadow:none!important; }}
+    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"],
+    .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] [data-baseweb="input"] > div,
+    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"] > div,
+    .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] input,
+    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] input {{ background:#FFFFFF!important;background-color:#FFFFFF!important;color:#2C3E50!important;border-color:#DCE0E5!important;border-radius:10px!important;box-shadow:none!important; }}
+    .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] [data-baseweb="input"],
+    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"] {{ border:1.5px solid #DCE0E5!important;overflow:hidden!important; }}
     .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] [data-baseweb="input"]:focus-within,
     .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"]:focus-within {{ border-color:#BC1661!important;box-shadow:0 0 0 1px #BC1661!important; }}
     .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] button,
@@ -1477,9 +1495,13 @@ def render_task_detail(t, cl, d, key_prefix):
                         padding:0.55rem 1rem !important; font-size:0.95rem !important;
                         line-height:1.2 !important; border-radius:10px !important;
                     }}
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"],
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] [data-baseweb="input"],
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] [data-baseweb="input"] > div,
                     .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] input {{
-                        background:#FFFFFF !important; border:1.5px solid #DCE0E5 !important;
-                        border-radius:10px !important; color:#2C3E50 !important;
+                        background:#FFFFFF !important; background-color:#FFFFFF !important;
+                        border:1.5px solid #DCE0E5 !important; border-radius:10px !important;
+                        color:#2C3E50 !important; box-shadow:none !important;
                     }}
                     </style>''', unsafe_allow_html=True)
                     with st.container(key=deadline_edit_wrap):
