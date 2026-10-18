@@ -998,7 +998,8 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     div[class*="st-key-dl_"] button { min-height:34px!important;height:34px!important;width:38px!important;min-width:38px!important;padding:0!important;border-radius:10px!important;border:1px solid #D7DFEA!important;background:linear-gradient(180deg,#FFFFFF 0%,#F2F5FA 100%)!important;color:#31577D!important;font-size:17px!important;font-weight:700!important;box-shadow:0 1px 3px rgba(30,50,75,.08)!important;transition:all .15s ease!important; }
     div[class*="st-key-dl_"] button:hover { background:#E7F0FA!important;border-color:#A9C3DF!important;transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,50,75,.12)!important; }
     div[class*="st-key-del_"] button { min-height:32px!important;height:32px!important;padding:0 8px!important;border-radius:9px!important;font-size:15px!important; }
-    div[class*="st-key-fdesc_"] textarea { min-height:34px!important;height:34px!important;padding:7px 10px!important;font-size:.8rem!important;line-height:1.2!important;resize:none!important;border-radius:9px!important; }
+    div[class*="st-key-fdesc_"] input { min-height:34px!important;height:34px!important;padding:7px 10px!important;font-size:.8rem!important;line-height:1.2!important;border-radius:9px!important; }
+    div[class*="st-key-fdesc_"] div[data-testid="InputInstructions"] { display:none!important; }
     </style>""", unsafe_allow_html=True)
 
     # Все файлы выводятся сразу, без сетки миниатюр и без пагинации.
@@ -1035,9 +1036,9 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
             with cols[2]:
                 desc_key = f"fdesc_{prefix}_{i}"
                 cur_desc = ff.get("description", "") or ""
-                new_desc = st.text_area("Описание файла", value=cur_desc, key=desc_key,
-                                        max_chars=200, label_visibility="collapsed",
-                                        placeholder="Описание файла...", height=36)
+                new_desc = st.text_input("Описание файла", value=cur_desc, key=desc_key,
+                                         max_chars=200, label_visibility="collapsed",
+                                         placeholder="Описание файла…")
                 if new_desc != cur_desc:
                     ff["description"] = new_desc
                     if hasattr(st.session_state, "crm_store"):
