@@ -1197,7 +1197,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     if st.session_state.get(warning_key):
         warn_container_key = f"rem_unsaved_warn_{key_suffix}"
-        st.markdown(f'<style>.st-key-{warn_container_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{warn_container_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=warn_container_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
             st.markdown("Сохранить перед закрытием?")
@@ -4379,7 +4379,7 @@ def add_client_dialog(fv):
                 st.rerun()
     if _show_add_warning:
         _warn_key = f"unsaved_warn_add_{fv}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
             st.markdown("Закрыть без сохранения?")
@@ -4519,7 +4519,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
     # Unsaved changes warning
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
             st.markdown("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?")
@@ -4619,7 +4619,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
 
     # Кнопка закрытия отчёта с предупреждением о незаписанных данных.
     close_css_key = f"task_report_close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button { width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; } .st-key-{close_css_key} .stButton > button:hover { background:#EEF0F3!important;border-color:#C9CFD7!important; } .st-key-{close_css_key} > div { gap:0!important; }</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div { gap:0!important; }</style>', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -4642,7 +4642,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
 
     if st.session_state.get(close_warning_key):
         _warn_key = f"task_report_unsaved_warn_{key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
             st.markdown("Закрыть отчёт и потерять введённые данные?")
@@ -4745,7 +4745,7 @@ def deal_report_dialog(deal_id, action):
     st.markdown(f"**{btn_label}: отчёт по сделке**")
 
     close_css_key = f"deal_report_close_row_{deal_id}_{action}"
-    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button { width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; } .st-key-{close_css_key} .stButton > button:hover { background:#EEF0F3!important;border-color:#C9CFD7!important; } .st-key-{close_css_key} > div { gap:0!important; }</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div { gap:0!important; }</style>', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -4762,7 +4762,7 @@ def deal_report_dialog(deal_id, action):
 
     if st.session_state.get(close_warning_key):
         _warn_key = f"deal_report_unsaved_warn_{deal_id}_{action}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
             st.markdown("Закрыть отчёт и потерять введённые данные?")
@@ -4851,7 +4851,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
 
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
             st.markdown("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u043f\u0435\u0440\u0435\u0434 \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c?")
@@ -4928,7 +4928,7 @@ def client_detail_dialog(cl_id):
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
             st.markdown("Сохранить перед закрытием?")
@@ -5083,7 +5083,7 @@ def create_deal_dialog(cl_id):
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
             st.markdown("Закрыть без сохранения?")
@@ -5169,7 +5169,7 @@ def deal_create_task_dialog(deal_id, client_id):
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
             st.markdown("Закрыть без сохранения?")
@@ -5228,7 +5228,7 @@ def client_create_task_dialog(cl_id):
                     st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
             st.markdown("Закрыть без сохранения?")
@@ -5276,7 +5276,7 @@ def client_create_deal_task_dialog(cl_id):
                 st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
-        st.markdown(f'<style>.st-key-{_warn_key} { border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }</style>', unsafe_allow_html=True)
+        st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
             st.markdown("Закрыть без сохранения?")
