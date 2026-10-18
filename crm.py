@@ -2693,6 +2693,20 @@ def _create_browser_session(user, remember=True):
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
         key="set_auth_token_cookie",
     )
+    # Keep the browser associated with this account as a fallback if the auth-token
+    # cookie is not available during the first Streamlit render after a page refresh.
+    # In that case, show the PIN screen rather than asking for login and password.
+    if remember:
+        cookie_manager.set(
+            "remembered_user", str(user.get("login", "")),
+            expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+            key="set_remembered_user_cookie",
+        )
+    else:
+        try:
+            cookie_manager.delete("remembered_user")
+        except Exception:
+            pass
 
 
 def _passkey_b64url_encode(value):
@@ -3246,7 +3260,7 @@ if not st.session_state.authenticated:
                       el.setAttribute('inputmode','numeric');
                       el.setAttribute('pattern','[0-9]*');
                       el.setAttribute('enterkeyhint','go');
-                      el.setAttribute('autocomplete','current-password');
+                      el.setAttribute('autocomplete','one-time-code');\n                      el.setAttribute('name','crm_pin_code');\n                      el.setAttribute('data-lpignore','true');\n                      el.setAttribute('data-1p-ignore','true');
                     });
                   }
                   tunePin();
