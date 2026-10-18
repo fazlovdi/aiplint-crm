@@ -209,7 +209,24 @@ st.markdown("""
         background: #EEF0F3 !important;
         border-color: #C9CFD7 !important;
     }
-    /* Unsaved changes warning box */
+    /* Unified close-button and unsaved-change warning styling for all dialogs */
+    [data-testid="stDialog"] [class*="st-key-close_row_"] .stButton > button,
+    [data-testid="stDialog"] [class*="st-key-task_report_close_row_"] .stButton > button,
+    [data-testid="stDialog"] [class*="st-key-deal_report_close_row_"] .stButton > button,
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] .stButton > button,
+    [data-testid="stDialog"] [class*="st-key-add_client_close_"] .stButton > button {
+        width:36px!important; height:36px!important; min-width:36px!important; min-height:36px!important;
+        padding:0!important; font-size:1.2rem!important; line-height:1!important;
+        background:#FFFFFF!important; border:1px solid #DCE0E5!important; border-radius:8px!important;
+        color:#5A6B7D!important; display:flex!important; align-items:center!important;
+        justify-content:center!important; margin:0!important; opacity:1!important; visibility:visible!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-close_row_"] .stButton > button:hover,
+    [data-testid="stDialog"] [class*="st-key-task_report_close_row_"] .stButton > button:hover,
+    [data-testid="stDialog"] [class*="st-key-deal_report_close_row_"] .stButton > button:hover,
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] .stButton > button:hover {
+        background:#EEF0F3!important; border-color:#C9CFD7!important; color:#344054!important;
+    }
     .crm-unsaved-warning {
         border: 2px solid #FF9800 !important;
         border-radius: 10px !important;
@@ -1168,13 +1185,12 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     close_css_key = f"rem_close_row_{key_suffix}"
     st.markdown(f'''<style>
-    .st-key-{close_css_key} {{ display:flex!important;justify-content:flex-end!important;margin-top:-0.5rem!important;margin-bottom:0.2rem!important; }}
-    .st-key-{close_css_key} {{ position:relative!important; z-index:10000!important; width:100%!important; }}
-    .st-key-{close_css_key} .stButton {{ display:flex!important; justify-content:flex-end!important; }}
-    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;font-weight:700!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#344054!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; position:relative!important; z-index:10001!important; }}
-    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#98A2B3!important;color:#101828!important; }}
-    .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ justify-content:flex-end!important; }}
-    .st-key-{close_css_key} [data-testid="column"]:first-child {{ display:none!important; }}
+    .st-key-{close_css_key} {{ position:relative!important; z-index:10000!important; width:100%!important; margin-top:-0.35rem!important; margin-bottom:0.25rem!important; }}
+    .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ display:flex!important; justify-content:flex-end!important; gap:0!important; }}
+    .st-key-{close_css_key} [data-testid="column"] {{ flex:0 0 44px!important; width:44px!important; min-width:44px!important; max-width:44px!important; padding:0!important; }}
+    .st-key-{close_css_key} [data-testid="column"] > div, .st-key-{close_css_key} .stButton {{ width:44px!important; min-width:44px!important; max-width:44px!important; }}
+    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;font-weight:700!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;position:relative!important;z-index:10001!important; }}
+    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important;color:#344054!important; }}
     </style>''', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
