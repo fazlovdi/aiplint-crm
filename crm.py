@@ -2807,6 +2807,11 @@ def _passkey_create_login_session(user):
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
         key="set_auth_token_cookie",
     )
+    cookie_manager.set(
+        "remembered_user", str(user.get("login", "")),
+        expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+        key="set_passkey_remembered_user_cookie",
+    )
 
 
 def _passkey_process_login_result(result, pending):
@@ -2940,7 +2945,24 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state.user_login = _cookie_user.get("login")
             st.session_state.user_name = _cookie_user.get("name", _cookie_user.get("login", ""))
             st.session_state.remember_login = True
-            st.session_state._auth_last_activity = moscow_now()
+            # Do not reset the server-side inactivity clock just because the page
+            # was refreshed. The persisted auth_sessions.expires_at is authoritative.
+            # Once the cookie is proven valid, count this request as activity and
+            # slide the expiry forward for this browser session.
+            _restored_hash = hashlib.sha256(str(_auth_token).encode("utf-8")).hexdigest()
+            _restored_now = moscow_now()
+            _restored_session_found = False
+            for _restored_session in _cookie_user.get("auth_sessions", []):
+                if isinstance(_restored_session, dict) and secrets.compare_digest(
+                    str(_restored_session.get("token_hash", "")), _restored_hash
+                ):
+                    _restored_session["expires_at"] = (
+                        _restored_now + timedelta(minutes=60)
+                    ).isoformat(timespec="seconds")
+                    _restored_session_found = True
+            if _restored_session_found:
+                save_data(st.session_state.crm_store)
+            st.session_state._auth_last_activity = _restored_now
             break
 
 if st.session_state.get("authenticated"):
@@ -3212,11 +3234,9 @@ def internal_task_detail_dialog(it_id):
 
 if not st.session_state.authenticated:
         # Не оставляем токены авторизации в адресной строке.
-        try:
-            if cookies.get("auth_token"):
-                cookie_manager.delete("auth_token")
-        except (KeyError, TypeError):
-            pass
+        # Не удаляем auth_token здесь: CookieManager может вернуть cookies
+        # не сразу после F5, и раннее удаление ломает восстановление сессии.
+        pass
 
 MGR_PLACEHOLDER = "Выбери ответственного"
 
