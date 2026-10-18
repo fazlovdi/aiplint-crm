@@ -49,6 +49,8 @@ st.set_page_config(page_title="Айплинт CRM", layout="wide")
 st.markdown("""
 <style>
     .stApp { background-color: #F5F6F8; color: #2C3E50; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
+    /* Уменьшаем пустое пространство над главной шапкой CRM. */
+    .block-container { padding-top: 0.45rem !important; }
     section[data-testid="stSidebar"] { background-color: #EEF0F3; border-right: 1px solid #DCE0E5; }
     .stExpander { border-radius: 14px; overflow: hidden; background-color: #FFFFFF; margin-bottom: 0.3rem !important; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
     .stExpander > details { border-radius: 14px; }
