@@ -46,6 +46,10 @@ def _safe_id(v):
 
 st.set_page_config(page_title="Айплинт CRM", layout="wide")
 
+# Видимость боковой панели управляется собственной кнопкой CRM.
+if "_crm_sidebar_visible" not in st.session_state:
+    st.session_state["_crm_sidebar_visible"] = True
+
 st.markdown("""
 <style>
     .stApp { background-color: #F5F6F8; color: #2C3E50; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
@@ -82,7 +86,9 @@ st.markdown("""
     /* Fix scrollbar going under Streamlit header */
     section[data-testid="stMainViewContainer"] { overflow-y: auto !important; }
     [data-testid="stAppViewBlockContainer"] { overflow: visible !important; }
-    [data-testid="stHeader"] { z-index: 999997 !important; }
+    /* Скрываем служебную верхнюю панель Streamlit. */
+    [data-testid="stHeader"] { display: none !important; }
+    #MainMenu, footer { visibility: hidden !important; }
     .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
     .stMarkdown strong { color: #2C3E50; font-weight: 600; }
     .stMarkdown { margin-top: 0.15rem !important; margin-bottom: 0.15rem !important; }
@@ -396,6 +402,14 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# При закрытой боковой панели освобождаем всю ширину для содержимого CRM.
+if not st.session_state.get("_crm_sidebar_visible", True):
+    st.markdown("""<style>
+        section[data-testid="stSidebar"] { display: none !important; }
+        section[data-testid="stMain"] { margin-left: 0 !important; width: 100% !important; }
+        [data-testid="stAppViewContainer"] > .main { margin-left: 0 !important; width: 100% !important; }
+    </style>""", unsafe_allow_html=True)
 
 st.components.v1.html("""
 <script>
@@ -3398,7 +3412,14 @@ process_due_reminders()
 # Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
 _header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
 with _header_left:
-    render_notifications_bell()
+    _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
+    with _toggle_col:
+        _sidebar_icon = "☰" if not st.session_state.get("_crm_sidebar_visible", True) else "‹"
+        if st.button(_sidebar_icon, key="crm_sidebar_toggle_btn", help="Открыть или закрыть боковую панель", use_container_width=True):
+            st.session_state["_crm_sidebar_visible"] = not st.session_state.get("_crm_sidebar_visible", True)
+            st.rerun()
+    with _bell_col:
+        render_notifications_bell()
 with _header_center:
     st.markdown(f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
         <h1 style="text-align:center;margin:0!important;padding:0!important;">Айплинт CRM</h1>
