@@ -190,22 +190,7 @@ st.markdown("""
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
     /* Notification dialog sizing */
     .st-key-notif_dlg { max-height: 50vh !important; overflow-y: auto !important; }
-    /* Read and clear notification buttons: half-size, without changing close button */
-    .st-key-btn_read_all_dlg button,
-    .st-key-btn_clear_read_dlg button {
-        width: 50% !important;
-        min-height: 24px !important;
-        height: 24px !important;
-        padding: 0.1rem 0.25rem !important;
-        font-size: 0.65rem !important;
-        line-height: 1.1 !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-    }
-    .st-key-btn_read_all_dlg > div,
-    .st-key-btn_clear_read_dlg > div {
-        align-items: center !important;
-    }
+    /* Кнопки «Прочитать все» и «Очистить прочитанные»: стандартный размер Streamlit */
     /* Compact notification list with minimal spacing */
     .st-key-notif_dlg [data-testid="stMarkdown"] { margin-top: 0 !important; margin-bottom: 0 !important; }
     .st-key-notif_dlg p { margin-top: 0 !important; margin-bottom: 2px !important; line-height: 1.2 !important; }
