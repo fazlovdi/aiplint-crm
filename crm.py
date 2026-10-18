@@ -3432,6 +3432,31 @@ if not st.session_state.authenticated:
 process_due_reminders()
 
 # Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
+# Выравниваем кнопку боковой панели по высоте с кнопкой уведомлений и увеличиваем значок.
+st.markdown("""<style>
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button {
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 1.65rem !important;
+    line-height: 1 !important;
+    box-sizing: border-box !important;
+}
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button p {
+    font-size: 1.65rem !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+</style>""", unsafe_allow_html=True)
 _header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
 with _header_left:
     _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
