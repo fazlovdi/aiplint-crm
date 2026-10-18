@@ -3521,7 +3521,7 @@ with _header_center:
         background: transparent !important;
         color: var(--text-color) !important;
         font-family: inherit !important;
-        font-size: 2.75rem !important;
+        font-size: 3.5rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
         text-align: center !important;
@@ -3545,13 +3545,23 @@ with _header_center:
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button span,
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button div {
         font-family: inherit !important;
-        font-size: 2.75rem !important;
+        font-size: 3.5rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
         margin: 0 !important;
         padding: 0 !important;
         color: inherit !important;
         text-decoration: none !important;
+    }
+    [class*="crm_refresh_db_title"] button,
+    [class*="crm_refresh_db_title"] button *,
+    [class*="crm_refresh_db_title"] [data-testid="stMarkdownContainer"],
+    [class*="crm_refresh_db_title"] p,
+    [class*="crm_refresh_db_title"] span,
+    [class*="crm_refresh_db_title"] div {
+        font-size: 3.5rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
     }
     </style>""", unsafe_allow_html=True)
     if st.button("Айплинт CRM", key="crm_refresh_db_title", help="Нажмите, чтобы обновить данные CRM"):
