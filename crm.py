@@ -3432,6 +3432,52 @@ if not st.session_state.authenticated:
 process_due_reminders()
 
 # Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
+# Выравниваем кнопку боковой панели и уведомлений по одной высоте; увеличиваем сам символ.
+st.markdown("""<style>
+/* Streamlit places a keyed wrapper around each widget; target both wrapper and actual button. */
+.st-key-crm_sidebar_toggle_btn,
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"],
+.st-key-crm_sidebar_toggle_btn > div {
+    align-self: center !important;
+    width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+}
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button,
+.st-key-crm_sidebar_toggle_btn button {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    line-height: 1 !important;
+}
+.st-key-crm_sidebar_toggle_btn button p,
+.st-key-crm_sidebar_toggle_btn button span {
+    font-size: 2.35rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+/* Match the notification button's height so the two controls align exactly. */
+.st-key-crm_bell_wrap [data-testid="stButton"] > button {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    box-sizing: border-box !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+.st-key-crm_bell_wrap [data-testid="stButton"] > button p {
+    line-height: 1 !important;
+}
+</style>""", unsafe_allow_html=True)
 _header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
 with _header_left:
     _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
@@ -3443,10 +3489,39 @@ with _header_left:
     with _bell_col:
         render_notifications_bell()
 with _header_center:
-    st.markdown(f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
-        <h1 style="text-align:center;margin:0!important;padding:0!important;">Айплинт CRM</h1>
-        <p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
-    </div>""", unsafe_allow_html=True)
+    # Заголовок работает как кнопка обновления актуального состояния основной SQLite-базы.
+    st.markdown("""<style>
+    .st-key-crm_refresh_database_btn { width:100%; }
+    .st-key-crm_refresh_database_btn [data-testid="stButton"] { width:100%; }
+    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button {
+        width:100%!important; min-height:0!important; height:auto!important;
+        padding:0!important; margin:0!important; border:0!important;
+        background:transparent!important; box-shadow:none!important;
+        color:inherit!important; border-radius:0!important;
+    }
+    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button p {
+        width:100%; margin:0!important; padding:0!important;
+        font-size:2rem!important; line-height:1.2!important; font-weight:700!important;
+        text-align:center!important; color:inherit!important;
+        transition:color .18s ease, transform .18s ease;
+    }
+    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button:hover p {
+        color:#BC1661!important; transform:translateY(-1px);
+    }
+    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button:active p {
+        transform:scale(.97);
+    }
+    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button:focus:not(:active) {
+        outline:none!important; box-shadow:none!important;
+    }
+    </style>""", unsafe_allow_html=True)
+    if st.button("Айплинт CRM", key="crm_refresh_database_btn", help="Нажмите, чтобы перечитать актуальные данные из основной базы CRM"):
+        with st.spinner("Обновляем базу данных…"):
+            _fresh_crm_data = load_data()
+            st.session_state.crm_store = _fresh_crm_data
+        st.toast("База данных обновлена", icon="🔄")
+        st.rerun()
+    st.markdown(f"""<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>""", unsafe_allow_html=True)
 with _header_right:
     components.html("""
     <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
