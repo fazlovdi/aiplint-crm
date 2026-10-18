@@ -1203,11 +1203,16 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
                     store.setdefault("reminders", []).append({"id":uuid.uuid4().hex,"entity_type":str(entity_type),"entity_id":str(entity_id),"entity_label":str(entity_label),"text":text_value.strip(),"created_at":now_str(),"created_by":me,"recipient":recipient,"due_at":due.strftime("%Y-%m-%d %H:%M:%S"),"sent":False,"sent_at":""})
                     save_data(store)
                     st.session_state.pop(f"rem_text_{entity_type}_{entity_id}",None)
+                    st.session_state.pop("_pending_reminder_dialog", None)
                     st.toast("Напоминание создано", icon="🔔")
                     st.rerun()
     with b2:
         if st.button("Отмена", key=f"rem_cancel_{entity_type}_{entity_id}", use_container_width=True):
+            st.session_state.pop("_pending_reminder_dialog", None)
             st.rerun()
+    if st.button("Закрыть", key=f"rem_close_{entity_type}_{entity_id}", use_container_width=True):
+        st.session_state.pop("_pending_reminder_dialog", None)
+        st.rerun()
 
 def render_reminders(entity_type, entity_id, entity_label, key_prefix):
     store = st.session_state.crm_store
@@ -1215,7 +1220,9 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
     st.markdown("---")
     st.markdown("**Напоминания**")
     if st.button("＋ Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
-        create_reminder_dialog(entity_type, entity_id, entity_label)
+        # Defer dialog rendering to the top-level dispatcher; nested dialog calls break layout context.
+        st.session_state["_pending_reminder_dialog"] = {"entity_type": str(entity_type), "entity_id": str(entity_id), "entity_label": str(entity_label)}
+        st.rerun()
     items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
     items.sort(key=lambda r:r.get("due_at", ""))
     if not items:
@@ -5496,7 +5503,10 @@ if st.session_state.active_tab == "Клиенты":
     _deal_report_dialog = st.session_state.get("dialog_deal_report")
     
     _task_completion_state = st.session_state.get("dialog_task_completion")
-    if _task_completion_state:
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    if _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _task_completion_state:
         task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
     elif _deal_report_dialog:
         deal_report_dialog(_deal_report_dialog.get("deal_id"), _deal_report_dialog.get("action", "close"))
@@ -5719,7 +5729,10 @@ elif st.session_state.active_tab == "Сделки":
     _deal_task_dialog_id = st.session_state.get("dialog_create_deal_task_deal_id")
 
     _task_completion_state = st.session_state.get("dialog_task_completion")
-    if _task_completion_state:
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    if _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _task_completion_state:
         task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
     elif _deal_report_state:
         deal_report_dialog(_deal_report_state.get("deal_id"), _deal_report_state.get("action", "close"))
@@ -5861,7 +5874,10 @@ elif st.session_state.active_tab == "Задачи":
     # Completion report dialog takes precedence over task details to avoid nested dialogs.
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _dialog_key = st.session_state.get("dialog_task_key")
-    if _task_completion_state:
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    if _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _task_completion_state:
         task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
     # Show created task dialog if requested
     elif st.session_state.get("_open_created_task"):
@@ -6021,7 +6037,10 @@ elif st.session_state.active_tab == "Внутренние задачи":
 
     # Trigger internal task dialog
     _dialog_it_key = st.session_state.get("dialog_it_key")
-    if _dialog_it_key is not None:
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    if _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _dialog_it_key is not None:
         internal_task_detail_dialog(_dialog_it_key)
 
 
@@ -6138,3 +6157,8 @@ elif st.session_state.active_tab == "Поставщики":
                     render_reminders("supplier", s.get("id", ""), s.get("name", "Поставщик"), f"supplier_{s.get('id')}")
     else:
         st.info("Поставщиков нет. Добавьте первого.")
+
+# Supplier cards are inline, so their reminder dialog is dispatched at the script root.
+if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("active_tab") == "Поставщики":
+    _pending_reminder = st.session_state["_pending_reminder_dialog"]
+    create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
