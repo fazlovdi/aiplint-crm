@@ -1171,6 +1171,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     .st-key-{close_css_key} {{ position:relative!important;z-index:10000!important;width:100%!important;margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important; }}
     .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ justify-content:flex-end!important;gap:0!important; }}
     .st-key-{close_css_key} [data-testid="column"]:first-child {{ display:none!important; }}
+    .st-key-{close_css_key} [data-testid="column"]:last-child {{ flex:0 0 36px!important;width:36px!important;min-width:36px!important; }}
     .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
     .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }}
     .st-key-{close_css_key} > div {{ gap:0!important; }}
@@ -1197,7 +1198,45 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     if st.session_state.get(warning_key):
         warn_container_key = f"rem_unsaved_warn_{key_suffix}"
-        st.markdown(f'<style>.st-key-{warn_container_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
+        st.markdown(f"""<style>
+        /* Единый вид предупреждения о несохранённых изменениях во всех местах CRM */
+        .st-key-{warn_container_key} {{
+            border:2px solid #FF9800!important;
+            border-radius:10px!important;
+            background:#FFF8E1!important;
+            padding:0.65rem 0.8rem!important;
+            margin:0.35rem 0 0.65rem!important;
+        }}
+        .st-key-{warn_container_key} [data-testid="stMarkdownContainer"] p {{
+            color:#5D4037!important;
+            font-size:0.88rem!important;
+            line-height:1.4!important;
+            margin:0.1rem 0 0.35rem!important;
+        }}
+        .st-key-{warn_container_key} [data-testid="stHorizontalBlock"] {{
+            gap:0.5rem!important;
+            align-items:center!important;
+        }}
+        .st-key-{warn_container_key} .stButton > button {{
+            width:100%!important;
+            min-height:34px!important;
+            padding:0.35rem 0.55rem!important;
+            border-radius:8px!important;
+            font-size:0.8rem!important;
+            font-weight:600!important;
+            white-space:normal!important;
+        }}
+        .st-key-{warn_container_key} .stButton > button[kind="primary"] {{
+            background:#bc1661!important;
+            color:#FFFFFF!important;
+            border:1px solid #bc1661!important;
+        }}
+        .st-key-{warn_container_key} .stButton > button[kind="secondary"] {{
+            background:#FFFFFF!important;
+            color:#5A6B7D!important;
+            border:1px solid #DCE0E5!important;
+        }}
+        </style>""", unsafe_allow_html=True)
         with st.container(key=warn_container_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
             st.markdown("Сохранить перед закрытием?")
