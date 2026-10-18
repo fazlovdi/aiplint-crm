@@ -2913,8 +2913,17 @@ try:
     _component_cookies = cookie_manager.get_all() or {}
 except Exception:
     _component_cookies = {}
-cookies = dict(_request_cookies)
-cookies.update(_component_cookies)
+# Prefer the cookies actually sent with the HTTP request. The frontend
+# CookieManager can briefly report empty/stale values during the first render
+# after F5; never let those overwrite a valid server-received auth_token.
+cookies = {
+    str(k): v for k, v in _request_cookies.items()
+    if v is not None and str(v).strip()
+}
+for _cookie_name, _cookie_value in _component_cookies.items():
+    if _cookie_value is not None and str(_cookie_value).strip():
+        if not cookies.get(_cookie_name):
+            cookies[_cookie_name] = _cookie_value
 
 # Авторизация по cookie без токена в URL. Поддерживаем старый auth_token
 # для плавного обновления существующих установок и новые независимые сеансы устройств.
@@ -3311,11 +3320,13 @@ if not st.session_state.authenticated:
                 _pin_attempt = bool(_pin_input and re.fullmatch(r"\d{4,8}", _pin_input or ""))
                 if _pin_attempt and _pin_verify(_remembered_user, _pin_input):
                     _create_browser_session(_remembered_user, remember=True)
+                    time.sleep(0.3)  # let CookieManager commit auth_token in the browser
                     st.toast("Успешный вход", icon="🔓")
                     st.rerun()
                 elif _pin_submit:
                     if _pin_verify(_remembered_user, _pin_input):
                         _create_browser_session(_remembered_user, remember=True)
+                        time.sleep(0.3)  # let CookieManager commit auth_token in the browser
                         st.toast("Успешный вход", icon="🔓")
                         st.rerun()
                     else:
