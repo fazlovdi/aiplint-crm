@@ -2693,20 +2693,6 @@ def _create_browser_session(user, remember=True):
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
         key="set_auth_token_cookie",
     )
-    # Keep the browser associated with this account as a fallback if the auth-token
-    # cookie is not available during the first Streamlit render after a page refresh.
-    # In that case, show the PIN screen rather than asking for login and password.
-    if remember:
-        cookie_manager.set(
-            "remembered_user", str(user.get("login", "")),
-            expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
-            key="set_remembered_user_cookie",
-        )
-    else:
-        try:
-            cookie_manager.delete("remembered_user")
-        except Exception:
-            pass
 
 
 def _passkey_b64url_encode(value):
@@ -2807,11 +2793,6 @@ def _passkey_create_login_session(user):
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
         key="set_auth_token_cookie",
     )
-    cookie_manager.set(
-        "remembered_user", str(user.get("login", "")),
-        expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
-        key="set_passkey_remembered_user_cookie",
-    )
 
 
 def _passkey_process_login_result(result, pending):
@@ -2901,29 +2882,7 @@ def _passkey_process_registration_result(result, pending, current_user):
 
 
 cookie_manager = stx.CookieManager()
-# CookieManager is a frontend component: immediately after F5 its get_all() can
-# temporarily return an incomplete cookie set. Streamlit's request cookies are
-# available synchronously on supported versions, so use them as the first source
-# and merge the component result as a fallback.
-try:
-    _request_cookies = dict(st.context.cookies)
-except Exception:
-    _request_cookies = {}
-try:
-    _component_cookies = cookie_manager.get_all() or {}
-except Exception:
-    _component_cookies = {}
-# Prefer the cookies actually sent with the HTTP request. The frontend
-# CookieManager can briefly report empty/stale values during the first render
-# after F5; never let those overwrite a valid server-received auth_token.
-cookies = {
-    str(k): v for k, v in _request_cookies.items()
-    if v is not None and str(v).strip()
-}
-for _cookie_name, _cookie_value in _component_cookies.items():
-    if _cookie_value is not None and str(_cookie_value).strip():
-        if not cookies.get(_cookie_name):
-            cookies[_cookie_name] = _cookie_value
+cookies = cookie_manager.get_all()
 
 # Авторизация по cookie без токена в URL. Поддерживаем старый auth_token
 # для плавного обновления существующих установок и новые независимые сеансы устройств.
@@ -2967,24 +2926,7 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state.user_login = _cookie_user.get("login")
             st.session_state.user_name = _cookie_user.get("name", _cookie_user.get("login", ""))
             st.session_state.remember_login = True
-            # Do not reset the server-side inactivity clock just because the page
-            # was refreshed. The persisted auth_sessions.expires_at is authoritative.
-            # Once the cookie is proven valid, count this request as activity and
-            # slide the expiry forward for this browser session.
-            _restored_hash = hashlib.sha256(str(_auth_token).encode("utf-8")).hexdigest()
-            _restored_now = moscow_now()
-            _restored_session_found = False
-            for _restored_session in _cookie_user.get("auth_sessions", []):
-                if isinstance(_restored_session, dict) and secrets.compare_digest(
-                    str(_restored_session.get("token_hash", "")), _restored_hash
-                ):
-                    _restored_session["expires_at"] = (
-                        _restored_now + timedelta(minutes=60)
-                    ).isoformat(timespec="seconds")
-                    _restored_session_found = True
-            if _restored_session_found:
-                save_data(st.session_state.crm_store)
-            st.session_state._auth_last_activity = _restored_now
+            st.session_state._auth_last_activity = moscow_now()
             break
 
 if st.session_state.get("authenticated"):
@@ -3256,9 +3198,11 @@ def internal_task_detail_dialog(it_id):
 
 if not st.session_state.authenticated:
         # Не оставляем токены авторизации в адресной строке.
-        # Не удаляем auth_token здесь: CookieManager может вернуть cookies
-        # не сразу после F5, и раннее удаление ломает восстановление сессии.
-        pass
+        try:
+            if cookies.get("auth_token"):
+                cookie_manager.delete("auth_token")
+        except (KeyError, TypeError):
+            pass
 
 MGR_PLACEHOLDER = "Выбери ответственного"
 
@@ -3290,7 +3234,7 @@ if not st.session_state.authenticated:
                 # Verify on every complete candidate length (4–8 digits) and sign in
                 # immediately when the entered PIN matches, including on iPhone.
                 _pin_input = st.text_input(
-                    "PIN-код:", type="password", max_chars=8,
+                    "PIN-код:", max_chars=8,
                     placeholder="Введите PIN-код", key="remembered_pin_input",
                     help="Введите PIN из 4–8 цифр. При правильном PIN вход выполнится автоматически."
                 )
@@ -3302,7 +3246,12 @@ if not st.session_state.authenticated:
                       el.setAttribute('inputmode','numeric');
                       el.setAttribute('pattern','[0-9]*');
                       el.setAttribute('enterkeyhint','go');
-                      el.setAttribute('autocomplete','one-time-code');\n                      el.setAttribute('name','crm_pin_code');\n                      el.setAttribute('data-lpignore','true');\n                      el.setAttribute('data-1p-ignore','true');
+                      // Treat this as a numeric PIN, not a website password, so the
+                      // browser password manager does not offer to save it.
+                      el.setAttribute('autocomplete','one-time-code');
+                      el.setAttribute('name','crm-pin-code');
+                      el.style.webkitTextSecurity = 'disc';
+                      el.style.textSecurity = 'disc';
                     });
                   }
                   tunePin();
@@ -3320,13 +3269,11 @@ if not st.session_state.authenticated:
                 _pin_attempt = bool(_pin_input and re.fullmatch(r"\d{4,8}", _pin_input or ""))
                 if _pin_attempt and _pin_verify(_remembered_user, _pin_input):
                     _create_browser_session(_remembered_user, remember=True)
-                    time.sleep(0.3)  # let CookieManager commit auth_token in the browser
                     st.toast("Успешный вход", icon="🔓")
                     st.rerun()
                 elif _pin_submit:
                     if _pin_verify(_remembered_user, _pin_input):
                         _create_browser_session(_remembered_user, remember=True)
-                        time.sleep(0.3)  # let CookieManager commit auth_token in the browser
                         st.toast("Успешный вход", icon="🔓")
                         st.rerun()
                     else:
