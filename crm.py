@@ -3234,7 +3234,7 @@ if not st.session_state.authenticated:
                 # Verify on every complete candidate length (4–8 digits) and sign in
                 # immediately when the entered PIN matches, including on iPhone.
                 _pin_input = st.text_input(
-                    "PIN-код:", max_chars=8,
+                    "PIN-код:", type="password", max_chars=8,
                     placeholder="Введите PIN-код", key="remembered_pin_input",
                     help="Введите PIN из 4–8 цифр. При правильном PIN вход выполнится автоматически."
                 )
@@ -3246,12 +3246,7 @@ if not st.session_state.authenticated:
                       el.setAttribute('inputmode','numeric');
                       el.setAttribute('pattern','[0-9]*');
                       el.setAttribute('enterkeyhint','go');
-                      // Treat this as a numeric PIN, not a website password, so the
-                      // browser password manager does not offer to save it.
-                      el.setAttribute('autocomplete','one-time-code');
-                      el.setAttribute('name','crm-pin-code');
-                      el.style.webkitTextSecurity = 'disc';
-                      el.style.textSecurity = 'disc';
+                      el.setAttribute('autocomplete','current-password');
                     });
                   }
                   tunePin();
