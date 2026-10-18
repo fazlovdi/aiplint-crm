@@ -1166,16 +1166,61 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         st.error("В CRM нет пользователей, которым можно назначить напоминание.")
         return
 
+    # Единое оформление для окна создания напоминания независимо от того,
+    # из какой карточки CRM оно открыто. Селекторы намеренно глобальные внутри
+    # Streamlit dialog, чтобы CSS родительских карточек не менял вид элементов.
     close_css_key = f"rem_close_row_{key_suffix}"
-    st.markdown(f'''<style>
-    .st-key-{close_css_key} {{ position:relative!important;z-index:10000!important;width:100%!important;margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important; }}
-    .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ justify-content:flex-end!important;gap:0!important; }}
-    .st-key-{close_css_key} [data-testid="column"]:first-child {{ display:none!important; }}
-    .st-key-{close_css_key} [data-testid="column"]:last-child {{ flex:0 0 36px!important;width:36px!important;min-width:36px!important; }}
-    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
-    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }}
-    .st-key-{close_css_key} > div {{ gap:0!important; }}
-    </style>''', unsafe_allow_html=True)
+    st.markdown("""<style>
+    /* Кнопка закрытия — единый стиль для всех контекстов */
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] {
+        position:relative!important;z-index:10000!important;width:100%!important;
+        margin:0!important;padding:0!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] [data-testid="stHorizontalBlock"] {
+        justify-content:flex-end!important;gap:0!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] [data-testid="column"]:first-child {
+        display:none!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] [data-testid="column"]:last-child {
+        flex:0 0 36px!important;width:36px!important;min-width:36px!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] .stButton > button {
+        width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;
+        padding:0!important;font-size:1.2rem!important;line-height:1!important;
+        background:#FFFFFF!important;border:1px solid #DCE0E5!important;
+        border-radius:8px!important;color:#5A6B7D!important;display:flex!important;
+        align-items:center!important;justify-content:center!important;margin:0!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_close_row_"] .stButton > button:hover {
+        background:#EEF0F3!important;border-color:#C9CFD7!important;
+    }
+
+    /* Предупреждение о несохранённых изменениях — единый стиль */
+    [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] {
+        border:2px solid #FF9800!important;border-radius:10px!important;
+        background:#FFF8E1!important;padding:0.65rem 0.8rem!important;
+        margin:0.35rem 0 0.65rem!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] [data-testid="stMarkdownContainer"] p {
+        color:#5D4037!important;font-size:0.88rem!important;line-height:1.4!important;
+        margin:0.1rem 0 0.35rem!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] [data-testid="stHorizontalBlock"] {
+        gap:0.5rem!important;align-items:center!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] .stButton > button {
+        width:100%!important;min-height:36px!important;padding:0.4rem 0.6rem!important;
+        border-radius:8px!important;font-size:0.82rem!important;font-weight:600!important;
+        white-space:normal!important;line-height:1.25!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] .stButton > button[kind="primary"] {
+        background:#bc1661!important;color:#FFFFFF!important;border:1px solid #bc1661!important;
+    }
+    [data-testid="stDialog"] [class*="st-key-rem_unsaved_warn_"] .stButton > button[kind="secondary"] {
+        background:#FFFFFF!important;color:#5A6B7D!important;border:1px solid #DCE0E5!important;
+    }
+    </style>""", unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -1198,45 +1243,6 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     if st.session_state.get(warning_key):
         warn_container_key = f"rem_unsaved_warn_{key_suffix}"
-        st.markdown(f"""<style>
-        /* Единый вид предупреждения о несохранённых изменениях во всех местах CRM */
-        .st-key-{warn_container_key} {{
-            border:2px solid #FF9800!important;
-            border-radius:10px!important;
-            background:#FFF8E1!important;
-            padding:0.65rem 0.8rem!important;
-            margin:0.35rem 0 0.65rem!important;
-        }}
-        .st-key-{warn_container_key} [data-testid="stMarkdownContainer"] p {{
-            color:#5D4037!important;
-            font-size:0.88rem!important;
-            line-height:1.4!important;
-            margin:0.1rem 0 0.35rem!important;
-        }}
-        .st-key-{warn_container_key} [data-testid="stHorizontalBlock"] {{
-            gap:0.5rem!important;
-            align-items:center!important;
-        }}
-        .st-key-{warn_container_key} .stButton > button {{
-            width:100%!important;
-            min-height:34px!important;
-            padding:0.35rem 0.55rem!important;
-            border-radius:8px!important;
-            font-size:0.8rem!important;
-            font-weight:600!important;
-            white-space:normal!important;
-        }}
-        .st-key-{warn_container_key} .stButton > button[kind="primary"] {{
-            background:#bc1661!important;
-            color:#FFFFFF!important;
-            border:1px solid #bc1661!important;
-        }}
-        .st-key-{warn_container_key} .stButton > button[kind="secondary"] {{
-            background:#FFFFFF!important;
-            color:#5A6B7D!important;
-            border:1px solid #DCE0E5!important;
-        }}
-        </style>""", unsafe_allow_html=True)
         with st.container(key=warn_container_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
             st.markdown("Сохранить перед закрытием?")
