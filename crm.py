@@ -2465,7 +2465,7 @@ def _create_browser_session(user, remember=True):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
-        "expires_at": (datetime.now() + timedelta(days=3650 if remember else 1)).isoformat(timespec="seconds"),
+        "expires_at": (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
     user["auth_sessions"] = sessions[-30:]
@@ -2475,10 +2475,14 @@ def _create_browser_session(user, remember=True):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = bool(remember)
-    # Do not set auth_token here: this app deliberately requires PIN after reload,
-    # and CookieManager.set uses a shared Streamlit key that conflicts when called twice
-    # in the same run (remembered_user + auth_token). The server-side session record is
-    # retained for revocation/audit, while remembered_user is the only persistent cookie.
+    st.session_state._auth_last_activity = datetime.now()
+    # One signed-by-randomness bearer cookie; server-side record limits it to 60 minutes
+    # of inactivity. The browser cookie can persist, but an expired server session cannot.
+    cookie_manager.set(
+        "auth_token", token,
+        expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
+        key="set_auth_token_cookie",
+    )
 
 
 def _passkey_b64url_encode(value):
@@ -2562,7 +2566,7 @@ def _passkey_create_login_session(user):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
-        "expires_at": (datetime.now() + timedelta(days=30)).isoformat(timespec="seconds"),
+        "expires_at": (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
     # Limit unbounded growth while keeping recent device sessions.
@@ -2573,8 +2577,12 @@ def _passkey_create_login_session(user):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = True
-    # Do not set auth_token: a fresh page session must require PIN/Passkey, and setting
-    # it here can collide with another CookieManager.set call in the same Streamlit run.
+    st.session_state._auth_last_activity = datetime.now()
+    cookie_manager.set(
+        "auth_token", token,
+        expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650),
+        key="set_auth_token_cookie",
+    )
 
 
 def _passkey_process_login_result(result, pending):
@@ -2697,8 +2705,46 @@ _auth_token = cookies.get("auth_token")
 _remembered_login = str(cookies.get("remembered_user") or "").strip()
 if st.session_state.get("_force_password_login"):
     _remembered_login = ""
-# Deliberately do not restore an authenticated state from auth_token on a fresh
-# Streamlit session: remembered browsers must enter their PIN, other browsers need password.
+
+# Restore a valid browser session after refresh/reopen. Server-side expiry is sliding:
+# it is extended only while the user is active, and inactivity over 60 minutes expires it.
+if _auth_token and not st.session_state.get("authenticated") and not st.session_state.get("_force_password_login"):
+    for _cookie_user in st.session_state.crm_store.get("users", []):
+        if _user_has_auth_token(_cookie_user, _auth_token):
+            st.session_state.authenticated = True
+            st.session_state.user_role = _cookie_user.get("role")
+            st.session_state.user_login = _cookie_user.get("login")
+            st.session_state.user_name = _cookie_user.get("name", _cookie_user.get("login", ""))
+            st.session_state.remember_login = True
+            st.session_state._auth_last_activity = datetime.now()
+            break
+
+if st.session_state.get("authenticated"):
+    _last_activity = st.session_state.get("_auth_last_activity")
+    if isinstance(_last_activity, datetime) and datetime.now() - _last_activity >= timedelta(minutes=60):
+        st.session_state.authenticated = False
+        st.session_state.user_role = None
+        st.session_state.user_login = None
+        st.session_state.user_name = None
+        st.session_state.pop("_auth_last_activity", None)
+        st.session_state["_auth_expired"] = True
+        try:
+            cookie_manager.delete("auth_token")
+        except Exception:
+            pass
+    elif _auth_token:
+        # Renew expiry only when enough time has passed to avoid a database write per rerun.
+        if not isinstance(_last_activity, datetime) or (datetime.now() - _last_activity).total_seconds() >= 60:
+            _token_hash = hashlib.sha256(str(_auth_token).encode("utf-8")).hexdigest()
+            _expiry_changed = False
+            for _active_user in st.session_state.crm_store.get("users", []):
+                for _active_session in _active_user.get("auth_sessions", []):
+                    if isinstance(_active_session, dict) and secrets.compare_digest(str(_active_session.get("token_hash", "")), _token_hash):
+                        _active_session["expires_at"] = (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds")
+                        _expiry_changed = True
+            if _expiry_changed:
+                save_data(st.session_state.crm_store)
+            st.session_state._auth_last_activity = datetime.now()
     
 def _render_it_edit(it):
     """Inline edit form for internal task."""
@@ -2959,6 +3005,8 @@ def check_login(username, password):
     return False
 
 if not st.session_state.authenticated:
+    if st.session_state.pop("_auth_expired", False):
+        st.info("Сессия завершена после 60 минут бездействия. Войдите снова.")
     # A remembered browser is identified by a non-secret login cookie, but must prove
     # knowledge of the PIN on every fresh page session.
     _remembered_user = get_user_by_login(_remembered_login) if _remembered_login else None
@@ -3057,7 +3105,7 @@ if not st.session_state.authenticated:
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
             remember_login = st.checkbox("Запомнить меня в этом браузере", value=False, key="remember_login_checkbox")
             if remember_login:
-                st.caption("После первого входа браузер будет помнить аккаунт, но при каждом новом открытии CRM потребуется PIN-код.")
+                st.caption("Сессия действует до 60 минут бездействия. Обновление страницы не требует повторного входа, пока сессия активна.")
                 _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="password", max_chars=8, key="new_login_pin")
                 _confirm_pin = st.text_input("Повторите PIN-код:", type="password", max_chars=8, key="confirm_login_pin")
             else:
@@ -3074,12 +3122,7 @@ if not st.session_state.authenticated:
                                 _user_for_login["login_pin"] = _pin_hash(_new_pin)
                                 # Persist the PIN hash before issuing cookies/session.
                                 save_data(st.session_state.crm_store)
-                                # Persistent first-party cookie: remember this browser for 10 years.
-                                cookie_manager.set(
-                                    "remembered_user", _user_for_login["login"],
-                                    expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650),
-                                    key="set_remembered_user_cookie",
-                                )
+                                # The auth_token cookie remembers this browser; no separate login cookie is needed.
                             else:
                                 try:
                                     cookie_manager.delete("remembered_user")
@@ -3173,14 +3216,17 @@ with st.sidebar:
                         # При смене пароля отзываем старые устройства и создаём
                         # новый сеанс только для текущего браузера.
                         u.pop("auth_token", None)
-                        _session_days = 30 if st.session_state.get("remember_login", False) else 1
                         u["auth_sessions"] = [{
                             "token_hash": hashlib.sha256(_new_token.encode("utf-8")).hexdigest(),
                             "created_at": now_str(),
-                            "expires_at": (datetime.now() + timedelta(days=_session_days)).isoformat(timespec="seconds"),
+                            "expires_at": (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
                         }]
                 save_data(st.session_state.crm_store)
-                cookie_manager.set("auth_token", _new_token, key="set_auth_token_cookie")
+                cookie_manager.set(
+                    "auth_token", _new_token,
+                    expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650 if st.session_state.get("remember_login", False) else 1),
+                    key="set_auth_token_cookie",
+                )
                 st.toast("Пароль изменён", icon="✅")
                 st.rerun()
             else: st.error("Пароли не совпадают")
@@ -3259,6 +3305,7 @@ with st.sidebar:
         st.session_state.user_login = None
         st.session_state.user_name = None
         st.session_state.remember_login = False
+        st.session_state.pop("_auth_last_activity", None)
         st.rerun()
 
 # Compute counters for tabs — only by authorized user
