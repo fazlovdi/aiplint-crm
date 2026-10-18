@@ -1175,7 +1175,7 @@ def render_entity_chat(entity, entity_type, entity_id):
 @st.dialog("Создать напоминание", width="medium")
 def create_reminder_dialog(entity_type, entity_id, entity_label):
     store = st.session_state.crm_store
-    users = [u for u in store.get("users", []) if u.get("login")]
+    users = [u for u in store.get("users", []) if u.get("login") and u.get("role") != "admin" and u.get("login") != "admin"]
     key_suffix = f"{entity_type}_{entity_id}"
     text_key = f"rem_text_{key_suffix}"
     date_key = f"rem_date_{key_suffix}"
@@ -1235,7 +1235,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     with c1:
         due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
     with c2:
-        due_time = st.time_input("Время", value=None, key=time_key, help=None)
+        due_time = st.time_input("Время", value=datetime.now().time().replace(second=0, microsecond=0), format="HH:mm", key=time_key, help=None)
     recipient_options = [""] + logins
     recipient = st.selectbox("Получатель", recipient_options, index=0,
         format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
