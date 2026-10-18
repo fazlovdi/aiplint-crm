@@ -1235,7 +1235,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     with c1:
         due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
     with c2:
-        due_time = st.time_input("Время", value=datetime.now().time().replace(second=0, microsecond=0), format="HH:mm", key=time_key, help=None)
+        due_time = st.time_input("Время", value=datetime.now().time().replace(second=0, microsecond=0), key=time_key, help=None)
     recipient_options = [""] + logins
     recipient = st.selectbox("Получатель", recipient_options, index=0,
         format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
