@@ -1173,9 +1173,10 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ display:flex!important; justify-content:flex-end!important; gap:0!important; }}
     .st-key-{close_css_key} [data-testid="column"] {{ flex:0 0 44px!important; width:44px!important; min-width:44px!important; max-width:44px!important; padding:0!important; }}
     .st-key-{close_css_key} [data-testid="column"] > div, .st-key-{close_css_key} .stButton {{ width:44px!important; min-width:44px!important; max-width:44px!important; }}
-    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
+    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-family:Arial,sans-serif!important;font-size:20px!important;font-weight:700!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;-webkit-text-fill-color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
+    .st-key-{close_css_key} .stButton > button * {{ color:#5A6B7D!important;-webkit-text-fill-color:#5A6B7D!important;opacity:1!important;visibility:visible!important;font-family:Arial,sans-serif!important;font-size:20px!important;font-weight:700!important; }}
     .st-key-{close_css_key} .stButton > button:hover {{ background:#F8F9FB!important;border-color:#98A2B3!important;color:#101828!important; }}
-    .st-key-{close_css_key} .stButton > button p {{ margin:0!important;line-height:1!important; }}
+    .st-key-{close_css_key} .stButton > button p {{ display:block!important;margin:0!important;padding:0!important;line-height:1!important; }}
     /* Keep native grey date/time fields; only retain readable text and icon colors. */
     .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] input,
     .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] input {{ color:#2C3E50!important;-webkit-text-fill-color:#2C3E50!important; }}
@@ -1185,7 +1186,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
+            if st.button("X", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
                 _has_unsaved = bool(
                     str(st.session_state.get(text_key, "") or "").strip()
                     or st.session_state.get(date_key) is not None
