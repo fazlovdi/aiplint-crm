@@ -148,10 +148,12 @@ st.markdown("""
     .deals-sticky-placeholder { height: 0; }
     /* Scroll-to-top button */
 
-    /* Notification dialog: width reduced by half */
-    [data-testid="stDialog"] [aria-label~="Уведомления"],
-    [data-testid="stDialog"]:has(.st-key-notif_dlg) {
+    /* Notification dialog: constrain the actual outer dialog, not only its contents */
+    [data-testid="stDialog"] [role="dialog"]:has(.st-key-notif_dlg),
+    [data-testid="stDialog"]:has(.st-key-notif_dlg) [role="dialog"],
+    [data-testid="stDialog"]:has(.st-key-notif_dlg) > div {
         width: 24vw !important;
+        min-width: 24vw !important;
         max-width: 24vw !important;
         max-height: 50vh !important;
     }
@@ -175,8 +177,7 @@ st.markdown("""
     /* Bell button compact */
     .crm-bell-btn button { min-width: 48px !important; font-size: 1rem !important; padding: 0.4rem 0.6rem !important; }
     /* Notification dialog sizing */
-    [data-testid="stDialog"] [aria-label="🔔 Уведомления"] ~ div,
-    .st-key-notif_dlg { width: 24vw !important; max-width: 24vw !important; max-height: 50vh !important; overflow-y: auto !important; }
+    .st-key-notif_dlg { max-height: 50vh !important; overflow-y: auto !important; }
     /* Read and clear notification buttons: half-size, without changing close button */
     .st-key-btn_read_all_dlg button,
     .st-key-btn_clear_read_dlg button {
@@ -220,9 +221,10 @@ st.markdown("""
         position: absolute !important;
         top: 0.4rem !important;
         right: 0.4rem !important;
-        width: 32px !important;
-        height: 32px !important;
-        min-height: 32px !important;
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        min-height: 36px !important;
         padding: 0 !important;
         font-size: 1.1rem !important;
         line-height: 1 !important;
