@@ -3478,6 +3478,14 @@ st.markdown("""<style>
     line-height: 1 !important;
 }
 </style>""", unsafe_allow_html=True)
+# Нажатие на ссылку заголовка перечитывает базу, не меняя внешний вид заголовка.
+if st.query_params.get("crm_refresh_db") == "1":
+    with st.spinner("⟳ Обновляем базу данных…"):
+        st.session_state.crm_store = load_data()
+    st.query_params.pop("crm_refresh_db", None)
+    st.toast("База данных обновлена", icon="🔄")
+    st.rerun()
+
 _header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
 with _header_left:
     _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
@@ -3489,39 +3497,14 @@ with _header_left:
     with _bell_col:
         render_notifications_bell()
 with _header_center:
-    # Заголовок работает как кнопка обновления актуального состояния основной SQLite-базы.
     st.markdown("""<style>
-    .st-key-crm_refresh_database_btn { width:100%; }
-    .st-key-crm_refresh_database_btn [data-testid="stButton"] { width:100%; }
-    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button {
-        width:100%!important; min-height:0!important; height:auto!important;
-        padding:0!important; margin:0!important; border:0!important;
-        background:transparent!important; box-shadow:none!important;
-        color:inherit!important; border-radius:0!important;
-    }
-    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button p {
-        width:100%; margin:0!important; padding:0!important;
-        font-size:2rem!important; line-height:1.2!important; font-weight:700!important;
-        text-align:center!important; color:inherit!important;
-        transition:color .18s ease, transform .18s ease;
-    }
-    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button:hover p {
-        color:#BC1661!important; transform:translateY(-1px);
-    }
-    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button:active p {
-        transform:scale(.97);
-    }
-    .st-key-crm_refresh_database_btn [data-testid="stButton"] > button:focus:not(:active) {
-        outline:none!important; box-shadow:none!important;
-    }
-    </style>""", unsafe_allow_html=True)
-    if st.button("Айплинт CRM", key="crm_refresh_database_btn", help="Нажмите, чтобы перечитать актуальные данные из основной базы CRM"):
-        with st.spinner("Обновляем базу данных…"):
-            _fresh_crm_data = load_data()
-            st.session_state.crm_store = _fresh_crm_data
-        st.toast("База данных обновлена", icon="🔄")
-        st.rerun()
-    st.markdown(f"""<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>""", unsafe_allow_html=True)
+    .crm-title-link { color:inherit!important; text-decoration:none!important; cursor:pointer; }
+    .crm-title-link:hover { color:inherit!important; text-decoration:none!important; }
+    </style>
+    """ + f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
+        <h1 style="text-align:center;margin:0!important;padding:0!important;"><a class="crm-title-link" href="?crm_refresh_db=1" title="Нажмите, чтобы обновить данные CRM">Айплинт CRM</a></h1>
+        <p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
+    </div>""", unsafe_allow_html=True)
 with _header_right:
     components.html("""
     <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
