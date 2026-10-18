@@ -245,6 +245,54 @@ st.markdown("""
         background: #EEF0F3 !important;
         border-color: #C9CFD7 !important;
     }
+    /* Match the working reminder close button in every OTHER dialog.
+       The reminder's own styles remain untouched. */
+    [class*="st-key-close_row_"] .stButton > button,
+    [class*="st-key-task_report_close_row_"] .stButton > button,
+    [class*="st-key-deal_report_close_row_"] .stButton > button,
+    [class*="st-key-rem_close_row_"] .stButton > button:not([data-preserve-reminder-style]),
+    [class*="st-key-add_client_close_"] .stButton > button {
+        width: 36px !important;
+        height: 36px !important;
+        min-height: 36px !important;
+        padding: 0 !important;
+        font-family: Arial, sans-serif !important;
+        font-size: 20px !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+        background: #FFFFFF !important;
+        border: 1px solid #DCE0E5 !important;
+        border-radius: 8px !important;
+        color: #5A6B7D !important;
+        -webkit-text-fill-color: #5A6B7D !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 0 !important;
+    }
+    [class*="st-key-close_row_"] .stButton > button p,
+    [class*="st-key-task_report_close_row_"] .stButton > button p,
+    [class*="st-key-deal_report_close_row_"] .stButton > button p,
+    [class*="st-key-add_client_close_"] .stButton > button p {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+        color: #5A6B7D !important;
+        -webkit-text-fill-color: #5A6B7D !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        font-family: Arial, sans-serif !important;
+        font-size: 20px !important;
+        font-weight: 700 !important;
+    }
+    [class*="st-key-close_row_"] .stButton > button:hover,
+    [class*="st-key-task_report_close_row_"] .stButton > button:hover,
+    [class*="st-key-deal_report_close_row_"] .stButton > button:hover,
+    [class*="st-key-add_client_close_"] .stButton > button:hover {
+        background: #F8F9FB !important;
+        border-color: #98A2B3 !important;
+    }
     /* Unsaved changes warning box */
     .crm-unsaved-warning {
         border: 2px solid #FF9800 !important;
