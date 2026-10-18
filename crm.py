@@ -3515,9 +3515,9 @@ with _header_center:
     }
     </style>
     """ + f"""<div class="greeting-block" style="text-align:center;margin:0!important;padding:0!important;">
-        <h1 style="text-align:center;margin:0!important;padding:0!important;"><a class="crm-title-link" href="?crm_refresh_db=1" title="Нажмите, чтобы обновить данные CRM">Айплинт CRM</a></h1>
-        <p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
-    </div>""", unsafe_allow_html=True)
+<h1 style="text-align:center;margin:0!important;padding:0!important;"><a class="crm-title-link" href="?crm_refresh_db=1" title="Нажмите, чтобы обновить данные CRM">Айплинт CRM</a></h1>
+<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>
+</div>""", unsafe_allow_html=True)
 with _header_right:
     components.html("""
     <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
