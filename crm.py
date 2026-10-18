@@ -32,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PIL import Image as PILImage
 import extra_streamlit_components as stx
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from collections import defaultdict
 
 def _safe_id(v):
@@ -516,14 +517,20 @@ if isinstance(raw_token, str):
 else:
     YANDEX_TOKEN = ""
 
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
+
+def moscow_now():
+    """Текущее московское время без tzinfo для совместимости с существующими строками дат CRM."""
+    return datetime.now(MOSCOW_TZ).replace(tzinfo=None)
+
 def now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return moscow_now().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_sort_key(entity):
     return entity.get("last_modified", "1970-01-01 00:00:00")
 
 def generate_task_number(prefix):
-    year = datetime.now().strftime("%y")
+    year = moscow_now().strftime("%y")
     max_num = 0
     for c in st.session_state.crm_store.get("clients", []):
         for t in c.get("tasks", []):
@@ -534,7 +541,7 @@ def generate_task_number(prefix):
     return f"{prefix}{year}-{max_num + 1}"
 
 def generate_deal_number():
-    year = datetime.now().strftime("%y")
+    year = moscow_now().strftime("%y")
     max_num = 0
     for d in st.session_state.crm_store.get("deals", []):
         dn = d.get("deal_number", "")
@@ -544,7 +551,7 @@ def generate_deal_number():
     return f"Сделка №{year}-{max_num + 1}"
 
 def assign_task_numbers(data):
-    year = datetime.now().strftime("%y")
+    year = moscow_now().strftime("%y")
     zk_max, zs_max = 0, 0
     for c in data.get("clients", []):
         for t in c.get("tasks", []):
@@ -566,7 +573,7 @@ def assign_task_numbers(data):
                     t["task_number"] = f"ЗК{year}-{zk_max}"
 
 def assign_deal_numbers(data):
-    year = datetime.now().strftime("%y")
+    year = moscow_now().strftime("%y")
     max_num = 0
     for d in data.get("deals", []):
         dn = d.get("deal_number", "")
@@ -808,7 +815,7 @@ def save_uploaded_file(u_file, c_id, prefix=""):
         for f in d.get("close_files", []):
             if f.get("file_hash") == file_hash and file_hash:
                 return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
-    name = f"{c_id}_{prefix}_{int(datetime.now().timestamp())}_{u_file.name}"
+    name = f"{c_id}_{prefix}_{int(time.time())}_{u_file.name}"
     if YANDEX_TOKEN:
         rp = f"CRM_NE_TROGAT/uploads/{name}"
         if upload_file_to_yandex(b, name):
@@ -858,17 +865,17 @@ def get_deal_by_id(d_id):
     return None
 
 def parse_deadline(ds):
-    if not ds: return datetime.now().date()
+    if not ds: return moscow_now().date()
     try: return datetime.strptime(ds, "%Y-%m-%d").date()
     except:
         try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").date()
-        except: return datetime.now().date()
+        except: return moscow_now().date()
 
 def is_task_overdue(task):
     if task.get("done"): return False
     dl = task.get("deadline", "")
     if not dl: return False
-    now = datetime.now()
+    now = moscow_now()
     try:
         if len(dl) == 10: deadline = datetime.strptime(dl, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
         elif len(dl) >= 16: deadline = datetime.strptime(dl[:16], "%Y-%m-%d %H:%M")
@@ -1095,7 +1102,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{datetime.now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -1166,7 +1173,7 @@ def render_entity_chat(entity, entity_type, entity_id):
       _send_clicked = st.button("Отправить", key=f"{entity_type}_send_{entity_id}", use_container_width=True)
     if _send_clicked:
         if msg_text.strip():
-            chat.append({"user": st.session_state.get("user_name", ""), "text": msg_text.strip(), "time": datetime.now().strftime("%d.%m.%Y %H:%M")})
+            chat.append({"user": st.session_state.get("user_name", ""), "text": msg_text.strip(), "time": moscow_now().strftime("%d.%m.%Y %H:%M")})
             st.session_state[clr_key] = True
             entity["last_modified"] = now_str()
             commit_and_rerun(st.session_state.crm_store)
@@ -1244,7 +1251,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
         st.caption("Выберите дату: день, месяц и год")
     with c2:
-        due_time = st.time_input("Время", value=datetime.now().time().replace(second=0, microsecond=0), key=time_key, help=None)
+        due_time = st.time_input("Время", value=moscow_now().time().replace(second=0, microsecond=0), key=time_key, help=None)
         st.caption("Выберите часы и минуты")
     recipient_options = [""] + logins
     recipient = st.selectbox("Получатель", recipient_options, index=0,
@@ -1267,7 +1274,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
                 st.warning(error)
         else:
             due = datetime.combine(due_date, due_time).replace(second=0, microsecond=0)
-            if due <= datetime.now():
+            if due <= moscow_now():
                 st.warning("Выберите дату и время в будущем.")
             else:
                 store.setdefault("reminders", []).append({"id":uuid.uuid4().hex,"entity_type":str(entity_type),"entity_id":str(entity_id),"entity_label":str(entity_label),"text":text_value,"created_at":now_str(),"created_by":st.session_state.get("user_login", ""),"recipient":recipient,"due_at":due.strftime("%Y-%m-%d %H:%M:%S"),"sent":False,"sent_at":""})
@@ -1287,7 +1294,7 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
     st.markdown("**Напоминания**")
     items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
     items.sort(key=lambda r:r.get("due_at", ""))
-    now = datetime.now()
+    now = moscow_now()
     users = {u.get("login"):u for u in store.get("users", [])}
     if not items:
         st.caption("Напоминаний пока нет")
@@ -1334,7 +1341,7 @@ def process_due_reminders():
     store = st.session_state.get("crm_store")
     if not isinstance(store, dict): return
     reminders = store.setdefault("reminders", [])
-    now = datetime.now()
+    now = moscow_now()
     due_items = []
     for r in reminders:
         if r.get("sent") or not r.get("recipient"):
@@ -1671,7 +1678,7 @@ def render_task_detail(t, cl, d, key_prefix):
             ntc = st.text_input("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"tc_input_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439...")
             if st.button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", key=f"tc_btn_{key_prefix}", use_container_width=True):
                 if ntc.strip():
-                    t.setdefault("task_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
+                    t.setdefault("task_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
                     t["last_modified"] = now_str()
                     st.session_state[tc_clr_key] = True
                     commit_and_rerun(st.session_state.crm_store, "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
@@ -2561,7 +2568,7 @@ def close_deal_dialog(deal_id):
             for d in st.session_state.crm_store["deals"]:
                 if d["id"] == deal_id:
                     d['status'] = "Сделка закрыта"
-                    d['closed_date'] = datetime.now().strftime("%Y-%m-%d")
+                    d['closed_date'] = moscow_now().strftime("%Y-%m-%d")
                     d['close_report'] = report.strip()
                     d['close_files'] = normalize_file_list(save_uploaded_files(close_files, d["client_id"], "deal_close")) if close_files else []
                     d["last_modified"] = now_str()
@@ -2652,7 +2659,7 @@ def _create_browser_session(user, remember=True):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
-        "expires_at": (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
+        "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
     user["auth_sessions"] = sessions[-30:]
@@ -2662,12 +2669,12 @@ def _create_browser_session(user, remember=True):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = bool(remember)
-    st.session_state._auth_last_activity = datetime.now()
+    st.session_state._auth_last_activity = moscow_now()
     # One signed-by-randomness bearer cookie; server-side record limits it to 60 minutes
     # of inactivity. The browser cookie can persist, but an expired server session cannot.
     cookie_manager.set(
         "auth_token", token,
-        expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
+        expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
         key="set_auth_token_cookie",
     )
 
@@ -2708,7 +2715,7 @@ def _passkey_make_authentication_pending():
         "challenge": _passkey_b64url_encode(options.challenge),
         "options_json": options_to_json(options),
         "event_id": secrets.token_urlsafe(18),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": moscow_now().isoformat(timespec="seconds"),
     }
 
 
@@ -2731,14 +2738,14 @@ def _passkey_make_registration_pending(user):
         "options_json": options_to_json(options),
         "event_id": secrets.token_urlsafe(18),
         "login": str(user.get("login", "")),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": moscow_now().isoformat(timespec="seconds"),
     }
 
 
 def _passkey_pending_is_fresh(pending):
     try:
         created = datetime.fromisoformat(str(pending.get("created_at", "")))
-        return datetime.now() - created <= timedelta(minutes=2)
+        return moscow_now() - created <= timedelta(minutes=2)
     except (TypeError, ValueError):
         return False
 
@@ -2753,7 +2760,7 @@ def _passkey_create_login_session(user):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
-        "expires_at": (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
+        "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
     # Limit unbounded growth while keeping recent device sessions.
@@ -2764,10 +2771,10 @@ def _passkey_create_login_session(user):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = True
-    st.session_state._auth_last_activity = datetime.now()
+    st.session_state._auth_last_activity = moscow_now()
     cookie_manager.set(
         "auth_token", token,
-        expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650),
+        expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
         key="set_auth_token_cookie",
     )
 
@@ -2876,7 +2883,7 @@ def _user_has_auth_token(user, token):
             expires_at = auth_session.get("expires_at")
             if expires_at:
                 try:
-                    if datetime.fromisoformat(str(expires_at)) < datetime.now():
+                    if datetime.fromisoformat(str(expires_at)) < moscow_now():
                         continue
                 except (TypeError, ValueError):
                     continue
@@ -2903,12 +2910,12 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state.user_login = _cookie_user.get("login")
             st.session_state.user_name = _cookie_user.get("name", _cookie_user.get("login", ""))
             st.session_state.remember_login = True
-            st.session_state._auth_last_activity = datetime.now()
+            st.session_state._auth_last_activity = moscow_now()
             break
 
 if st.session_state.get("authenticated"):
     _last_activity = st.session_state.get("_auth_last_activity")
-    if isinstance(_last_activity, datetime) and datetime.now() - _last_activity >= timedelta(minutes=60):
+    if isinstance(_last_activity, datetime) and moscow_now() - _last_activity >= timedelta(minutes=60):
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -2921,17 +2928,17 @@ if st.session_state.get("authenticated"):
             pass
     elif _auth_token:
         # Renew expiry only when enough time has passed to avoid a database write per rerun.
-        if not isinstance(_last_activity, datetime) or (datetime.now() - _last_activity).total_seconds() >= 60:
+        if not isinstance(_last_activity, datetime) or (moscow_now() - _last_activity).total_seconds() >= 60:
             _token_hash = hashlib.sha256(str(_auth_token).encode("utf-8")).hexdigest()
             _expiry_changed = False
             for _active_user in st.session_state.crm_store.get("users", []):
                 for _active_session in _active_user.get("auth_sessions", []):
                     if isinstance(_active_session, dict) and secrets.compare_digest(str(_active_session.get("token_hash", "")), _token_hash):
-                        _active_session["expires_at"] = (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds")
+                        _active_session["expires_at"] = (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds")
                         _expiry_changed = True
             if _expiry_changed:
                 save_data(st.session_state.crm_store)
-            st.session_state._auth_last_activity = datetime.now()
+            st.session_state._auth_last_activity = moscow_now()
     
 def _render_it_edit(it):
     """Inline edit form for internal task."""
@@ -3409,12 +3416,12 @@ with st.sidebar:
                         u["auth_sessions"] = [{
                             "token_hash": hashlib.sha256(_new_token.encode("utf-8")).hexdigest(),
                             "created_at": now_str(),
-                            "expires_at": (datetime.now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
+                            "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
                         }]
                 save_data(st.session_state.crm_store)
                 cookie_manager.set(
                     "auth_token", _new_token,
-                    expires_at=datetime.now().replace(microsecond=0) + timedelta(days=3650 if st.session_state.get("remember_login", False) else 1),
+                    expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650 if st.session_state.get("remember_login", False) else 1),
                     key="set_auth_token_cookie",
                 )
                 st.toast("Пароль изменён", icon="✅")
@@ -3694,7 +3701,7 @@ def render_deal_card_expanded(d, cl):
         nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
         if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
             if nc.strip():
-                d.setdefault("deal_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
+                d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
                 d["last_modified"] = now_str()
                 st.session_state[dc_clr_key] = True
                 commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
@@ -3996,7 +4003,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
             if _dcc_clicked:
                 if nc.strip():
-                    d.setdefault("deal_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
+                    d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
                     d["last_modified"] = now_str()
                     st.session_state[dc_clr_key] = True
                     commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
@@ -4207,7 +4214,7 @@ def render_client_card_expanded(cl):
                 _cc_clicked = st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True)
             if _cc_clicked:
                 if nci.strip():
-                    cl.setdefault("client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
+                    cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
                     cl["last_modified"] = now_str()
                     st.session_state[cc_clr_key] = True
                     commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
@@ -4350,7 +4357,7 @@ def render_client_in_tree(cl):
                         st.warning("Выберите ответственного")
                     else:
                         deals = st.session_state.crm_store.get("deals", [])
-                        did = f"deal_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+                        did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
                         dn = generate_deal_number()
                         new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "change_log": [], "deal_chat": []}
                         st.session_state.crm_store.setdefault("deals", []).append(new_deal)
@@ -4443,7 +4450,7 @@ def add_client_dialog(fv):
                 _fcc_clicked = st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True)
             if _fcc_clicked:
                 if ncc.strip():
-                    st.session_state.setdefault("pending_client_comments", []).append({"time": datetime.now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
+                    st.session_state.setdefault("pending_client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
                     st.session_state[cc_form_clr] = True
                     st.rerun()
                 else: st.warning("Введите текст")
@@ -4817,7 +4824,7 @@ def deal_report_dialog(deal_id, action):
                         seen.add(f.get("file_hash"))
                 if is_close:
                     d["status"] = "Сделка закрыта"
-                    d["closed_date"] = datetime.now().strftime("%Y-%m-%d")
+                    d["closed_date"] = moscow_now().strftime("%Y-%m-%d")
                     d["close_report"] = rep.strip()
                     d["close_files"] = merged
                 else:
@@ -5139,7 +5146,7 @@ def create_deal_dialog(cl_id):
             st.warning("Выберите ответственного")
         else:
             deals = st.session_state.crm_store.get("deals", [])
-            did = f"deal_{datetime.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+            did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
             dn = generate_deal_number()
             new_deal = {"id": did, "client_id": cl_id, "title": dn, "deal_number": dn, "deal_title": cd_title.strip(),
                         "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0,
@@ -5663,7 +5670,7 @@ elif st.session_state.active_tab == "Сделки":
     cid_map = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
     # Compute sums
     work_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "В работе")
-    closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта" and str(d.get("closed_date", ""))[:7] == datetime.now().strftime("%Y-%m"))
+    closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта" and str(d.get("closed_date", ""))[:7] == moscow_now().strftime("%Y-%m"))
     closed_all_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта")
     # Sum metrics (no heading)
     mcols = st.columns(3 if st.session_state.get("user_role") == "admin" else 2)
@@ -5812,7 +5819,7 @@ elif st.session_state.active_tab == "Сделки":
                 break
 
 elif st.session_state.active_tab == "Задачи":
-    now_time = datetime.now()
+    now_time = moscow_now()
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
     with plan_sub1:
         col_sq, col_mf = st.columns([3, 2])
