@@ -65,9 +65,42 @@ st.markdown("""
     .stButton > button { border-radius: 10px; font-weight: 500; transition: all 0.15s ease; margin-top: 0.1rem !important; margin-bottom: 0.1rem !important; }
     .stTextArea textarea { overflow-wrap:anywhere !important; white-space:pre-wrap !important; resize:vertical !important; }
     .stTextInput > div > input, .stTextArea > div > textarea, .stNumberInput > div > div > input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; padding: 0.55rem 0.8rem !important; color: #2C3E50 !important; font-size: 1rem; }
-    /* Date/time pickers match the white comment input fields */
-    [data-testid="stDateInput"] input, [data-testid="stTimeInput"] input { background-color: #FFFFFF !important; border-radius: 10px !important; border: 1.5px solid #DCE0E5 !important; color: #2C3E50 !important; box-shadow: none !important; }
-    [data-testid="stDateInput"] [data-baseweb="input"], [data-testid="stTimeInput"] [data-baseweb="input"] { background-color: #FFFFFF !important; border-radius: 10px !important; }
+    /* Shared close-button appearance: same visible X as the reminder dialog. */
+    [class*="st-key-close_row_"] [data-testid="stHorizontalBlock"] { display:flex !important; justify-content:flex-end !important; gap:0 !important; }
+    [class*="st-key-close_row_"] [data-testid="column"] { flex:0 0 44px !important; width:44px !important; min-width:44px !important; max-width:44px !important; padding:0 !important; }
+    [class*="st-key-close_row_"] .stButton > button,
+    [class*="st-key-task_report_close_row_"] .stButton > button,
+    [class*="st-key-deal_report_close_row_"] .stButton > button {
+        width:36px !important; min-width:36px !important; max-width:36px !important;
+        height:36px !important; min-height:36px !important; padding:0 !important;
+        font-family:Arial,sans-serif !important; font-size:20px !important; font-weight:700 !important; line-height:1 !important;
+        background:#FFFFFF !important; border:1px solid #DCE0E5 !important; border-radius:8px !important;
+        color:#5A6B7D !important; -webkit-text-fill-color:#5A6B7D !important;
+        display:flex !important; align-items:center !important; justify-content:center !important; margin:0 !important;
+    }
+    [class*="st-key-close_row_"] .stButton > button p,
+    [class*="st-key-task_report_close_row_"] .stButton > button p,
+    [class*="st-key-deal_report_close_row_"] .stButton > button p { display:block !important; margin:0 !important; padding:0 !important; line-height:1 !important; }
+    [class*="st-key-close_row_"] .stButton > button:hover,
+    [class*="st-key-task_report_close_row_"] .stButton > button:hover,
+    [class*="st-key-deal_report_close_row_"] .stButton > button:hover { background:#F8F9FB !important; border-color:#98A2B3 !important; }
+
+    /* Match date/time inputs to the white comment text area style across all dialogs and tabs. */
+    [data-testid="stDateInput"] [data-baseweb="input"],
+    [data-testid="stTimeInput"] [data-baseweb="input"],
+    [data-testid="stDateInput"] [data-baseweb="input"] > div,
+    [data-testid="stTimeInput"] [data-baseweb="input"] > div,
+    [data-testid="stDateInput"] input,
+    [data-testid="stTimeInput"] input {
+        background:#FFFFFF !important; background-color:#FFFFFF !important;
+        border-color:#DCE0E5 !important; border-radius:10px !important;
+        color:#2C3E50 !important; -webkit-text-fill-color:#2C3E50 !important;
+        box-shadow:none !important;
+    }
+    [data-testid="stDateInput"] [data-baseweb="input"],
+    [data-testid="stTimeInput"] [data-baseweb="input"] { border:1.5px solid #DCE0E5 !important; overflow:hidden !important; }
+    [data-testid="stDateInput"] button, [data-testid="stTimeInput"] button { background:#FFFFFF !important; color:#475467 !important; }
+    /* Keep Streamlit native grey background for date/time widgets. */
     input[placeholder*="Поиск"], .stTextInput input[aria-label="Поиск"] { background-color:#FFFFFF !important; }
     .stNumberInput button { display:none !important; }
     .stNumberInput input { -moz-appearance:textfield !important; }
@@ -1171,18 +1204,19 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     close_css_key = f"rem_close_row_{key_suffix}"
     st.markdown(f'''<style>
-    .st-key-{close_css_key} {{ display:flex!important;justify-content:flex-end!important;margin-top:-0.5rem!important;margin-bottom:0.2rem!important; }}
-    .st-key-{close_css_key} {{ position:relative!important; z-index:10000!important; width:100%!important; }}
-    .st-key-{close_css_key} .stButton {{ display:flex!important; justify-content:flex-end!important; }}
-    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;font-weight:700!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#344054!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; position:relative!important; z-index:10001!important; }}
-    .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#98A2B3!important;color:#101828!important; }}
-    .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ justify-content:flex-end!important; }}
-    .st-key-{close_css_key} [data-testid="column"]:first-child {{ display:none!important; }}
+    .st-key-{close_css_key} {{ position:relative!important; z-index:10000!important; width:100%!important; margin-top:-0.35rem!important; margin-bottom:0.25rem!important; }}
+    .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ display:flex!important; justify-content:flex-end!important; gap:0!important; }}
+    .st-key-{close_css_key} [data-testid="column"] {{ flex:0 0 44px!important; width:44px!important; min-width:44px!important; max-width:44px!important; padding:0!important; }}
+    .st-key-{close_css_key} [data-testid="column"] > div, .st-key-{close_css_key} .stButton {{ width:44px!important; min-width:44px!important; max-width:44px!important; }}
+    .st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-family:Arial,sans-serif!important;font-size:20px!important;font-weight:700!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;-webkit-text-fill-color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }}
+    .st-key-{close_css_key} .stButton > button * {{ color:#5A6B7D!important;-webkit-text-fill-color:#5A6B7D!important;opacity:1!important;visibility:visible!important;font-family:Arial,sans-serif!important;font-size:20px!important;font-weight:700!important; }}
+    .st-key-{close_css_key} .stButton > button:hover {{ background:#F8F9FB!important;border-color:#98A2B3!important;color:#101828!important; }}
+    .st-key-{close_css_key} .stButton > button p {{ display:block!important;margin:0!important;padding:0!important;line-height:1!important; }}
     </style>''', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("✕", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
+            if st.button("X", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
                 _has_unsaved = bool(
                     str(st.session_state.get(text_key, "") or "").strip()
                     or st.session_state.get(date_key) is not None
@@ -1220,18 +1254,20 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     logins = [u["login"] for u in users]
     names = {u["login"]: u.get("name") or u["login"] for u in users}
-    st.text_area("О чём напомнить?", key=text_key, height=68, label_visibility="visible")
-    c1, c2 = st.columns(2)
-    with c1:
-        due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
-        st.caption("Выберите дату: день, месяц и год")
-    with c2:
-        due_time = st.time_input("Время", value=moscow_now().time().replace(second=0, microsecond=0), key=time_key, help=None)
-        st.caption("Выберите часы и минуты")
-    recipient_options = [""] + logins
-    recipient = st.selectbox("Получатель", recipient_options, index=0,
-        format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
-        key=recipient_key, placeholder="Выберите получателя")
+    fields_wrap_key = f"reminder_fields_{key_suffix}"
+    with st.container(key=fields_wrap_key):
+        st.text_area("О чём напомнить?", key=text_key, height=68, label_visibility="visible")
+        c1, c2 = st.columns(2)
+        with c1:
+            due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
+            st.caption("Выберите дату: день, месяц и год")
+        with c2:
+            due_time = st.time_input("Время", value=moscow_now().time().replace(second=0, microsecond=0), key=time_key, help=None)
+            st.caption("Выберите часы и минуты")
+        recipient_options = [""] + logins
+        recipient = st.selectbox("Получатель", recipient_options, index=0,
+            format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
+            key=recipient_key, placeholder="Выберите получателя")
 
     if st.button("Создать напоминание", key=f"rem_save_{key_suffix}", type="primary", use_container_width=True):
         errors = []
@@ -1467,9 +1503,13 @@ def render_task_detail(t, cl, d, key_prefix):
                         padding:0.55rem 1rem !important; font-size:0.95rem !important;
                         line-height:1.2 !important; border-radius:10px !important;
                     }}
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"],
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] [data-baseweb="input"],
+                    .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] [data-baseweb="input"] > div,
                     .st-key-{deadline_edit_wrap} [data-testid="stDateInput"] input {{
-                        background:#FFFFFF !important; border:1.5px solid #DCE0E5 !important;
-                        border-radius:10px !important; color:#2C3E50 !important;
+                        background:#FFFFFF !important; background-color:#FFFFFF !important;
+                        border:1.5px solid #DCE0E5 !important; border-radius:10px !important;
+                        color:#2C3E50 !important; box-shadow:none !important;
                     }}
                     </style>''', unsafe_allow_html=True)
                     with st.container(key=deadline_edit_wrap):
@@ -2455,7 +2495,7 @@ def notifications_dialog():
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 st.session_state.pop("show_notifications_dialog", None)
                 st.session_state["_in_dialog"] = False
                 st.rerun()
@@ -2527,7 +2567,7 @@ def close_deal_dialog(deal_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 st.session_state.pop("dialog_close_deal_id", None)
                 st.session_state["_in_dialog"] = False
                 st.rerun()
@@ -2971,7 +3011,7 @@ def create_internal_task_dialog():
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 _has_unsaved = (
                     st.session_state.get("it_topic", "").strip() or
                     st.session_state.get("it_comment", "").strip()
@@ -3056,7 +3096,7 @@ def internal_task_detail_dialog(it_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 st.session_state.pop("dialog_it_key", None)
                 st.session_state["_in_dialog"] = False
                 st.rerun()
@@ -4367,7 +4407,7 @@ def add_client_dialog(fv):
     _show_add_warning = st.session_state.get(_add_close_warning_key, False)
     _dc_col1, _dc_col2 = st.columns([20, 1])
     with _dc_col2:
-        if st.button("✕", key=f"add_client_close_{fv}"):
+        if st.button("X", key=f"add_client_close_{fv}"):
             # Check for unsaved changes
             _has_unsaved = (
                 st.session_state.get(f"cn_{fv}", "").strip() or
@@ -4516,7 +4556,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=_close_btn_key, use_container_width=True):
+            if st.button("X", key=_close_btn_key, use_container_width=True):
                 if _is_editing and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{key_prefix}"] = True
                     st.rerun()
@@ -4637,7 +4677,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("✕", key=f"task_report_close_btn_{key_prefix}", use_container_width=True):
+            if st.button("X", key=f"task_report_close_btn_{key_prefix}", use_container_width=True):
                 _has_unsaved = bool(
                     str(st.session_state.get(report_key, "") or "").strip()
                     or st.session_state.get(files_key)
@@ -4763,7 +4803,7 @@ def deal_report_dialog(deal_id, action):
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("✕", key=f"deal_report_close_btn_{deal_id}_{action}", use_container_width=True):
+            if st.button("X", key=f"deal_report_close_btn_{deal_id}_{action}", use_container_width=True):
                 _has_unsaved = bool(str(st.session_state.get(report_key, "") or "").strip() or st.session_state.get(upload_key))
                 if _has_unsaved:
                     st.session_state[close_warning_key] = True
@@ -4850,7 +4890,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=_close_btn_key, use_container_width=True):
+            if st.button("X", key=_close_btn_key, use_container_width=True):
                 if _is_editing and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{key_prefix}"] = True
                     st.rerun()
@@ -4929,7 +4969,7 @@ def client_detail_dialog(cl_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=_close_btn_key, use_container_width=True):
+            if st.button("X", key=_close_btn_key, use_container_width=True):
                 if _is_editing and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = True
                     st.rerun()
@@ -5031,7 +5071,7 @@ def client_deals_dialog(cl_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 _pop_dialog_return()
                 st.session_state.pop("dialog_client_deals_key", None)
                 st.session_state["_in_dialog"] = False
@@ -5085,7 +5125,7 @@ def create_deal_dialog(cl_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 if _has_unsaved and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = True
                     st.rerun()
@@ -5170,7 +5210,7 @@ def deal_create_task_dialog(deal_id, client_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 if _has_unsaved and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = True
                     st.rerun()
@@ -5230,7 +5270,7 @@ def client_create_task_dialog(cl_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 if _has_unsaved and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = True
                     st.rerun()
@@ -5285,7 +5325,7 @@ def client_create_deal_task_dialog(cl_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 st.session_state[f"_show_close_warning_{_key_prefix}"] = True
                 st.rerun()
     if _show_close_warning:
@@ -5335,7 +5375,7 @@ def client_tasks_dialog(cl_id):
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
+            if st.button("X", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 _pop_dialog_return()
                 st.session_state.pop("dialog_client_tasks_key", None)
                 st.session_state["_in_dialog"] = False
