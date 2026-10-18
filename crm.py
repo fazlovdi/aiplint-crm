@@ -3483,7 +3483,7 @@ with _header_left:
     _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
     with _toggle_col:
         _sidebar_icon = "☰" if not st.session_state.get("_crm_sidebar_visible", True) else "‹"
-        if st.button(_sidebar_icon, key="crm_sidebar_toggle_btn", help="Открыть или закрыть боковую панель", use_container_width=True):
+        if st.button(_sidebar_icon, key="crm_sidebar_toggle_btn", use_container_width=True):
             st.session_state["_crm_sidebar_visible"] = not st.session_state.get("_crm_sidebar_visible", True)
             st.rerun()
     with _bell_col:
@@ -3564,7 +3564,7 @@ with _header_center:
         line-height: 1.2 !important;
     }
     </style>""", unsafe_allow_html=True)
-    if st.button("Айплинт CRM", key="crm_refresh_db_title", help="Нажмите, чтобы обновить данные CRM"):
+    if st.button("Айплинт CRM", key="crm_refresh_db_title"):
         with st.spinner("⟳ Обновляем базу данных…"):
             st.session_state.crm_store = load_data()
         st.toast("База данных обновлена", icon="🔄")
