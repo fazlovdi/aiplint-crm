@@ -3489,52 +3489,65 @@ with _header_left:
     with _bell_col:
         render_notifications_bell()
 with _header_center:
-    # Нативное действие Streamlit вместо ссылки с href: без перехода/перезагрузки браузера.
+    # Заголовок визуально остаётся обычным h1; клик запускает загрузку сохранённых данных.
     st.markdown("""<style>
-    .st-key-crm_refresh_db_title {
+    .st-key-crm_refresh_db_title,
+    .st-key-crm_refresh_db_title > div,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] {
         display: flex !important;
         justify-content: center !important;
+        align-items: center !important;
         width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
     }
-    .st-key-crm_refresh_db_title [data-testid="stButton"] {
-        width: auto !important;
-        margin: 0 auto !important;
-        padding: 0 !important;
-    }
-    .st-key-crm_refresh_db_title [data-testid="stButton"] > button {
-        all: unset !important;
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button,
+    .st-key-crm_refresh_db_title button {
+        -webkit-appearance: none !important;
+        appearance: none !important;
         display: block !important;
-        box-sizing: border-box !important;
+        width: auto !important;
+        min-height: 0 !important;
+        height: auto !important;
         margin: 0 auto !important;
         padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
         color: var(--text-color) !important;
         font-family: inherit !important;
         font-size: 2.75rem !important;
         font-weight: 600 !important;
         line-height: 1.2 !important;
         text-align: center !important;
+        text-decoration: none !important;
         cursor: pointer !important;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
         white-space: nowrap !important;
     }
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button:hover,
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button:focus,
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button:active {
-        color: var(--text-color) !important;
         background: transparent !important;
+        color: var(--text-color) !important;
         border: 0 !important;
+        outline: none !important;
         box-shadow: none !important;
         text-decoration: none !important;
+        transform: none !important;
     }
-    .st-key-crm_refresh_db_title [data-testid="stButton"] > button p {
+    .st-key-crm_refresh_db_title button p,
+    .st-key-crm_refresh_db_title button span {
         margin: 0 !important;
         padding: 0 !important;
+        color: inherit !important;
         font: inherit !important;
         line-height: inherit !important;
+        text-decoration: none !important;
     }
     </style>""", unsafe_allow_html=True)
     if st.button("Айплинт CRM", key="crm_refresh_db_title", help="Нажмите, чтобы обновить данные CRM"):
