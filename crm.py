@@ -3432,29 +3432,50 @@ if not st.session_state.authenticated:
 process_due_reminders()
 
 # Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
-# Выравниваем кнопку боковой панели по высоте с кнопкой уведомлений и увеличиваем значок.
+# Выравниваем кнопку боковой панели и уведомлений по одной высоте; увеличиваем сам символ.
 st.markdown("""<style>
-.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button {
+/* Streamlit places a keyed wrapper around each widget; target both wrapper and actual button. */
+.st-key-crm_sidebar_toggle_btn,
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"],
+.st-key-crm_sidebar_toggle_btn > div {
+    align-self: center !important;
+    width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+}
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button,
+.st-key-crm_sidebar_toggle_btn button {
     height: 44px !important;
     min-height: 44px !important;
+    max-height: 44px !important;
     padding: 0 !important;
     margin: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    font-size: 1.65rem !important;
-    line-height: 1 !important;
     box-sizing: border-box !important;
+    line-height: 1 !important;
 }
-.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button p {
-    font-size: 1.65rem !important;
+.st-key-crm_sidebar_toggle_btn button p,
+.st-key-crm_sidebar_toggle_btn button span {
+    font-size: 2.35rem !important;
+    font-weight: 700 !important;
     line-height: 1 !important;
     margin: 0 !important;
     padding: 0 !important;
 }
-.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] {
+/* Match the notification button's height so the two controls align exactly. */
+.st-key-crm_bell_wrap [data-testid="stButton"] > button {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    box-sizing: border-box !important;
     margin-top: 0 !important;
     margin-bottom: 0 !important;
+}
+.st-key-crm_bell_wrap [data-testid="stButton"] > button p {
+    line-height: 1 !important;
 }
 </style>""", unsafe_allow_html=True)
 _header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
