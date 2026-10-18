@@ -1172,6 +1172,120 @@ def render_entity_chat(entity, entity_type, entity_id):
             commit_and_rerun(st.session_state.crm_store)
         else: st.warning("Введите текст")
 
+@st.dialog("Создать напоминание", width="medium")
+def create_reminder_dialog(entity_type, entity_id, entity_label):
+    store = st.session_state.crm_store
+    users = [u for u in store.get("users", []) if u.get("login")]
+    if not users:
+        st.error("В CRM нет пользователей, которым можно назначить напоминание.")
+        return
+    logins = [u["login"] for u in users]
+    names = {u["login"]: u.get("name") or u["login"] for u in users}
+    me = st.session_state.get("user_login", "")
+    default_idx = logins.index(me) if me in logins else 0
+    text_value = st.text_area("О чём напомнить?", key=f"rem_text_{entity_type}_{entity_id}", height=68, placeholder="О чём напомнить?")
+    c1, c2 = st.columns(2)
+    with c1:
+        due_date = st.date_input("Дата", value=datetime.now().date(), key=f"rem_date_{entity_type}_{entity_id}")
+    with c2:
+        due_time = st.time_input("Время", value=(datetime.now()+timedelta(minutes=5)).time().replace(second=0,microsecond=0), key=f"rem_time_{entity_type}_{entity_id}")
+    recipient = st.selectbox("Получатель", logins, index=default_idx, format_func=lambda x: names.get(x,x), key=f"rem_recipient_{entity_type}_{entity_id}")
+    b1,b2 = st.columns(2)
+    with b1:
+        if st.button("Создать напоминание", key=f"rem_save_{entity_type}_{entity_id}", type="primary", use_container_width=True):
+            if not text_value.strip():
+                st.warning("Введите текст напоминания.")
+            else:
+                due = datetime.combine(due_date, due_time).replace(second=0, microsecond=0)
+                if due <= datetime.now():
+                    st.warning("Выберите дату и время в будущем.")
+                else:
+                    store.setdefault("reminders", []).append({"id":uuid.uuid4().hex,"entity_type":str(entity_type),"entity_id":str(entity_id),"entity_label":str(entity_label),"text":text_value.strip(),"created_at":now_str(),"created_by":me,"recipient":recipient,"due_at":due.strftime("%Y-%m-%d %H:%M:%S"),"sent":False,"sent_at":""})
+                    save_data(store)
+                    st.session_state.pop(f"rem_text_{entity_type}_{entity_id}",None)
+                    st.toast("Напоминание создано", icon="🔔")
+                    st.rerun()
+    with b2:
+        if st.button("Отмена", key=f"rem_cancel_{entity_type}_{entity_id}", use_container_width=True):
+            st.rerun()
+
+def render_reminders(entity_type, entity_id, entity_label, key_prefix):
+    store = st.session_state.crm_store
+    store.setdefault("reminders", [])
+    st.markdown("---")
+    st.markdown("**Напоминания**")
+    if st.button("＋ Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
+        create_reminder_dialog(entity_type, entity_id, entity_label)
+    items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
+    items.sort(key=lambda r:r.get("due_at", ""))
+    if not items:
+        st.caption("Напоминаний пока нет")
+        return
+    now = datetime.now()
+    users = {u.get("login"):u for u in store.get("users", [])}
+    for r in items:
+        with st.container(border=True):
+            st.markdown(format_created_date(r), unsafe_allow_html=True)
+            due_raw = r.get("due_at", "")
+            try: past = datetime.strptime(due_raw[:19], "%Y-%m-%d %H:%M:%S") <= now
+            except Exception: past = False
+            txt = html.escape(str(r.get("text", ""))).replace("\n", "<br>")
+            if past:
+                st.markdown(f"<div style='text-decoration:line-through;color:#7F8C9A;overflow-wrap:anywhere'>{txt}</div>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div style='overflow-wrap:anywhere'>{txt}</div>", unsafe_allow_html=True)
+            try: due_label = datetime.strptime(due_raw[:19], "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y %H:%M")
+            except Exception: due_label = due_raw
+            rec = users.get(r.get("recipient"), {})
+            st.caption(f"Срок: {due_label} · Получатель: {rec.get('name') or r.get('recipient','—')}")
+            del_key = f"rem_confirm_del_{r.get('id')}"
+            _, dc = st.columns([8,1])
+            with dc:
+                if st.button("🗑", key=f"rem_del_{r.get('id')}", help="Удалить напоминание"):
+                    st.session_state[del_key] = True
+            if st.session_state.get(del_key):
+                st.warning("Удалить это напоминание?")
+                yes,no = st.columns(2)
+                with yes:
+                    if st.button("Удалить", key=f"rem_del_yes_{r.get('id')}", type="primary", use_container_width=True):
+                        store["reminders"] = [x for x in store["reminders"] if x.get("id") != r.get("id")]
+                        st.session_state.pop(del_key,None)
+                        save_data(store)
+                        st.rerun()
+                with no:
+                    if st.button("Отмена", key=f"rem_del_no_{r.get('id')}", use_container_width=True):
+                        st.session_state.pop(del_key,None)
+                        st.rerun()
+
+def process_due_reminders():
+    """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
+    store = st.session_state.get("crm_store")
+    if not isinstance(store, dict): return
+    reminders = store.setdefault("reminders", [])
+    now = datetime.now()
+    due_items = []
+    for r in reminders:
+        if r.get("sent") or not r.get("recipient"):
+            continue
+        try: due = datetime.strptime(r.get("due_at", "")[:19], "%Y-%m-%d %H:%M:%S")
+        except Exception: continue
+        if due <= now:
+            r["sent"] = True
+            r["sent_at"] = now_str()
+            due_items.append(r)
+    if not due_items: return
+    store.setdefault("notifications", [])
+    users = {u.get("login"):u for u in store.get("users", [])}
+    for r in due_items:
+        body = f"Напоминание: {r.get('text','')}\nОбъект: {r.get('entity_label','')}"
+        store["notifications"].append({"id":uuid.uuid4().hex,"to":r["recipient"],"text":body,"date":now_str(),"read":False,"reminder_id":r.get("id")})
+    # Persist sent flags before external delivery to minimize duplicate Telegram sends on reruns.
+    save_data(store)
+    for r in due_items:
+        u = users.get(r.get("recipient"), {})
+        if u.get("telegram_chat_id"):
+            send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
+
 def render_task_detail(t, cl, d, key_prefix):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
@@ -1471,6 +1585,7 @@ def render_task_detail(t, cl, d, key_prefix):
                             st.info("\u041e\u0436\u0438\u0434\u0430\u0435\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0432\u0442\u043e\u0440\u043e\u043c")
                     else:
                         st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
+            render_reminders("task", t.get("task_number", t.get("id", "")), _task_header, f"task_{key_prefix}")
         with right_col:
             # Comments block (now above files) — no gap at top
             if t.get("task_comments"):
@@ -2898,6 +3013,7 @@ def internal_task_detail_dialog(it_id):
             commit_and_rerun(st.session_state.crm_store, "Ответственный изменён")
         if it.get("comment"): st.markdown(f"**Комментарий:** {it['comment']}")
         if it.get("completed_report"): st.markdown(f"**Отчёт:** {it['completed_report']}")
+        render_reminders("internal_task", it.get("id", ""), f"Внутренняя задача №{it.get('id', '')}", f"it_{it.get('id')}")
     with _it_right:
         render_entity_chat(it, "it", it["id"])
         st.markdown("---")
@@ -3163,6 +3279,8 @@ if not st.session_state.authenticated:
             )
             _passkey_process_login_result(_pk_result, _pk_pending)
     st.stop()
+
+process_due_reminders()
 
 st.markdown(f"""<div class="greeting-block" style="margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important;"><h1 style='text-align: center; margin-top: 0!important; margin-bottom: 0!important; padding-top: 0!important; padding-bottom: 0!important;'>Айплинт CRM</h1><p style='text-align: center; color: #7F8C9A; font-size: 0.95rem; margin-top: 0; margin-bottom: 0; padding-top: 0!important; padding-bottom: 0!important;'>Продуктивного тебе дня, {st.session_state.user_name} \U0001F60A</p></div>""", unsafe_allow_html=True)
 
@@ -3790,6 +3908,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
                     commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
+            render_reminders("deal", deal_id, f"Сделка №{d.get('deal_number', d.get('title', deal_id))}", f"deal_{key_prefix}")
         with right_col:
             if d.get("deal_comments"):
                 st.markdown("**Комментарии:**")
@@ -4000,6 +4119,7 @@ def render_client_card_expanded(cl):
             st.markdown("---")
             # Чат в левом столбце под информацией
             render_entity_chat(cl, "client", cl["id"])
+            render_reminders("client", cl.get("id", ""), cl.get("name", "Клиент"), f"client_{cl.get('id')}")
         with _right_col:
             st.markdown("**Комментарии:**")
             for cc in cl.get("client_comments", []):
@@ -6015,5 +6135,6 @@ elif st.session_state.active_tab == "Поставщики":
                             st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
                             st.session_state.expanded_task_key = None
                             commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
+                    render_reminders("supplier", s.get("id", ""), s.get("name", "Поставщик"), f"supplier_{s.get('id')}")
     else:
         st.info("Поставщиков нет. Добавьте первого.")
