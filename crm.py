@@ -2524,10 +2524,11 @@ def render_notifications_bell():
     unread = get_unread_count()
     bell_key = "show_notifications_dialog"
     st.markdown("""<style>
-    .st-key-crm_bell_wrap { width:100%; text-align:center; }
-    .st-key-crm_bell_wrap [data-testid="stButton"] { display:flex; justify-content:center; }
-    .st-key-crm_bell_wrap [data-testid="stButton"] button { width:52px!important; min-width:52px!important; padding:0.25rem 0!important; margin:0 auto!important; justify-content:center!important; }
-    .st-key-crm_bell_wrap .crm-unread-count { text-align:center; white-space:nowrap; font-size:0.82rem; line-height:1.2; color:#7F8C9A; font-variant-numeric:tabular-nums; }
+    .st-key-crm_bell_wrap { width:100%!important; text-align:center!important; }
+    .st-key-crm_bell_wrap [data-testid="stVerticalBlock"] { width:100%!important; align-items:center!important; }
+    .st-key-crm_bell_wrap [data-testid="stButton"] { width:100%!important; display:flex!important; justify-content:center!important; }
+    .st-key-crm_bell_wrap [data-testid="stButton"] > button { width:52px!important; min-width:52px!important; padding:0.25rem 0!important; margin-left:auto!important; margin-right:auto!important; justify-content:center!important; }
+    .st-key-crm_bell_wrap .crm-unread-count { display:block!important; width:100%!important; text-align:center!important; white-space:nowrap!important; font-size:1.05rem!important; font-weight:700!important; line-height:1.25!important; color:#5A6B7D!important; font-variant-numeric:tabular-nums; }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_bell_wrap"):
         if st.button("🔔", key="btn_bell", help="Уведомления"):
@@ -4695,7 +4696,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
 
     # Кнопка закрытия отчёта с предупреждением о незаписанных данных.
     close_css_key = f"task_report_close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div { gap:0!important; }</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
@@ -4821,7 +4822,7 @@ def deal_report_dialog(deal_id, action):
     st.markdown(f"**{btn_label}: отчёт по сделке**")
 
     close_css_key = f"deal_report_close_row_{deal_id}_{action}"
-    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div { gap:0!important; }</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
