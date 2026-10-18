@@ -1187,7 +1187,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     .st-key-{close_css_key} [data-testid="stHorizontalBlock"] {{ display:flex!important; justify-content:flex-end!important; gap:0!important; }}
     .st-key-{close_css_key} [data-testid="column"] {{ flex:0 0 44px!important; width:44px!important; min-width:44px!important; max-width:44px!important; padding:0!important; }}
     .st-key-{close_css_key} [data-testid="column"] > div, .st-key-{close_css_key} .stButton {{ width:44px!important; min-width:44px!important; max-width:44px!important; }}
-    .st-key-{close_css_key} .stButton > button {{ box-sizing:border-box!important; width:36px!important;height:36px!important;min-width:36px!important;max-width:36px!important;min-height:36px!important;max-height:36px!important;padding:0!important;font-size:1.15rem!important;font-weight:600!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:9px!important;color:#475467!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;box-shadow:0 1px 2px rgba(16,24,40,.06)!important; position:relative!important; z-index:10001!important; }}
+    .st-key-{close_css_key} .stButton > button {{ box-sizing:border-box!important; width:36px!important;height:36px!important;min-width:36px!important;max-width:36px!important;min-height:36px!important;max-height:36px!important;padding:0!important;font-family:Arial,sans-serif!important;font-size:1.45rem!important;font-weight:400!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:9px!important;color:#475467!important;opacity:1!important;visibility:visible!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;box-shadow:0 1px 2px rgba(16,24,40,.06)!important; position:relative!important; z-index:10001!important; }}
     .st-key-{close_css_key} .stButton > button:hover {{ background:#F8F9FB!important;border-color:#98A2B3!important;color:#101828!important; }}
     .st-key-{close_css_key} .stButton > button p {{ margin:0!important;line-height:1!important; }}
     .st-key-reminder_fields_{key_suffix} div[data-testid="stDateInput"],
@@ -1204,11 +1204,18 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"]:focus-within {{ border-color:#BC1661!important;box-shadow:0 0 0 1px #BC1661!important; }}
     .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] button,
     .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] button {{ background:#FFFFFF!important;color:#475467!important; }}
+    /* Streamlit/BaseWeb may paint the visible surface on a nested wrapper */
+    .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] [data-baseweb="input"] *,
+    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"] * {{ background-color:#FFFFFF!important; }}
+    .st-key-reminder_fields_{key_suffix} [data-testid="stDateInput"] [data-baseweb="input"] input,
+    .st-key-reminder_fields_{key_suffix} [data-testid="stTimeInput"] [data-baseweb="input"] input {{ -webkit-text-fill-color:#2C3E50!important;color:#2C3E50!important;opacity:1!important; }}
+    .st-key-{close_css_key} .stButton > button,
+    .st-key-{close_css_key} .stButton > button * {{ color:#475467!important;-webkit-text-fill-color:#475467!important;opacity:1!important;visibility:visible!important; }}
     </style>''', unsafe_allow_html=True)
     with st.container(key=close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
-            if st.button("✕", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
+            if st.button("×", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
                 _has_unsaved = bool(
                     str(st.session_state.get(text_key, "") or "").strip()
                     or st.session_state.get(date_key) is not None
