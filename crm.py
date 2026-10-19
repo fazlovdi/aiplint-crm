@@ -1165,24 +1165,67 @@ def render_print_file_button(files, key_suffix):
 
 
 def linkify_text(text):
-    """Convert URLs in text to clickable HTML links that open in a new tab.
-    Adds http:// prefix to bare domains (without protocol)."""
+    # Safely render plain URLs, Markdown links, and pasted HTML links in comments.
     if not text:
         return text
     import html as _html
-    safe = _html.escape(str(text))
-    # First: full URLs with protocol
-    url_pattern = r'(https?://[^\s<>"]+)'
+
+    raw = str(text)
+    # Some copied rich-text comments contain backslash-escaped HTML characters.
+    raw = re.sub(r'\\([<>_:])', r'\1', raw)
+
+    # Replace pasted HTML anchors with readable text. Prefer a valid Markdown URL
+    # inside the anchor's visible text when the copied href itself is malformed.
+    anchor_pattern = re.compile(r'<a\b([^>]*)>(.*?)(?:</a\s*>|$)', re.IGNORECASE | re.DOTALL)
+    def _clean_anchor(match):
+        attrs, inner = match.group(1), match.group(2)
+        inner_plain = re.sub(r'\\([<>_:])', r'\1', inner)
+        # Remove a duplicated protocol immediately before a Markdown link, as
+        # happens when rich text is copied from some chat editors.
+        inner_plain = re.sub(r'https?://(?=\[)', '', inner_plain, flags=re.IGNORECASE)
+        md_link = re.search(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', inner_plain, re.IGNORECASE)
+        if md_link:
+            # Keep the readable label; the normal URL pass below makes it clickable.
+            inner_plain = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'\1', inner_plain, count=1, flags=re.IGNORECASE)
+            return inner_plain
+        href_match = re.search(r'href\s*=\s*"([^"]+)"', attrs, re.IGNORECASE)
+        href = href_match.group(1).strip() if href_match else ''
+        href_md = re.search(r'\((https?://[^)\s]+)\)', href, re.IGNORECASE)
+        if href_md:
+            href = href_md.group(1)
+        label = re.sub(r'<[^>]*>', '', inner_plain).strip()
+        label = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'\1', label)
+        if href.startswith(('http://', 'https://')):
+            return f'{label or href} ({href})'
+        return label or href
+    raw = anchor_pattern.sub(_clean_anchor, raw)
+
+    # Keep Markdown links as tokens while escaping all user-provided text.
+    links = []
+    def _markdown_link(match):
+        label, url = match.group(1), match.group(2)
+        token = f'CRMMDLINKTOKEN{len(links)}END'
+        links.append((token, label, url))
+        return token
+    raw = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', _markdown_link, raw, flags=re.IGNORECASE)
+
+    safe = _html.escape(raw)
+    url_pattern = r'(https?://[^\s<>\"]+)'
     safe = re.sub(url_pattern, r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">\1</a>', safe)
-    # Then: bare domains without protocol (example.com, www.example.com/path)
-    bare_domain_pattern = r'(?<!href=")(?<!<a href="https://)(?<!<a href="http://)(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>"]*)?'
+    bare_domain_pattern = r'(?<!href=")(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>\"]*)?'
     def _add_http(m):
         url = m.group(0)
-        if 'href' in url or url.startswith('http'):
+        if url.startswith(('http://', 'https://')):
             return url
         return f'<a href="http://{url}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{url}</a>'
     safe = re.sub(bare_domain_pattern, _add_http, safe)
+
+    for token, label, url in links:
+        safe_token = _html.escape(token)
+        safe_link = f'<a href="{_html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{_html.escape(label)}</a>'
+        safe = safe.replace(safe_token, safe_link)
     return safe
+
 def render_entity_chat(entity, entity_type, entity_id):
     chat_key = f"{entity_type}_chat"
     if chat_key not in entity: entity[chat_key] = []
