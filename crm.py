@@ -1165,59 +1165,52 @@ def render_print_file_button(files, key_suffix):
 
 
 def linkify_text(text):
-    # Safely render plain URLs, Markdown links, and pasted HTML links in comments.
+    """Render plain URLs, Markdown links, and copied/escaped HTML anchors safely."""
     if not text:
         return text
     import html as _html
 
     raw = str(text)
-    # Some copied rich-text comments contain backslash-escaped HTML characters.
+    # Chat/comment data can contain escaped HTML copied from rich-text editors.
     raw = re.sub(r'\\([<>_:])', r'\1', raw)
 
-    # Replace pasted HTML anchors with readable text. Prefer a valid Markdown URL
-    # inside the anchor's visible text when the copied href itself is malformed.
-    anchor_pattern = re.compile(r'<a\b([^>]*)>(.*?)(?:</a\s*>|$)', re.IGNORECASE | re.DOTALL)
-    def _clean_anchor(match):
-        attrs, inner = match.group(1), match.group(2)
-        inner_plain = re.sub(r'\\([<>_:])', r'\1', inner)
-        # Remove a duplicated protocol immediately before a Markdown link, as
-        # happens when rich text is copied from some chat editors.
-        inner_plain = re.sub(r'https?://(?=\[)', '', inner_plain, flags=re.IGNORECASE)
-        md_link = re.search(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', inner_plain, re.IGNORECASE)
-        if md_link:
-            # Keep the readable label; the normal URL pass below makes it clickable.
-            inner_plain = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'\1', inner_plain, count=1, flags=re.IGNORECASE)
-            return inner_plain
-        href_match = re.search(r'href\s*=\s*"([^"]+)"', attrs, re.IGNORECASE)
-        href = href_match.group(1).strip() if href_match else ''
-        href_md = re.search(r'\((https?://[^)\s]+)\)', href, re.IGNORECASE)
-        if href_md:
-            href = href_md.group(1)
-        label = re.sub(r'<[^>]*>', '', inner_plain).strip()
-        label = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'\1', label)
-        if href.startswith(('http://', 'https://')):
-            return f'{label or href} ({href})'
-        return label or href
-    raw = anchor_pattern.sub(_clean_anchor, raw)
+    # Strip anchor tags first instead of trying to parse attributes: copied HTML
+    # sometimes contains Markdown inside href attributes, which breaks HTML parsing.
+    raw = re.sub(r'<\s*/?\s*a\b[^>]*>', '', raw, flags=re.IGNORECASE | re.DOTALL)
+    # Repair a malformed nested form such as:
+    # https://[www.instagram.com/name/](http://www.instagram.com/name/)
+    # by retaining the valid Markdown destination and avoiding a duplicated prefix.
+    raw = re.sub(
+        r'https?://\[([^\]]+)\]\((https?://[^)\s]+)\)',
+        r'[\1](\2)', raw, flags=re.IGNORECASE
+    )
+    # Some copied links escape punctuation, including the colon in https://.
+    raw = re.sub(r'\\([:])', r'\1', raw)
+    raw = re.sub(r'http://(?=www\.instagram\.com/)', 'https://', raw, flags=re.IGNORECASE)
 
     # Keep Markdown links as tokens while escaping all user-provided text.
     links = []
     def _markdown_link(match):
-        label, url = match.group(1), match.group(2)
+        label, url = match.group(1).strip(), match.group(2).strip()
         token = f'CRMMDLINKTOKEN{len(links)}END'
         links.append((token, label, url))
         return token
     raw = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', _markdown_link, raw, flags=re.IGNORECASE)
 
     safe = _html.escape(raw)
-    url_pattern = r'(https?://[^\s<>\"]+)'
-    safe = re.sub(url_pattern, r'<a href="\1" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">\1</a>', safe)
-    bare_domain_pattern = r'(?<!href=")(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>\"]*)?'
+    url_pattern = r'https?://[^\s<>"\']+'
+    def _link_url(m):
+        url = m.group(0).rstrip('.,;:!?)]}')
+        suffix = m.group(0)[len(url):]
+        return f'<a href="{_html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{_html.escape(url)}</a>{suffix}'
+    safe = re.sub(url_pattern, _link_url, safe, flags=re.IGNORECASE)
+
+    # Link bare domains without touching href attributes already generated above.
+    bare_domain_pattern = r'(?<![="/])\b(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>"\']*)?'
     def _add_http(m):
-        url = m.group(0)
-        if url.startswith(('http://', 'https://')):
-            return url
-        return f'<a href="http://{url}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{url}</a>'
+        url = m.group(0).rstrip('.,;:!?)]}')
+        suffix = m.group(0)[len(url):]
+        return f'<a href="https://{_html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{_html.escape(url)}</a>{suffix}'
     safe = re.sub(bare_domain_pattern, _add_http, safe)
 
     for token, label, url in links:
@@ -3371,10 +3364,16 @@ if not st.session_state.authenticated:
                 # Verify on every complete candidate length (4–8 digits) and sign in
                 # immediately when the entered PIN matches, including on iPhone.
                 _pin_input = st.text_input(
-                    "PIN-код:", type="password", max_chars=8,
+                    "PIN-код:", type="default", max_chars=8,
                     placeholder="Введите PIN-код", key="remembered_pin_input",
                     help="Введите PIN из 4–8 цифр. При правильном PIN вход выполнится автоматически."
                 )
+                st.markdown("""<style>
+                .st-key-remembered_pin_input input {
+                    -webkit-text-security: disc !important;
+                    text-security: disc !important;
+                }
+                </style>""", unsafe_allow_html=True)
                 st.markdown("""<script>
                 (function(){
                   function tunePin(){
@@ -3383,7 +3382,11 @@ if not st.session_state.authenticated:
                       el.setAttribute('inputmode','numeric');
                       el.setAttribute('pattern','[0-9]*');
                       el.setAttribute('enterkeyhint','go');
-                      el.setAttribute('autocomplete','new-password');
+                      el.setAttribute('autocomplete','off');
+                      el.setAttribute('name','crm_pin_code');
+                      el.setAttribute('data-lpignore','true');
+                      el.setAttribute('data-1p-ignore','true');
+                      el.setAttribute('spellcheck','false');
                     });
                   }
                   tunePin();
