@@ -3021,55 +3021,7 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state._auth_last_activity = moscow_now()
             break
 
-# Не запускаем периодический скрытый Streamlit-клик для проверки активности.
-# Такой клик вызывает st.rerun() каждые несколько секунд и может закрывать/повторно
-# открывать диалоги и модальные окна. Активность обновляется обычными действиями CRM.
-
-if st.session_state.get("authenticated"):
-    _auth_heartbeat_clicked = st.button("auth activity heartbeat", key="auth_activity_heartbeat")
-    if _auth_heartbeat_clicked:
-        st.session_state._auth_last_activity = moscow_now()
-        _auth_token_for_heartbeat = cookies.get("auth_token")
-        if _auth_token_for_heartbeat:
-            _heartbeat_hash = hashlib.sha256(str(_auth_token_for_heartbeat).encode("utf-8")).hexdigest()
-            _heartbeat_expiry_changed = False
-            for _heartbeat_user in st.session_state.crm_store.get("users", []):
-                for _heartbeat_session in _heartbeat_user.get("auth_sessions", []):
-                    if isinstance(_heartbeat_session, dict) and secrets.compare_digest(str(_heartbeat_session.get("token_hash", "")), _heartbeat_hash):
-                        try:
-                            _current_expiry = datetime.fromisoformat(str(_heartbeat_session.get("expires_at", "")))
-                        except (TypeError, ValueError):
-                            _current_expiry = moscow_now()
-                        if _current_expiry <= moscow_now() + timedelta(minutes=55):
-                            _heartbeat_session["expires_at"] = (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds")
-                            _heartbeat_expiry_changed = True
-            if _heartbeat_expiry_changed:
-                save_data(st.session_state.crm_store)
-    st.markdown("""<style>
-    .st-key-auth_activity_heartbeat {display:none !important;}
-    </style>""", unsafe_allow_html=True)
-    components.html("""<script>
-    (function(){
-      try {
-        const w = window.parent;
-        if (!w.__crmAuthActivityState) w.__crmAuthActivityState = {last: Date.now(), installed: false};
-        const state = w.__crmAuthActivityState;
-        if (!state.installed) {
-          const mark = function(){ state.last = Date.now(); };
-          ['pointerdown','keydown','touchstart','scroll','click','input','change','wheel'].forEach(function(evt){
-            w.document.addEventListener(evt, mark, {passive:true, capture:true});
-          });
-          state.installed = true;
-        }
-        if (w.__crmAuthHeartbeatTimer) w.clearInterval(w.__crmAuthHeartbeatTimer);
-        w.__crmAuthHeartbeatTimer = w.setInterval(function(){
-          if (Date.now() - state.last > 5 * 60 * 1000) return;
-          const candidates = w.document.querySelectorAll('.st-key-auth_activity_heartbeat button');
-          if (candidates.length && !candidates[0].disabled) candidates[0].click();
-        }, 30000);
-      } catch(e) {}
-    })();
-    </script>""", height=0)
+# Периодический скрытый heartbeat удалён: он вызывал автоматические rerun и перерисовку диалогов.
 
 if st.session_state.get("authenticated"):
     _last_activity = st.session_state.get("_auth_last_activity")
