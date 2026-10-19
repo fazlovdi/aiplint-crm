@@ -1531,7 +1531,45 @@ def process_due_reminders():
         if u.get("telegram_chat_id"):
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
-def render_task_detail(t, cl, d, key_prefix):
+def _render_task_shipping_fields(task, client, deal, key_prefix):
+    """Inline status and estimated shipping date, saved immediately from the existing task dialog."""
+    statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
+    status_key = f"task_shipping_status_{key_prefix}"
+    date_key = f"task_estimated_ship_date_{key_prefix}"
+    current_status = task.get("shipping_status", "") or ""
+    current_date_raw = task.get("estimated_ship_date", "") or ""
+    try:
+        current_date = datetime.strptime(str(current_date_raw)[:10], "%Y-%m-%d").date() if current_date_raw else None
+    except (TypeError, ValueError):
+        current_date = None
+
+    st.selectbox(
+        "Статус",
+        options=statuses,
+        index=statuses.index(current_status) if current_status in statuses else None,
+        placeholder="Выберите статус",
+        key=status_key,
+    )
+    selected_date = st.date_input(
+        "Ориентировочная дата отправки",
+        value=current_date,
+        format="DD.MM.YYYY",
+        key=date_key,
+    )
+
+    selected_status = st.session_state.get(status_key, current_status) or ""
+    selected_date_value = selected_date.isoformat() if selected_date else ""
+    if selected_status != current_status or selected_date_value != current_date_raw:
+        task["shipping_status"] = selected_status
+        task["estimated_ship_date"] = selected_date_value
+        task["last_modified"] = now_str()
+        client["last_modified"] = now_str()
+        if deal:
+            deal["last_modified"] = now_str()
+        save_data(st.session_state.crm_store)
+
+
+def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # CSS to align print and edit buttons
@@ -1570,7 +1608,7 @@ def render_task_detail(t, cl, d, key_prefix):
                 _deal_num = d.get('deal_number', d.get('title', ''))
                 _deal_id = d.get('id')
                 _deal_link_key = f"deal_link_{key_prefix}"
-                _hdr_inner, _print_inner = st.columns([14, 1])
+                _hdr_inner, _status_inner = st.columns([3, 2])
                 with _hdr_inner:
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
@@ -1584,16 +1622,22 @@ def render_task_detail(t, cl, d, key_prefix):
                         st.session_state.pop("_open_created_task", None)
                         st.session_state["_in_dialog"] = False
                         st.rerun()
-                with _print_inner:
-                    render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
+                with _status_inner:
+                    if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
+                        _render_task_shipping_fields(t, cl, d, key_prefix)
+                    elif not show_shipping_status:
+                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             else:
-                _hdr_inner, _print_inner = st.columns([14, 1])
+                _hdr_inner, _status_inner = st.columns([3, 2])
                 with _hdr_inner:
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
                         st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
-                with _print_inner:
-                    render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
+                with _status_inner:
+                    if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
+                        _render_task_shipping_fields(t, cl, d, key_prefix)
+                    elif not show_shipping_status:
+                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             st.markdown(format_created_date(t), unsafe_allow_html=True)
             show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if show_edit_task:
@@ -4917,7 +4961,9 @@ def task_detail_dialog(task, cl, d, key_prefix):
     _close_css_key = f"close_row_{key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
-        _spacer_col, _close_col = st.columns([20, 1])
+        _print_col, _spacer_col, _close_col = st.columns([1, 20, 1])
+        with _print_col:
+            render_print_button(task, cl, task.get("type", "Связаться"), format_date(task.get("deadline", "")), f"td_{key_prefix}_top")
         with _close_col:
             if st.button("\u2715", key=_close_btn_key, use_container_width=True):
                 if _is_editing and not _show_close_warning:
@@ -5016,7 +5062,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.rerun()
 
-    render_task_detail(task, cl, d, key_prefix)
+    render_task_detail(task, cl, d, key_prefix, show_shipping_status=True)
 
 @_crm_dialog("Отчёт о выполнении задачи", width="large")
 def task_completion_report_dialog(client_id, task_number, key_prefix):
