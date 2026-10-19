@@ -1760,6 +1760,10 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 if not tk_done:
                     if not t.get("in_work"):
                         if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
+                            # Для общей неназначенной задачи ответственным становится тот, кто первым взял её в работу.
+                            if not t.get("manager"):
+                                t["manager"] = cu
+                                t["delegated_to"] = cu
                             t["in_work"] = True
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
@@ -1782,7 +1786,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         if create_new_task:
                             with st.container(border=True):
                                 nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"cnt_topic_{key_prefix}")
-                                nt_mgr2 = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                                nt_mgr2 = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
                                 nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD.MM.YYYY", key=f"cnt_dl_{key_prefix}")
                                 nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"cnt_comment_{key_prefix}")
                                 nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"cnt_files_{key_prefix}", accept_multiple_files=True)
@@ -1808,7 +1812,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         tn2 = generate_task_number(prefix2)
                                         new_task = {
                                             "text": nt_topic2.strip(), "deadline": nt_dl2.isoformat(), "done": False, "type": "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f",
-                                            "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2,
+                                            "task_files": normalize_file_list(ntfi_list2), "manager": nt_mgr2 or "",
                                             "completion_report": "", "completion_files": [],
                                             "deal_id": (d["id"] if d else None), "task_comment": nt_comment2.strip(),
                                             "order_amount": 0, "last_modified": now_str(),
@@ -1818,7 +1822,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "tk_num": ""
                                         }
                                         cl.setdefault("tasks", []).append(new_task)
-                                        add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
+                                        if nt_mgr2:
+                                            add_notification(nt_mgr2, f"\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}", f"\U0001F4DD \u041d\u043e\u0432\u0430\u044f \u0437\u0430\u0434\u0430\u0447\u0430: {nt_topic2.strip()} | \u041a\u043b\u0438\u0435\u043d\u0442: {cl.get('name','')} | \u0421\u0440\u043e\u043a: {nt_dl2.isoformat()}")
                                     st.session_state[f"uf_ver_{key_prefix}"] = uf_ver + 1
                                     commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u0430")
                                 else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u0442\u0447\u0435\u0442")
@@ -3268,20 +3273,18 @@ def create_internal_task_dialog():
     _cu = st.session_state.user_name
     _cu_login = st.session_state.get("user_login", "")
     it_topic = st.text_input("Тема задачи:", key="it_topic")
-    it_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key="it_mgr", placeholder=MGR_PLACEHOLDER)
+    it_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key="it_mgr", placeholder=MGR_PLACEHOLDER)
     it_comment = st.text_area("Комментарии:", key="it_comment")
     it_files = st.file_uploader("Файлы:", key="it_files_create", accept_multiple_files=True)
     if st.button("Создать", key="it_go", use_container_width=True, type="primary"):
         if not it_topic.strip():
             st.warning("Введите тему задачи")
-        elif not it_mgr:
-            st.warning("Выберите ответственного")
         else:
             new_it = {
                 "id": (max([_safe_id(t.get("id", 0)) for t in internal_tasks], default=0)) + 1,
                 "text": it_topic.strip(),
                 "done": False,
-                "manager": it_mgr,
+                "manager": it_mgr or "",
                 "comment": it_comment.strip(),
                 "created_at": now_str(),
                 "created_by": _cu_login,
@@ -3292,7 +3295,8 @@ def create_internal_task_dialog():
                 "it_files": normalize_file_list(save_uploaded_files(it_files, "internal", "it_file")) if it_files else []
             }
             internal_tasks.append(new_it)
-            add_notification(it_mgr, f"Новая внутренняя задача: {it_topic.strip()}", f"\U0001F4DD Новая внутренняя задача: {it_topic.strip()}")
+            if it_mgr:
+                add_notification(it_mgr, f"Новая внутренняя задача: {it_topic.strip()}", f"\U0001F4DD Новая внутренняя задача: {it_topic.strip()}")
             st.session_state.pop("show_it_form", None)
             st.session_state.pop("it_topic", None)
             st.session_state.pop("it_comment", None)
@@ -3360,6 +3364,10 @@ def internal_task_detail_dialog(it_id):
     _status = it.get("it_status", "new")
     if _status == "new":
         if st.button("Взять в работу", key=f"itdlg_take_{it['id']}", type="primary", use_container_width=True):
+            # Если задача не назначена, ответственным становится первый сотрудник, взявший её.
+            if not it.get("manager"):
+                it["manager"] = _cu
+                it["delegated_to"] = _cu
             it["it_status"] = "in_work"
             it["in_work"] = True
             it["last_modified"] = now_str()
@@ -3955,7 +3963,7 @@ for _c in st.session_state.crm_store.get("clients", []):
             _dtm = _t.get("delegated_to", "")
             if _tm == _cu_name_count or _dtm == _cu_name_count or st.session_state.get("user_role") == "admin":
                 _new_tasks_count += 1
-_new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks", []) if not it.get("done", False) and it.get("it_status", "new") == "new" and (it.get("manager", "") == _cu_name_count or st.session_state.get("user_role") == "admin"))
+_new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks", []) if not it.get("done", False) and it.get("it_status", "new") == "new" and (not it.get("manager") or it.get("manager", "") == _cu_name_count or st.session_state.get("user_role") == "admin"))
 
 # Reset modal request tracking before any shared UI can request a dialog.
 st.session_state["_crm_dialog_requested_this_run"] = False
@@ -4030,7 +4038,7 @@ cu = st.session_state.user_name
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
     ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
-    ntm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
+    ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
     ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
     if ntype in ("Отправить заказ", "Отправить образцы"):
         nproducts = st.text_area("Товары:", key=f"nt_prod_{key_suffix}")
@@ -4055,15 +4063,13 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
         if not ntopic.strip():
             st.warning("Введите тему задачи")
-        elif not ntm:
-            st.warning("Выберите ответственного")
         else:
             tfi_list = save_uploaded_files(ntf, cl_id, "task_file") if ntf else []
             prefix = "ЗС" if deal_id else "ЗК"
             tn = generate_task_number(prefix)
             te = {
                 "text": ntopic.strip(), "deadline": ntd.isoformat(), "done": False, "type": ntype,
-                "task_files": normalize_file_list(tfi_list), "manager": ntm,
+                "task_files": normalize_file_list(tfi_list), "manager": ntm or "",
                 "completion_report": "", "completion_files": [],
                 "deal_id": deal_id, "task_comment": ncomment.strip(),
                 "order_amount": int(norder_amount) if norder_amount and norder_amount.strip().isdigit() else 0, "last_modified": now_str(),
@@ -4081,7 +4087,8 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 if deal_id:
                     d = get_deal_by_id(deal_id)
                     if d: d["last_modified"] = now_str()
-                add_notification(ntm, f"Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
+                if ntm:
+                    add_notification(ntm, f"Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
                 return te
         return False
     return False
@@ -5142,7 +5149,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
         with st.container(border=True):
             next_values["topic"] = st.text_input("Тема новой задачи:", key=f"task_completion_next_topic_{key_prefix}")
             managers = get_managers_list()
-            next_values["manager"] = st.selectbox("Ответственный:", managers, index=0 if task.get("manager") not in managers else managers.index(task.get("manager")), key=f"task_completion_next_manager_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+            next_values["manager"] = st.selectbox("Ответственный:", managers, index=None, key=f"task_completion_next_manager_{key_prefix}", placeholder=MGR_PLACEHOLDER)
             next_values["deadline"] = st.date_input("Срок:", format="DD.MM.YYYY", key=f"task_completion_next_deadline_{key_prefix}")
             next_values["comment"] = st.text_input("Комментарий:", key=f"task_completion_next_comment_{key_prefix}")
             next_values["files"] = st.file_uploader("Файлы новой задачи:", key=f"task_completion_next_files_{key_prefix}", accept_multiple_files=True)
@@ -5153,8 +5160,6 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                 st.warning("Введите отчёт")
             elif create_next and not next_values.get("topic", "").strip():
                 st.warning("Введите тему новой задачи")
-            elif create_next and not next_values.get("manager"):
-                st.warning("Выберите ответственного для новой задачи")
             else:
                 task["done"] = True
                 task["in_work"] = False
@@ -5173,7 +5178,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                     prefix = "ЗС" if deal else "ЗК"
                     new_task = {
                         "text": next_values["topic"].strip(), "deadline": next_values["deadline"].isoformat(), "done": False,
-                        "type": "Связаться", "task_files": normalize_file_list(next_files), "manager": next_values["manager"],
+                        "type": "Связаться", "task_files": normalize_file_list(next_files), "manager": next_values["manager"] or "",
                         "completion_report": "", "completion_files": [], "deal_id": deal["id"] if deal else None,
                         "task_comment": next_values.get("comment", "").strip(), "order_amount": 0, "last_modified": now_str(),
                         "task_number": generate_task_number(prefix), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
@@ -5182,7 +5187,8 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                         "receiver_phone": "", "ship_pay": "", "tk_num": ""
                     }
                     cl.setdefault("tasks", []).append(new_task)
-                    add_notification(next_values["manager"], f"Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
+                    if next_values["manager"]:
+                        add_notification(next_values["manager"], f"Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
                 save_data(st.session_state.crm_store)
                 st.session_state[file_ver_key] = file_ver + 1
                 st.session_state.pop("dialog_task_completion", None)
@@ -6383,7 +6389,8 @@ elif st.session_state.active_tab == "Задачи":
                     if mf == "Мои задачи":
                         if tm and tm != cu and dtm != cu: continue
                     elif mf != "Все":
-                        if tm != mf and dtm != mf: continue
+                        # Неназначенные задачи видны всем: любой пользователь может взять их в работу.
+                        if tm and tm != mf and dtm != mf: continue
                 if task_search:
                     search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
                     if task_search not in search_text: continue
@@ -6548,7 +6555,8 @@ elif st.session_state.active_tab == "Внутренние задачи":
             _status = it.get("it_status", "new")
             if it.get("done") and it.get("reviewed", False):
                 continue
-            if it_mf != "Все" and it.get("manager", "") != it_mf:
+            # Неназначенные задачи доступны всем сотрудникам, даже при фильтре по ответственному.
+            if it_mf != "Все" and it.get("manager", "") and it.get("manager", "") != it_mf:
                 continue
             if it_search:
                 _hay = f"{it.get('text', '')} {it.get('manager', '')} {it.get('comment', '')}".lower()
