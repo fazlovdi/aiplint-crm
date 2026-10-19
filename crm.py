@@ -1599,6 +1599,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
         }}
         </style>""", unsafe_allow_html=True)
         # Two columns: left = everything, right = comments + files
+        show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
         left_col, right_col = st.columns(2)
         with left_col:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
@@ -1622,6 +1623,10 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.session_state.pop("_open_created_task", None)
                         st.session_state["_in_dialog"] = False
                         st.rerun()
+                    st.markdown(format_created_date(t), unsafe_allow_html=True)
+                    if not show_edit_task:
+                        st.markdown(f"**Тема:** {t.get('text', '')}")
+                        st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
                         _render_task_shipping_fields(t, cl, d, key_prefix)
@@ -1633,13 +1638,15 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
                         st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
+                    st.markdown(format_created_date(t), unsafe_allow_html=True)
+                    if not show_edit_task:
+                        st.markdown(f"**Тема:** {t.get('text', '')}")
+                        st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
                         _render_task_shipping_fields(t, cl, d, key_prefix)
                     elif not show_shipping_status:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-            st.markdown(format_created_date(t), unsafe_allow_html=True)
-            show_edit_task = st.session_state.get(f"show_edit_task_{key_prefix}", False)
             if show_edit_task:
                 # Inline editing mode
                 et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
@@ -1689,9 +1696,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.session_state[f"show_edit_task_{key_prefix}"] = False
                         _smart_rerun()
             else:
-                # Display mode
-                st.markdown(f"**\u0422\u0435\u043c\u0430:** {t.get('text', '')}")
-                st.markdown(f"**\u0422\u0438\u043f:** {t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')}")
+                # Display mode: task topic and type are shown directly under the task number above.
                 # Deadline: clickable date, no pencil button
                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                 if show_edit_dl:
