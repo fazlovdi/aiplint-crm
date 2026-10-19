@@ -1286,6 +1286,15 @@ def _crm_dialog(title, width="large"):
                 "name": func.__name__, "title": title, "width": width,
                 "args": args, "kwargs": kwargs, "signature": signature,
             }
+            # При переключении из одного диалога в другой мы уже находимся
+            # внутри dialog-fragment Streamlit. Перерисовываем только его,
+            # не перезапуская всю страницу CRM и списки активной вкладки.
+            if st.session_state.get("_crm_inside_dialog_host", False):
+                try:
+                    st.rerun(scope="fragment")
+                except TypeError:
+                    # Совместимость со старыми версиями Streamlit.
+                    st.rerun()
             return None
         _request_dialog.__name__ = func.__name__
         _request_dialog.__doc__ = func.__doc__
@@ -6717,7 +6726,11 @@ if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm
             _spec = _CRM_DIALOG_REGISTRY.get(_target.get("name"))
             if not _spec:
                 return
-            _spec["func"](*_target.get("args", ()), **_target.get("kwargs", {}))
+            st.session_state["_crm_inside_dialog_host"] = True
+            try:
+                _spec["func"](*_target.get("args", ()), **_target.get("kwargs", {}))
+            finally:
+                st.session_state["_crm_inside_dialog_host"] = False
 
         _crm_dialog_host = st.dialog(_active_crm_dialog.get("title", "CRM"), width=_active_crm_dialog.get("width", "large"))(_crm_render_active_dialog)
         _crm_dialog_host()
