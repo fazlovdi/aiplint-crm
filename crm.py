@@ -4874,6 +4874,9 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     _pop_dialog_return()
                     st.session_state.pop("dialog_task_key", None)
+                    st.session_state.pop("dialog_task_number", None)
+                    st.session_state.pop("dialog_task_client_id", None)
+                    st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
@@ -4934,6 +4937,9 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state.pop("dialog_task_key", None)
+                    st.session_state.pop("dialog_task_number", None)
+                    st.session_state.pop("dialog_task_client_id", None)
+                    st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
@@ -4944,6 +4950,9 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state.pop("dialog_task_key", None)
+                    st.session_state.pop("dialog_task_number", None)
+                    st.session_state.pop("dialog_task_client_id", None)
+                    st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
@@ -5716,10 +5725,12 @@ def client_tasks_dialog(cl_id):
             st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=_tk_key):
                 if st.button(_label, key=f"ct_go_cl_{cl_id}_{ti}", use_container_width=True, type="secondary"):
-                    task_key = f"ct_cl_{cl_id}_{ti}"
                     _push_dialog_return()
                     st.session_state.pop("dialog_client_tasks_key", None)
-                    st.session_state["dialog_task_key"] = task_key
+                    st.session_state["dialog_task_number"] = str(t.get("task_number", ""))
+                    st.session_state["dialog_task_client_id"] = cl_id
+                    st.session_state["dialog_task_deal_id"] = str(t.get("deal_id", "") or "")
+                    st.session_state["dialog_task_key"] = f"clienttask_{cl_id}_{t.get('task_number', '')}_client"
                     st.rerun()
     else:
         st.caption("Задач по клиенту нет")
@@ -5753,10 +5764,12 @@ def client_tasks_dialog(cl_id):
             st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=_tk_key):
                 if st.button(_label, key=f"ct_go_dl_{cl_id}_{ti}", use_container_width=True, type="secondary"):
-                    task_key = f"ct_dl_{cl_id}_{ti}"
                     _push_dialog_return()
                     st.session_state.pop("dialog_client_tasks_key", None)
-                    st.session_state["dialog_task_key"] = task_key
+                    st.session_state["dialog_task_number"] = str(t.get("task_number", ""))
+                    st.session_state["dialog_task_client_id"] = cl_id
+                    st.session_state["dialog_task_deal_id"] = str(t.get("deal_id", "") or "")
+                    st.session_state["dialog_task_key"] = f"clienttask_{cl_id}_{t.get('task_number', '')}_{d.get('id', '')}"
                     st.rerun()
     else:
         st.caption("Задач по сделкам нет")
@@ -5817,6 +5830,34 @@ if st.session_state.active_tab == "Клиенты":
         fcl.sort(key=lambda c: c.get("name", "").lower())
     elif sort_mode == "По городу":
         fcl.sort(key=lambda c: (c.get("city", "") or "").strip().lower())
+
+    # Постраничный вывод: создаём элементы интерфейса только для текущей страницы,
+    # а поиск и сортировка по-прежнему применяются ко всей базе.
+    _client_page_size = 50
+    _client_page_signature = f"{sq}|{ctf}|{sort_mode}|{len(fcl)}"
+    if st.session_state.get("_client_page_signature") != _client_page_signature:
+        st.session_state["_client_page_signature"] = _client_page_signature
+        st.session_state["_client_page"] = 0
+    _client_page_count = max(1, (len(fcl) + _client_page_size - 1) // _client_page_size)
+    _client_page = min(max(0, int(st.session_state.get("_client_page", 0))), _client_page_count - 1)
+    st.session_state["_client_page"] = _client_page
+    if all_clients:
+        _pg_left, _pg_info, _pg_right = st.columns([1, 4, 1])
+        with _pg_left:
+            if st.button("← Назад", key="clients_page_prev", disabled=_client_page <= 0, use_container_width=True):
+                st.session_state["_client_page"] = _client_page - 1
+                st.rerun()
+        with _pg_info:
+            _first_client_num = _client_page * _client_page_size + 1 if fcl else 0
+            _last_client_num = min((_client_page + 1) * _client_page_size, len(fcl))
+            st.markdown(f"<div style='text-align:center;padding:7px 0;color:#5A6B7D;font-size:.9rem;'>Клиенты {_first_client_num}–{_last_client_num} из {len(fcl)} · Страница {_client_page + 1} из {_client_page_count}</div>", unsafe_allow_html=True)
+        with _pg_right:
+            if st.button("Вперёд →", key="clients_page_next", disabled=_client_page >= _client_page_count - 1, use_container_width=True):
+                st.session_state["_client_page"] = _client_page + 1
+                st.rerun()
+        _visible_clients = fcl[_client_page * _client_page_size:(_client_page + 1) * _client_page_size]
+    else:
+        _visible_clients = []
     if all_clients:
         # Таблица клиентов: город и телефон сразу после наименования
         _hc1, _hc2, _hc3, _hc4, _hc5, _hc6, _hc7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
@@ -5842,7 +5883,7 @@ if st.session_state.active_tab == "Клиенты":
 
         # Объединяем CSS всех кнопок списка в один блок вместо трёх style-блоков на каждого клиента.
         _client_row_css = []
-        for _style_client in fcl:
+        for _style_client in _visible_clients:
             _style_id = _style_client["id"]
             _style_deals = _clients_deals_by_id.get(_style_id, [])
             _style_active_deals = any(_sd.get("status", "Новый") in ("Новый", "В работе") for _sd in _style_deals)
@@ -5862,7 +5903,7 @@ if st.session_state.active_tab == "Клиенты":
         if _client_row_css:
             st.markdown("<style>" + "".join(_client_row_css) + "</style>", unsafe_allow_html=True)
 
-        for cl in fcl:
+        for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
             cl_tasks_all = cl.get("tasks", [])
             all_tasks_count = len(cl_tasks_all)
@@ -5929,6 +5970,9 @@ if st.session_state.active_tab == "Клиенты":
     _dialog_ct_key = st.session_state.get("dialog_client_tasks_key")
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
     _dialog_task_key = st.session_state.get("dialog_task_key")
+    _dialog_task_number = st.session_state.get("dialog_task_number")
+    _dialog_task_client_id = st.session_state.get("dialog_task_client_id")
+    _dialog_task_deal_id = st.session_state.get("dialog_task_deal_id")
     _deal_report_dialog = st.session_state.get("dialog_deal_report")
     
     _task_completion_state = st.session_state.get("dialog_task_completion")
@@ -5942,6 +5986,25 @@ if st.session_state.active_tab == "Клиенты":
     elif _dlg_cdt_deal:
         _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
         deal_create_task_dialog(_dlg_cdt_deal, _cdt_client_id)
+    elif _dialog_task_key and _dialog_task_number and _dialog_task_client_id:
+        _target_client = get_client_by_id(_dialog_task_client_id)
+        _target_task = None
+        _target_deal = None
+        if _target_client:
+            for _candidate_task in _target_client.get("tasks", []):
+                if str(_candidate_task.get("task_number", "")) == str(_dialog_task_number) and str(_candidate_task.get("deal_id", "") or "") == str(_dialog_task_deal_id or ""):
+                    _target_task = _candidate_task
+                    break
+            if _target_task and _target_task.get("deal_id"):
+                _target_deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id", "")) == str(_target_task.get("deal_id", ""))), None)
+        if _target_task and _target_client:
+            task_detail_dialog(_target_task, _target_client, _target_deal, _dialog_task_key)
+        else:
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("dialog_task_number", None)
+            st.session_state.pop("dialog_task_client_id", None)
+            st.session_state.pop("dialog_task_deal_id", None)
+            st.warning("Не удалось найти выбранную задачу. Обновите список и попробуйте ещё раз.")
     elif _dialog_client_key and st.session_state.get("_dialog_return_stack"):
         client_detail_dialog(_dialog_client_key)
     elif _dlg_cct:
