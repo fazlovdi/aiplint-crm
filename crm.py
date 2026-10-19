@@ -1258,7 +1258,41 @@ def render_entity_chat(entity, entity_type, entity_id):
             commit_and_rerun(st.session_state.crm_store)
         else: st.warning("Введите текст")
 
-@st.dialog("Создать напоминание", width="medium")
+# Единый диспетчер всплывающих окон CRM.
+# Все диалоги используют один и тот же dialog-host, чтобы при переключении
+# менялось содержимое одного окна, а не закрывался один диалог и создавался другой.
+_CRM_DIALOG_REGISTRY = {}
+
+def _crm_dialog_signature_value(value):
+    if isinstance(value, dict):
+        return ("dict", value.get("id"), value.get("task_number"), value.get("client_id"),
+                value.get("deal_id"), value.get("name"), value.get("login"))
+    if isinstance(value, (str, int, float, bool, type(None))):
+        return (type(value).__name__, value)
+    if isinstance(value, (list, tuple)):
+        return (type(value).__name__, tuple(_crm_dialog_signature_value(x) for x in value))
+    return (type(value).__name__, repr(value)[:100])
+
+def _crm_dialog(title, width="large"):
+    def _decorate(func):
+        _CRM_DIALOG_REGISTRY[func.__name__] = {"func": func, "title": title, "width": width}
+        def _request_dialog(*args, **kwargs):
+            st.session_state["_crm_dialog_requested_this_run"] = True
+            signature = (_crm_dialog_signature_value(args), _crm_dialog_signature_value(kwargs))
+            current = st.session_state.get("_crm_active_dialog") or {}
+            # Сохраняем новые аргументы даже для уже открытого диалога, чтобы использовать
+            # актуальные записи из crm_store после сохранения/обновления.
+            st.session_state["_crm_active_dialog"] = {
+                "name": func.__name__, "title": title, "width": width,
+                "args": args, "kwargs": kwargs, "signature": signature,
+            }
+            return None
+        _request_dialog.__name__ = func.__name__
+        _request_dialog.__doc__ = func.__doc__
+        return _request_dialog
+    return _decorate
+
+@_crm_dialog("Создать напоминание", width="medium")
 def create_reminder_dialog(entity_type, entity_id, entity_label):
     store = st.session_state.crm_store
     users = [u for u in store.get("users", []) if u.get("login") and u.get("role") != "admin" and u.get("login") != "admin"]
@@ -2580,7 +2614,7 @@ def mark_all_notifications_read():
             n["read"] = True
     save_data(st.session_state.crm_store)
 
-@st.dialog("🔔 Уведомления", width="large")
+@_crm_dialog("🔔 Уведомления", width="large")
 def notifications_dialog():
     st.session_state["_in_dialog"] = True
     _key_prefix = "notif_dlg"
@@ -2665,7 +2699,7 @@ def render_close_deal_dialog_trigger():
 
 
 
-@st.dialog("Завершить сделку", width="medium")
+@_crm_dialog("Завершить сделку", width="medium")
 def close_deal_dialog(deal_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"close_deal_{deal_id}"
@@ -3128,7 +3162,7 @@ def _render_it_delete(it):
             st.session_state.expanded_task_key = None
             commit_and_rerun(st.session_state.crm_store, "Задача удалена")
 
-@st.dialog("Создать внутреннюю задачу", width="medium")
+@_crm_dialog("Создать внутреннюю задачу", width="medium")
 def create_internal_task_dialog():
     st.session_state["_in_dialog"] = True
     _key_prefix = "create_it"
@@ -3207,7 +3241,7 @@ def create_internal_task_dialog():
             commit_and_rerun(st.session_state.crm_store, "Внутренняя задача создана")
 
 
-@st.dialog("Внутренняя задача", width="medium")
+@_crm_dialog("Внутренняя задача", width="medium")
 def internal_task_detail_dialog(it_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"itdlg_{it_id}"
@@ -3864,6 +3898,9 @@ for _c in st.session_state.crm_store.get("clients", []):
             if _tm == _cu_name_count or _dtm == _cu_name_count or st.session_state.get("user_role") == "admin":
                 _new_tasks_count += 1
 _new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks", []) if not it.get("done", False) and it.get("it_status", "new") == "new" and (it.get("manager", "") == _cu_name_count or st.session_state.get("user_role") == "admin"))
+
+# Reset modal request tracking before any shared UI can request a dialog.
+st.session_state["_crm_dialog_requested_this_run"] = False
 
 nc1, nc2, nc3, nc4, nc5 = st.columns(5)
 with nc1:
@@ -4718,7 +4755,7 @@ def render_client_form(fv):
     if st.session_state.get(f"show_add_client_dialog_{fv}", False):
         add_client_dialog(fv)
 
-@st.dialog("Добавить клиента", width="large")
+@_crm_dialog("Добавить клиента", width="large")
 def add_client_dialog(fv):
     _add_close_warning_key = f"_show_close_warning_add_client_{fv}"
     _show_add_warning = st.session_state.get(_add_close_warning_key, False)
@@ -4860,7 +4897,7 @@ def add_client_dialog(fv):
                 st.toast(f"Клиент {cn} добавлен", icon="✅")
                 st.rerun()
         else: st.error("Заполните ФИО и телефон")
-@st.dialog("Подробности задачи", width="large")
+@_crm_dialog("Подробности задачи", width="large")
 def task_detail_dialog(task, cl, d, key_prefix):
     st.session_state["_in_dialog"] = True
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
@@ -4972,7 +5009,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
 
     render_task_detail(task, cl, d, key_prefix)
 
-@st.dialog("Отчёт о выполнении задачи", width="large")
+@_crm_dialog("Отчёт о выполнении задачи", width="large")
 def task_completion_report_dialog(client_id, task_number, key_prefix):
     """Отдельное всплывающее окно отчёта; подробности задачи остаются в состоянии для возврата."""
     cl = next((c for c in st.session_state.crm_store.get("clients", []) if c.get("id") == client_id), None)
@@ -5110,7 +5147,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                 st.rerun()
 
 
-@st.dialog("Отчёт по сделке", width="large")
+@_crm_dialog("Отчёт по сделке", width="large")
 def deal_report_dialog(deal_id, action):
     d = get_deal_by_id(deal_id)
     if not d:
@@ -5203,7 +5240,7 @@ def deal_report_dialog(deal_id, action):
                 st.rerun()
 
 
-@st.dialog("Подробности сделки", width="large")
+@_crm_dialog("Подробности сделки", width="large")
 def deal_detail_dialog(d, cl, cu, key_prefix):
     st.session_state["_in_dialog"] = True
     deal_id = d["id"]
@@ -5275,7 +5312,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
 
 
 
-@st.dialog("Карточка клиента", width="large")
+@_crm_dialog("Карточка клиента", width="large")
 def client_detail_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     cl = get_client_by_id(cl_id)
@@ -5383,7 +5420,7 @@ def client_detail_dialog(cl_id):
     render_client_card_expanded(cl)
 
 
-@st.dialog("Сделки клиента", width="large")
+@_crm_dialog("Сделки клиента", width="large")
 def client_deals_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     cl = get_client_by_id(cl_id)
@@ -5437,7 +5474,7 @@ def client_deals_dialog(cl_id):
 # ============================================================
 # Dialog: Создать сделку (из карточки клиента / окна сделок)
 # ============================================================
-@st.dialog("Создать сделку", width="large")
+@_crm_dialog("Создать сделку", width="large")
 def create_deal_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cdlg_{cl_id}"
@@ -5522,7 +5559,7 @@ def create_deal_dialog(cl_id):
 # ============================================================
 # Dialog: Создать задачу по сделке (из всплывающего окна сделки)
 # ============================================================
-@st.dialog("Создать задачу по сделке", width="large")
+@_crm_dialog("Создать задачу по сделке", width="large")
 def deal_create_task_dialog(deal_id, client_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cdt_{deal_id}"
@@ -5582,7 +5619,7 @@ def deal_create_task_dialog(deal_id, client_id):
 # ============================================================
 # Dialog: Создать задачу по клиенту (из всплывающего окна задач)
 # ============================================================
-@st.dialog("Создать задачу по клиенту", width="large")
+@_crm_dialog("Создать задачу по клиенту", width="large")
 def client_create_task_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cct_{cl_id}"
@@ -5639,7 +5676,7 @@ def client_create_task_dialog(cl_id):
 # ============================================================
 # Dialog: Создать задачу по сделке (из всплывающего окна задач клиента)
 # ============================================================
-@st.dialog("Создать задачу по сделке", width="large")
+@_crm_dialog("Создать задачу по сделке", width="large")
 def client_create_deal_task_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"ccdt_{cl_id}"
@@ -5687,7 +5724,7 @@ def client_create_deal_task_dialog(cl_id):
         st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
-@st.dialog("Задачи клиента", width="large")
+@_crm_dialog("Задачи клиента", width="large")
 def client_tasks_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     cl = get_client_by_id(cl_id)
@@ -6663,3 +6700,25 @@ elif st.session_state.active_tab == "Поставщики":
 if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("active_tab") == "Поставщики":
     _pending_reminder = st.session_state["_pending_reminder_dialog"]
     create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+
+# Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
+# Внутри отображается исходное содержимое соответствующего диалога.
+if not st.session_state.get("_crm_dialog_requested_this_run", False):
+    st.session_state.pop("_crm_active_dialog", None)
+
+_active_crm_dialog = st.session_state.get("_crm_active_dialog")
+if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm_dialog:
+    _dialog_spec = _CRM_DIALOG_REGISTRY.get(_active_crm_dialog.get("name"))
+    if _dialog_spec:
+        def _crm_render_active_dialog():
+            _target = st.session_state.get("_crm_active_dialog")
+            if not _target:
+                return
+            _spec = _CRM_DIALOG_REGISTRY.get(_target.get("name"))
+            if not _spec:
+                return
+            _spec["func"](*_target.get("args", ()), **_target.get("kwargs", {}))
+
+        _crm_dialog_host = st.dialog(_active_crm_dialog.get("title", "CRM"), width=_active_crm_dialog.get("width", "large"))(_crm_render_active_dialog)
+        _crm_dialog_host()
+
