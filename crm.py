@@ -1165,59 +1165,70 @@ def render_print_file_button(files, key_suffix):
 
 
 def linkify_text(text):
-    """Render plain URLs, Markdown links, and copied/escaped HTML anchors safely."""
+    """Safely render plain URLs, Markdown links and links copied from HTML."""
     if not text:
         return text
     import html as _html
 
     raw = str(text)
-    # Chat/comment data can contain escaped HTML copied from rich-text editors.
     raw = re.sub(r'\\([<>_:])', r'\1', raw)
 
-    # Strip anchor tags first instead of trying to parse attributes: copied HTML
-    # sometimes contains Markdown inside href attributes, which breaks HTML parsing.
+    # Use visible anchor text, not its potentially malformed href attribute.
+    raw = re.sub(r'<\s*a\b[^>]*>(.*?)<\s*/\s*a\s*>', lambda m: m.group(1), raw,
+                 flags=re.IGNORECASE | re.DOTALL)
     raw = re.sub(r'<\s*/?\s*a\b[^>]*>', '', raw, flags=re.IGNORECASE | re.DOTALL)
-    # Repair a malformed nested form such as:
-    # https://[www.instagram.com/name/](http://www.instagram.com/name/)
-    # by retaining the valid Markdown destination and avoiding a duplicated prefix.
-    raw = re.sub(
-        r'https?://\[([^\]]+)\]\((https?://[^)\s]+)\)',
-        r'[\1](\2)', raw, flags=re.IGNORECASE
-    )
-    # Some copied links escape punctuation, including the colon in https://.
-    raw = re.sub(r'\\([:])', r'\1', raw)
-    raw = re.sub(r'http://(?=www\.instagram\.com/)', 'https://', raw, flags=re.IGNORECASE)
 
-    # Keep Markdown links as tokens while escaping all user-provided text.
+    # Repair URL split into Markdown fragments by some messengers/editors.
+    split_url = r'\[https?://www\]\(https?://www/?\)\.\[([^\]]+)\]\(https?://[^)\s]+\)'
+    raw = re.sub(
+        split_url,
+        lambda m: 'https://www.' + re.sub(r'^https?://(?:www\.)?', '', m.group(1), flags=re.IGNORECASE),
+        raw, flags=re.IGNORECASE
+    )
+    # Repair another copied form: https://[www.example.com/path](https://example.com/path)
+    raw = re.sub(r'https?://\[([^\]]+)\]\((https?://[^)\s]+)\)', r'[\1](\2)', raw, flags=re.IGNORECASE)
+    raw = re.sub(r'\\:', ':', raw)
+
+    # Turn links into placeholders first. This prevents matching domains inside
+    # already-generated HTML anchors and avoids nested <a> elements.
     links = []
-    def _markdown_link(match):
-        label, url = match.group(1).strip(), match.group(2).strip()
-        token = f'CRMMDLINKTOKEN{len(links)}END'
+    def save_link(label, url):
+        token = f'CRM_LINK_TOKEN_{len(links)}_END'
         links.append((token, label, url))
         return token
-    raw = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', _markdown_link, raw, flags=re.IGNORECASE)
 
+    def markdown_link(m):
+        label, url = m.group(1).strip(), m.group(2).strip()
+        return save_link(label, url)
+
+    raw = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', markdown_link, raw, flags=re.IGNORECASE)
+
+    def plain_url(m):
+        url = m.group(0).rstrip('.,;:!?)]}')
+        suffix = m.group(0)[len(url):]
+        token = save_link(url, url)
+        return token + suffix
+
+    raw = re.sub(r'https?://[^\s<>"\']+', plain_url, raw, flags=re.IGNORECASE)
+
+    def bare_domain(m):
+        value = m.group(0).rstrip('.,;:!?)]}')
+        suffix = m.group(0)[len(value):]
+        token = save_link(value, 'https://' + value)
+        return token + suffix
+
+    raw = re.sub(r'(?<![=\"/\.])\b(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>\"\']*)?',
+                 bare_domain, raw, flags=re.IGNORECASE)
     safe = _html.escape(raw)
-    url_pattern = r'https?://[^\s<>"\']+'
-    def _link_url(m):
-        url = m.group(0).rstrip('.,;:!?)]}')
-        suffix = m.group(0)[len(url):]
-        return f'<a href="{_html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{_html.escape(url)}</a>{suffix}'
-    safe = re.sub(url_pattern, _link_url, safe, flags=re.IGNORECASE)
-
-    # Link bare domains without touching href attributes already generated above.
-    bare_domain_pattern = r'(?<![="/])\b(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}(?:/[^\s<>"\']*)?'
-    def _add_http(m):
-        url = m.group(0).rstrip('.,;:!?)]}')
-        suffix = m.group(0)[len(url):]
-        return f'<a href="https://{_html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{_html.escape(url)}</a>{suffix}'
-    safe = re.sub(bare_domain_pattern, _add_http, safe)
-
     for token, label, url in links:
-        safe_token = _html.escape(token)
-        safe_link = f'<a href="{_html.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">{_html.escape(label)}</a>'
-        safe = safe.replace(safe_token, safe_link)
+        safe_anchor = (
+            f'<a href="{_html.escape(url, quote=True)}" target="_blank" '
+            f'rel="noopener noreferrer" style="color:#bc1661;text-decoration:underline;">'
+            f'{_html.escape(label)}</a>'
+        )
+        safe = safe.replace(_html.escape(token), safe_anchor)
     return safe
+
 
 def render_entity_chat(entity, entity_type, entity_id):
     chat_key = f"{entity_type}_chat"
