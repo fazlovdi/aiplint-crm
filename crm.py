@@ -2766,6 +2766,20 @@ def _create_browser_session(user, remember=True):
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
         key="set_auth_token_cookie",
     )
+    # This cookie selects the PIN screen on this browser. It contains only the
+    # login identifier, never the PIN or password; authentication still requires
+    # the valid auth_token or a correct PIN.
+    if remember:
+        cookie_manager.set(
+            "remembered_user", str(user.get("login", "")),
+            expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+            key="set_remembered_user_cookie",
+        )
+    else:
+        try:
+            cookie_manager.delete("remembered_user")
+        except Exception:
+            pass
 
 
 def _passkey_b64url_encode(value):
@@ -2865,6 +2879,11 @@ def _passkey_create_login_session(user):
         "auth_token", token,
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
         key="set_auth_token_cookie",
+    )
+    cookie_manager.set(
+        "remembered_user", str(user.get("login", "")),
+        expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+        key="set_remembered_user_cookie",
     )
 
 
@@ -3001,6 +3020,55 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state.remember_login = True
             st.session_state._auth_last_activity = moscow_now()
             break
+
+# Browser-side activity heartbeat: mouse, keyboard, touch, scrolling and form
+# interaction refresh a hidden Streamlit button while the page is actively used.
+# This makes activity visible to the server even when the user only reads/scrolls.
+if st.session_state.get("authenticated"):
+    _auth_heartbeat_clicked = st.button("auth activity heartbeat", key="auth_activity_heartbeat")
+    if _auth_heartbeat_clicked:
+        st.session_state._auth_last_activity = moscow_now()
+        _auth_token_for_heartbeat = cookies.get("auth_token")
+        if _auth_token_for_heartbeat:
+            _heartbeat_hash = hashlib.sha256(str(_auth_token_for_heartbeat).encode("utf-8")).hexdigest()
+            _heartbeat_expiry_changed = False
+            for _heartbeat_user in st.session_state.crm_store.get("users", []):
+                for _heartbeat_session in _heartbeat_user.get("auth_sessions", []):
+                    if isinstance(_heartbeat_session, dict) and secrets.compare_digest(str(_heartbeat_session.get("token_hash", "")), _heartbeat_hash):
+                        try:
+                            _current_expiry = datetime.fromisoformat(str(_heartbeat_session.get("expires_at", "")))
+                        except (TypeError, ValueError):
+                            _current_expiry = moscow_now()
+                        if _current_expiry <= moscow_now() + timedelta(minutes=55):
+                            _heartbeat_session["expires_at"] = (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds")
+                            _heartbeat_expiry_changed = True
+            if _heartbeat_expiry_changed:
+                save_data(st.session_state.crm_store)
+    st.markdown("""<style>
+    .st-key-auth_activity_heartbeat {display:none !important;}
+    </style>""", unsafe_allow_html=True)
+    components.html("""<script>
+    (function(){
+      try {
+        const w = window.parent;
+        if (!w.__crmAuthActivityState) w.__crmAuthActivityState = {last: Date.now(), installed: false};
+        const state = w.__crmAuthActivityState;
+        if (!state.installed) {
+          const mark = function(){ state.last = Date.now(); };
+          ['pointerdown','keydown','touchstart','scroll','click','input','change','wheel'].forEach(function(evt){
+            w.document.addEventListener(evt, mark, {passive:true, capture:true});
+          });
+          state.installed = true;
+        }
+        if (w.__crmAuthHeartbeatTimer) w.clearInterval(w.__crmAuthHeartbeatTimer);
+        w.__crmAuthHeartbeatTimer = w.setInterval(function(){
+          if (Date.now() - state.last > 5 * 60 * 1000) return;
+          const candidates = w.document.querySelectorAll('.st-key-auth_activity_heartbeat button');
+          if (candidates.length && !candidates[0].disabled) candidates[0].click();
+        }, 30000);
+      } catch(e) {}
+    })();
+    </script>""", height=0)
 
 if st.session_state.get("authenticated"):
     _last_activity = st.session_state.get("_auth_last_activity")
@@ -3392,7 +3460,7 @@ if not st.session_state.authenticated:
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
             remember_login = st.checkbox("Запомнить меня в этом браузере", value=False, key="remember_login_checkbox")
             if remember_login:
-                st.caption("Сессия действует до 60 минут бездействия. Обновление страницы не требует повторного входа, пока сессия активна.")
+                st.caption("Сессия действует до 60 минут бездействия. При активности CRM продлевает сессию автоматически.")
                 _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="password", max_chars=8, key="new_login_pin")
                 _confirm_pin = st.text_input("Повторите PIN-код:", type="password", max_chars=8, key="confirm_login_pin")
             else:
