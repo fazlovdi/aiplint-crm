@@ -1502,55 +1502,6 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
             st.session_state["_pending_reminder_dialog"] = {"entity_type": str(entity_type), "entity_id": str(entity_id), "entity_label": str(entity_label)}
             st.rerun()
 
-@_crm_dialog("Предстоящие напоминания", width="large")
-def upcoming_reminders_dialog():
-    """Показывает текущему пользователю только его предстоящие напоминания."""
-    store = st.session_state.get("crm_store", {})
-    current_login = str(st.session_state.get("user_login", "") or "")
-    now = moscow_now()
-    reminders = store.setdefault("reminders", [])
-    upcoming = []
-    for reminder in reminders:
-        if str(reminder.get("recipient", "")) != current_login or reminder.get("sent"):
-            continue
-        try:
-            due = datetime.strptime(str(reminder.get("due_at", ""))[:19], "%Y-%m-%d %H:%M:%S")
-        except Exception:
-            continue
-        if due > now:
-            upcoming.append((due, reminder))
-    upcoming.sort(key=lambda item: item[0])
-    st.caption(f"Предстоящих напоминаний: {len(upcoming)}")
-    if not upcoming:
-        st.info("Предстоящих напоминаний нет.")
-        return
-    for due, reminder in upcoming:
-        rid = str(reminder.get("id", ""))
-        with st.container(border=True):
-            left, right = st.columns([12, 1], vertical_alignment="center")
-            with left:
-                st.markdown(f"**{due.strftime('%d.%m.%Y %H:%M')}** · {html.escape(str(reminder.get('entity_label') or 'Напоминание'))}")
-                st.markdown(html.escape(str(reminder.get("text", ""))).replace("\n", "  \n"))
-            with right:
-                if st.button("🗑", key=f"upcoming_rem_delete_{rid}", help="Удалить напоминание", use_container_width=True):
-                    st.session_state[f"upcoming_rem_confirm_{rid}"] = True
-            confirm_key = f"upcoming_rem_confirm_{rid}"
-            if st.session_state.get(confirm_key):
-                st.warning("Удалить это напоминание?")
-                yes, no = st.columns(2)
-                with yes:
-                    if st.button("Удалить", key=f"upcoming_rem_yes_{rid}", type="primary", use_container_width=True):
-                        store["reminders"] = [x for x in reminders if str(x.get("id", "")) != rid]
-                        st.session_state.pop(confirm_key, None)
-                        save_data(store)
-                        st.toast("Напоминание удалено", icon="🗑️")
-                        st.rerun()
-                with no:
-                    if st.button("Отмена", key=f"upcoming_rem_no_{rid}", use_container_width=True):
-                        st.session_state.pop(confirm_key, None)
-                        st.rerun()
-
-
 def process_due_reminders():
     """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
     store = st.session_state.get("crm_store")
@@ -3829,44 +3780,9 @@ with _header_center:
         unsafe_allow_html=True,
     )
 with _header_right:
-    _current_login_for_reminders = str(st.session_state.get("user_login", "") or "")
-    _reminder_now_for_header = moscow_now()
-    _upcoming_reminder_count = 0
-    for _header_reminder in st.session_state.crm_store.get("reminders", []):
-        if str(_header_reminder.get("recipient", "")) != _current_login_for_reminders or _header_reminder.get("sent"):
-            continue
-        try:
-            _header_due = datetime.strptime(str(_header_reminder.get("due_at", ""))[:19], "%Y-%m-%d %H:%M:%S")
-            if _header_due > _reminder_now_for_header:
-                _upcoming_reminder_count += 1
-        except Exception:
-            pass
-    _date_col, _count_col = st.columns([3.3, 1], vertical_alignment="center", gap="small")
-    with _date_col:
-        st.markdown("""<style>
-        .st-key-crm_reminders_calendar_btn,
-        .st-key-crm_reminders_calendar_btn > div,
-        .st-key-crm_reminders_calendar_btn [data-testid="stButton"] {width:100%!important;margin:0!important;padding:0!important;}
-        .st-key-crm_reminders_calendar_btn [data-testid="stButton"] > button {
-            width:100%!important;min-height:0!important;height:auto!important;padding:0!important;margin:0!important;
-            border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;
-            color:#7F8C9A!important;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;
-            font-size:0.82rem!important;font-weight:400!important;line-height:1.2!important;white-space:nowrap!important;
-        }
-        .st-key-crm_reminders_calendar_btn [data-testid="stButton"] > button:hover,
-        .st-key-crm_reminders_calendar_btn [data-testid="stButton"] > button:focus,
-        .st-key-crm_reminders_calendar_btn [data-testid="stButton"] > button:active {
-            border:0!important;background:transparent!important;box-shadow:none!important;color:#7F8C9A!important;
-        }
-        .st-key-crm_reminders_calendar_btn [data-testid="stButton"] > button p {font-size:0.82rem!important;font-weight:400!important;line-height:1.2!important;margin:0!important;padding:0!important;}
-        </style>""", unsafe_allow_html=True)
-        if st.button(_reminder_now_for_header.strftime("%d.%m.%Y"), key="crm_reminders_calendar_btn", help="Открыть предстоящие напоминания"):
-            st.session_state["_pending_upcoming_reminders_dialog"] = True
-    with _count_col:
-        if _upcoming_reminder_count > 0:
-            st.markdown(f"""<div style="display:flex;justify-content:flex-start;align-items:center;height:100%;padding-top:1px;"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;border-radius:10px;background:#bc1661;color:#fff;font-size:0.68rem;font-weight:700;line-height:17px;box-sizing:border-box;">{_upcoming_reminder_count}</span></div>""", unsafe_allow_html=True)
     components.html("""
     <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
+      <div id="crm-live-date" style="font-size:0.82rem;color:#7F8C9A;"></div>
       <div id="crm-live-time" style="font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums;"></div>
     </div>
     <script>
@@ -3874,6 +3790,8 @@ with _header_right:
       function updateClock(){
         const now = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/Moscow'}));
         const pad = n => String(n).padStart(2,'0');
+        document.getElementById('crm-live-date').textContent =
+          pad(now.getDate())+'.'+pad(now.getMonth()+1)+'.'+now.getFullYear();
         document.getElementById('crm-live-time').textContent =
           pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
       }
@@ -3881,7 +3799,7 @@ with _header_right:
       setInterval(updateClock, 1000);
     })();
     </script>
-    """, height=30, scrolling=False)
+    """, height=48, scrolling=False)
 
 with st.sidebar:
     if st.session_state.cloud_ok: st.success("Облако активно")
@@ -4041,8 +3959,6 @@ _new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks",
 
 # Reset modal request tracking before any shared UI can request a dialog.
 st.session_state["_crm_dialog_requested_this_run"] = False
-if st.session_state.pop("_pending_upcoming_reminders_dialog", False):
-    upcoming_reminders_dialog()
 
 nc1, nc2, nc3, nc4, nc5 = st.columns(5)
 with nc1:
