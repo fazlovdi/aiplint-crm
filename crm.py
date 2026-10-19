@@ -3370,10 +3370,11 @@ def internal_task_detail_dialog(it_id):
                 it["delegated_to"] = _cu
             it["it_status"] = "in_work"
             it["in_work"] = True
+            it["needs_rework"] = False
             it["last_modified"] = now_str()
             st.session_state.pop("dialog_it_key", None)
             commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
-    elif _status == "in_work" or it.get("in_work", False):
+    elif (_status == "in_work" or it.get("in_work", False)) and not (it.get("done", False) and not it.get("reviewed", False)):
         _show_it_complete = f"show_itdlg_complete_{it['id']}"
         if st.button("Выполнить", key=f"itdlg_complete_btn_{it['id']}", type="primary", use_container_width=True):
             st.session_state[_show_it_complete] = not st.session_state.get(_show_it_complete, False)
@@ -3384,6 +3385,7 @@ def internal_task_detail_dialog(it_id):
                 if _it_report.strip():
                     it["done"] = True
                     it["it_status"] = "review"
+                    it["in_work"] = False
                     it["completed_report"] = _it_report.strip()
                     it["last_modified"] = now_str()
                     st.session_state[_show_it_complete] = False
@@ -3396,36 +3398,29 @@ def internal_task_detail_dialog(it_id):
         _it_author = it.get("created_by", "") or it.get("author", "")
         _can_review = _is_admin or _it_author == _cu_login or _it_author == _cu
         if _can_review:
-            _show_rework = f"show_itdlg_rework_{it['id']}"
             _rc1, _rc2 = st.columns(2)
             with _rc1:
                 if st.button("Отправить на доработку", key=f"itdlg_rework_btn_{it['id']}", type="secondary", use_container_width=True):
-                    st.session_state[_show_rework] = not st.session_state.get(_show_rework, False)
-                    st.rerun()
+                    # Возвращаем задачу ответственному в колонку «Новые» и помечаем её.
+                    it["done"] = False
+                    it["it_status"] = "new"
+                    it["in_work"] = False
+                    it["reviewed"] = False
+                    it["needs_rework"] = True
+                    it["last_modified"] = now_str()
+                    st.session_state.pop("dialog_it_key", None)
+                    _manager = it.get("manager", "")
+                    if _manager:
+                        add_notification(_manager, f"Задача №{it['id']} отправлена на доработку", f"↩️ Задача №{it['id']} отправлена на доработку")
+                    commit_and_rerun(st.session_state.crm_store, "Задача возвращена ответственному на доработку")
             with _rc2:
-                if st.button("В архив", key=f"itdlg_archive_btn_{it['id']}", type="primary", use_container_width=True):
+                if st.button("Проверка выполнена", key=f"itdlg_archive_btn_{it['id']}", type="primary", use_container_width=True):
                     it["reviewed"] = True
+                    it["needs_rework"] = False
                     it["it_status"] = "archived"
                     it["last_modified"] = now_str()
                     st.session_state.pop("dialog_it_key", None)
-                    commit_and_rerun(st.session_state.crm_store, "Задача отправлена в архив")
-            if st.session_state.get(_show_rework, False):
-                with st.container(border=True):
-                    _rework_reason = st.text_area("Причина доработки (обязательно):", key=f"itdlg_rework_reason_{it['id']}", height=80)
-                    if st.button("Отправить", key=f"itdlg_rework_go_{it['id']}", type="primary", use_container_width=True):
-                        if _rework_reason.strip():
-                            it["done"] = False
-                            it["it_status"] = "in_work"
-                            it["in_work"] = True
-                            it["reviewed"] = False
-                            it["rework_reason"] = _rework_reason.strip()
-                            it["last_modified"] = now_str()
-                            st.session_state[_show_rework] = False
-                            st.session_state.pop("dialog_it_key", None)
-                            add_notification(it.get("manager", ""), f"Задача №{it['id']} возвращена на доработку: {_rework_reason.strip()}", f"↩️ Задача №{it['id']} возвращена на доработку: {_rework_reason.strip()}")
-                            commit_and_rerun(st.session_state.crm_store, "Задача отправлена на доработку")
-                        else:
-                            st.warning("Укажите причину доработки")
+                    commit_and_rerun(st.session_state.crm_store, "Проверка выполнена — задача перемещена в архив")
         else:
             st.info("Ожидает проверки автором задачи")
         st.markdown("---")
@@ -5389,8 +5384,6 @@ def client_detail_dialog(cl_id):
     _key_prefix = f"client_{cl_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
     _is_editing = st.session_state.get(f"show_edit_{cl_id}", False)
-    # Compact spacing below the dialog title and above the close button
-    st.markdown("<style>[data-testid='stDialog'] [data-testid='stDialogContent']{padding-top:0.1rem!important}[data-testid='stDialog'] [data-testid='stVerticalBlock']{gap:0.08rem!important}[data-testid='stDialog'] h2{margin-top:0!important;margin-bottom:0.05rem!important;padding-top:0!important;padding-bottom:0!important}.st-key-close_row_client_" + str(cl_id) + "{margin-top:0!important;margin-bottom:0!important;padding-top:0!important;padding-bottom:0!important}</style>", unsafe_allow_html=True)
     # Close button
     _close_btn_key = f"close_btn_{_key_prefix}"
     _close_css_key = f"close_row_{_key_prefix}"
@@ -6583,7 +6576,10 @@ elif st.session_state.active_tab == "Внутренние задачи":
                         _it_key = f"it_card_{it['id']}"
                         _it_bg = "#E3F2FD"
                         _it_bc = "#2196F3"
-                        st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
+                        _it_rework_css = ""
+                        if it.get("needs_rework", False):
+                            _it_rework_css = f".st-key-{_it_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
+                        st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }} {_it_rework_css}</style>", unsafe_allow_html=True)
                         with st.container(key=_it_key):
                             _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
                             if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
