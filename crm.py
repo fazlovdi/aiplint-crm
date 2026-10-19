@@ -5835,8 +5835,35 @@ if st.session_state.active_tab == "Клиенты":
         with _hc7:
             st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сумма сделок</div>", unsafe_allow_html=True)
         st.markdown('<div style="border-top:1px solid #DCE0E5;margin-bottom:4px;"></div>', unsafe_allow_html=True)
+        # Индексируем сделки один раз: раньше для каждого клиента повторно просматривалась вся база сделок.
+        _clients_deals_by_id = {}
+        for _deal_item in st.session_state.crm_store.get("deals", []):
+            _clients_deals_by_id.setdefault(_deal_item.get("client_id"), []).append(_deal_item)
+
+        # Объединяем CSS всех кнопок списка в один блок вместо трёх style-блоков на каждого клиента.
+        _client_row_css = []
+        for _style_client in fcl:
+            _style_id = _style_client["id"]
+            _style_deals = _clients_deals_by_id.get(_style_id, [])
+            _style_active_deals = any(_sd.get("status", "Новый") in ("Новый", "В работе") for _sd in _style_deals)
+            _style_tasks = _style_client.get("tasks", [])
+            _style_overdue_tasks = any(not _st.get("done") and is_task_overdue(_st) for _st in _style_tasks)
+            _style_active_tasks = any(not _st.get("done") for _st in _style_tasks)
+            _style_deals_color = "#2E7D32" if _style_active_deals else "#2C3E50"
+            _style_tasks_color = "#C62828" if _style_overdue_tasks else ("#2E7D32" if _style_active_tasks else "#2C3E50")
+            _client_row_css.append(
+                f".st-key-tbl_name_{_style_id} button{{background:transparent!important;border:none!important;box-shadow:none!important;text-align:left!important;padding:2px 0!important;font-size:.88rem!important;color:#2C3E50!important;font-weight:600!important}}"
+                f".st-key-tbl_name_{_style_id} button:hover{{color:#bc1661!important}}"
+                f".st-key-tbl_deals_btn_{_style_id} button,.st-key-tbl_tasks_{_style_id} button{{background:transparent!important;border:none!important;box-shadow:none!important;text-decoration:none!important;padding:2px 0!important;font-size:.88rem!important}}"
+                f".st-key-tbl_deals_btn_{_style_id} button{{color:{_style_deals_color}!important;font-weight:{800 if _style_deals_color != '#2C3E50' else 600}!important}}"
+                f".st-key-tbl_tasks_{_style_id} button{{color:{_style_tasks_color}!important;font-weight:{800 if _style_tasks_color != '#2C3E50' else 600}!important}}"
+                f".st-key-tbl_deals_btn_{_style_id} button:hover,.st-key-tbl_tasks_{_style_id} button:hover{{color:#bc1661!important}}"
+            )
+        if _client_row_css:
+            st.markdown("<style>" + "".join(_client_row_css) + "</style>", unsafe_allow_html=True)
+
         for cl in fcl:
-            cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl["id"]]
+            cl_deals = _clients_deals_by_id.get(cl["id"], [])
             cl_tasks_all = cl.get("tasks", [])
             all_tasks_count = len(cl_tasks_all)
             deals_sum = sum(d.get("budget", 0) for d in cl_deals)
@@ -5858,10 +5885,8 @@ if st.session_state.active_tab == "Клиенты":
             with _c1:
                 # Текст вместо кнопки с рамкой — прозрачный фон, без границ, кликабельный
                 _name_btn_key = f"tbl_name_{cl['id']}"
-                st.markdown(f"<style>.st-key-{_name_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; text-align: left !important; padding: 2px 0 !important; font-size: 0.88rem !important; color: #2C3E50 !important; font-weight: 600 !important; }} .st-key-{_name_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
-                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True, ):
+                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True):
                     st.session_state["dialog_client_key"] = cl["id"]
-                    st.rerun()
             with _c2:
                 _city = html.escape(str(cl.get("city", "") or "—"))
                 st.markdown(f"<div title='{_city}' style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.84rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_city}</div>", unsafe_allow_html=True)
@@ -5873,10 +5898,8 @@ if st.session_state.active_tab == "Клиенты":
             with _c5:
                 _deals_btn_key = f"tbl_deals_btn_{cl['id']}"
                 _deals_color = "#2E7D32" if has_active_deals else "#2C3E50"
-                st.markdown(f"<style>.st-key-{_deals_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_deals_color} !important; font-weight: {800 if _deals_color != '#2C3E50' else 600} !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_deals_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
-                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True, ):
+                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True):
                     st.session_state["dialog_client_deals_key"] = cl["id"]
-                    st.rerun()
             with _c6:
                 _tasks_btn_key = f"tbl_tasks_{cl['id']}"
                 if has_overdue_tasks:
@@ -5885,10 +5908,8 @@ if st.session_state.active_tab == "Клиенты":
                     _tasks_color = "#2E7D32"
                 else:
                     _tasks_color = "#2C3E50"
-                st.markdown(f"<style>.st-key-{_tasks_btn_key} button {{ background: transparent !important; border: none !important; box-shadow: none !important; color: {_tasks_color} !important; font-weight: {800 if _tasks_color != '#2C3E50' else 600} !important; text-decoration: none !important; padding: 2px 0 !important; font-size: 0.88rem !important; }} .st-key-{_tasks_btn_key} button:hover {{ color: #bc1661 !important; }}</style>", unsafe_allow_html=True)
-                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True, ):
+                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True):
                     st.session_state["dialog_client_tasks_key"] = cl["id"]
-                    st.rerun()
             with _c7:
                 st.markdown(f"<div style='display:flex;align-items:center;justify-content:flex-end;min-height:32px;font-weight:600;white-space:nowrap;'>{_sum_str}</div>", unsafe_allow_html=True)
             # Разделитель между клиентами — минимальный отступ
