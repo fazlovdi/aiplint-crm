@@ -3021,9 +3021,10 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state._auth_last_activity = moscow_now()
             break
 
-# Browser-side activity heartbeat: mouse, keyboard, touch, scrolling and form
-# interaction refresh a hidden Streamlit button while the page is actively used.
-# This makes activity visible to the server even when the user only reads/scrolls.
+# Не запускаем периодический скрытый Streamlit-клик для проверки активности.
+# Такой клик вызывает st.rerun() каждые несколько секунд и может закрывать/повторно
+# открывать диалоги и модальные окна. Активность обновляется обычными действиями CRM.
+
 if st.session_state.get("authenticated"):
     _auth_heartbeat_clicked = st.button("auth activity heartbeat", key="auth_activity_heartbeat")
     if _auth_heartbeat_clicked:
