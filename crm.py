@@ -6345,25 +6345,34 @@ elif st.session_state.active_tab == "Сделки":
 
 elif st.session_state.active_tab == "Задачи":
     now_time = moscow_now()
-    # Верхняя шапка раздела задач: компактный заголовок в стиле нового макета.
+    # Верхняя шапка раздела задач: современный компактный стиль без изменения общей навигации CRM.
     st.markdown("""
     <style>
-    .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0.25rem 0 0.8rem 0; padding: 0.15rem 0 0.7rem 0; border-bottom:1px solid #E3E8EF; }
-    .tasks-page-title { color:#2C3E50; font-size:1.8rem; line-height:1.2; font-weight:750; letter-spacing:-0.035em; }
-    .tasks-page-subtitle { color:#8492A6; font-size:0.88rem; margin-top:0.2rem; }
-    div[data-testid="stTabs"] > div[role="tablist"] { gap:0.35rem; border-bottom:1px solid #E3E8EF; padding-bottom:0.35rem; }
-    div[data-testid="stTabs"] button[role="tab"] { border-radius:9px 9px 0 0; padding:0.55rem 1.05rem; color:#65758B; font-weight:600; }
-    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color:#BC1661 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.045); }
+    .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0.15rem 0 0.8rem 0; padding: 0.1rem 0 0.85rem 0; border-bottom:1px solid #E3E8EF; }
+    .tasks-page-title-row { display:flex; align-items:center; gap:12px; }
+    .tasks-page-title { color:#26384A; font-size:1.9rem; line-height:1.15; font-weight:750; letter-spacing:-0.04em; }
+    .tasks-page-subtitle { color:#8492A6; font-size:0.86rem; margin-top:0.25rem; }
+    .tasks-page-mark { width:5px; height:34px; border-radius:8px; background:#BC1661; }
+    div[data-testid="stTabs"] { margin-top:0.1rem; }
+    div[data-testid="stTabs"] > div[role="tablist"] { gap:0.35rem; border-bottom:1px solid #E3E8EF; padding:0.15rem 0 0.45rem 0; }
+    div[data-testid="stTabs"] button[role="tab"] { border:1px solid #E0E6EF; border-radius:9px 9px 0 0; padding:0.55rem 1.15rem; color:#65758B; font-weight:600; background:rgba(255,255,255,0.55); }
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.055) !important; }
     div[data-testid="stTabs"] button[role="tab"] p { font-size:0.92rem; }
-    .st-key-task_search_input input { min-height:42px; }
-    .st-key-task_filter_mgr [data-testid="stSelectbox"] > div > div { min-height:42px; }
+    .st-key-task_search_input input { min-height:44px; border-radius:9px !important; }
+    .st-key-task_filter_mgr [data-testid="stSelectbox"] > div > div { min-height:44px; border-radius:9px !important; }
+    .st-key-task_search_input, .st-key-task_filter_mgr { padding-top:0.1rem; }
+    .tasks-filter-caption { color:#8A97A8; font-size:0.74rem; font-weight:650; text-transform:uppercase; letter-spacing:0.055em; margin:0.05rem 0 0.2rem 0.1rem; }
+    @media (min-width: 900px) {
+      div[data-testid="stTabs"] button[role="tab"] { min-width:118px; }
+    }
     </style>
     <div class="tasks-page-heading">
-      <div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div>
+      <div class="tasks-page-title-row"><div class="tasks-page-mark"></div><div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div></div>
     </div>
     """, unsafe_allow_html=True)
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
     with plan_sub1:
+        st.markdown("<div class='tasks-filter-caption'>Поиск и фильтрация</div>", unsafe_allow_html=True)
         col_sq, col_mf = st.columns([3.2, 1.8], gap="small")
         with col_sq:
             _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="⌕  Поиск по задачам...", label_visibility="collapsed")
