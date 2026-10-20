@@ -3650,42 +3650,167 @@ if not st.session_state.authenticated:
 
 process_due_reminders()
 
-# Единая верхняя шапка CRM: бренд слева, дата/время и действия справа.
-# Вкладки рабочих разделов остаются в основной области; боковая панель не дублирует их.
+# Главная шапка: уведомления слева, приветствие по центру, дата и часы справа.
+# Выравниваем кнопку боковой панели и уведомлений по одной высоте; увеличиваем сам символ.
 st.markdown("""<style>
-.crm-global-header {
-    display:flex; align-items:center; justify-content:space-between; gap:18px;
-    width:100%; min-height:54px; padding:5px 4px 10px 4px;
-    border-bottom:1px solid #E1E6ED; margin-bottom:14px;
+/* Streamlit places a keyed wrapper around each widget; target both wrapper and actual button. */
+.st-key-crm_sidebar_toggle_btn,
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"],
+.st-key-crm_sidebar_toggle_btn > div {
+    align-self: center !important;
+    width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
 }
-.crm-global-brand { display:flex; align-items:center; gap:10px; min-width:0; }
-.crm-global-brand img { width:32px; height:32px; object-fit:contain; }
-.crm-global-brand-name { color:#263B57; font-size:1.18rem; font-weight:750; white-space:nowrap; }
-.crm-global-clock { text-align:right; color:#718198; white-space:nowrap; font-size:.82rem; }
-.crm-global-clock strong { color:#415875; font-size:.95rem; margin-left:8px; }
+.st-key-crm_sidebar_toggle_btn [data-testid="stButton"] > button,
 .st-key-crm_sidebar_toggle_btn button {
-    border:0!important; background:transparent!important; box-shadow:none!important;
-    color:#526985!important; font-size:1.25rem!important; min-height:36px!important;
-    padding:0!important; width:36px!important;
+    width: 22px !important;
+    min-width: 22px !important;
+    max-width: 22px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    line-height: 1 !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
 }
-.st-key-crm_sidebar_toggle_btn button:hover { color:#bc1661!important; }
-@media (max-width: 700px) {
-  .crm-global-brand-name { font-size:1rem; }
-  .crm-global-clock { font-size:.72rem; }
+.st-key-crm_sidebar_toggle_btn button:hover,
+.st-key-crm_sidebar_toggle_btn button:focus,
+.st-key-crm_sidebar_toggle_btn button:active {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+}
+.st-key-crm_sidebar_toggle_btn button p,
+.st-key-crm_sidebar_toggle_btn button span {
+    font-size: 1.175rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+/* Match the notification button's height so the two controls align exactly. */
+.st-key-crm_bell_wrap [data-testid="stButton"] > button {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    box-sizing: border-box !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+.st-key-crm_bell_wrap [data-testid="stButton"] > button p {
+    line-height: 1 !important;
 }
 </style>""", unsafe_allow_html=True)
-_header_brand, _header_clock, _header_actions = st.columns([3.2, 2.2, 1.0], vertical_alignment="center")
-with _header_brand:
-    _logo_b64 = get_logo_base64()
-    if _logo_b64:
-        _brand_html = f'<div class="crm-global-header"><div class="crm-global-brand"><img src="data:image/png;base64,{_logo_b64}" alt="Айплинт"><span class="crm-global-brand-name">Айплинт CRM</span></div></div>'
-    else:
-        _brand_html = '<div class="crm-global-header"><div class="crm-global-brand"><span class="crm-global-brand-name">Айплинт CRM</span></div></div>'
-    st.markdown(_brand_html, unsafe_allow_html=True)
-with _header_clock:
+_header_left, _header_center, _header_right = st.columns([1.35, 4, 1.35], vertical_alignment="center")
+with _header_left:
+    _toggle_col, _bell_col = st.columns([0.32, 1], vertical_alignment="center")
+    with _toggle_col:
+        _sidebar_icon = "☰" if not st.session_state.get("_crm_sidebar_visible", True) else "‹"
+        if st.button(_sidebar_icon, key="crm_sidebar_toggle_btn", use_container_width=True):
+            st.session_state["_crm_sidebar_visible"] = not st.session_state.get("_crm_sidebar_visible", True)
+            st.rerun()
+    with _bell_col:
+        render_notifications_bell()
+with _header_center:
+    # Заголовок визуально остаётся обычным h1; клик запускает загрузку сохранённых данных.
+    st.markdown("""<style>
+    .st-key-crm_refresh_db_title,
+    .st-key-crm_refresh_db_title > div,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] {
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button,
+    .st-key-crm_refresh_db_title button {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+        display: block !important;
+        width: auto !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+        color: var(--text-color) !important;
+        font-family: inherit !important;
+        font-size: 3.5rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+        text-align: center !important;
+        text-decoration: none !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+    }
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button:hover,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button:focus,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button:active {
+        background: transparent !important;
+        color: var(--text-color) !important;
+        border: 0 !important;
+        outline: none !important;
+        box-shadow: none !important;
+        text-decoration: none !important;
+        transform: none !important;
+    }
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button p,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button span,
+    .st-key-crm_refresh_db_title [data-testid="stButton"] > button div {
+        font-family: inherit !important;
+        font-size: 3.5rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: inherit !important;
+        text-decoration: none !important;
+    }
+    [class*="crm_refresh_db_title"] button,
+    [class*="crm_refresh_db_title"] button *,
+    [class*="crm_refresh_db_title"] [data-testid="stMarkdownContainer"],
+    [class*="crm_refresh_db_title"] p,
+    [class*="crm_refresh_db_title"] span,
+    [class*="crm_refresh_db_title"] div {
+        font-size: 3.5rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+    }
+    </style>""", unsafe_allow_html=True)
+    if st.button("Айплинт CRM", key="crm_refresh_db_title"):
+        with st.spinner("⟳ Обновляем базу данных…"):
+            st.session_state.crm_store = load_data()
+        st.toast("База данных обновлена", icon="🔄")
+    st.markdown(
+        f'<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>',
+        unsafe_allow_html=True,
+    )
+with _header_right:
     components.html("""
-    <div class="crm-global-clock" style="padding-top:6px">
-      <span id="crm-live-date"></span><strong id="crm-live-time"></strong>
+    <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
+      <div id="crm-live-date" style="font-size:0.82rem;color:#7F8C9A;"></div>
+      <div id="crm-live-time" style="font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums;"></div>
     </div>
     <script>
     (function(){
@@ -3697,19 +3822,11 @@ with _header_clock:
         document.getElementById('crm-live-time').textContent =
           pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
       }
-      updateClock(); setInterval(updateClock, 1000);
+      updateClock();
+      setInterval(updateClock, 1000);
     })();
     </script>
-    """, height=38, scrolling=False)
-with _header_actions:
-    _act_menu, _act_bell = st.columns([0.7, 1.0], vertical_alignment="center")
-    with _act_menu:
-        _sidebar_icon = "☰" if not st.session_state.get("_crm_sidebar_visible", True) else "‹"
-        if st.button(_sidebar_icon, key="crm_sidebar_toggle_btn", help="Показать/скрыть боковую панель"):
-            st.session_state["_crm_sidebar_visible"] = not st.session_state.get("_crm_sidebar_visible", True)
-            st.rerun()
-    with _act_bell:
-        render_notifications_bell()
+    """, height=48, scrolling=False)
 
 with st.sidebar:
     if st.session_state.cloud_ok: st.success("Облако активно")
