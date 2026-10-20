@@ -1638,6 +1638,18 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
                         st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
+                    # Для задачи, созданной непосредственно по клиенту, ссылка на карточку
+                    # клиента расположена и оформлена так же, как ссылка на сделку выше.
+                    if cl:
+                        _client_link_key = f"task_client_link_{key_prefix}"
+                        if st.button(f"{cl.get('name', 'Клиент')}", key=_client_link_key, type="secondary"):
+                            _push_dialog_return()
+                            st.session_state.active_tab = "Клиенты"
+                            st.session_state["dialog_client_key"] = cl.get("id")
+                            st.session_state.pop("dialog_task_key", None)
+                            st.session_state.pop("_open_created_task", None)
+                            st.session_state["_in_dialog"] = False
+                            st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
                         st.markdown(f"**Тема:** {t.get('text', '')}")
