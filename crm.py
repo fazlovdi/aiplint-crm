@@ -6345,11 +6345,28 @@ elif st.session_state.active_tab == "Сделки":
 
 elif st.session_state.active_tab == "Задачи":
     now_time = moscow_now()
+    # Верхняя шапка раздела задач: компактный заголовок в стиле нового макета.
+    st.markdown("""
+    <style>
+    .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0.25rem 0 0.8rem 0; padding: 0.15rem 0 0.7rem 0; border-bottom:1px solid #E3E8EF; }
+    .tasks-page-title { color:#2C3E50; font-size:1.8rem; line-height:1.2; font-weight:750; letter-spacing:-0.035em; }
+    .tasks-page-subtitle { color:#8492A6; font-size:0.88rem; margin-top:0.2rem; }
+    div[data-testid="stTabs"] > div[role="tablist"] { gap:0.35rem; border-bottom:1px solid #E3E8EF; padding-bottom:0.35rem; }
+    div[data-testid="stTabs"] button[role="tab"] { border-radius:9px 9px 0 0; padding:0.55rem 1.05rem; color:#65758B; font-weight:600; }
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color:#BC1661 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.045); }
+    div[data-testid="stTabs"] button[role="tab"] p { font-size:0.92rem; }
+    .st-key-task_search_input input { min-height:42px; }
+    .st-key-task_filter_mgr [data-testid="stSelectbox"] > div > div { min-height:42px; }
+    </style>
+    <div class="tasks-page-heading">
+      <div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div>
+    </div>
+    """, unsafe_allow_html=True)
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
     with plan_sub1:
-        col_sq, col_mf = st.columns([3, 2])
+        col_sq, col_mf = st.columns([3.2, 1.8], gap="small")
         with col_sq:
-            _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="Поиск...", label_visibility="collapsed")
+            _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="⌕  Поиск по задачам...", label_visibility="collapsed")
             task_search = (_task_search_now or "").strip().lower()
         with col_mf:
             _task_mgr_list = ["Все"] + get_managers_list()
@@ -6357,7 +6374,7 @@ elif st.session_state.active_tab == "Задачи":
             _default_idx_task = 0
             if _cu_name_task and _cu_name_task in _task_mgr_list:
                 _default_idx_task = _task_mgr_list.index(_cu_name_task)
-            mf = st.selectbox("Ответственный", _task_mgr_list, index=_default_idx_task, key="task_filter_mgr", label_visibility="collapsed")
+            mf = st.selectbox("Ответственный", _task_mgr_list, index=_default_idx_task, key="task_filter_mgr", label_visibility="collapsed", help="Показать задачи выбранного ответственного")
         di = {d["id"]: d for d in st.session_state.crm_store.get("deals", [])}
         aat = []
         new_tasks = []
