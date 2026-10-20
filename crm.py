@@ -1780,7 +1780,19 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            commit_and_rerun(st.session_state.crm_store, "Задача взята в работу")
+                            # Сначала фиксируем новый статус. Затем закрываем окно задачи,
+                            # чтобы основная доска перерисовалась с актуальным списком:
+                            # задача сразу исчезает из «Новые» и появляется в «В работе/На сегодня».
+                            save_data(st.session_state.crm_store)
+                            st.session_state.pop("dialog_task_key", None)
+                            st.session_state.pop("dialog_task_number", None)
+                            st.session_state.pop("dialog_task_client_id", None)
+                            st.session_state.pop("dialog_task_deal_id", None)
+                            st.session_state.pop("_open_created_task", None)
+                            _pop_dialog_return()
+                            st.session_state["_in_dialog"] = False
+                            st.toast("Задача взята в работу", icon="✅")
+                            st.rerun()
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state["dialog_task_completion"] = {
