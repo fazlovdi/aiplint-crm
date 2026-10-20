@@ -6496,7 +6496,41 @@ elif st.session_state.active_tab == "Задачи":
                 else: st.caption("Новых задач нет.")
         with col_today:
             with st.container(border=True):
-                st.subheader(f"На сегодня ({len(tt_list)})")
+                _today_head, _today_print_col = st.columns([5, 1])
+                with _today_head:
+                    st.subheader(f"На сегодня ({len(tt_list)})")
+                with _today_print_col:
+                    if st.button("", key="print_today_tasks_btn", icon=":material/print:", type="secondary"):
+                        _print_rows = []
+                        for _pt in tt_list:
+                            _ptask = _pt["task_obj"]
+                            _print_rows.append(
+                                "<tr>"
+                                f"<td>{html.escape(str(_ptask.get('task_number', '') or ''))}</td>"
+                                f"<td>{html.escape(str(_ptask.get('products', '') or '')).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(str(_ptask.get('task_comment', '') or _ptask.get('text', '') or '')).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(str(_ptask.get('tk_num', '') or ''))}</td>"
+                                "<td class='notes'></td>"
+                                "</tr>"
+                            )
+                        _print_date = moscow_now().strftime("%d.%m.%Y")
+                        _print_html = f'''<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Задачи на сегодня</title><style>
+                        @page {{ size: A4 landscape; margin: 10mm; }}
+                        body {{ font-family: Arial, sans-serif; color: #111; margin: 0; }}
+                        h2 {{ font-size: 18px; margin: 0 0 4px; }}
+                        .meta {{ font-size: 11px; margin-bottom: 12px; }}
+                        table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }}
+                        th, td {{ border: 1px solid #555; padding: 6px; vertical-align: top; overflow-wrap: anywhere; }}
+                        th {{ background: #eee; text-align: left; }}
+                        th:nth-child(1) {{ width: 9%; }} th:nth-child(2) {{ width: 24%; }}
+                        th:nth-child(3) {{ width: 29%; }} th:nth-child(4) {{ width: 17%; }} th:nth-child(5) {{ width: 21%; }}
+                        td.notes {{ height: 28px; }}
+                        @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
+                        </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
+                        <table><thead><tr><th>№ задачи</th><th>Товары</th><th>Комментарий</th><th>Трек</th><th>Отметки</th></tr></thead>
+                        <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="5">На сегодня задач нет</td></tr>'}</tbody></table>
+                        <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
+                        components.html(_print_html, height=0, width=0)
                 if tt_list:
                     for t in tt_list: render_task_block(t, "today")
                 else: st.success("Все задачи на сегодня закрыты.")
