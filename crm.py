@@ -4395,7 +4395,7 @@ def render_deal_products_block(d, key_prefix):
         with total_col:
             st.markdown(f"{calc['total']:,.0f} ₽".replace(",", " "))
         with edit_col:
-            if st.button("Изменить", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
+            if st.button("Открыть", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
                 _push_dialog_return()
                 deal_calculation_dialog(d["id"], calc["id"])
         with delete_col:
@@ -4421,6 +4421,14 @@ def render_deal_products_block(d, key_prefix):
 @_crm_dialog("Расчёт сделки", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
     """Отдельное окно редактирования расчёта в стиле окон задач."""
+    def _calc_refresh():
+        if st.session_state.get("_crm_inside_dialog_host", False):
+            try:
+                st.rerun(scope="fragment")
+            except TypeError:
+                st.rerun()
+        else:
+            st.rerun()
     deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id")) == str(deal_id)), None)
     if not deal:
         st.error("Сделка не найдена")
@@ -4452,7 +4460,7 @@ def deal_calculation_dialog(deal_id, calc_id):
             if st.button("✕", key=f"{key}_close", use_container_width=True):
                 if st.session_state.get(dirty_key, False) and not st.session_state.get(warning_key, False):
                     st.session_state[warning_key] = True
-                    st.rerun()
+                    _calc_refresh()
                 else:
                     if calc.get("_draft"):
                         deal["calculations"] = [x for x in deal.get("calculations", []) if str(x.get("id")) != str(calc_id)]
@@ -4492,9 +4500,15 @@ def deal_calculation_dialog(deal_id, calc_id):
             with c3:
                 if st.button("Продолжить", key=f"{key}_warn_continue", use_container_width=True):
                     st.session_state[warning_key] = False
-                    st.rerun()
+                    _calc_refresh()
 
-    st.markdown("## Расчёт сделки")
+    st.markdown("""<style>
+    div[role="dialog"] div[data-testid="stVerticalBlock"] {gap: 0.45rem !important;}
+    div[role="dialog"] div[data-testid="stHorizontalBlock"] {gap: 0.55rem !important;}
+    div[role="dialog"] .stTextInput, div[role="dialog"] .stNumberInput, div[role="dialog"] .stSelectbox {margin-bottom: -0.25rem !important;}
+    div[role="dialog"] [data-testid="stCaptionContainer"] {margin-top: -0.35rem !important;margin-bottom: -0.25rem !important;}
+    </style>""", unsafe_allow_html=True)
+    st.markdown("### Расчёт сделки")
     st.text_input("Название расчёта", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
     catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
     active_products = [p for p in catalog if p.get("active", True)]
@@ -4553,7 +4567,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         if st.button("Удалить позицию", key=f"{key}_{row_id}_remove"):
             calc["items"] = [x for x in items if x.get("row_id") != row_id]
             st.session_state[dirty_key] = True
-            st.rerun()
+            _calc_refresh()
         # Обновляем только локальный объект до нажатия «Сохранить расчёт».
         item["product_id"] = selected_pid
         item["product_name"] = product.get("name", "")
@@ -4570,12 +4584,27 @@ def deal_calculation_dialog(deal_id, calc_id):
         product = active_products[0]
         items.append({"row_id": uuid.uuid4().hex, "product_id": str(product.get("id", product.get("sku", ""))), "product_name": product.get("name", ""), "unit": product.get("unit", "шт."), "quantity": 1.0, "unit_price": float(product.get("price", 0) or 0), "discount": float(custom_default if selected_dtype == "Индивидуальная" else DISCOUNT_TYPES.get(selected_dtype, 0)), "color_ral": ""})
         st.session_state[dirty_key] = True
-        st.rerun()
+        _calc_refresh()
 
     delivery_key = f"{key}_delivery"
-    delivery = st.number_input("Доставка, ₽", min_value=0.0, value=float(calc.get("delivery_amount", 0) or 0), step=100.0, format="%g", key=delivery_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True), help="Вводится вручную и не участвует в скидках.")
+    delivery_exists = bool(calc.get("delivery_added", False) or float(calc.get("delivery_amount", 0) or 0) > 0)
+    if delivery_exists:
+        delivery = st.number_input("Доставка, ₽", min_value=0.0, value=float(calc.get("delivery_amount", 0) or 0), step=100.0, format="%g", key=delivery_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        if st.button("Убрать доставку", key=f"{key}_remove_delivery"):
+            calc["delivery_added"] = False
+            calc["delivery_amount"] = 0.0
+            st.session_state.pop(delivery_key, None)
+            st.session_state[dirty_key] = True
+            _calc_refresh()
+    else:
+        delivery = 0.0
+        if st.button("+ Добавить доставку", key=f"{key}_add_delivery", use_container_width=True):
+            calc["delivery_added"] = True
+            calc["delivery_amount"] = 0.0
+            st.session_state[dirty_key] = True
+            _calc_refresh()
     total = _deal_items_total(items) + float(delivery or 0)
-    st.markdown(f"**Итого с доставкой: {total:,.0f} ₽**".replace(",", " "))
+    st.markdown(f"**Итого: {total:,.0f} ₽**".replace(",", " "))
     _save_clicked = st.button("Сохранить расчёт", key=f"{key}_save", type="primary", use_container_width=True)
     _save_from_warning = bool(st.session_state.pop(f"{key}_save_requested", False))
     if _save_clicked or _save_from_warning:
