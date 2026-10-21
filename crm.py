@@ -4428,8 +4428,10 @@ def _number_to_russian_words(n):
 def _pdf_font_setup():
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    app_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        ("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ("DejaVu", os.path.join(app_dir, "fonts", "DejaVuSans.ttf"), os.path.join(app_dir, "fonts", "DejaVuSans-Bold.ttf")),
+        ("DejaVuSystem", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         ("Liberation", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
     ]
     for name, regular, bold in candidates:
@@ -4941,9 +4943,9 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.session_state[name_key] = _calculation_display_name(deal, calc)
 
     close_css = f"calc_close_row_{key}"
-    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;}} .st-key-{close_css} .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}</style>''', unsafe_allow_html=True)
+    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:100%!important;min-width:150px!important;min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:normal!important;}} .st-key-{close_css} .stButton > button:hover {{filter:brightness(0.97);}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, _spacer, close_col = st.columns([4.6, 4.6, 10.0, 1.0])
+        offer_col, invoice_col, _spacer, close_col = st.columns([7.0, 7.0, 5.0, 1.0])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
