@@ -34,6 +34,7 @@ import extra_streamlit_components as stx
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from collections import defaultdict
+from calendar import monthrange
 
 def _safe_id(v):
     """Safely convert value to int, returning 0 for non-numeric values."""
@@ -2072,7 +2073,7 @@ def migrate_data(data):
     for c in data.get("clients", []):
         client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
         first_deal_id = client_deals[0]["id"] if client_deals else None
-        for k, v in [("email",""),("address",""),("base_comment",""),("category","Не определён"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("manager",""),("comments",[]),("tasks",[]),("last_modified","1970-01-01 00:00:00"),("client_chat",[]),("created_at","")]:
+        for k, v in [("email",""),("address",""),("base_comment",""),("category","Не определён"),("discount",0),("extra_phones",[]),("extra_emails",[]),("extra_addresses",[]),("client_files",[]),("client_comments",[]),("requisites",[]),("manager",""),("comments",[]),("tasks",[]),("last_modified","1970-01-01 00:00:00"),("client_chat",[]),("created_at","")]:
             if k not in c or c[k] == "-": c[k] = v
         for ea in c.get("extra_addresses", []):
             if isinstance(ea, str):
@@ -2624,7 +2625,7 @@ def _push_dialog_return():
     current = {}
     for key in ["dialog_client_key", "dialog_deal_key", "dialog_task_key",
                 "dialog_client_deals_key", "dialog_client_tasks_key",
-                "dialog_deal_task_key", "_open_created_task"]:
+                "dialog_deal_task_key", "_open_created_task", "dialog_invoice_request"]:
         val = st.session_state.get(key)
         if val:
             current[key] = val
@@ -4361,9 +4362,422 @@ def _deal_calc_total(calc):
     return round(_deal_items_total(calc.get("items", [])) + max(0.0, float(calc.get("delivery_amount", 0) or 0)), 2)
 
 
+def _deal_doc_number(deal):
+    """Номер сделки без префикса для названий КП/счёта."""
+    raw = str(deal.get("deal_number", deal.get("title", deal.get("id", ""))) or "").strip()
+    return re.sub(r"^Сделка\s*№\s*", "", raw, flags=re.IGNORECASE).strip() or raw
+
+
+def _calculation_display_name(deal, calc, index=None):
+    base = f"Расчёт №{_deal_doc_number(deal)}"
+    if index is None:
+        index = next((i for i, c in enumerate(deal.get("calculations", [])) if str(c.get("id")) == str(calc.get("id"))), 0)
+    # First calculation uses the deal number; subsequent calculations are numbered as variants.
+    return base if index == 0 else f"{base} — вариант {index + 1}"
+
+
+def _ensure_calculation_names(deal):
+    for i, calc in enumerate(deal.setdefault("calculations", [])):
+        if not calc.get("name") or re.match(r"^Расчёт\s+\d+$", str(calc.get("name", "")), re.I):
+            calc["name"] = _calculation_display_name(deal, calc, i)
+
+
+def _money(value):
+    try:
+        return f"{float(value or 0):,.2f}".replace(",", " ").replace(".", ",")
+    except (TypeError, ValueError):
+        return "0,00"
+
+
+def _number_to_russian_words(n):
+    """Небольшой конвертер целой части суммы в русские слова для счёта."""
+    n = max(0, int(n or 0))
+    ones_m = ["ноль", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"]
+    ones_f = ["ноль", "одна", "две", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять"]
+    teens = ["десять", "одиннадцать", "двенадцать", "тринадцать", "четырнадцать", "пятнадцать", "шестнадцать", "семнадцать", "восемнадцать", "девятнадцать"]
+    tens = ["", "", "двадцать", "тридцать", "сорок", "пятьдесят", "шестьдесят", "семьдесят", "восемьдесят", "девяносто"]
+    hundreds = ["", "сто", "двести", "триста", "четыреста", "пятьсот", "шестьсот", "семьсот", "восемьсот", "девятьсот"]
+    def triad(v, feminine=False):
+        out=[]
+        if v >= 100: out.append(hundreds[v//100])
+        x=v%100
+        if 10 <= x < 20: out.append(teens[x-10])
+        else:
+            if x>=20: out.append(tens[x//10])
+            u=x%10
+            if u: out.append((ones_f if feminine else ones_m)[u])
+        return out
+    def form(v, one, few, many):
+        x=v%100
+        if 11 <= x <= 14: return many
+        x=v%10
+        if x==1: return one
+        if 2<=x<=4: return few
+        return many
+    if n == 0: return "ноль рублей"
+    groups=[]
+    billions=n//1_000_000_000; millions=(n//1_000_000)%1000; thousands=(n//1000)%1000; rest=n%1000
+    if billions: groups += triad(billions) + [form(billions,"миллиард","миллиарда","миллиардов")]
+    if millions: groups += triad(millions) + [form(millions,"миллион","миллиона","миллионов")]
+    if thousands: groups += triad(thousands, True) + [form(thousands,"тысяча","тысячи","тысяч")]
+    if rest: groups += triad(rest)
+    groups.append(form(n,"рубль","рубля","рублей"))
+    return " ".join(groups)
+
+
+def _pdf_font_setup():
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    candidates = [
+        ("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ("Liberation", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
+    ]
+    for name, regular, bold in candidates:
+        if os.path.exists(regular) and os.path.exists(bold):
+            try:
+                if f"{name}" not in pdfmetrics.getRegisteredFontNames(): pdfmetrics.registerFont(TTFont(name, regular))
+                if f"{name}-Bold" not in pdfmetrics.getRegisteredFontNames(): pdfmetrics.registerFont(TTFont(f"{name}-Bold", bold))
+                return name, f"{name}-Bold"
+            except Exception:
+                pass
+    return "Helvetica", "Helvetica-Bold"
+
+
+def _pdf_paragraph(text, style, escape=True):
+    from reportlab.platypus import Paragraph
+    from reportlab.lib.utils import escape as rl_escape
+    value = rl_escape(str(text or "")).replace("\n", "<br/>") if escape else str(text or "")
+    return Paragraph(value, style)
+
+
+def _calculation_rows(calc, catalog):
+    pmap = {str(p.get("id", p.get("sku", ""))): p for p in catalog}
+    rows=[]
+    for item in calc.get("items", []):
+        product = pmap.get(str(item.get("product_id", "")), {})
+        qty=max(0.0,float(item.get("quantity",0) or 0))
+        price=max(0.0,float(item.get("unit_price",product.get("price",0)) or 0))
+        discount=min(100.0,max(0.0,float(item.get("discount",0) or 0)))
+        after=round(price*(1-discount/100),2)
+        amount=round(qty*after,2)
+        rows.append({
+            "sku": product.get("sku", item.get("sku", item.get("product_id", ""))),
+            "name": item.get("product_name", product.get("name", "Товар")),
+            "color": item.get("color_ral", ""),
+            "spec": product.get("characteristics", product.get("description", "")),
+            "unit": item.get("unit", product.get("unit", "шт.")),
+            "price": price, "discount": discount, "after": after,
+            "quantity": qty, "amount": amount,
+        })
+    return rows
+
+
+def _make_commercial_offer_pdf(deal, client, calc):
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    font, bold = _pdf_font_setup()
+    out=io.BytesIO()
+    doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=9*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
+    styles=getSampleStyleSheet()
+    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#242C36"), spaceAfter=4*mm)
+    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#242C36"), spaceBefore=2*mm, spaceAfter=1.5*mm)
+    body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm)
+    small=ParagraphStyle("OfferSmall", parent=body, fontSize=6.4, leading=8)
+    cell=ParagraphStyle("OfferCell", parent=small, fontSize=6.2, leading=7.5)
+    cellhead=ParagraphStyle("OfferCellHead", parent=cell, fontName=bold, alignment=TA_CENTER, textColor=colors.white)
+    date=moscow_now().date()
+    validity=date+timedelta(days=30)
+    date_ru=date.strftime("%d.%m.%Y")
+    flow=[Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
+          Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')} &nbsp;&nbsp; Срок действия предложения: 30 дней (до {validity.strftime('%d.%m.%Y')})", body),
+          Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
+          Paragraph("Наименование организации: ИП Фазлов Дамир Ибрагимович<br/>ИНН: 731701704975<br/>Адрес производства: г. Казань, ул. Кулагина, д. 3<br/>Телефон / Email: +7 (900) 329-33-00 / info@iplinth.ru", body),
+          Paragraph(f"Кому: {html.escape(str(client.get('name','') or ''))}", body),
+          Paragraph("2. СМЕТА НА ПОСТАВКУ МАТЕРИАЛОВ", h),
+          Paragraph("Условия налогообложения: все цены указаны без НДС в связи с применением УСН.", small), Spacer(1, 2*mm)]
+    rows=_calculation_rows(calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG))
+    table_data=[[Paragraph(x,cellhead) for x in ["№","Артикул / наименование","Цвет","Технические характеристики","Ед. изм.","Цена","Скидка","Цена со скидкой","Кол-во","Сумма"]]]
+    for i,r in enumerate(rows,1):
+        item_name=f"<b>{html.escape(str(r['sku']))}</b><br/>{html.escape(str(r['name']))}"
+        table_data.append([Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell), Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell), Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)])
+    if not rows:
+        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell), "", "", "", "", "", "", "", ""])
+    total=sum(r['amount'] for r in rows)
+    delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
+    if delivery:
+        table_data.append(["", Paragraph("Доставка",cell), "", "", "", "", "", "", "", Paragraph(_money(delivery),cell)])
+    table_data.append(["", "", "", "", "", "", "", "", Paragraph("ИТОГО:",cell), Paragraph(_money(total+delivery),cell)])
+    widths=[9*mm,48*mm,17*mm,46*mm,13*mm,20*mm,15*mm,24*mm,14*mm,24*mm]
+    tbl=Table(table_data,colWidths=widths,repeatRows=1,hAlign="LEFT")
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#343D4A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#B9C0C9")),("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
+        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+        ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F1F3F6")),("FONTNAME",(0,-1),(-1,-1),bold),
+        ("SPAN",(0,-1),(7,-1)),("ALIGN",(8,1),(-1,-1),"RIGHT"),
+    ]))
+    flow += [tbl, Spacer(1, 3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
+             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 5 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
+             Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h), Paragraph("ИП Фазлов Дамир Ибрагимович", body)]
+    doc.build(flow)
+    return out.getvalue()
+
+
+def _make_invoice_pdf(deal, client, calc, requisites):
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    font,bold=_pdf_font_setup()
+    out=io.BytesIO()
+    doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=11*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
+    styles=getSampleStyleSheet()
+    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_LEFT,spaceAfter=4*mm,textColor=colors.HexColor("#202833"))
+    body=ParagraphStyle("InvBody",parent=styles["BodyText"],fontName=font,fontSize=8,leading=10,spaceAfter=1.3*mm)
+    small=ParagraphStyle("InvSmall",parent=body,fontSize=6.7,leading=8)
+    cell=ParagraphStyle("InvCell",parent=small,fontSize=6.8,leading=8)
+    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER)
+    date=moscow_now().date()
+    next_month=1 if date.month==12 else date.month+1
+    year=date.year+1 if date.month==12 else date.year
+    due=date.replace(year=year,month=next_month,day=monthrange(year,next_month)[1])
+    rows=_calculation_rows(calc,st.session_state.crm_store.get("products",DEFAULT_PRODUCT_CATALOG))
+    delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
+    total=round(sum(r["amount"] for r in rows)+delivery,2)
+    payer_name=requisites.get("legal_name","")
+    if requisites.get("payer_type")=="person":
+        payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}, {requisites.get('address','')}"
+    else:
+        payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}"+(f"/КПП {requisites.get('kpp','')}" if requisites.get('kpp') else "")+f", {requisites.get('address','')}"
+    seller="ИП Фазлов Дамир Ибрагимович"
+    bank="ООО \"Банк Точка\""
+    seller_inn="731701704975"
+    account="40802810801500486358"
+    bik="044525104"
+    corr="30101810745374525104"
+    calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
+    suffix=calc_name.replace("Расчёт", "", 1).strip()
+    invoice_no=f"Счёт {suffix} от {date.strftime('%d.%m.%Y')}"
+    flow=[Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT)),
+          Paragraph("Получатель",body),
+          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#AEB6C2")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#F8F9FB")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
+          Spacer(1,5*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
+          Paragraph(f"Получатель: {seller}, ИНН {seller_inn}, р/с {account}, в банке {bank}, БИК {bik}, к/с {corr}",body),
+          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
+    data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
+    for i,r in enumerate(rows,1):
+        name=f"{html.escape(str(r['name']))}<br/><font size='6'>(Артикул: {html.escape(str(r['sku']))})</font>"
+        if r['color']: name += f"<br/><font size='6'>Цвет/RAL: {html.escape(str(r['color']))}</font>"
+        data.append([Paragraph(str(i),cell),Paragraph(name,cell),Paragraph(f"{r['quantity']:g}",cell),Paragraph(html.escape(str(r['unit'])),cell),Paragraph(_money(r['after']),cell),Paragraph("Без НДС",cell),Paragraph(_money(r['amount']),cell)])
+    if delivery:
+        data.append([Paragraph(str(len(rows)+1),cell),Paragraph("Доставка",cell),Paragraph("1",cell),Paragraph("усл.",cell),Paragraph(_money(delivery),cell),Paragraph("Без НДС",cell),Paragraph(_money(delivery),cell)])
+    tbl=Table(data,colWidths=[9*mm,72*mm,17*mm,18*mm,24*mm,18*mm,27*mm],repeatRows=1,hAlign="LEFT")
+    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E9EDF2")),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#AEB6C2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+    _line_count = len(rows) + (1 if delivery else 0)
+    _count_mod = _line_count % 100
+    _count_last = _line_count % 10
+    _count_word = "наименование" if _count_last == 1 and _count_mod != 11 else ("наименования" if 2 <= _count_last <= 4 and not 12 <= _count_mod <= 14 else "наименований")
+    flow += [tbl,Spacer(1,3*mm),Paragraph(f"Всего {_line_count} {_count_word} на сумму {_number_to_russian_words(int(total))} {int(round((total-int(total))*100)):02d} копеек.",body),Paragraph(f"<b>Итог к оплате: {_money(total)} ₽</b> &nbsp;&nbsp; Без НДС",ParagraphStyle("InvTotal",parent=body,fontName=bold,fontSize=10,alignment=TA_RIGHT)),Paragraph(f"Срок оплаты: Не позднее {due.strftime('%d.%m.%Y')} г.",body),Spacer(1,12*mm)]
+    sign=Table([[Paragraph(f"Получатель:<br/><br/>Индивидуальный предприниматель<br/>Фазлов Дамир Ибрагимович",body),Paragraph("Плательщик: ___________________________<br/><br/>Подпись / печать",body)]],colWidths=[90*mm,90*mm])
+    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),4)]))
+    flow.append(sign)
+    doc.build(flow)
+    return out.getvalue(), due.strftime("%d.%m.%Y")
+
+
+def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None):
+    """Сохраняет PDF в хранилище CRM и прикрепляет к файлам сделки."""
+    safe_name=re.sub(r"[^\wА-Яа-яЁё№(). —-]+", "_", filename).strip().replace("/", "_")
+    digest=hashlib.sha256(pdf_bytes).hexdigest()
+    path=""
+    if YANDEX_TOKEN:
+        remote_name=f"deal_{deal.get('id')}_{uuid.uuid4().hex[:8]}_{safe_name}"
+        if upload_file_to_yandex(pdf_bytes, remote_name):
+            path=f"CRM_NE_TROGAT/uploads/{remote_name}"
+    if not path:
+        os.makedirs("uploads",exist_ok=True)
+        local_name=f"deal_{deal.get('id')}_{uuid.uuid4().hex[:8]}_{safe_name}"
+        path=os.path.join("uploads",local_name)
+        with open(path,"wb") as f: f.write(pdf_bytes)
+    file_obj={"file_path":path,"file_name":safe_name,"file_hash":digest,"description":f"{kind} · {calc.get('name','Расчёт')}","document_type":kind,"calculation_id":str(calc.get("id")),"created_at":now_str()}
+    deal.setdefault("deal_files",[]).append(file_obj)
+    deal.setdefault("generated_documents",[]).append({"id":uuid.uuid4().hex,"kind":kind,"file_name":safe_name,"file_hash":digest,"calculation_id":str(calc.get("id")),"calculation_name":calc.get("name",""),"created_at":now_str(),"payer":copy.deepcopy(extra or {})})
+    deal["last_modified"]=now_str()
+    save_data(st.session_state.crm_store)
+    return file_obj
+
+
+def _open_pdf_link(pdf_bytes, filename, key):
+    b64=base64.b64encode(pdf_bytes).decode("ascii")
+    st.session_state[key]={"data":b64,"filename":filename}
+
+
+@_crm_dialog("Добавить реквизиты", width="large")
+def client_requisites_dialog(client_id, return_to_invoice=False):
+    client=get_client_by_id(client_id)
+    if not client:
+        st.error("Клиент не найден")
+        return
+    client.setdefault("requisites",[])
+    key=f"req_{client_id}_{'invoice' if return_to_invoice else 'client'}"
+    dirty=f"{key}_dirty"; warning=f"{key}_warning"
+    fields=[("legal_name","Наименование юр. лица"),("payer_type","Тип плательщика"),("inn","ИНН"),("kpp","КПП"),("address","Юридический адрес"),("bank_name","Банк"),("bik","БИК"),("corr_account","Корр. счёт"),("settlement_account","Расчётный счёт"),("phone","Телефон"),("email","Email")]
+    for k,_ in fields:
+        if f"{key}_{k}" not in st.session_state:
+            st.session_state[f"{key}_{k}"] = "company" if k == "payer_type" else ""
+    close_css=f"{key}_close_row"
+    st.markdown(f'<style>.st-key-{close_css} .stButton>button{{width:36px!important;height:36px!important;min-width:36px!important;padding:0!important;background:#fff!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;}}</style>',unsafe_allow_html=True)
+    with st.container(key=close_css):
+        sp,cc=st.columns([20,1])
+        with cc:
+            if st.button("✕",key=f"{key}_close",use_container_width=True):
+                if st.session_state.get(dirty,False) and not st.session_state.get(warning,False):
+                    st.session_state[warning]=True; st.rerun()
+                else:
+                    for k,_ in fields: st.session_state.pop(f"{key}_{k}",None)
+                    st.session_state.pop(dirty,None); st.session_state.pop(warning,None)
+                    st.session_state.pop("dialog_client_requisites_client_id",None)
+                    st.session_state.pop("dialog_client_requisites_return_to_invoice",None)
+                    if return_to_invoice:
+                        invoice=st.session_state.get("dialog_invoice_request") or {}
+                        invoice["selected_requisite_id"]=""
+                        st.session_state["dialog_invoice_request"]=invoice
+                        invoice_document_dialog(invoice.get("deal_id"),invoice.get("calc_id"))
+                    else:
+                        _pop_dialog_return(); st.rerun()
+    if st.session_state.get(warning):
+        with st.container(border=True):
+            st.warning("Есть несохранённые изменения. Сохранить перед закрытием?")
+            a,b,c=st.columns(3)
+            with a:
+                if st.button("Сохранить",key=f"{key}_warn_save",type="primary",use_container_width=True): st.session_state[f"{key}_save_requested"]=True; st.session_state[warning]=False
+            with b:
+                if st.button("Без сохр.",key=f"{key}_warn_discard",use_container_width=True):
+                    for k,_ in fields: st.session_state.pop(f"{key}_{k}",None)
+                    st.session_state.pop(dirty,None); st.session_state.pop(warning,None); st.session_state.pop("dialog_client_requisites_client_id",None)
+                    st.session_state.pop("dialog_client_requisites_return_to_invoice",None)
+                    if return_to_invoice:
+                        inv=st.session_state.get("dialog_invoice_request") or {}; invoice_document_dialog(inv.get("deal_id"),inv.get("calc_id"))
+                    else: _pop_dialog_return(); st.rerun()
+            with c:
+                if st.button("Продолжить",key=f"{key}_warn_continue",use_container_width=True): st.session_state[warning]=False; st.rerun()
+    st.markdown("Заполни реквизиты плательщика. Они сохранятся в карточке клиента и будут доступны для следующих счетов.")
+    c1,c2=st.columns(2)
+    with c1:
+        st.text_input("Наименование юр. лица / ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.selectbox("Тип плательщика",["company","ip","person"],format_func=lambda x:{"company":"Юридическое лицо (ООО)","ip":"Индивидуальный предприниматель","person":"Физическое лицо"}[x],key=f"{key}_payer_type",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("ИНН",key=f"{key}_inn",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("КПП",key=f"{key}_kpp",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_area("Юридический адрес",key=f"{key}_address",height=75,on_change=lambda:st.session_state.__setitem__(dirty,True))
+    with c2:
+        st.text_input("Наименование банка",key=f"{key}_bank_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("БИК",key=f"{key}_bik",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("Корреспондентский счёт",key=f"{key}_corr_account",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("Расчётный счёт",key=f"{key}_settlement_account",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("Телефон",key=f"{key}_phone",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("Email",key=f"{key}_email",on_change=lambda:st.session_state.__setitem__(dirty,True))
+    save_now=st.button("Сохранить реквизиты",key=f"{key}_save",type="primary",use_container_width=True)
+    save_warn=bool(st.session_state.pop(f"{key}_save_requested",False))
+    if save_now or save_warn:
+        name=str(st.session_state.get(f"{key}_legal_name","")).strip()
+        inn=str(st.session_state.get(f"{key}_inn","")).strip()
+        address=str(st.session_state.get(f"{key}_address","")).strip()
+        if not name or not inn:
+            st.error("Укажи наименование плательщика и ИНН.")
+        else:
+            req={k:st.session_state.get(f"{key}_{k}","").strip() if isinstance(st.session_state.get(f"{key}_{k}",""),str) else st.session_state.get(f"{key}_{k}") for k,_ in fields}
+            req.update({"id":uuid.uuid4().hex,"deleted":False,"created_at":now_str(),"created_by":st.session_state.get("user_name",st.session_state.get("user_login",""))})
+            client.setdefault("requisites",[]).append(req)
+            client["last_modified"]=now_str()
+            client.setdefault("change_log",[]).append({"date":now_str(),"author":st.session_state.get("user_name",st.session_state.get("user_login","")),"fields":f"Добавлены реквизиты «{name}»"})
+            save_data(st.session_state.crm_store)
+            st.session_state.pop("dialog_client_requisites_client_id",None)
+            st.session_state.pop("dialog_client_requisites_return_to_invoice",None)
+            for k,_ in fields: st.session_state.pop(f"{key}_{k}",None)
+            st.session_state.pop(dirty,None); st.session_state.pop(warning,None); st.session_state.pop(f"{key}_save_requested",None)
+            st.toast("Реквизиты сохранены",icon="✅")
+            if return_to_invoice:
+                inv=st.session_state.get("dialog_invoice_request") or {}
+                inv["selected_requisite_id"]=req["id"]
+                st.session_state["dialog_invoice_request"]=inv
+                invoice_document_dialog(inv.get("deal_id"),inv.get("calc_id"))
+            else:
+                _pop_dialog_return(); st.rerun()
+
+
+@_crm_dialog("Сформировать счёт", width="large")
+def invoice_document_dialog(deal_id, calc_id):
+    deal=next((d for d in st.session_state.crm_store.get("deals",[]) if str(d.get("id"))==str(deal_id)),None)
+    if not deal:
+        st.error("Сделка не найдена"); return
+    calc=next((c for c in deal.get("calculations",[]) if str(c.get("id"))==str(calc_id)),None)
+    if not calc:
+        st.error("Расчёт не найден"); return
+    client=get_client_by_id(deal.get("client_id")) or {}
+    requisites=[r for r in client.setdefault("requisites",[]) if not r.get("deleted")]
+    state=st.session_state.get("dialog_invoice_request") or {"deal_id":deal_id,"calc_id":calc_id,"selected_requisite_id":""}
+    st.session_state["dialog_invoice_request"]=state
+    close_key=f"invoice_close_{deal_id}_{calc_id}"
+    with st.container(key=f"{close_key}_row"):
+        sp,cc=st.columns([20,1])
+        with cc:
+            if st.button("✕",key=close_key,use_container_width=True):
+                st.session_state.pop("dialog_invoice_request",None)
+                deal_calculation_dialog(deal_id,calc_id)
+    st.markdown(f"**Сделка:** {deal.get('deal_number',deal.get('title',''))}")
+    st.markdown(f"**Расчёт:** {calc.get('name','Расчёт')}")
+    if not requisites:
+        st.info("Для клиента пока не сохранены реквизиты плательщика.")
+    else:
+        ids=[str(r.get("id")) for r in requisites]
+        selected=str(state.get("selected_requisite_id",ids[0]))
+        if selected not in ids: selected=ids[0]
+        sel=st.selectbox("Реквизиты плательщика",ids,index=ids.index(selected),format_func=lambda rid:next((r.get("legal_name", "Реквизиты") for r in requisites if str(r.get("id"))==str(rid)),"Реквизиты"),key=f"invoice_req_select_{deal_id}_{calc_id}")
+        state["selected_requisite_id"]=sel
+        selected_req=next((r for r in requisites if str(r.get("id"))==str(sel)),None)
+        if selected_req:
+            st.caption(f"ИНН: {selected_req.get('inn','—')}  ·  Адрес: {selected_req.get('address','—')}")
+    add_col,generate_col=st.columns(2)
+    with add_col:
+        if st.button("+ Добавить новые реквизиты",key=f"invoice_add_req_{deal_id}_{calc_id}",use_container_width=True):
+            st.session_state["dialog_client_requisites_client_id"]=client.get("id")
+            st.session_state["dialog_client_requisites_return_to_invoice"]=True
+            client_requisites_dialog(client.get("id"),True)
+    with generate_col:
+        if st.button("Сформировать счёт PDF",key=f"invoice_generate_{deal_id}_{calc_id}",type="primary",use_container_width=True):
+            req=next((r for r in requisites if str(r.get("id"))==str(state.get("selected_requisite_id"))),None)
+            if not req:
+                st.error("Сначала выбери реквизиты плательщика или добавь новые.")
+            elif not calc.get("items"):
+                st.error("Добавь хотя бы одну товарную позицию в расчёт.")
+            else:
+                try:
+                    pdf,due=_make_invoice_pdf(deal,client,calc,req)
+                    display=str(calc.get("name") or _calculation_display_name(deal,calc)).replace("Расчёт","Счёт",1)
+                    filename=f"{display} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+                    _save_generated_document(deal,pdf,filename,"Счёт",calc,req)
+                    _open_pdf_link(pdf,filename,f"invoice_pdf_{deal_id}_{calc_id}")
+                    st.session_state[f"invoice_generated_note_{deal_id}_{calc_id}"]=f"Счёт сохранён в файлах сделки. Срок оплаты: {due}."
+                    st.success(f"Счёт сохранён в файлах сделки. Срок оплаты: {due}.")
+                except Exception as exc:
+                    st.error(f"Не удалось сформировать счёт: {exc}")
+    pdf_state=st.session_state.get(f"invoice_pdf_{deal_id}_{calc_id}")
+    if pdf_state:
+        st.markdown(f'<a href="data:application/pdf;base64,{pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:600">Открыть PDF в новой вкладке</a>',unsafe_allow_html=True)
+        st.download_button("Скачать PDF",data=base64.b64decode(pdf_state["data"]),file_name=pdf_state["filename"],mime="application/pdf",key=f"invoice_pdf_dl_{deal_id}_{calc_id}")
+
+
 def render_deal_products_block(d, key_prefix):
     """Список сохранённых расчётов с мягким удалением и отдельным окном редактора."""
     calculations = d.setdefault("calculations", [])
+    _ensure_calculation_names(d)
     # Перенос ранее созданного одиночного расчёта в список без потери данных.
     if not calculations and (d.get("items") or d.get("delivery_amount")):
         calculations.append({
@@ -4373,6 +4787,7 @@ def render_deal_products_block(d, key_prefix):
             "individual_discount": float(d.get("individual_discount", 0) or 0),
             "total": float(d.get("budget", 0) or 0), "deleted": False, "created_at": now_str()
         })
+        _ensure_calculation_names(d)
         save_data(st.session_state.crm_store)
 
     st.markdown("**Расчёты по сделке**")
@@ -4409,7 +4824,7 @@ def render_deal_products_block(d, key_prefix):
                 st.rerun()
 
     if st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True):
-        calc = {"id": uuid.uuid4().hex, "name": f"Расчёт {len(calculations) + 1}", "items": [],
+        calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(d, {"id": "__new__"}, len(calculations)), "items": [],
                 "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
                 "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
         calculations.append(calc)
@@ -4450,12 +4865,51 @@ def deal_calculation_dialog(deal_id, calc_id):
     if snapshot_key not in st.session_state:
         st.session_state[snapshot_key] = copy.deepcopy(calc)
     if name_key not in st.session_state:
-        st.session_state[name_key] = calc.get("name", "Новый расчёт")
+        st.session_state[name_key] = calc.get("name") or _calculation_display_name(deal, calc)
+    if re.match(r"^Расчёт\s+\d+$", str(st.session_state.get(name_key, "")), re.I):
+        st.session_state[name_key] = _calculation_display_name(deal, calc)
 
     close_css = f"calc_close_row_{key}"
     st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;}} .st-key-{close_css} .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        _spacer, close_col = st.columns([20, 1])
+        offer_col, invoice_col, _spacer, close_col = st.columns([2.8, 2.8, 13.0, 1.0])
+        with offer_col:
+            if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
+                try:
+                    calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
+                    calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
+                    calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
+                    calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
+                    calc["total"] = _deal_calc_total(calc)
+                    if not calc.get("items"):
+                        raise ValueError("Добавь хотя бы одну товарную позицию в расчёт.")
+                    calc["_draft"] = False
+                    calc["updated_at"] = now_str()
+                    deal["budget"] = calc["total"]
+                    deal["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                    pdf = _make_commercial_offer_pdf(deal, get_client_by_id(deal.get("client_id")) or {}, calc)
+                    filename = f"{calc['name'].replace('Расчёт','КП',1)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+                    _save_generated_document(deal, pdf, filename, "Коммерческое предложение", calc)
+                    _open_pdf_link(pdf, filename, f"offer_pdf_{deal_id}_{calc_id}")
+                    st.session_state[f"{key}_doc_message"] = "КП сохранено в файлах сделки."
+                except Exception as exc:
+                    st.session_state[f"{key}_doc_error"] = f"Не удалось сформировать КП: {exc}"
+                _calc_refresh()
+        with invoice_col:
+            if st.button("Сформировать счёт", key=f"{key}_make_invoice", use_container_width=True):
+                calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
+                calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
+                calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
+                calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
+                calc["total"] = _deal_calc_total(calc)
+                calc["_draft"] = False
+                calc["updated_at"] = now_str()
+                deal["budget"] = calc["total"]
+                deal["last_modified"] = now_str()
+                save_data(st.session_state.crm_store)
+                st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
+                invoice_document_dialog(deal_id, calc_id)
         with close_col:
             if st.button("✕", key=f"{key}_close", use_container_width=True):
                 if st.session_state.get(dirty_key, False) and not st.session_state.get(warning_key, False):
@@ -4469,6 +4923,17 @@ def deal_calculation_dialog(deal_id, calc_id):
                         st.session_state.pop(k, None)
                     _pop_dialog_return()
                     st.rerun()
+
+    _doc_error = st.session_state.pop(f"{key}_doc_error", None)
+    if _doc_error:
+        st.error(_doc_error)
+    _doc_message = st.session_state.pop(f"{key}_doc_message", None)
+    if _doc_message:
+        st.success(_doc_message)
+    _offer_pdf_state = st.session_state.get(f"offer_pdf_{deal_id}_{calc_id}")
+    if _offer_pdf_state:
+        st.markdown(f'<a href="data:application/pdf;base64,{_offer_pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:8px 12px;border-radius:8px;font-weight:600;margin:3px 0">Открыть сформированное КП в новой вкладке</a>',unsafe_allow_html=True)
+        st.download_button("Скачать КП PDF",data=base64.b64decode(_offer_pdf_state["data"]),file_name=_offer_pdf_state["filename"],mime="application/pdf",key=f"offer_pdf_dl_{deal_id}_{calc_id}")
 
     if st.session_state.get(warning_key):
         warn_key = f"calc_unsaved_warn_{key}"
@@ -5065,7 +5530,35 @@ def render_client_card_expanded(cl):
                     st.session_state["dialog_create_deal_from_client"] = cl["id"]
                     st.session_state.pop("dialog_client_key", None)
                     st.rerun()
-            # История изменений — после кнопок создания сделки и задачи
+            # Реквизиты для документов — между действиями и историей изменений.
+            st.markdown("---")
+            st.markdown("**Реквизиты для документов**")
+            _reqs = cl.setdefault("requisites", [])
+            if not _reqs:
+                st.caption("Реквизиты плательщика пока не добавлены.")
+            for _ri, _req in enumerate(_reqs):
+                _req_cols = st.columns([4, 1])
+                _req_name = str(_req.get("legal_name", "Реквизиты без названия"))
+                with _req_cols[0]:
+                    if _req.get("deleted"):
+                        st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0'>{html.escape(_req_name)} (удалены)</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='padding:0.35rem 0;font-weight:500'>{html.escape(_req_name)}</div>", unsafe_allow_html=True)
+                with _req_cols[1]:
+                    if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
+                        _req["deleted"] = True
+                        _req["deleted_at"] = now_str()
+                        _req["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                        cl["last_modified"] = now_str()
+                        cl.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Реквизиты «{_req_name}» помечены удалёнными"})
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
+            if st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_client_requisites_client_id"] = cl["id"]
+                st.session_state["dialog_client_requisites_return_to_invoice"] = False
+                client_requisites_dialog(cl["id"], False)
+            # История изменений — после реквизитов
             st.markdown("---")
             st.markdown("**Внесённые изменения**")
             _client_changes = cl.get("change_log", [])
@@ -6451,7 +6944,13 @@ if st.session_state.active_tab == "Клиенты":
     
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
-    if _pending_reminder:
+    _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
+    _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
+    if _req_dialog_client_id:
+        client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
+    elif _invoice_dialog_state:
+        invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
+    elif _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
     elif _task_completion_state:
         task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
