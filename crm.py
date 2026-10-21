@@ -4620,18 +4620,20 @@ def _open_pdf_link(pdf_bytes, filename, key):
 
 
 @_crm_dialog("Добавить реквизиты", width="large")
-def client_requisites_dialog(client_id, return_to_invoice=False):
+def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=None):
     client=get_client_by_id(client_id)
     if not client:
         st.error("Клиент не найден")
         return
     client.setdefault("requisites",[])
-    key=f"req_{client_id}_{'invoice' if return_to_invoice else 'client'}"
+    existing_req=next((r for r in client.get("requisites",[]) if str(r.get("id"))==str(requisite_id) and not r.get("deleted")),None) if requisite_id else None
+    key=f"req_{client_id}_{'invoice' if return_to_invoice else 'client'}_{requisite_id or 'new'}"
     dirty=f"{key}_dirty"; warning=f"{key}_warning"
     fields=[("legal_name","Наименование юр. лица"),("payer_type","Тип плательщика"),("inn","ИНН"),("kpp","КПП"),("address","Юридический адрес"),("bank_name","Банк"),("bik","БИК"),("corr_account","Корр. счёт"),("settlement_account","Расчётный счёт"),("phone","Телефон"),("email","Email")]
     for k,_ in fields:
         if f"{key}_{k}" not in st.session_state:
-            st.session_state[f"{key}_{k}"] = "company" if k == "payer_type" else ""
+            default_value = (existing_req or {}).get(k, "company" if k == "payer_type" else "")
+            st.session_state[f"{key}_{k}"] = default_value
     close_css=f"{key}_close_row"
     st.markdown(f'<style>.st-key-{close_css} .stButton>button{{width:36px!important;height:36px!important;min-width:36px!important;padding:0!important;background:#fff!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;}}</style>',unsafe_allow_html=True)
     with st.container(key=close_css):
@@ -4669,6 +4671,69 @@ def client_requisites_dialog(client_id, return_to_invoice=False):
             with c:
                 if st.button("Продолжить",key=f"{key}_warn_continue",use_container_width=True): st.session_state[warning]=False; st.rerun()
     st.markdown("Заполни реквизиты плательщика. Они сохранятся в карточке клиента и будут доступны для следующих счетов.")
+    recognize_key=f"{key}_recognize_open"
+    if st.button("Распознать реквизиты", key=f"{key}_recognize_btn", use_container_width=True):
+        st.session_state[recognize_key] = not st.session_state.get(recognize_key, False)
+    if st.session_state.get(recognize_key, False):
+        uploaded_req_file=st.file_uploader("Выбери файл с реквизитами", type=["pdf","docx","xlsx","txt","csv"], key=f"{key}_recognize_file", help="Поддерживаются PDF с текстовым слоем, Word, Excel, TXT и CSV. Скан PDF без текстового слоя нужно предварительно распознать OCR.")
+        if uploaded_req_file and st.button("Заполнить поля из файла", key=f"{key}_recognize_apply", type="primary", use_container_width=True):
+            try:
+                raw_text=""
+                ext=Path(uploaded_req_file.name).suffix.lower()
+                if ext==".pdf":
+                    try:
+                        from pypdf import PdfReader
+                    except ImportError:
+                        from PyPDF2 import PdfReader
+                    reader=PdfReader(io.BytesIO(uploaded_req_file.getvalue()))
+                    raw_text="\n".join(page.extract_text() or "" for page in reader.pages)
+                elif ext==".docx":
+                    from docx import Document
+                    doc=Document(io.BytesIO(uploaded_req_file.getvalue()))
+                    raw_text="\n".join([p.text for p in doc.paragraphs]+[" | ".join(c.text for c in row.cells) for table in doc.tables for row in table.rows])
+                elif ext in (".xlsx", ".xls"):
+                    import openpyxl
+                    wb=openpyxl.load_workbook(io.BytesIO(uploaded_req_file.getvalue()),data_only=True,read_only=True)
+                    raw_text="\n".join(" ".join(str(v) for v in row if v is not None) for ws in wb.worksheets for row in ws.iter_rows(values_only=True))
+                else:
+                    raw_text=uploaded_req_file.getvalue().decode("utf-8-sig",errors="replace")
+                def _extract_req(patterns):
+                    for pat in patterns:
+                        m=re.search(pat,raw_text,re.I|re.M)
+                        if m:
+                            return re.sub(r"\s+"," ",m.group(1)).strip(" ;,\t")
+                    return ""
+                found={
+                    "inn":_extract_req([r"ИНН\s*[:№]?\s*([0-9]{10,12})"]),
+                    "kpp":_extract_req([r"КПП\s*[:№]?\s*([0-9]{9})"]),
+                    "bik":_extract_req([r"БИК\s*[:№]?\s*([0-9]{9})"]),
+                    "corr_account":_extract_req([r"(?:корреспондентский|корр\.?)[^\n:]{0,30}(?:сч[её]т|с/с)?\s*[:№]?\s*(\d{20})",r"301\d{17}"]),
+                    "settlement_account":_extract_req([r"(?:расч[её]тный|р/с)[^\n:]{0,25}(?:сч[её]т)?\s*[:№]?\s*(\d{20})",r"408\d{17}"]),
+                    "email":_extract_req([r"([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})"]),
+                    "phone":_extract_req([r"(?:тел(?:ефон)?\.?|моб\.?)[^\n:]{0,12}[:]?\s*(\+?[0-9][0-9 ()-]{7,}[0-9])"]),
+                    "bank_name":_extract_req([r"(?:банк|наименование банка)\s*[:]?\s*([^\n;]+)"]),
+                    "address":_extract_req([r"(?:юридический адрес|адрес)\s*[:]?\s*([^\n;]+)"]),
+                }
+                lines=[re.sub(r"\s+"," ",x).strip() for x in raw_text.splitlines() if x.strip()]
+                name=_extract_req([r"(?:полное наименование|наименование организации|наименование юридического лица|плательщик|получатель)\s*[:]?\s*([^\n]+)",r"(ИП\s+[^\n,;]+)",r"(ООО\s*[«\"“]?[^\n»\"”;,]+[»\"”]?)"])
+                if not name:
+                    name=next((ln for ln in lines if re.search(r"\b(ООО|АО|ПАО|ИП|индивидуальный предприниматель)\b",ln,re.I)),"")
+                found["legal_name"]=name
+                found["payer_type"]="ip" if re.search(r"\bИП\b|индивидуальный предприниматель",name,re.I) else "company" if re.search(r"ООО|АО|ПАО|ЗАО|ОАО",name,re.I) else "person"
+                count=0
+                for field_name,value in found.items():
+                    if value:
+                        st.session_state[f"{key}_{field_name}"]=value
+                        count+=1
+                st.session_state[dirty]=True
+                st.session_state[recognize_key]=False
+                if count:
+                    st.success(f"Заполнено полей: {count}. Проверь данные и сохрани реквизиты.")
+                    st.rerun()
+                else:
+                    st.warning("Не удалось найти реквизиты в файле. Если это скан, нужен OCR или файл с выделяемым текстом.")
+            except Exception as e:
+                st.error(f"Не удалось прочитать файл: {e}")
     c1,c2=st.columns(2)
     with c1:
         st.text_input("Наименование юр. лица / ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
@@ -4693,10 +4758,16 @@ def client_requisites_dialog(client_id, return_to_invoice=False):
             st.error("Укажи наименование плательщика и ИНН.")
         else:
             req={k:st.session_state.get(f"{key}_{k}","").strip() if isinstance(st.session_state.get(f"{key}_{k}",""),str) else st.session_state.get(f"{key}_{k}") for k,_ in fields}
-            req.update({"id":uuid.uuid4().hex,"deleted":False,"created_at":now_str(),"created_by":st.session_state.get("user_name",st.session_state.get("user_login",""))})
-            client.setdefault("requisites",[]).append(req)
+            if existing_req:
+                existing_req.update(req)
+                existing_req["updated_at"]=now_str()
+                existing_req["updated_by"]=st.session_state.get("user_name",st.session_state.get("user_login",""))
+                req=existing_req
+            else:
+                req.update({"id":uuid.uuid4().hex,"deleted":False,"created_at":now_str(),"created_by":st.session_state.get("user_name",st.session_state.get("user_login",""))})
+                client.setdefault("requisites",[]).append(req)
             client["last_modified"]=now_str()
-            client.setdefault("change_log",[]).append({"date":now_str(),"author":st.session_state.get("user_name",st.session_state.get("user_login","")),"fields":f"Добавлены реквизиты «{name}»"})
+            client.setdefault("change_log",[]).append({"date":now_str(),"author":st.session_state.get("user_name",st.session_state.get("user_login","")),"fields":f"{'Обновлены' if existing_req else 'Добавлены'} реквизиты «{name}»"})
             save_data(st.session_state.crm_store)
             st.session_state.pop("dialog_client_requisites_client_id",None)
             st.session_state.pop("dialog_client_requisites_return_to_invoice",None)
@@ -4872,7 +4943,7 @@ def deal_calculation_dialog(deal_id, calc_id):
     close_css = f"calc_close_row_{key}"
     st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;}} .st-key-{close_css} .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, _spacer, close_col = st.columns([2.8, 2.8, 13.0, 1.0])
+        offer_col, invoice_col, _spacer, close_col = st.columns([4.6, 4.6, 10.0, 1.0])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
@@ -5537,7 +5608,7 @@ def render_client_card_expanded(cl):
             if not _reqs:
                 st.caption("Реквизиты плательщика пока не добавлены.")
             for _ri, _req in enumerate(_reqs):
-                _req_cols = st.columns([4, 1])
+                _req_cols = st.columns([3.2, 1.1, 1.1])
                 _req_name = str(_req.get("legal_name", "Реквизиты без названия"))
                 with _req_cols[0]:
                     if _req.get("deleted"):
@@ -5545,6 +5616,12 @@ def render_client_card_expanded(cl):
                     else:
                         st.markdown(f"<div style='padding:0.35rem 0;font-weight:500'>{html.escape(_req_name)}</div>", unsafe_allow_html=True)
                 with _req_cols[1]:
+                    if not _req.get("deleted") and st.button("Открыть", key=f"client_req_open_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
+                        _push_dialog_return()
+                        st.session_state["dialog_client_requisites_client_id"] = cl["id"]
+                        st.session_state["dialog_client_requisites_return_to_invoice"] = False
+                        client_requisites_dialog(cl["id"], False, _req.get("id"))
+                with _req_cols[2]:
                     if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
                         _req["deleted"] = True
                         _req["deleted_at"] = now_str()
