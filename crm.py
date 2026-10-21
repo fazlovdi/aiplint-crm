@@ -4546,7 +4546,9 @@ def deal_calculation_dialog(deal_id, calc_id):
         else:
             active_products_row = active_products
         pmap = {str(p.get("id", p.get("sku", ""))): p for p in active_products_row}
-        cols = st.columns([3.2, 1.5, 1.0, 1.0, 0.9])
+        # Артикул и единица измерения показываются отдельными компактными колонками,
+        # как в прайсе. Они берутся из карточки товара и не редактируются в расчёте.
+        cols = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
         with cols[0]:
             selected_pid = st.selectbox("Товар", pids, index=pids.index(current_pid) if current_pid in pids else 0,
                 format_func=lambda x, pm=pmap: pm[x].get("name", x), key=pid_key,
@@ -4556,14 +4558,20 @@ def deal_calculation_dialog(deal_id, calc_id):
         if price_key not in st.session_state:
             st.session_state[price_key] = float(item.get("unit_price", product.get("price", 0)) or 0)
         with cols[1]:
-            st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"{key}_{row_id}_color", placeholder="RAL / цвет", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+            st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem'>Артикул</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:0.78rem;font-weight:600;padding-top:0.15rem;overflow-wrap:anywhere'>{product.get('sku', selected_pid)}</div>", unsafe_allow_html=True)
         with cols[2]:
-            st.number_input("Кол-во", min_value=0.0, value=float(item.get("quantity", 1) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_qty", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+            st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem'>Ед.</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:0.78rem;font-weight:600;padding-top:0.15rem'>{product.get('unit', item.get('unit', 'шт.'))}</div>", unsafe_allow_html=True)
         with cols[3]:
-            st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_discount", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+            st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"{key}_{row_id}_color", placeholder="RAL / цвет", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
         with cols[4]:
-            st.markdown(f"<div style='padding-top:1.9rem;text-align:right;font-size:0.8rem;color:#64748b'>{float(item.get('unit_price', product.get('price', 0)) or 0):,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
-        st.caption(f"Артикул: {product.get('sku', selected_pid)} · {product.get('unit', item.get('unit', 'шт.'))}")
+            st.number_input("Кол-во", min_value=0.0, value=float(item.get("quantity", 1) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_qty", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        with cols[5]:
+            st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_discount", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        with cols[6]:
+            st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem;text-align:right'>Цена</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='padding-top:0.15rem;text-align:right;font-size:0.8rem;color:#64748b;white-space:nowrap'>{float(item.get('unit_price', product.get('price', 0)) or 0):,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
         if st.button("Удалить позицию", key=f"{key}_{row_id}_remove"):
             calc["items"] = [x for x in items if x.get("row_id") != row_id]
             st.session_state[dirty_key] = True
