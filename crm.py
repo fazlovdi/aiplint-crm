@@ -4582,12 +4582,10 @@ def deal_calculation_dialog(deal_id, calc_id):
         with cols[6]:
             st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem;text-align:right'>Цена</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='padding-top:0.15rem;text-align:right;font-size:0.8rem;color:#64748b;white-space:nowrap'>{float(item.get('unit_price', product.get('price', 0)) or 0):,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
-        _remove_left, _remove_center, _remove_right = st.columns([1, 2.2, 1])
-        with _remove_center:
-            if st.button("Удалить позицию", key=f"{key}_{row_id}_remove", use_container_width=True):
-                calc["items"] = [x for x in items if x.get("row_id") != row_id]
-                st.session_state[dirty_key] = True
-                _calc_refresh()
+        if st.button("Удалить позицию", key=f"{key}_{row_id}_remove"):
+            calc["items"] = [x for x in items if x.get("row_id") != row_id]
+            st.session_state[dirty_key] = True
+            _calc_refresh()
         # Обновляем только локальный объект до нажатия «Сохранить расчёт».
         item["product_id"] = selected_pid
         item["product_name"] = product.get("name", "")
