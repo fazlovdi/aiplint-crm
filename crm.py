@@ -4357,133 +4357,245 @@ def _deal_items_total(items):
     return round(total, 2)
 
 
+def _deal_calc_total(calc):
+    return round(_deal_items_total(calc.get("items", [])) + max(0.0, float(calc.get("delivery_amount", 0) or 0)), 2)
+
+
 def render_deal_products_block(d, key_prefix):
-    """Editable product lines and delivery cost inside the deal's right column."""
-    products = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
-    active_products = [p for p in products if p.get("active", True)]
-    if not active_products:
-        st.info("В каталоге пока нет активных товаров. Добавьте товары в разделе «Товары и прайс».")
-        return
-    items = d.setdefault("items", [])
-    ui_rows = {}
-    for i, item in enumerate(items):
-        item.setdefault("row_id", str(uuid.uuid4()))
-        item.setdefault("product_id", active_products[0].get("id", active_products[0].get("sku", "")))
-        item.setdefault("color_ral", "")
-        item.setdefault("quantity", 1.0)
-        item.setdefault("unit_price", 0.0)
-        item.setdefault("discount", 0.0)
-        item.setdefault("product_name", "")
-        item.setdefault("unit", "шт.")
-    st.markdown("**Товары и расчёт**")
-    dtype_key = f"deal_discount_type_{d['id']}"
-    current_dtype = d.get("discount_type", "Без скидки")
-    dtype_options = list(DISCOUNT_TYPES.keys())
-    if current_dtype not in dtype_options:
-        current_dtype = "Без скидки"
-    selected_dtype = st.selectbox("Тип скидки по умолчанию для новых товаров", dtype_options, index=dtype_options.index(current_dtype), key=dtype_key)
-    custom_default = st.number_input("Индивидуальная скидка, %", min_value=0.0, max_value=100.0, value=float(d.get("individual_discount", 0) or 0), step=1.0, key=f"deal_ind_discount_{d['id']}") if selected_dtype == "Индивидуальная" else float(d.get("individual_discount", 0) or 0)
-    default_discount = custom_default if selected_dtype == "Индивидуальная" else float(DISCOUNT_TYPES.get(selected_dtype, 0))
-    st.caption("Процент можно изменить отдельно для каждой товарной позиции. Цена берётся из каталога и фиксируется в сделке.")
-    if not items:
-        st.caption("Товаров пока нет. Нажмите «Добавить товар».")
-    for i, item in enumerate(items):
-        row_id = item["row_id"]
-        current_pid = str(item.get("product_id", ""))
-        row_products = list(active_products)
-        if current_pid and all(str(p.get("id", p.get("sku", ""))) != current_pid for p in row_products):
-            _archived_match = next((p for p in products if str(p.get("id", p.get("sku", ""))) == current_pid), None)
-            if _archived_match:
-                row_products.append(_archived_match)
-        prod_ids = [str(p.get("id", p.get("sku", ""))) for p in row_products]
-        selected_idx = prod_ids.index(current_pid) if current_pid in prod_ids else 0
-        pmap = {str(p.get("id", p.get("sku", ""))): p for p in row_products}
-        cols = st.columns([3.2, 1.6, 1.05, 1.15])
-        with cols[0]:
-            pid = st.selectbox("Товар", prod_ids, index=selected_idx, format_func=lambda x, pm=pmap: pm[x].get("name", x), key=f"deal_item_product_{d['id']}_{row_id}")
-            current_product = pmap.get(pid, active_products[0])
-            # До нажатия «Сохранить состав» не меняем сохранённые данные сделки.
-            # Если пользователь выбрал другой товар, показываем его актуальную цену,
-            # но фиксируем выбор и цену только по явному сохранению.
-            if pid != current_pid:
-                unit_price = float(current_product.get("price", 0) or 0)
-                discount_widget_key = f"deal_item_discount_{d['id']}_{row_id}"
-                selected_pid_key = f"deal_item_last_selected_product_{d['id']}_{row_id}"
-                if st.session_state.get(selected_pid_key) != pid:
-                    st.session_state[discount_widget_key] = default_discount
-                    st.session_state[selected_pid_key] = pid
-                selected_unit = current_product.get("unit", "шт.")
-            else:
-                unit_price = float(item.get("unit_price", current_product.get("price", 0)) or 0)
-                selected_unit = item.get("unit", current_product.get("unit", "шт."))
-            st.caption(f"Артикул: {current_product.get('sku', pid)} · {selected_unit} · {unit_price:,.2f} ₽".replace(",", " "))
-        with cols[1]:
-            color = st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"deal_item_color_{d['id']}_{row_id}", placeholder="RAL / цвет")
-        with cols[2]:
-            quantity = st.number_input("Кол-во", min_value=0.0, value=float(item.get("quantity", 1) or 0), step=1.0, key=f"deal_item_qty_{d['id']}_{row_id}")
-        with cols[3]:
-            discount = st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, key=f"deal_item_discount_{d['id']}_{row_id}")
-        line_total = max(0.0, quantity) * unit_price * (1 - min(100.0, max(0.0, discount)) / 100.0)
-        st.markdown(f"<div style='text-align:right;color:#465568;font-size:0.9rem;margin-top:-0.3rem;margin-bottom:0.3rem;'>Сумма позиции: <b>{line_total:,.2f} ₽</b></div>".replace(",", " "), unsafe_allow_html=True)
-        ui_rows[row_id] = {"color_ral": color, "quantity": quantity, "discount": discount,
-                           "product_id": pid, "unit_price": unit_price,
-                           "product_name": current_product.get("name", ""), "unit": selected_unit}
-        if st.button("Удалить позицию", key=f"deal_item_remove_{d['id']}_{row_id}"):
-            for saved_item in items:
-                _ui = ui_rows.get(saved_item.get("row_id"))
-                if _ui:
-                    saved_item["color_ral"] = _ui["color_ral"]
-                    saved_item["quantity"] = _ui["quantity"]
-                    saved_item["discount"] = _ui["discount"]
-                    saved_item["product_id"] = _ui["product_id"]
-                    saved_item["unit_price"] = _ui["unit_price"]
-                    saved_item["product_name"] = _ui["product_name"]
-                    saved_item["unit"] = _ui["unit"]
-            d["items"] = [x for x in items if x.get("row_id") != row_id]
-            d["budget"] = round(_deal_items_total(d["items"]) + float(d.get("delivery_amount", 0) or 0), 2)
-            d["last_modified"] = now_str()
-            save_data(st.session_state.crm_store)
-            st.rerun()
-    delivery_key = f"deal_delivery_{d['id']}"
-    delivery = st.number_input("Доставка, ₽", min_value=0.0, value=float(d.get("delivery_amount", 0) or 0), step=100.0, key=delivery_key, help="Вводится вручную и не участвует в скидках.")
-    item_total = 0.0
-    for item in items:
-        _ui = ui_rows.get(item.get("row_id"), {})
-        qty = float(_ui.get("quantity", item.get("quantity", 0)) or 0)
-        price = float(_ui.get("unit_price", item.get("unit_price", 0)) or 0)
-        disc = min(100.0, max(0.0, float(_ui.get("discount", item.get("discount", 0)) or 0)))
-        item_total += max(0.0, qty) * max(0.0, price) * (1 - disc / 100.0)
-    st.markdown(f"**Товары:** {item_total:,.2f} ₽".replace(",", " "))
-    st.markdown(f"**Итого с доставкой:** {item_total + delivery:,.2f} ₽".replace(",", " "))
-    btn_add, btn_save = st.columns(2)
-    with btn_add:
-        add_clicked = st.button("+ Добавить товар", key=f"deal_item_add_{d['id']}", use_container_width=True)
-    with btn_save:
-        save_clicked = st.button("Сохранить состав", key=f"deal_item_save_{d['id']}", use_container_width=True, type="primary")
-    if add_clicked or save_clicked:
-        for item in items:
-            _ui = ui_rows.get(item.get("row_id"))
-            if _ui:
-                item["color_ral"] = _ui["color_ral"]
-                item["quantity"] = float(_ui["quantity"] or 0)
-                item["discount"] = float(_ui["discount"] or 0)
-                item["product_id"] = _ui["product_id"]
-                item["unit_price"] = float(_ui["unit_price"] or 0)
-                item["product_name"] = _ui["product_name"]
-                item["unit"] = _ui["unit"]
-        d["discount_type"] = selected_dtype
-        d["individual_discount"] = float(custom_default or 0)
-        d["delivery_amount"] = float(delivery or 0)
-        if add_clicked:
-            p = active_products[0]
-            d["items"].append({"row_id": str(uuid.uuid4()), "product_id": str(p.get("id", p.get("sku", ""))), "product_name": p.get("name", ""), "unit": p.get("unit", "шт."), "quantity": 1.0, "unit_price": float(p.get("price", 0) or 0), "discount": default_discount, "color_ral": ""})
-        d["budget"] = round(_deal_items_total(d["items"]) + d["delivery_amount"], 2)
-        d["last_modified"] = now_str()
-        d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Товары, скидки, цвет/RAL, доставка, бюджет"})
+    """Список сохранённых расчётов с мягким удалением и отдельным окном редактора."""
+    calculations = d.setdefault("calculations", [])
+    # Перенос ранее созданного одиночного расчёта в список без потери данных.
+    if not calculations and (d.get("items") or d.get("delivery_amount")):
+        calculations.append({
+            "id": uuid.uuid4().hex, "name": "Расчёт 1", "items": copy.deepcopy(d.get("items", [])),
+            "delivery_amount": float(d.get("delivery_amount", 0) or 0),
+            "discount_type": d.get("discount_type", "Без скидки"),
+            "individual_discount": float(d.get("individual_discount", 0) or 0),
+            "total": float(d.get("budget", 0) or 0), "deleted": False, "created_at": now_str()
+        })
         save_data(st.session_state.crm_store)
-        st.toast("Состав сделки сохранён" if save_clicked else "Товар добавлен", icon="✅")
+
+    st.markdown("**Расчёты по сделке**")
+    if not calculations:
+        st.caption("Расчётов пока нет.")
+    for idx, calc in enumerate(calculations):
+        calc.setdefault("id", uuid.uuid4().hex)
+        calc.setdefault("deleted", False)
+        calc.setdefault("name", f"Расчёт {idx + 1}")
+        calc.setdefault("total", _deal_calc_total(calc))
+        if calc.get("deleted"):
+            st.markdown(
+                f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{calc.get('name', 'Расчёт')} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
+                unsafe_allow_html=True,
+            )
+            continue
+        name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
+        with name_col:
+            st.markdown(f"**{calc.get('name', 'Расчёт')}**")
+        with total_col:
+            st.markdown(f"{calc['total']:,.0f} ₽".replace(",", " "))
+        with edit_col:
+            if st.button("Изменить", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
+                _push_dialog_return()
+                deal_calculation_dialog(d["id"], calc["id"])
+        with delete_col:
+            if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
+                calc["deleted"] = True
+                calc["deleted_at"] = now_str()
+                calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                d["last_modified"] = now_str()
+                d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
+                save_data(st.session_state.crm_store)
+                st.rerun()
+
+    if st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True):
+        calc = {"id": uuid.uuid4().hex, "name": f"Расчёт {len(calculations) + 1}", "items": [],
+                "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
+                "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
+        calculations.append(calc)
+        save_data(st.session_state.crm_store)
+        _push_dialog_return()
+        deal_calculation_dialog(d["id"], calc["id"])
+
+
+@_crm_dialog("Расчёт сделки", width="large")
+def deal_calculation_dialog(deal_id, calc_id):
+    """Отдельное окно редактирования расчёта в стиле окон задач."""
+    deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id")) == str(deal_id)), None)
+    if not deal:
+        st.error("Сделка не найдена")
+        return
+    calc = next((x for x in deal.setdefault("calculations", []) if str(x.get("id")) == str(calc_id)), None)
+    if calc is None:
+        st.error("Расчёт не найден")
+        return
+
+    key = f"calc_{deal_id}_{calc_id}"
+    dirty_key = f"{key}_dirty"
+    warning_key = f"{key}_close_warning"
+    name_key = f"{key}_name"
+    calc.setdefault("items", [])
+    calc.setdefault("delivery_amount", 0.0)
+    calc.setdefault("discount_type", "Без скидки")
+    calc.setdefault("individual_discount", 0.0)
+    snapshot_key = f"{key}_original_snapshot"
+    if snapshot_key not in st.session_state:
+        st.session_state[snapshot_key] = copy.deepcopy(calc)
+    if name_key not in st.session_state:
+        st.session_state[name_key] = calc.get("name", "Новый расчёт")
+
+    close_css = f"calc_close_row_{key}"
+    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;}} .st-key-{close_css} .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}</style>''', unsafe_allow_html=True)
+    with st.container(key=close_css):
+        _spacer, close_col = st.columns([20, 1])
+        with close_col:
+            if st.button("✕", key=f"{key}_close", use_container_width=True):
+                if st.session_state.get(dirty_key, False) and not st.session_state.get(warning_key, False):
+                    st.session_state[warning_key] = True
+                    st.rerun()
+                else:
+                    if calc.get("_draft"):
+                        deal["calculations"] = [x for x in deal.get("calculations", []) if str(x.get("id")) != str(calc_id)]
+                    save_data(st.session_state.crm_store)
+                    for k in (dirty_key, warning_key, name_key, snapshot_key):
+                        st.session_state.pop(k, None)
+                    _pop_dialog_return()
+                    st.rerun()
+
+    if st.session_state.get(warning_key):
+        warn_key = f"calc_unsaved_warn_{key}"
+        st.markdown(f'<style>.st-key-{warn_key} {{border:2px solid #FF9800!important;border-radius:10px!important;background:#FFF8E1!important;padding:0.65rem 0.8rem!important;margin:0.35rem 0 0.65rem!important;}}</style>', unsafe_allow_html=True)
+        with st.container(key=warn_key):
+            st.markdown("**⚠️ Есть несохранённые изменения**")
+            st.markdown("Сохранить перед закрытием?")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if st.button("Сохранить", key=f"{key}_warn_save", type="primary", use_container_width=True):
+                    st.session_state[warning_key] = False
+                    st.session_state[f"{key}_save_requested"] = True
+            with c2:
+                if st.button("Без сохр.", key=f"{key}_warn_discard", use_container_width=True):
+                    if calc.get("_draft"):
+                        deal["calculations"] = [x for x in deal.get("calculations", []) if str(x.get("id")) != str(calc_id)]
+                    else:
+                        _original = st.session_state.get(snapshot_key)
+                        if _original is not None:
+                            for _i, _saved_calc in enumerate(deal.get("calculations", [])):
+                                if str(_saved_calc.get("id")) == str(calc_id):
+                                    deal["calculations"][_i] = copy.deepcopy(_original)
+                                    break
+                    save_data(st.session_state.crm_store)
+                    for k in (dirty_key, warning_key, name_key, f"{key}_save_requested", snapshot_key):
+                        st.session_state.pop(k, None)
+                    _pop_dialog_return()
+                    st.rerun()
+            with c3:
+                if st.button("Продолжить", key=f"{key}_warn_continue", use_container_width=True):
+                    st.session_state[warning_key] = False
+                    st.rerun()
+
+    st.markdown("## Расчёт сделки")
+    st.text_input("Название расчёта", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+    catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+    active_products = [p for p in catalog if p.get("active", True)]
+    if not active_products:
+        st.warning("В каталоге нет активных товаров. Добавьте товары в разделе «Товары и прайс».")
+        return
+    items = calc.setdefault("items", [])
+    dtype_options = list(DISCOUNT_TYPES.keys())
+    if calc.get("discount_type") not in dtype_options:
+        calc["discount_type"] = "Без скидки"
+    dtype_key = f"{key}_discount_type"
+    selected_dtype = st.selectbox("Тип скидки по умолчанию для новых товаров", dtype_options,
+        index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
+        on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+    custom_key = f"{key}_individual_discount"
+    custom_default = st.number_input("Индивидуальная скидка, %", min_value=0.0, max_value=100.0,
+        value=float(calc.get("individual_discount", 0) or 0), step=1.0, format="%g", key=custom_key,
+        on_change=lambda: st.session_state.__setitem__(dirty_key, True)) if selected_dtype == "Индивидуальная" else float(calc.get("individual_discount", 0) or 0)
+    default_discount = custom_default if selected_dtype == "Индивидуальная" else float(DISCOUNT_TYPES.get(selected_dtype, 0))
+
+    for idx, item in enumerate(items):
+        item.setdefault("row_id", uuid.uuid4().hex)
+        item.setdefault("color_ral", "")
+        row_id = item["row_id"]
+        pid_key = f"{key}_{row_id}_product"
+        pids = [str(p.get("id", p.get("sku", ""))) for p in active_products]
+        current_pid = str(item.get("product_id", pids[0] if pids else ""))
+        if current_pid not in pids:
+            archived = next((p for p in catalog if str(p.get("id", p.get("sku", ""))) == current_pid), None)
+            if archived:
+                active_products_row = active_products + [archived]
+                pids = [str(p.get("id", p.get("sku", ""))) for p in active_products_row]
+            else:
+                active_products_row = active_products
+        else:
+            active_products_row = active_products
+        pmap = {str(p.get("id", p.get("sku", ""))): p for p in active_products_row}
+        cols = st.columns([3.2, 1.5, 1.0, 1.0, 0.9])
+        with cols[0]:
+            selected_pid = st.selectbox("Товар", pids, index=pids.index(current_pid) if current_pid in pids else 0,
+                format_func=lambda x, pm=pmap: pm[x].get("name", x), key=pid_key,
+                on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        product = pmap[selected_pid]
+        price_key = f"{key}_{row_id}_price"
+        if price_key not in st.session_state:
+            st.session_state[price_key] = float(item.get("unit_price", product.get("price", 0)) or 0)
+        with cols[1]:
+            st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"{key}_{row_id}_color", placeholder="RAL / цвет", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        with cols[2]:
+            st.number_input("Кол-во", min_value=0.0, value=float(item.get("quantity", 1) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_qty", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        with cols[3]:
+            st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_discount", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        with cols[4]:
+            st.markdown(f"<div style='padding-top:1.9rem;text-align:right;font-size:0.8rem;color:#64748b'>{float(item.get('unit_price', product.get('price', 0)) or 0):,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
+        st.caption(f"Артикул: {product.get('sku', selected_pid)} · {product.get('unit', item.get('unit', 'шт.'))}")
+        if st.button("Удалить позицию", key=f"{key}_{row_id}_remove"):
+            calc["items"] = [x for x in items if x.get("row_id") != row_id]
+            st.session_state[dirty_key] = True
+            st.rerun()
+        # Обновляем только локальный объект до нажатия «Сохранить расчёт».
+        item["product_id"] = selected_pid
+        item["product_name"] = product.get("name", "")
+        item["unit"] = product.get("unit", "шт.")
+        item["unit_price"] = float(product.get("price", 0) or 0) if selected_pid != current_pid else float(item.get("unit_price", product.get("price", 0)) or 0)
+        item["color_ral"] = st.session_state.get(f"{key}_{row_id}_color", item.get("color_ral", ""))
+        item["quantity"] = float(st.session_state.get(f"{key}_{row_id}_qty", item.get("quantity", 1)) or 0)
+        item["discount"] = float(st.session_state.get(f"{key}_{row_id}_discount", item.get("discount", default_discount)) or 0)
+        if selected_pid != current_pid:
+            st.session_state[price_key] = float(product.get("price", 0) or 0)
+            item["unit_price"] = float(product.get("price", 0) or 0)
+
+    if st.button("+ Добавить товар", key=f"{key}_add_item", use_container_width=True):
+        product = active_products[0]
+        items.append({"row_id": uuid.uuid4().hex, "product_id": str(product.get("id", product.get("sku", ""))), "product_name": product.get("name", ""), "unit": product.get("unit", "шт."), "quantity": 1.0, "unit_price": float(product.get("price", 0) or 0), "discount": float(custom_default if selected_dtype == "Индивидуальная" else DISCOUNT_TYPES.get(selected_dtype, 0)), "color_ral": ""})
+        st.session_state[dirty_key] = True
         st.rerun()
 
+    delivery_key = f"{key}_delivery"
+    delivery = st.number_input("Доставка, ₽", min_value=0.0, value=float(calc.get("delivery_amount", 0) or 0), step=100.0, format="%g", key=delivery_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True), help="Вводится вручную и не участвует в скидках.")
+    total = _deal_items_total(items) + float(delivery or 0)
+    st.markdown(f"**Итого с доставкой: {total:,.0f} ₽**".replace(",", " "))
+    _save_clicked = st.button("Сохранить расчёт", key=f"{key}_save", type="primary", use_container_width=True)
+    _save_from_warning = bool(st.session_state.pop(f"{key}_save_requested", False))
+    if _save_clicked or _save_from_warning:
+        calc["name"] = str(st.session_state.get(name_key, "Расчёт") or "Расчёт").strip() or "Расчёт"
+        calc["discount_type"] = selected_dtype
+        calc["individual_discount"] = float(custom_default or 0)
+        calc["delivery_amount"] = float(delivery or 0)
+        calc["total"] = _deal_calc_total(calc)
+        calc["updated_at"] = now_str()
+        calc["updated_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+        calc["_draft"] = False
+        deal["budget"] = calc["total"]
+        deal["last_modified"] = now_str()
+        deal.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc['name']}» сохранён"})
+        save_data(st.session_state.crm_store)
+        for k in (dirty_key, warning_key, f"{key}_save_requested", snapshot_key):
+            st.session_state.pop(k, None)
+        st.toast("Расчёт сохранён", icon="✅")
+        _pop_dialog_return()
+        st.rerun()
 
 def render_deal_detail(d, cl, cu, key_prefix):
     """Детали сделки в 2 колонки — как render_task_detail."""
