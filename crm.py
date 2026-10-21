@@ -2037,6 +2037,31 @@ def migrate_task_files(t):
     if "tk_num" not in t: t["tk_num"] = ""
     if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
 
+DEFAULT_PRODUCT_CATALOG = [
+    {"id":"APLNT1003","sku":"APLNT1003","name":"Комплект «Айплинт встроенный»","unit":"м","price":1395.0,"note":"Всегда в наличии; продажа кратно 2 м","active":True},
+    {"id":"APLNT1007-K","sku":"APLNT1007","name":"Комплект «Айплинт керамогранит»","unit":"м","price":1445.0,"note":"Всегда в наличии; продажа кратно 2 м","active":True},
+    {"id":"APLNT1001","sku":"APLNT1001","name":"Магнитный профиль «Айплинт 1»","unit":"м","price":1195.0,"note":"Всегда в наличии; продажа кратно 2 м","active":True},
+    {"id":"APLNT1002","sku":"APLNT1002","name":"Магнитный профиль «Айплинт 2»","unit":"м","price":1195.0,"note":"Всегда в наличии; продажа кратно 2 м","active":True},
+    {"id":"APLNT1050","sku":"APLNT1050","name":"Тонкий плинтус «Айплинт Слим 4»","unit":"м","price":790.0,"note":"Высота 40 мм","active":True},
+    {"id":"APLNT1051","sku":"APLNT1051","name":"Тонкий плинтус «Айплинт Слим 6»","unit":"м","price":890.0,"note":"Высота 60 мм","active":True},
+    {"id":"APLNT1052","sku":"APLNT1052","name":"Айплинт Слим 4 LED","unit":"м","price":890.0,"note":"Скоро в продаже","active":False},
+    {"id":"APLNT1053","sku":"APLNT1053","name":"Айплинт Слим 6 LED","unit":"м","price":890.0,"note":"Скоро в продаже","active":False},
+    {"id":"APLNT1004","sku":"APLNT1004","name":"Вставка полимерная под покраску (2 м)","unit":"шт.","price":520.0,"note":"Продажа кратно 2 м; цена за изделие 2 м","active":True},
+    {"id":"APLNT1006","sku":"APLNT1006","name":"Вставка из натурального каменного шпона","unit":"м","price":1790.0,"note":"На заказ; длина до 3,2 м","active":True},
+    {"id":"APLNT1005","sku":"APLNT1005","name":"Комплект «Айплинт радиусный»","unit":"м/шт.","price":6490.0,"note":"На заказ; срок около 10 календарных дней; единицу уточнять","active":True},
+    {"id":"APLNT1007-R","sku":"APLNT1007","name":"Магнитный профиль радиусный (без вставки)","unit":"м/шт.","price":5490.0,"note":"На заказ; срок около 10 календарных дней; единицу уточнять","active":True},
+    {"id":"APLNT1010-1","sku":"APLNT1010-1","name":"Светодиодная лента COB 5/3000 (5 м)","unit":"уп.","price":1390.0,"note":"24V, 4000K; наличие уточнять","active":True},
+    {"id":"APLNT1010-2","sku":"APLNT1010-2","name":"Светодиодная лента COB 5/4000 (5 м)","unit":"уп.","price":1390.0,"note":"24V, 4000K; наличие уточнять","active":True},
+    {"id":"APLNT1010-3","sku":"APLNT1010-3","name":"Светодиодная лента COB 5/6500 (5 м)","unit":"уп.","price":1390.0,"note":"24V, 6500K; наличие уточнять","active":True},
+    {"id":"APLNT1020-1","sku":"APLNT1020-1","name":"Блок питания 24V 150W","unit":"шт.","price":1590.0,"note":"Регулятор яркости; наличие уточнять","active":True},
+    {"id":"APLNT1020-2","sku":"APLNT1020-2","name":"Блок питания 24V 200W","unit":"шт.","price":1790.0,"note":"Регулятор яркости; наличие уточнять","active":True},
+    {"id":"APLNT1020-3","sku":"APLNT1020-3","name":"Блок питания 24V 300W","unit":"шт.","price":2190.0,"note":"Регулятор яркости; наличие уточнять","active":True},
+    {"id":"APLNT1030","sku":"APLNT1030","name":"Датчик движения Rexant","unit":"шт.","price":1305.0,"note":"220V; наличие уточнять","active":True},
+    {"id":"APLNT1060","sku":"APLNT1060","name":"Шпатель для подготовки основания","unit":"шт.","price":1390.0,"note":"В наличии","active":True},
+    {"id":"APLNT1102","sku":"APLNT1102","name":"Образцы магнитного и тонкого плинтусов","unit":"компл.","price":0.0,"note":"Бесплатно","active":True},
+]
+DISCOUNT_TYPES = {"Без скидки": 0, "Дилерская": 30, "Дизайнер / строитель": 10, "Акционная": 5, "Индивидуальная": 0}
+
 def migrate_data(data):
     du = [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}]
     if "users" not in data: data["users"] = du
@@ -2084,6 +2109,7 @@ def migrate_data(data):
     if "chat_messages" not in data: data["chat_messages"] = []
     if "qa_entries" not in data: data["qa_entries"] = []
     if "suppliers" not in data: data["suppliers"] = []
+    if "products" not in data: data["products"] = copy.deepcopy(DEFAULT_PRODUCT_CATALOG)
     data["_migrated"] = "v2"
     return data
 
@@ -2840,6 +2866,10 @@ def close_deal_dialog(deal_id):
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
+# Каталог товаров добавляется совместимо с уже работающей базой.
+if "products" not in st.session_state.crm_store:
+    st.session_state.crm_store["products"] = copy.deepcopy(DEFAULT_PRODUCT_CATALOG)
+    save_data(st.session_state.crm_store)
 # Показываем конфликт уже после rerun, чтобы предупреждение не исчезало сразу.
 _saved_conflicts = st.session_state.pop("crm_last_save_conflicts", None)
 if _saved_conflicts:
@@ -3987,7 +4017,7 @@ _new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks",
 # Reset modal request tracking before any shared UI can request a dialog.
 st.session_state["_crm_dialog_requested_this_run"] = False
 
-nc1, nc2, nc3, nc4, nc5 = st.columns(5)
+nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
@@ -4038,6 +4068,14 @@ with nc5:
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
+        st.session_state.pop("dialog_deal_key", None)
+        st.session_state.pop("_open_created_deal", None)
+        st.rerun()
+with nc6:
+    if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
+        st.session_state.active_tab = "Товары и прайс"
+        st.session_state["_dialog_return_stack"] = []
+        st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         st.rerun()
@@ -4309,6 +4347,144 @@ def render_deal_standalone(d, cl, cu):
             st.rerun()
 
 
+def _deal_items_total(items):
+    total = 0.0
+    for item in items or []:
+        qty = max(0.0, float(item.get("quantity", 0) or 0))
+        price = max(0.0, float(item.get("unit_price", 0) or 0))
+        discount = min(100.0, max(0.0, float(item.get("discount", 0) or 0)))
+        total += qty * price * (1 - discount / 100.0)
+    return round(total, 2)
+
+
+def render_deal_products_block(d, key_prefix):
+    """Editable product lines and delivery cost inside the deal's right column."""
+    products = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+    active_products = [p for p in products if p.get("active", True)]
+    if not active_products:
+        st.info("В каталоге пока нет активных товаров. Добавьте товары в разделе «Товары и прайс».")
+        return
+    items = d.setdefault("items", [])
+    ui_rows = {}
+    for i, item in enumerate(items):
+        item.setdefault("row_id", str(uuid.uuid4()))
+        item.setdefault("product_id", active_products[0].get("id", active_products[0].get("sku", "")))
+        item.setdefault("color_ral", "")
+        item.setdefault("quantity", 1.0)
+        item.setdefault("unit_price", 0.0)
+        item.setdefault("discount", 0.0)
+        item.setdefault("product_name", "")
+        item.setdefault("unit", "шт.")
+    st.markdown("**Товары и расчёт**")
+    dtype_key = f"deal_discount_type_{d['id']}"
+    current_dtype = d.get("discount_type", "Без скидки")
+    dtype_options = list(DISCOUNT_TYPES.keys())
+    if current_dtype not in dtype_options:
+        current_dtype = "Без скидки"
+    selected_dtype = st.selectbox("Тип скидки по умолчанию для новых товаров", dtype_options, index=dtype_options.index(current_dtype), key=dtype_key)
+    custom_default = st.number_input("Индивидуальная скидка, %", min_value=0.0, max_value=100.0, value=float(d.get("individual_discount", 0) or 0), step=1.0, key=f"deal_ind_discount_{d['id']}") if selected_dtype == "Индивидуальная" else float(d.get("individual_discount", 0) or 0)
+    default_discount = custom_default if selected_dtype == "Индивидуальная" else float(DISCOUNT_TYPES.get(selected_dtype, 0))
+    st.caption("Процент можно изменить отдельно для каждой товарной позиции. Цена берётся из каталога и фиксируется в сделке.")
+    if not items:
+        st.caption("Товаров пока нет. Нажмите «Добавить товар».")
+    for i, item in enumerate(items):
+        row_id = item["row_id"]
+        current_pid = str(item.get("product_id", ""))
+        row_products = list(active_products)
+        if current_pid and all(str(p.get("id", p.get("sku", ""))) != current_pid for p in row_products):
+            _archived_match = next((p for p in products if str(p.get("id", p.get("sku", ""))) == current_pid), None)
+            if _archived_match:
+                row_products.append(_archived_match)
+        prod_ids = [str(p.get("id", p.get("sku", ""))) for p in row_products]
+        selected_idx = prod_ids.index(current_pid) if current_pid in prod_ids else 0
+        pmap = {str(p.get("id", p.get("sku", ""))): p for p in row_products}
+        cols = st.columns([3.2, 1.6, 1.05, 1.15])
+        with cols[0]:
+            pid = st.selectbox("Товар", prod_ids, index=selected_idx, format_func=lambda x, pm=pmap: pm[x].get("name", x), key=f"deal_item_product_{d['id']}_{row_id}")
+            current_product = pmap.get(pid, active_products[0])
+            # До нажатия «Сохранить состав» не меняем сохранённые данные сделки.
+            # Если пользователь выбрал другой товар, показываем его актуальную цену,
+            # но фиксируем выбор и цену только по явному сохранению.
+            if pid != current_pid:
+                unit_price = float(current_product.get("price", 0) or 0)
+                discount_widget_key = f"deal_item_discount_{d['id']}_{row_id}"
+                selected_pid_key = f"deal_item_last_selected_product_{d['id']}_{row_id}"
+                if st.session_state.get(selected_pid_key) != pid:
+                    st.session_state[discount_widget_key] = default_discount
+                    st.session_state[selected_pid_key] = pid
+                selected_unit = current_product.get("unit", "шт.")
+            else:
+                unit_price = float(item.get("unit_price", current_product.get("price", 0)) or 0)
+                selected_unit = item.get("unit", current_product.get("unit", "шт."))
+            st.caption(f"Артикул: {current_product.get('sku', pid)} · {selected_unit} · {unit_price:,.2f} ₽".replace(",", " "))
+        with cols[1]:
+            color = st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"deal_item_color_{d['id']}_{row_id}", placeholder="RAL / цвет")
+        with cols[2]:
+            quantity = st.number_input("Кол-во", min_value=0.0, value=float(item.get("quantity", 1) or 0), step=1.0, key=f"deal_item_qty_{d['id']}_{row_id}")
+        with cols[3]:
+            discount = st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, key=f"deal_item_discount_{d['id']}_{row_id}")
+        line_total = max(0.0, quantity) * unit_price * (1 - min(100.0, max(0.0, discount)) / 100.0)
+        st.markdown(f"<div style='text-align:right;color:#465568;font-size:0.9rem;margin-top:-0.3rem;margin-bottom:0.3rem;'>Сумма позиции: <b>{line_total:,.2f} ₽</b></div>".replace(",", " "), unsafe_allow_html=True)
+        ui_rows[row_id] = {"color_ral": color, "quantity": quantity, "discount": discount,
+                           "product_id": pid, "unit_price": unit_price,
+                           "product_name": current_product.get("name", ""), "unit": selected_unit}
+        if st.button("Удалить позицию", key=f"deal_item_remove_{d['id']}_{row_id}"):
+            for saved_item in items:
+                _ui = ui_rows.get(saved_item.get("row_id"))
+                if _ui:
+                    saved_item["color_ral"] = _ui["color_ral"]
+                    saved_item["quantity"] = _ui["quantity"]
+                    saved_item["discount"] = _ui["discount"]
+                    saved_item["product_id"] = _ui["product_id"]
+                    saved_item["unit_price"] = _ui["unit_price"]
+                    saved_item["product_name"] = _ui["product_name"]
+                    saved_item["unit"] = _ui["unit"]
+            d["items"] = [x for x in items if x.get("row_id") != row_id]
+            d["budget"] = round(_deal_items_total(d["items"]) + float(d.get("delivery_amount", 0) or 0), 2)
+            d["last_modified"] = now_str()
+            save_data(st.session_state.crm_store)
+            st.rerun()
+    delivery_key = f"deal_delivery_{d['id']}"
+    delivery = st.number_input("Доставка, ₽", min_value=0.0, value=float(d.get("delivery_amount", 0) or 0), step=100.0, key=delivery_key, help="Вводится вручную и не участвует в скидках.")
+    item_total = 0.0
+    for item in items:
+        _ui = ui_rows.get(item.get("row_id"), {})
+        qty = float(_ui.get("quantity", item.get("quantity", 0)) or 0)
+        price = float(_ui.get("unit_price", item.get("unit_price", 0)) or 0)
+        disc = min(100.0, max(0.0, float(_ui.get("discount", item.get("discount", 0)) or 0)))
+        item_total += max(0.0, qty) * max(0.0, price) * (1 - disc / 100.0)
+    st.markdown(f"**Товары:** {item_total:,.2f} ₽".replace(",", " "))
+    st.markdown(f"**Итого с доставкой:** {item_total + delivery:,.2f} ₽".replace(",", " "))
+    btn_add, btn_save = st.columns(2)
+    with btn_add:
+        add_clicked = st.button("+ Добавить товар", key=f"deal_item_add_{d['id']}", use_container_width=True)
+    with btn_save:
+        save_clicked = st.button("Сохранить состав", key=f"deal_item_save_{d['id']}", use_container_width=True, type="primary")
+    if add_clicked or save_clicked:
+        for item in items:
+            _ui = ui_rows.get(item.get("row_id"))
+            if _ui:
+                item["color_ral"] = _ui["color_ral"]
+                item["quantity"] = float(_ui["quantity"] or 0)
+                item["discount"] = float(_ui["discount"] or 0)
+                item["product_id"] = _ui["product_id"]
+                item["unit_price"] = float(_ui["unit_price"] or 0)
+                item["product_name"] = _ui["product_name"]
+                item["unit"] = _ui["unit"]
+        d["discount_type"] = selected_dtype
+        d["individual_discount"] = float(custom_default or 0)
+        d["delivery_amount"] = float(delivery or 0)
+        if add_clicked:
+            p = active_products[0]
+            d["items"].append({"row_id": str(uuid.uuid4()), "product_id": str(p.get("id", p.get("sku", ""))), "product_name": p.get("name", ""), "unit": p.get("unit", "шт."), "quantity": 1.0, "unit_price": float(p.get("price", 0) or 0), "discount": default_discount, "color_ral": ""})
+        d["budget"] = round(_deal_items_total(d["items"]) + d["delivery_amount"], 2)
+        d["last_modified"] = now_str()
+        d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Товары, скидки, цвет/RAL, доставка, бюджет"})
+        save_data(st.session_state.crm_store)
+        st.toast("Состав сделки сохранён" if save_clicked else "Товар добавлен", icon="✅")
+        st.rerun()
+
+
 def render_deal_detail(d, cl, cu, key_prefix):
     """Детали сделки в 2 колонки — как render_task_detail."""
     deal_id = d["id"]
@@ -4505,6 +4681,8 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.session_state["dialog_create_deal_task_deal_id"] = deal_id
                 st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
                 st.rerun()
+            st.markdown("---")
+            render_deal_products_block(d, key_prefix)
             st.markdown("---")
             st.markdown("**Внесённые изменения**")
             _deal_changes = d.get("change_log", [])
@@ -6366,6 +6544,74 @@ elif st.session_state.active_tab == "Сделки":
                 _cl = cid_map.get(_d.get("client_id"))
                 deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
                 break
+
+elif st.session_state.active_tab == "Товары и прайс":
+    st.markdown("## Товары и прайс")
+    st.caption("Редактирование каталога применяется к новым добавлениям товаров. Цены уже сохранённых позиций в сделках не меняются.")
+    _is_catalog_admin = st.session_state.get("user_role") == "admin"
+    _catalog = st.session_state.crm_store.setdefault("products", copy.deepcopy(DEFAULT_PRODUCT_CATALOG))
+    if _is_catalog_admin:
+        st.info("Изменяйте текущие цены, добавляйте новые товары и снимайте позиции с продажи через флажок «Активен». Удалять товар не нужно: архивные позиции остаются в истории сделок.")
+        _edited_catalog = st.data_editor(
+            _catalog,
+            key="products_catalog_editor",
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "id": st.column_config.TextColumn("ID", help="Служебный идентификатор; для новых товаров можно оставить пустым"),
+                "sku": st.column_config.TextColumn("Артикул"),
+                "name": st.column_config.TextColumn("Наименование", required=True),
+                "unit": st.column_config.TextColumn("Ед. изм.", required=True),
+                "price": st.column_config.NumberColumn("Цена, ₽", min_value=0, step=10, format="%.2f", required=True),
+                "note": st.column_config.TextColumn("Примечание"),
+                "active": st.column_config.CheckboxColumn("Активен", default=True),
+            },
+        )
+        if st.button("Сохранить прайс", key="save_products_catalog", type="primary", use_container_width=True):
+            _rows = _edited_catalog.to_dict("records") if hasattr(_edited_catalog, "to_dict") else list(_edited_catalog)
+            _old_catalog_by_id = {str(x.get("id", x.get("sku", ""))): x for x in st.session_state.crm_store.get("products", [])}
+            _clean_rows = []
+            _price_changes = []
+            _seen_ids = set()
+            for _i, _row in enumerate(_rows):
+                _raw_name = _row.get("name", "")
+                _name = "" if _raw_name is None or str(_raw_name).strip().lower() in ("nan", "none") else str(_raw_name).strip()
+                if not _name:
+                    continue
+                _raw_sku = _row.get("sku", "")
+                _sku = "" if _raw_sku is None or str(_raw_sku).strip().lower() in ("nan", "none") else str(_raw_sku).strip()
+                _raw_id = _row.get("id", "")
+                _pid = str((_raw_id if _raw_id is not None and str(_raw_id).strip().lower() not in ("nan", "none") else "") or _sku or uuid.uuid4()).strip()
+                if _pid in _seen_ids:
+                    _pid = f"{_pid}-{uuid.uuid4().hex[:6]}"
+                _seen_ids.add(_pid)
+                try:
+                    _price = float(_row.get("price", 0) or 0)
+                    if _price != _price: _price = 0.0
+                    _price = max(0.0, _price)
+                except (TypeError, ValueError): _price = 0.0
+                _old_product = _old_catalog_by_id.get(_pid)
+                if _old_product is not None:
+                    try: _old_price = float(_old_product.get("price", 0) or 0)
+                    except (TypeError, ValueError): _old_price = 0.0
+                    if round(_old_price, 2) != round(_price, 2):
+                        _price_changes.append({"date":now_str(),"product_id":_pid,"sku":_sku,"name":_name,"old_price":_old_price,"new_price":_price,"author":st.session_state.get("user_name", st.session_state.get("user_login", ""))})
+                _clean_rows.append({"id":_pid,"sku":_sku,"name":_name,"unit":str(_row.get("unit", "шт.") or "шт."),"price":_price,"note":str(_row.get("note", "") or ""),"active":bool(_row.get("active", True))})
+            st.session_state.crm_store["products"] = _clean_rows
+            st.session_state.crm_store.setdefault("product_price_history", []).extend(_price_changes)
+            save_data(st.session_state.crm_store)
+            st.toast("Прайс сохранён", icon="✅")
+            st.rerun()
+        with st.expander("История изменения цен", expanded=False):
+            _price_history = list(reversed(st.session_state.crm_store.get("product_price_history", [])[-100:]))
+            if _price_history:
+                st.dataframe(_price_history, use_container_width=True, hide_index=True)
+            else:
+                st.caption("Изменений цен пока нет.")
+    else:
+        st.dataframe(_catalog, use_container_width=True, hide_index=True)
+        st.caption("Изменять прайс может администратор CRM. Обратитесь к нему, если нужно обновить цену или добавить товар.")
 
 elif st.session_state.active_tab == "Задачи":
     now_time = moscow_now()
