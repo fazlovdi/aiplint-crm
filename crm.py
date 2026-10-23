@@ -3400,6 +3400,26 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state._auth_last_activity = _server_last_activity if isinstance(_server_last_activity, datetime) else moscow_now()
             break
 
+# CookieManager загружается как браузерный компонент и при первом проходе
+# после обновления страницы может вернуть пустой словарь до получения cookie.
+# Не показываем PIN и не считаем пользователя вышедшим, пока не дадим компоненту
+# несколько коротких циклов для чтения сохранённого токена. Это именно ожидание
+# чтения cookie, а не продление сессии: серверный тайм-аут 60 минут проверяется выше.
+if (
+    not st.session_state.get("authenticated")
+    and not st.session_state.get("_force_password_login")
+    and not cookies.get("auth_token")
+):
+    _cookie_restore_attempts = int(st.session_state.get("_cookie_restore_attempts", 0) or 0)
+    if _cookie_restore_attempts < 3:
+        st.session_state["_cookie_restore_attempts"] = _cookie_restore_attempts + 1
+        time.sleep(0.4)
+        st.rerun()
+    else:
+        st.session_state.pop("_cookie_restore_attempts", None)
+else:
+    st.session_state.pop("_cookie_restore_attempts", None)
+
 # Не используем периодический heartbeat: он вызывал rerun и перерисовку диалогов.
 # Каждый обычный rerun, вызванный действием в CRM, фиксирует активность; обновление
 # страницы восстанавливает только ещё не истёкшую серверную сессию.
