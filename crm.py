@@ -5837,20 +5837,78 @@ def render_client_card_expanded(cl):
                         st.rerun()
                 else: st.warning("Выберите файл(ы)")
             st.markdown("---")
-            # Кнопки создания сделки и задачи
-            _bc1, _bc2 = st.columns(2)
-            with _bc1:
-                if st.button("Создать задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
-                    _push_dialog_return()
-                    st.session_state["dialog_create_client_task_client_id"] = cl["id"]
-                    st.session_state.pop("dialog_client_key", None)
-                    st.rerun()
-            with _bc2:
-                if st.button("Создать сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
-                    _push_dialog_return()
-                    st.session_state["dialog_create_deal_from_client"] = cl["id"]
-                    st.session_state.pop("dialog_client_key", None)
-                    st.rerun()
+            # Список задач по клиенту — сразу под блоком файлов
+            _client_only_tasks = [t for t in cl.get("tasks", []) if not t.get("deal_id")]
+            _client_only_tasks.sort(key=lambda task: task.get("created_at", ""), reverse=True)
+            st.markdown(f"**Список задач по клиенту ({len(_client_only_tasks)})**")
+            if _client_only_tasks:
+                for _ti, _task in enumerate(_client_only_tasks):
+                    _task_col, _date_col, _open_col = st.columns([2, 2, 1])
+                    with _task_col:
+                        _task_number_label = html.escape(str(_task.get("task_number", "")))
+                        _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
+                        st.markdown(f"**{_task_number_label}** · {_task_type_label}")
+                    with _date_col:
+                        _created = str(_task.get("created_at", "") or "")
+                        try:
+                            _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
+                            _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
+                        except Exception:
+                            _created_label = f"Создано {_created}" if _created else "Создано —"
+                        st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
+                    with _open_col:
+                        if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
+                            _push_dialog_return()
+                            st.session_state["dialog_task_number"] = str(_task.get("task_number", ""))
+                            st.session_state["dialog_task_client_id"] = str(cl.get("id", ""))
+                            st.session_state["dialog_task_deal_id"] = ""
+                            st.session_state["dialog_task_key"] = f"client_task_{cl['id']}_{_task.get('task_number', '')}"
+                            st.rerun()
+            else:
+                st.caption("Задач по клиенту пока нет.")
+            if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_create_client_task_client_id"] = cl["id"]
+                st.session_state.pop("dialog_client_key", None)
+                st.rerun()
+
+            st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
+
+            # Список сделок клиента — в том же стиле, что список задач по сделке
+            _client_deals_list = [deal for deal in st.session_state.crm_store.get("deals", []) if str(deal.get("client_id", "")) == str(cl.get("id", ""))]
+            _client_deals_list.sort(key=lambda deal: deal.get("created_at", ""), reverse=True)
+            st.markdown(f"**Список сделок ({len(_client_deals_list)})**")
+            if _client_deals_list:
+                for _di, _deal in enumerate(_client_deals_list):
+                    _deal_col, _date_col, _open_col = st.columns([2, 2, 1])
+                    with _deal_col:
+                        _deal_number = html.escape(str(_deal.get("deal_number", _deal.get("title", ""))))
+                        _deal_title = html.escape(str(_deal.get("deal_title", "") or ""))
+                        _deal_status = html.escape(str(_deal.get("status", "Новый") or "Новый"))
+                        st.markdown(f"**{_deal_number}** · {_deal_title} <span style='color:#7B8490'>({ _deal_status })</span>", unsafe_allow_html=True)
+                    with _date_col:
+                        _created = str(_deal.get("created_at", "") or "")
+                        try:
+                            _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
+                            _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
+                        except Exception:
+                            _created_label = f"Создано {_created}" if _created else "Создано —"
+                        st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
+                    with _open_col:
+                        if st.button("Открыть", key=f"client_deal_open_{cl['id']}_{_di}", use_container_width=True):
+                            _push_dialog_return()
+                            st.session_state.pop("dialog_client_key", None)
+                            st.session_state["dialog_deal_key"] = _deal["id"]
+                            st.rerun()
+            else:
+                st.caption("Сделок пока нет.")
+            if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_create_deal_from_client"] = cl["id"]
+                st.session_state.pop("dialog_client_key", None)
+                st.rerun()
+
+            st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
             # Реквизиты для документов — между действиями и историей изменений.
             st.markdown("---")
             st.markdown("**Реквизиты для документов**")
