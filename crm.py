@@ -1673,6 +1673,13 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _render_task_shipping_fields(t, cl, d, key_prefix)
                     elif not show_shipping_status:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
+            # В режиме просмотра заказа выводим товары так же построчно, как при создании/редактировании.
+            if not show_edit_task and _tp == "Отправить заказ":
+                _task_products_text = str(t.get("products", "") or "").strip()
+                if _task_products_text:
+                    _task_product_lines = [line.strip() for line in _task_products_text.replace("\r\n", "\n").split("\n") if line.strip()]
+                    st.text("Товары:\n" + "\n".join(_task_product_lines))
+
             if show_edit_task:
                 # Inline editing mode
                 _old_task_type = t.get("type", "Связаться")
