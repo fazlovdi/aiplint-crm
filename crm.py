@@ -1710,6 +1710,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["manager"] = et_mgr
                             t["task_comment"] = et_comment
                             t["products"] = et_products
+                            if et_type == "Отправить заказ" and d:
+                                t["products_calc_id"] = st.session_state.get(f"edit_prod_calc_selected_{key_prefix}", "")
+                                t["products_manual"] = et_products_manual.strip()
                             t["ship_addr"] = et_addr
                             t["receiver"] = et_recv
                             t["receiver_phone"] = et_rphone
@@ -4121,6 +4124,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 for _row in _calculation_rows(_selected_calc, _catalog):
                     _calc_lines.append(f"{_row['sku']} — {_row['name']} — {_row['quantity']:g} {_row['unit']}")
                 nproducts = "\n".join(_calc_lines)
+                st.markdown("**Товары:**\n" + "\n".join(f"- {line}" for line in _calc_lines) if _calc_lines else "**Товары:**")
+            else:
+                st.markdown("**Товары:**")
             nproducts_manual = st.text_area("", key=f"nt_prod_manual_{key_suffix}", placeholder="Добавить товары...", help="Добавить товары...", label_visibility="collapsed")
             if nproducts_manual.strip(): nproducts = (nproducts + "\n" if nproducts else "") + nproducts_manual.strip()
         nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
@@ -4157,7 +4163,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "task_number": tn, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                 "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                 "task_comments": [], "flagged": False,
-                "products": nproducts, "ship_addr": nship_addr,
+                "products": nproducts, "products_calc_id": str(_selected_calc.get("id")) if ntype == "Отправить заказ" and deal_id and _selected_calc_label in _calc_labels else "", "products_manual": nproducts_manual.strip() if ntype == "Отправить заказ" and deal_id else "", "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
                 "ship_pay": nship_pay, "tk_num": ntk_num.strip()
             }
@@ -4509,7 +4515,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
     out=io.BytesIO()
     doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=9*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#bc1661"), spaceAfter=4*mm)
+    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_LEFT, textColor=colors.black, spaceAfter=3*mm)
     h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#bc1661"), spaceBefore=2*mm, spaceAfter=1.5*mm)
     body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm)
     small=ParagraphStyle("OfferSmall", parent=body, fontSize=6.4, leading=8)
@@ -4519,10 +4525,8 @@ def _make_commercial_offer_pdf(deal, client, calc):
     validity=date+timedelta(days=30)
     date_ru=date.strftime("%d.%m.%Y")
     logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
-    logo_cell=Image(logo_path, width=48*mm, height=20*mm, kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>", title)
-    logo_table=Table([[logo_cell, Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title)]], colWidths=[55*mm, 185*mm])
-    logo_table.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)]))
-    flow=[logo_table,
+    logo_cell=Image(logo_path, width=144*mm, height=62*mm, kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>", title)
+    flow=[logo_cell, Spacer(1, 1*mm), Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
           Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')} &nbsp;&nbsp; Срок действия предложения: 30 дней (до {validity.strftime('%d.%m.%Y')})", body),
           Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
           Paragraph("Наименование организации: ИП Фазлов Дамир Ибрагимович<br/>ИНН: 731701704975<br/>Адрес производства: г. Казань, ул. Кулагина, д. 3<br/>Телефон / Email: +7 (900) 329-33-00 / info@iplinth.ru", body),
@@ -4554,11 +4558,17 @@ def _make_commercial_offer_pdf(deal, client, calc):
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F1F3F6")),("FONTNAME",(0,-1),(-1,-1),bold),
-        ("SPAN",(0,-1),(7,-1)),("ALIGN",(8,1),(-1,-1),"RIGHT"),
+        ("SPAN",(0,-1),(len(headers)-3,-1)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT"),
     ]))
     flow += [tbl, Spacer(1, 3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
              Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
-             Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h), Paragraph("ИП Фазлов Дамир Ибрагимович", body)]
+             Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h)]
+    asset_dir=os.path.dirname(os.path.abspath(__file__))
+    signature_path=os.path.join(asset_dir,"подпись.png")
+    stamp_path=os.path.join(asset_dir,"печать.png")
+    sig=Image(signature_path,width=28*mm,height=25*mm,kind="proportional") if os.path.exists(signature_path) else Paragraph("",body)
+    stamp=Image(stamp_path,width=27*mm,height=27*mm,kind="proportional") if os.path.exists(stamp_path) else Paragraph("",body)
+    flow.append(Table([[Paragraph("ИП Фазлов Дамир Ибрагимович",body),sig,stamp]],colWidths=[105*mm,35*mm,35*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),2)])))
     doc.build(flow)
     return out.getvalue()
 
@@ -4569,7 +4579,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
     font,bold=_pdf_font_setup()
     out=io.BytesIO()
     doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=11*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
@@ -4603,10 +4613,11 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
     logo=Image(logo_path,width=45*mm,height=19*mm,kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>",title)
     flow=[Table([[logo,Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT))]],colWidths=[85*mm,95*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)])),
+          Spacer(1,3*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
+          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),
           Paragraph("Получатель",body),
           Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#E7A4C5")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#FCEAF3")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
-          Spacer(1,5*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
-          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
+          Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
         name=f"{html.escape(str(r['name']))}<br/><font size='6'>(Артикул: {html.escape(str(r['sku']))})</font>"
@@ -4621,8 +4632,13 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     _count_last = _line_count % 10
     _count_word = "наименование" if _count_last == 1 and _count_mod != 11 else ("наименования" if 2 <= _count_last <= 4 and not 12 <= _count_mod <= 14 else "наименований")
     flow += [tbl,Spacer(1,3*mm),Paragraph(f"Всего {_line_count} {_count_word} на сумму {_number_to_russian_words(int(total))} {int(round((total-int(total))*100)):02d} копеек.",body),Paragraph(f"<b>Итог к оплате: {_money(total)} ₽</b> &nbsp;&nbsp; Без НДС",ParagraphStyle("InvTotal",parent=body,fontName=bold,fontSize=10,alignment=TA_RIGHT)),Paragraph(f"Срок оплаты: Не позднее {due.strftime('%d.%m.%Y')} г.",body),Spacer(1,12*mm)]
-    sign=Table([[Paragraph(f"Получатель:<br/><br/>Индивидуальный предприниматель<br/>Фазлов Дамир Ибрагимович",body),Paragraph("Плательщик: ___________________________<br/><br/>Подпись / печать",body)]],colWidths=[90*mm,90*mm])
-    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),4)]))
+    asset_dir=os.path.dirname(os.path.abspath(__file__))
+    signature_path=os.path.join(asset_dir,"подпись.png")
+    stamp_path=os.path.join(asset_dir,"печать.png")
+    sig=Image(signature_path,width=22*mm,height=22*mm,kind="proportional") if os.path.exists(signature_path) else Paragraph("",body)
+    stamp=Image(stamp_path,width=24*mm,height=24*mm,kind="proportional") if os.path.exists(stamp_path) else Paragraph("",body)
+    sign=Table([[Paragraph(f"Получатель:<br/><br/>Индивидуальный предприниматель<br/>Фазлов Дамир Ибрагимович",body),sig,stamp,Paragraph("Плательщик: ___________________________<br/><br/>Подпись / печать",body)]],colWidths=[65*mm,28*mm,30*mm,57*mm])
+    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),4),("LEFTPADDING",(0,0),(-1,-1),1),("RIGHTPADDING",(0,0),(-1,-1),1)]))
     flow.append(sign)
     doc.build(flow)
     return out.getvalue(), due.strftime("%d.%m.%Y")
@@ -4977,10 +4993,14 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.session_state[name_key] = _calculation_display_name(deal, calc)
 
     close_css = f"calc_close_row_{key}"
+    # Force the active dialog host title to the calculation-specific title even when
+    # the dialog was opened from an existing deal-detail popup.
+    if st.session_state.get("_crm_active_dialog", {}).get("name") == "deal_calculation_dialog":
+        st.session_state["_crm_active_dialog"]["title"] = "Создание расчёта"
     st.markdown(f'<style>.st-key-{close_css} .stButton > button {{ width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important; }}</style>', unsafe_allow_html=True)
     st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:nowrap!important;}} .st-key-{close_css} .st-key-{key}_make_offer button,.st-key-{close_css} .st-key-{key}_make_invoice button {{width:100%!important;min-width:190px!important;}} .st-key-{close_css} .st-key-{key}_close button {{width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important;}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, close_col = st.columns([2.0, 2.0, 0.25])
+        offer_col, invoice_col, close_col = st.columns([2.0, 2.0, 0.16], gap="small")
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
