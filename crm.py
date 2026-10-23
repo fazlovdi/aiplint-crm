@@ -1675,12 +1675,16 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             if show_edit_task:
                 # Inline editing mode
-                et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
+                _old_task_type = t.get("type", "Связаться")
+                et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}") if _old_task_type not in ("Отправить заказ", "Отправить образцы") else t.get("text", "")
                 et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
+                et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}", height=100)
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
-                    et_products = st.text_area("\u0422\u043e\u0432\u0430\u0440\u044b:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
+                    if t.get("type") == "Отправить заказ":
+                        et_products = st.text_area("", value=t.get("products", ""), key=f"edit_prod_{key_prefix}", placeholder="Добавить товары...", label_visibility="collapsed")
+                    else:
+                        et_products = st.text_area("\u0422\u043e\u0432\u0430\u0440\u044b:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
@@ -4099,18 +4103,33 @@ cu = st.session_state.user_name
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
-    ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
+    _topic_required = ntype not in ("Отправить заказ", "Отправить образцы")
+    ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}") if _topic_required else "Заказ" if ntype == "Отправить заказ" else "Образцы"
     ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
     ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
     if ntype in ("Отправить заказ", "Отправить образцы"):
-        nproducts = st.text_area("Товары:", key=f"nt_prod_{key_suffix}")
+        nproducts = ""
+        if ntype == "Отправить заказ" and deal_id:
+            _order_deal = get_deal_by_id(deal_id) or {}
+            _order_calcs = [c for c in _order_deal.get("calculations", []) if not c.get("deleted")]
+            _calc_labels = {f"{c.get('name') or _calculation_display_name(_order_deal,c)}": c for c in _order_calcs}
+            _selected_calc_label = st.selectbox("Товары из расчёта:", ["— Выберите расчёт —"] + list(_calc_labels), key=f"nt_order_calc_{key_suffix}")
+            if _selected_calc_label in _calc_labels:
+                _selected_calc = _calc_labels[_selected_calc_label]
+                _catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+                _calc_lines = []
+                for _row in _calculation_rows(_selected_calc, _catalog):
+                    _calc_lines.append(f"{_row['sku']} — {_row['name']} — {_row['quantity']:g} {_row['unit']}")
+                nproducts = "\n".join(_calc_lines)
+            nproducts_manual = st.text_area("", key=f"nt_prod_manual_{key_suffix}", placeholder="Добавить товары...", help="Добавить товары...", label_visibility="collapsed")
+            if nproducts_manual.strip(): nproducts = (nproducts + "\n" if nproducts else "") + nproducts_manual.strip()
         nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
         nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
         nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
         norder_amount = st.text_input("Сумма заказа (руб.):", value="", key=f"nt_amount_{key_suffix}", placeholder="Введите сумму")
         ntk_num = st.text_input("Трек:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
-        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
+        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}", height=100)
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     else:
         nproducts = ""
@@ -4120,10 +4139,10 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         nship_pay = ""
         norder_amount = ""
         ntk_num = ""
-        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
+        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}", height=100)
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
-        if not ntopic.strip():
+        if _topic_required and not ntopic.strip():
             st.warning("Введите тему задачи")
         else:
             tfi_list = save_uploaded_files(ntf, cl_id, "task_file") if ntf else []
@@ -4484,13 +4503,14 @@ def _make_commercial_offer_pdf(deal, client, calc):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
+    from reportlab.lib.utils import ImageReader
     font, bold = _pdf_font_setup()
     out=io.BytesIO()
     doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=9*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#242C36"), spaceAfter=4*mm)
-    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#242C36"), spaceBefore=2*mm, spaceAfter=1.5*mm)
+    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#bc1661"), spaceAfter=4*mm)
+    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#bc1661"), spaceBefore=2*mm, spaceAfter=1.5*mm)
     body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm)
     small=ParagraphStyle("OfferSmall", parent=body, fontSize=6.4, leading=8)
     cell=ParagraphStyle("OfferCell", parent=small, fontSize=6.2, leading=7.5)
@@ -4498,7 +4518,11 @@ def _make_commercial_offer_pdf(deal, client, calc):
     date=moscow_now().date()
     validity=date+timedelta(days=30)
     date_ru=date.strftime("%d.%m.%Y")
-    flow=[Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
+    logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
+    logo_cell=Image(logo_path, width=48*mm, height=20*mm, kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>", title)
+    logo_table=Table([[logo_cell, Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title)]], colWidths=[55*mm, 185*mm])
+    logo_table.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)]))
+    flow=[logo_table,
           Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')} &nbsp;&nbsp; Срок действия предложения: 30 дней (до {validity.strftime('%d.%m.%Y')})", body),
           Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
           Paragraph("Наименование организации: ИП Фазлов Дамир Ибрагимович<br/>ИНН: 731701704975<br/>Адрес производства: г. Казань, ул. Кулагина, д. 3<br/>Телефон / Email: +7 (900) 329-33-00 / info@iplinth.ru", body),
@@ -4506,29 +4530,34 @@ def _make_commercial_offer_pdf(deal, client, calc):
           Paragraph("2. СМЕТА НА ПОСТАВКУ МАТЕРИАЛОВ", h),
           Paragraph("Условия налогообложения: все цены указаны без НДС в связи с применением УСН.", small), Spacer(1, 2*mm)]
     rows=_calculation_rows(calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG))
-    table_data=[[Paragraph(x,cellhead) for x in ["№","Артикул / наименование","Цвет","Технические характеристики","Ед. изм.","Цена","Скидка","Цена со скидкой","Кол-во","Сумма"]]]
+    has_discount=any(float(r.get("discount",0) or 0)>0 for r in rows)
+    headers=["№","Артикул / наименование","Цвет","Описание","Ед. изм.","Цена"] + (["Скидка","Цена со скидкой"] if has_discount else []) + ["Кол-во","Сумма"]
+    table_data=[[Paragraph(x,cellhead) for x in headers]]
     for i,r in enumerate(rows,1):
         item_name=f"<b>{html.escape(str(r['sku']))}</b><br/>{html.escape(str(r['name']))}"
-        table_data.append([Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell), Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell), Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)])
+        line=[Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell)]
+        if has_discount: line += [Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell)]
+        line += [Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)]
+        table_data.append(line)
     if not rows:
-        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell), "", "", "", "", "", "", "", ""])
+        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell)] + [""]*(len(headers)-2))
     total=sum(r['amount'] for r in rows)
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
     if delivery:
-        table_data.append(["", Paragraph("Доставка",cell), "", "", "", "", "", "", "", Paragraph(_money(delivery),cell)])
-    table_data.append(["", "", "", "", "", "", "", "", Paragraph("ИТОГО:",cell), Paragraph(_money(total+delivery),cell)])
-    widths=[9*mm,48*mm,17*mm,46*mm,13*mm,20*mm,15*mm,24*mm,14*mm,24*mm]
+        table_data.append(["", Paragraph("Доставка",cell)] + [""]*(len(headers)-3) + [Paragraph(_money(delivery),cell)])
+    table_data.append([""]*(len(headers)-2) + [Paragraph("ИТОГО:",cell), Paragraph(_money(total+delivery),cell)])
+    widths=[9*mm,48*mm,17*mm,46*mm,13*mm,20*mm] + ([15*mm,24*mm] if has_discount else []) + [14*mm,24*mm]
     tbl=Table(table_data,colWidths=widths,repeatRows=1,hAlign="LEFT")
     tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#343D4A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#B9C0C9")),("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#bc1661")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#E7A4C5")),("VALIGN",(0,0),(-1,-1),"TOP"),
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F1F3F6")),("FONTNAME",(0,-1),(-1,-1),bold),
         ("SPAN",(0,-1),(7,-1)),("ALIGN",(8,1),(-1,-1),"RIGHT"),
     ]))
     flow += [tbl, Spacer(1, 3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
-             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 5 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
+             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
              Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h), Paragraph("ИП Фазлов Дамир Ибрагимович", body)]
     doc.build(flow)
     return out.getvalue()
@@ -4545,11 +4574,11 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     out=io.BytesIO()
     doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=11*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_LEFT,spaceAfter=4*mm,textColor=colors.HexColor("#202833"))
+    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_LEFT,spaceAfter=4*mm,textColor=colors.HexColor("#bc1661"))
     body=ParagraphStyle("InvBody",parent=styles["BodyText"],fontName=font,fontSize=8,leading=10,spaceAfter=1.3*mm)
     small=ParagraphStyle("InvSmall",parent=body,fontSize=6.7,leading=8)
     cell=ParagraphStyle("InvCell",parent=small,fontSize=6.8,leading=8)
-    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER)
+    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER,textColor=colors.white)
     date=moscow_now().date()
     next_month=1 if date.month==12 else date.month+1
     year=date.year+1 if date.month==12 else date.year
@@ -4571,11 +4600,12 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
     suffix=calc_name.replace("Расчёт", "", 1).strip()
     invoice_no=f"Счёт {suffix} от {date.strftime('%d.%m.%Y')}"
-    flow=[Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT)),
+    logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
+    logo=Image(logo_path,width=45*mm,height=19*mm,kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>",title)
+    flow=[Table([[logo,Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT))]],colWidths=[85*mm,95*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)])),
           Paragraph("Получатель",body),
-          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#AEB6C2")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#F8F9FB")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
+          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#E7A4C5")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#FCEAF3")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
           Spacer(1,5*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
-          Paragraph(f"Получатель: {seller}, ИНН {seller_inn}, р/с {account}, в банке {bank}, БИК {bik}, к/с {corr}",body),
           Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
@@ -4585,7 +4615,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     if delivery:
         data.append([Paragraph(str(len(rows)+1),cell),Paragraph("Доставка",cell),Paragraph("1",cell),Paragraph("усл.",cell),Paragraph(_money(delivery),cell),Paragraph("Без НДС",cell),Paragraph(_money(delivery),cell)])
     tbl=Table(data,colWidths=[9*mm,72*mm,17*mm,18*mm,24*mm,18*mm,27*mm],repeatRows=1,hAlign="LEFT")
-    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E9EDF2")),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#AEB6C2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#bc1661")),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#AEB6C2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
     _line_count = len(rows) + (1 if delivery else 0)
     _count_mod = _line_count % 100
     _count_last = _line_count % 10
@@ -4948,9 +4978,9 @@ def deal_calculation_dialog(deal_id, calc_id):
 
     close_css = f"calc_close_row_{key}"
     st.markdown(f'<style>.st-key-{close_css} .stButton > button {{ width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important; }}</style>', unsafe_allow_html=True)
-    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:100%!important;min-width:150px!important;min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:normal!important;}} .st-key-{close_css} .stButton > button:hover {{filter:brightness(0.97);}}</style>''', unsafe_allow_html=True)
+    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:nowrap!important;}} .st-key-{close_css} .st-key-{key}_make_offer button,.st-key-{close_css} .st-key-{key}_make_invoice button {{width:100%!important;min-width:190px!important;}} .st-key-{close_css} .st-key-{key}_close button {{width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important;}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, _spacer, close_col = st.columns([7.0, 7.0, 5.0, 1.0])
+        offer_col, invoice_col, close_col = st.columns([2.0, 2.0, 0.25])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
