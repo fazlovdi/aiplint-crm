@@ -1673,13 +1673,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _render_task_shipping_fields(t, cl, d, key_prefix)
                     elif not show_shipping_status:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-            # В режиме просмотра заказа выводим товары так же построчно, как при создании/редактировании.
-            if not show_edit_task and _tp == "Отправить заказ":
-                _task_products_text = str(t.get("products", "") or "").strip()
-                if _task_products_text:
-                    _task_product_lines = [line.strip() for line in _task_products_text.replace("\r\n", "\n").split("\n") if line.strip()]
-                    st.text("Товары:\n" + "\n".join(_task_product_lines))
-
             if show_edit_task:
                 # Inline editing mode
                 _old_task_type = t.get("type", "Связаться")
@@ -1797,7 +1790,10 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if d: d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
                 st.markdown("---")
-                if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
+                if t.get('products'):
+                    _display_products = str(t.get("products", "") or "").strip()
+                    _display_product_lines = [line.strip() for line in _display_products.replace("\r\n", "\n").split("\n") if line.strip()]
+                    st.text("Товары:\n" + "\n".join(_display_product_lines))
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
