@@ -1180,8 +1180,15 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
             format_func=lambda cid: calc_by_id[cid].get("name", "Расчёт"),
             key=calc_key
         )
-        if st.session_state.get(last_calc_key) != str(selected_id):
-            st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
+        if last_calc_key not in st.session_state:
+            # При первом открытии редактирования сохраняем ручные товары из задачи.
+            # Если список пустой, заполняем его товарами выбранного расчёта.
+            if not str(st.session_state.get(products_key, "") or "").strip():
+                st.session_state[products_key] = "\\n".join(_task_products_from_calculation(deal, selected_id))
+            st.session_state[last_calc_key] = str(selected_id)
+        elif st.session_state.get(last_calc_key) != str(selected_id):
+            # При явной смене расчёта обновляем список из нового расчёта.
+            st.session_state[products_key] = "\\n".join(_task_products_from_calculation(deal, selected_id))
             st.session_state[last_calc_key] = str(selected_id)
     else:
         st.caption("В сделке пока нет сохранённых расчётов.")
@@ -1788,7 +1795,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     et_topic = et_type
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
                     _selected_calc_id_edit, et_products = render_task_products_editor(
                         d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
@@ -1805,7 +1811,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
                     et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
                     et_tk = st.text_input("Трек (подпиши если габариты не указаны):", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                    et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 else:
+                    et_comment = st.text_area("\\u041a\\u043e\\u043c\\u043c\\u0435\\u043d\\u0442\\u0430\\u0440\\u0438\\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                     et_products = t.get("products", "")
                     et_city = t.get("ship_city", "")
                     et_addr = t.get("ship_addr", "")
