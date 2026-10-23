@@ -1639,7 +1639,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
-                        st.markdown(f"**Тема:** {t.get('text', '')}")
+                        if t.get("type") not in ("Отправить заказ", "Отправить образцы"):
+                            st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
@@ -1666,7 +1667,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
-                        st.markdown(f"**Тема:** {t.get('text', '')}")
+                        if t.get("type") not in ("Отправить заказ", "Отправить образцы"):
+                            st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
