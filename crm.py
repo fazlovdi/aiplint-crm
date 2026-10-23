@@ -1681,10 +1681,27 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
                 et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}", height=100)
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
-                    if t.get("type") == "Отправить заказ":
-                        et_products = st.text_area("", value=t.get("products", ""), key=f"edit_prod_{key_prefix}", placeholder="Добавить товары...", label_visibility="collapsed")
+                    if et_type == "Отправить заказ" and d:
+                        _edit_calcs = [c for c in d.get("calculations", []) if not c.get("deleted")]
+                        _edit_calc_map = {str(c.get("id")): c for c in _edit_calcs}
+                        _current_calc_id = str(t.get("products_calc_id", "") or "")
+                        _calc_ids = [""] + list(_edit_calc_map.keys())
+                        _default_idx = _calc_ids.index(_current_calc_id) if _current_calc_id in _calc_ids else 0
+                        _chosen_calc_id = st.selectbox("Товары из расчёта:", _calc_ids, index=_default_idx, format_func=lambda cid: "— Выберите расчёт —" if not cid else str(_edit_calc_map[cid].get("name") or _calculation_display_name(d,_edit_calc_map[cid])), key=f"edit_prod_calc_selected_{key_prefix}")
+                        _chosen_calc = _edit_calc_map.get(str(_chosen_calc_id))
+                        _base_lines = []
+                        if _chosen_calc:
+                            for _row in _calculation_rows(_chosen_calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)):
+                                _base_lines.append(f"{_row['sku']} — {_row['name']} — {_row['quantity']:g} {_row['unit']}")
+                        _manual_key = f"edit_prod_manual_{key_prefix}"
+                        if _manual_key not in st.session_state:
+                            st.session_state[_manual_key] = str(t.get("products_manual", "") or "")
+                        st.markdown("**Товары:**" + ("\n" + "\n".join(_base_lines) if _base_lines else ""))
+                        et_products_manual = st.text_area("", key=_manual_key, placeholder="Добавить товары...", label_visibility="collapsed")
+                        et_products = "\n".join(_base_lines + ([et_products_manual.strip()] if et_products_manual.strip() else []))
                     else:
-                        et_products = st.text_area("\u0422\u043e\u0432\u0430\u0440\u044b:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
+                        et_products_manual = ""
+                        et_products = st.text_area("Товары:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
@@ -4482,7 +4499,10 @@ def _pdf_paragraph(text, style, escape=True):
 
 
 def _calculation_rows(calc, catalog):
-    pmap = {str(p.get("id", p.get("sku", ""))): p for p in catalog}
+    pmap = {}
+    for p in catalog:
+        if p.get("id") is not None: pmap[str(p.get("id"))] = p
+        if p.get("sku") is not None: pmap[str(p.get("sku"))] = p
     rows=[]
     for item in calc.get("items", []):
         product = pmap.get(str(item.get("product_id", "")), {})
@@ -4495,7 +4515,7 @@ def _calculation_rows(calc, catalog):
             "sku": product.get("sku", item.get("sku", item.get("product_id", ""))),
             "name": item.get("product_name", product.get("name", "Товар")),
             "color": item.get("color_ral", ""),
-            "spec": product.get("characteristics", product.get("description", "")),
+            "spec": (product.get("characteristics") or product.get("description") or product.get("specification") or product.get("note") or product.get("details") or item.get("description") or ""),
             "unit": item.get("unit", product.get("unit", "шт.")),
             "price": price, "discount": discount, "after": after,
             "quantity": qty, "amount": amount,
@@ -4525,8 +4545,11 @@ def _make_commercial_offer_pdf(deal, client, calc):
     validity=date+timedelta(days=30)
     date_ru=date.strftime("%d.%m.%Y")
     logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
-    logo_cell=Image(logo_path, width=144*mm, height=62*mm, kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>", title)
-    flow=[logo_cell, Spacer(1, 1*mm), Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
+    logo_cell=Image(logo_path, width=70*mm, height=30*mm, kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>", title)
+    title_center=ParagraphStyle("OfferTitleCentered", parent=title, alignment=TA_CENTER, textColor=colors.black, spaceAfter=0, fontSize=15, leading=18)
+    header_tbl=Table([[logo_cell, Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title_center)]], colWidths=[75*mm, 192*mm], rowHeights=[30*mm], hAlign="LEFT")
+    header_tbl.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    flow=[header_tbl, Spacer(1, 1*mm),
           Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')} &nbsp;&nbsp; Срок действия предложения: 30 дней (до {validity.strftime('%d.%m.%Y')})", body),
           Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
           Paragraph("Наименование организации: ИП Фазлов Дамир Ибрагимович<br/>ИНН: 731701704975<br/>Адрес производства: г. Казань, ул. Кулагина, д. 3<br/>Телефон / Email: +7 (900) 329-33-00 / info@iplinth.ru", body),
@@ -4611,12 +4634,15 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     suffix=calc_name.replace("Расчёт", "", 1).strip()
     invoice_no=f"Счёт {suffix} от {date.strftime('%d.%m.%Y')}"
     logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
-    logo=Image(logo_path,width=45*mm,height=19*mm,kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>",title)
-    flow=[Table([[logo,Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT))]],colWidths=[85*mm,95*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)])),
-          Spacer(1,3*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
-          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),
-          Paragraph("Получатель",body),
-          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#E7A4C5")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#FCEAF3")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
+    logo=Image(logo_path,width=60*mm,height=26*mm,kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>",title)
+    inv_title_center=ParagraphStyle("InvTitleCentered",parent=title,fontSize=13,leading=16,alignment=TA_CENTER,textColor=colors.black,spaceAfter=0)
+    inv_header=Table([[logo,Paragraph(f"<b>{html.escape(invoice_no)}</b>",inv_title_center)]],colWidths=[65*mm,115*mm],rowHeights=[26*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    flow=[inv_header,
+          Spacer(1,2*mm),Paragraph(f"Плательщик: {html.escape(payer_details)}",body),
+          Paragraph("Получатель:",body),
+          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body),
+                  Table([[Image(os.path.join(os.path.dirname(os.path.abspath(__file__)),"подпись.png"),width=20*mm,height=16*mm,kind="proportional") if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),"подпись.png")) else "",
+                          Image(os.path.join(os.path.dirname(os.path.abspath(__file__)),"печать.png"),width=22*mm,height=22*mm,kind="proportional") if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),"печать.png")) else ""]],colWidths=[24*mm,26*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)]))]],colWidths=[125*mm,55*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#E7A4C5")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#FCEAF3")),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)])),
           Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
@@ -4632,14 +4658,6 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     _count_last = _line_count % 10
     _count_word = "наименование" if _count_last == 1 and _count_mod != 11 else ("наименования" if 2 <= _count_last <= 4 and not 12 <= _count_mod <= 14 else "наименований")
     flow += [tbl,Spacer(1,3*mm),Paragraph(f"Всего {_line_count} {_count_word} на сумму {_number_to_russian_words(int(total))} {int(round((total-int(total))*100)):02d} копеек.",body),Paragraph(f"<b>Итог к оплате: {_money(total)} ₽</b> &nbsp;&nbsp; Без НДС",ParagraphStyle("InvTotal",parent=body,fontName=bold,fontSize=10,alignment=TA_RIGHT)),Paragraph(f"Срок оплаты: Не позднее {due.strftime('%d.%m.%Y')} г.",body),Spacer(1,12*mm)]
-    asset_dir=os.path.dirname(os.path.abspath(__file__))
-    signature_path=os.path.join(asset_dir,"подпись.png")
-    stamp_path=os.path.join(asset_dir,"печать.png")
-    sig=Image(signature_path,width=22*mm,height=22*mm,kind="proportional") if os.path.exists(signature_path) else Paragraph("",body)
-    stamp=Image(stamp_path,width=24*mm,height=24*mm,kind="proportional") if os.path.exists(stamp_path) else Paragraph("",body)
-    sign=Table([[Paragraph(f"Получатель:<br/><br/>Индивидуальный предприниматель<br/>Фазлов Дамир Ибрагимович",body),sig,stamp,Paragraph("Плательщик: ___________________________<br/><br/>Подпись / печать",body)]],colWidths=[65*mm,28*mm,30*mm,57*mm])
-    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),4),("LEFTPADDING",(0,0),(-1,-1),1),("RIGHTPADDING",(0,0),(-1,-1),1)]))
-    flow.append(sign)
     doc.build(flow)
     return out.getvalue(), due.strftime("%d.%m.%Y")
 
@@ -4881,16 +4899,17 @@ def invoice_document_dialog(deal_id, calc_id):
             elif not calc.get("items"):
                 st.error("Добавь хотя бы одну товарную позицию в расчёт.")
             else:
-                try:
-                    pdf,due=_make_invoice_pdf(deal,client,calc,req)
-                    display=str(calc.get("name") or _calculation_display_name(deal,calc)).replace("Расчёт","Счёт",1)
-                    filename=f"{display} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
-                    _save_generated_document(deal,pdf,filename,"Счёт",calc,req)
-                    _open_pdf_link(pdf,filename,f"invoice_pdf_{deal_id}_{calc_id}")
-                    st.session_state[f"invoice_generated_note_{deal_id}_{calc_id}"]=f"Счёт сохранён в файлах сделки. Срок оплаты: {due}."
-                    st.success(f"Счёт сохранён в файлах сделки. Срок оплаты: {due}.")
-                except Exception as exc:
-                    st.error(f"Не удалось сформировать счёт: {exc}")
+                with st.spinner("Формируется счёт PDF…"):
+                    try:
+                        pdf,due=_make_invoice_pdf(deal,client,calc,req)
+                        display=str(calc.get("name") or _calculation_display_name(deal,calc)).replace("Расчёт","Счёт",1)
+                        filename=f"{display} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+                        _save_generated_document(deal,pdf,filename,"Счёт",calc,req)
+                        _open_pdf_link(pdf,filename,f"invoice_pdf_{deal_id}_{calc_id}")
+                        st.session_state[f"invoice_generated_note_{deal_id}_{calc_id}"]=f"Счёт сохранён в файлах сделки. Срок оплаты: {due}."
+                        st.success(f"Счёт сохранён в файлах сделки. Срок оплаты: {due}.")
+                    except Exception as exc:
+                        st.error(f"Не удалось сформировать счёт: {exc}")
     pdf_state=st.session_state.get(f"invoice_pdf_{deal_id}_{calc_id}")
     if pdf_state:
         st.markdown(f'<a href="data:application/pdf;base64,{pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:600">Открыть PDF в новой вкладке</a>',unsafe_allow_html=True)
@@ -6619,10 +6638,7 @@ def deal_create_task_dialog(deal_id, client_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cdt_{deal_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
-    _has_unsaved = (
-        st.session_state.get(f"nt_topic_cdt_{deal_id}", "").strip() or
-        st.session_state.get(f"nt_c_cdt_{deal_id}", "").strip()
-    )
+    _has_unsaved = any(str(st.session_state.get(f"nt_{suffix}_cdt_{deal_id}", "") or "").strip() for suffix in ("topic", "c", "prod_manual", "addr", "recv", "rphone", "amount", "tk")) or bool(st.session_state.get(f"nt_file_cdt_{deal_id}")) or (st.session_state.get(f"nt_order_calc_cdt_{deal_id}", "— Выберите расчёт —") != "— Выберите расчёт —")
     _close_css_key = f"close_row_{_key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
