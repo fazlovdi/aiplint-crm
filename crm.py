@@ -1194,6 +1194,10 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
     else:
         st.caption("Товары не добавлены.")
     add_key = f"{key_prefix}_add_product"
+    # Streamlit запрещает менять значение ключа виджета после его создания в текущем проходе.
+    # Флаг очищается до создания text_input на следующем проходе.
+    if st.session_state.pop(f"{add_key}_clear_pending", False):
+        st.session_state[add_key] = ""
     st.markdown(f"<style>.st-key-{add_key} input::placeholder {{font-size:0.78rem!important;font-style:italic!important;color:#9AA3AD!important;opacity:1!important;}}</style>", unsafe_allow_html=True)
     _add_col, _btn_col = st.columns([5, 1])
     with _add_col:
@@ -1204,7 +1208,7 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
             if new_line:
                 current = str(st.session_state.get(products_key, "") or "").strip()
                 st.session_state[products_key] = (current + "\n" if current else "") + new_line
-                st.session_state[add_key] = ""
+                st.session_state[f"{add_key}_clear_pending"] = True
                 st.rerun()
     return str(selected_id), str(st.session_state.get(products_key, "") or "")
 
@@ -1850,7 +1854,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if d: d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
                 st.markdown("---")
-                if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
+                if t.get('products'):
+                    st.markdown("**Товары:**")
+                    for _product_line in str(t.get("products", "")).splitlines():
+                        if _product_line.strip():
+                            st.markdown(f"- {html.escape(_product_line.strip())}", unsafe_allow_html=True)
                 if t.get('type') in ("Отправить заказ", "Отправить образцы"):
                     st.markdown(f"**Город:** {t.get('ship_city', '')}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
@@ -5546,12 +5554,6 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 else:
                     st.warning("Выберите файл(ы)")
             st.markdown("---")
-            _dls_ct_key = f"dls_show_ct_{deal_id}"
-            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
-                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
-                st.rerun()
             _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
             _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
             if _deal_tasks_list:
@@ -5563,10 +5565,11 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     with _date_col:
                         _created = str(_task.get("created_at", "") or "")
                         try:
-                            _created = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y")
+                            _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
+                            _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
                         except Exception:
-                            _created = _created[:10]
-                        st.caption(_created or "—")
+                            _created_label = f"Создано {_created}" if _created else "Создано —"
+                        st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"deal_task_open_{deal_id}_{_ti}", use_container_width=True):
                             _push_dialog_return()
@@ -5577,6 +5580,12 @@ def render_deal_detail(d, cl, cu, key_prefix):
                             st.rerun()
             else:
                 st.caption("Задач по сделке пока нет.")
+            _dls_ct_key = f"dls_show_ct_{deal_id}"
+            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
+                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
+                st.rerun()
             st.markdown("---")
             render_deal_products_block(d, key_prefix)
             st.markdown("---")
@@ -7471,6 +7480,10 @@ elif st.session_state.active_tab == "Сделки":
     _active_deal_dialog_id = _dialog_deal_key or _created_deal_id
     _deal_report_state = st.session_state.get("dialog_deal_report")
     _deal_task_dialog_id = st.session_state.get("dialog_create_deal_task_deal_id")
+    _dialog_task_number = st.session_state.get("dialog_task_number")
+    _dialog_task_client_id = st.session_state.get("dialog_task_client_id")
+    _dialog_task_deal_id = st.session_state.get("dialog_task_deal_id")
+    _dialog_task_key = st.session_state.get("dialog_task_key")
 
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
@@ -7483,6 +7496,27 @@ elif st.session_state.active_tab == "Сделки":
     elif _deal_task_dialog_id:
         _task_client_id = st.session_state.get("dialog_create_deal_task_client_id")
         deal_create_task_dialog(_deal_task_dialog_id, _task_client_id)
+    elif _dialog_task_key and _dialog_task_number and _dialog_task_client_id:
+        _target_client = get_client_by_id(_dialog_task_client_id)
+        _target_task = None
+        _target_deal = None
+        if _target_client:
+            for _candidate_task in _target_client.get("tasks", []):
+                if (str(_candidate_task.get("task_number", "")) == str(_dialog_task_number)
+                        and str(_candidate_task.get("deal_id", "") or "") == str(_dialog_task_deal_id or "")):
+                    _target_task = _candidate_task
+                    break
+        if _target_task:
+            if _target_task.get("deal_id"):
+                _target_deal = next((x for x in st.session_state.crm_store.get("deals", [])
+                                     if str(x.get("id", "")) == str(_target_task.get("deal_id", ""))), None)
+            task_detail_dialog(_target_task, _target_client, _target_deal, _dialog_task_key)
+        else:
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("dialog_task_number", None)
+            st.session_state.pop("dialog_task_client_id", None)
+            st.session_state.pop("dialog_task_deal_id", None)
+            st.warning("Не удалось найти выбранную задачу. Обновите список и попробуйте ещё раз.")
     elif _active_deal_dialog_id and not st.session_state.get("dialog_client_key"):
         for _d in st.session_state.crm_store.get("deals", []):
             if _d["id"] == _active_deal_dialog_id:
