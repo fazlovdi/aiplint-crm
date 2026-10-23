@@ -1532,41 +1532,8 @@ def process_due_reminders():
         if u.get("telegram_chat_id"):
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
-def _save_task_shipping_widget_value(task_id, client_id, deal_id, key_prefix, field):
-    """Persist shipping widgets from their callbacks, before the dialog is rendered again.
-
-    Saving from the middle of render_task_detail used to replace crm_store with a deep
-    copy while the rest of that same render still held references to the old objects.
-    Subsequent action buttons could then mutate stale task/client objects.
-    """
-    store = st.session_state.get("crm_store", {})
-    client = next((c for c in store.get("clients", []) if str(c.get("id")) == str(client_id)), None)
-    if not client:
-        return
-    task = next((t for t in client.get("tasks", []) if str(t.get("id")) == str(task_id)), None)
-    if task is None:
-        return
-
-    if field == "status":
-        value = st.session_state.get(f"task_shipping_status_{key_prefix}", "") or ""
-        task["shipping_status"] = value
-    elif field == "date":
-        value = st.session_state.get(f"task_estimated_ship_date_{key_prefix}")
-        task["estimated_ship_date"] = value.isoformat() if value else ""
-
-    now = now_str()
-    task["last_modified"] = now
-    client["last_modified"] = now
-    if deal_id:
-        for deal in client.get("deals", []):
-            if str(deal.get("id")) == str(deal_id):
-                deal["last_modified"] = now
-                break
-    save_data(store)
-
-
 def _render_task_shipping_fields(task, client, deal, key_prefix):
-    """Shipping status/date are saved by callbacks, without invalidating live dialog references."""
+    """Inline status and estimated shipping date, saved immediately from the existing task dialog."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
     status_key = f"task_shipping_status_{key_prefix}"
     date_key = f"task_estimated_ship_date_{key_prefix}"
@@ -1577,29 +1544,31 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
     except (TypeError, ValueError):
         current_date = None
 
-    # Seed widget state only when it has not yet been initialized. This prevents
-    # rerenders from resetting a user's selection back to the stored value.
-    if status_key not in st.session_state:
-        st.session_state[status_key] = current_status if current_status in statuses else None
-    if date_key not in st.session_state:
-        st.session_state[date_key] = current_date
-
     st.selectbox(
         "Статус",
         options=statuses,
-        index=None,
+        index=statuses.index(current_status) if current_status in statuses else None,
         placeholder="Выберите статус",
         key=status_key,
-        on_change=_save_task_shipping_widget_value,
-        args=(task.get("id"), client.get("id"), deal.get("id") if deal else None, key_prefix, "status"),
     )
-    st.date_input(
+    selected_date = st.date_input(
         "Ориентировочная дата отправки",
+        value=current_date,
         format="DD.MM.YYYY",
         key=date_key,
-        on_change=_save_task_shipping_widget_value,
-        args=(task.get("id"), client.get("id"), deal.get("id") if deal else None, key_prefix, "date"),
     )
+
+    selected_status = st.session_state.get(status_key, current_status) or ""
+    selected_date_value = selected_date.isoformat() if selected_date else ""
+    if selected_status != current_status or selected_date_value != current_date_raw:
+        task["shipping_status"] = selected_status
+        task["estimated_ship_date"] = selected_date_value
+        task["last_modified"] = now_str()
+        client["last_modified"] = now_str()
+        if deal:
+            deal["last_modified"] = now_str()
+        save_data(st.session_state.crm_store)
+
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
@@ -1812,11 +1781,19 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            # Сохраняем статус, но оставляем окно задачи открытым.
-                            # Так пользователь может продолжить работу с карточкой.
+                            # Сначала фиксируем новый статус. Затем закрываем окно задачи,
+                            # чтобы основная доска перерисовалась с актуальным списком:
+                            # задача сразу исчезает из «Новые» и появляется в «В работе/На сегодня».
                             save_data(st.session_state.crm_store)
+                            st.session_state.pop("dialog_task_key", None)
+                            st.session_state.pop("dialog_task_number", None)
+                            st.session_state.pop("dialog_task_client_id", None)
+                            st.session_state.pop("dialog_task_deal_id", None)
+                            st.session_state.pop("_open_created_task", None)
+                            _pop_dialog_return()
+                            st.session_state["_in_dialog"] = False
                             st.toast("Задача взята в работу", icon="✅")
-                            _smart_rerun()
+                            st.rerun()
                     show_key = f"show_complete_{key_prefix}"
                     if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                         st.session_state["dialog_task_completion"] = {
@@ -1836,7 +1813,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 nt_topic2 = st.text_input("\u0422\u0435\u043c\u0430:", key=f"cnt_topic_{key_prefix}")
                                 nt_mgr2 = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cnt_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
                                 nt_dl2 = st.date_input("\u0421\u0440\u043e\u043a:", format="DD.MM.YYYY", key=f"cnt_dl_{key_prefix}")
-                                nt_comment2 = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"cnt_comment_{key_prefix}", height=90)
+                                nt_comment2 = st.text_input("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"cnt_comment_{key_prefix}")
                                 nt_files2 = st.file_uploader("\u0424\u0430\u0439\u043b\u044b:", key=f"cnt_files_{key_prefix}", accept_multiple_files=True)
                         pc1, pc2 = st.columns(2)
                         with pc1:
@@ -4226,7 +4203,7 @@ def render_deal_card_expanded(d, cl):
         if st.session_state.get(dc_clr_key):
             st.session_state[f"dc_input_{d['id']}"] = ""
             st.session_state[dc_clr_key] = False
-        nc = st.text_area("Добавить комментарий:", key=f"dc_input_{d['id']}", height=90, placeholder="Введите комментарий...")
+        nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
         if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
             if nc.strip():
                 d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
@@ -4451,8 +4428,10 @@ def _number_to_russian_words(n):
 def _pdf_font_setup():
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    app_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        ("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ("DejaVu", os.path.join(app_dir, "fonts", "DejaVuSans.ttf"), os.path.join(app_dir, "fonts", "DejaVuSans-Bold.ttf")),
+        ("DejaVuSystem", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         ("Liberation", "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
     ]
     for name, regular, bold in candidates:
@@ -4927,7 +4906,7 @@ def render_deal_products_block(d, key_prefix):
         deal_calculation_dialog(d["id"], calc["id"])
 
 
-@_crm_dialog("Создание расчёта", width="large")
+@_crm_dialog("Расчёт сделки", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
     """Отдельное окно редактирования расчёта в стиле окон задач."""
     def _calc_refresh():
@@ -4964,14 +4943,9 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.session_state[name_key] = _calculation_display_name(deal, calc)
 
     close_css = f"calc_close_row_{key}"
-    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;}} .st-key-{close_css} .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}</style>''', unsafe_allow_html=True)
-    st.markdown(f'''<style>
-    .st-key-{key}_make_offer button, .st-key-{key}_make_invoice button {{min-width:150px!important;white-space:nowrap!important;padding-left:12px!important;padding-right:12px!important;font-size:0.9rem!important;}}
-    .st-key-{close_css} .stButton > button {{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important;}}
-    .st-key-{close_css} .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}
-    </style>''' , unsafe_allow_html=True)
+    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:100%!important;min-width:150px!important;min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:normal!important;}} .st-key-{close_css} .stButton > button:hover {{filter:brightness(0.97);}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, _spacer, close_col = st.columns([5.2, 5.2, 7.0, 1.0])
+        offer_col, invoice_col, _spacer, close_col = st.columns([7.0, 7.0, 5.0, 1.0])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
@@ -6113,7 +6087,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
             managers = get_managers_list()
             next_values["manager"] = st.selectbox("Ответственный:", managers, index=None, key=f"task_completion_next_manager_{key_prefix}", placeholder=MGR_PLACEHOLDER)
             next_values["deadline"] = st.date_input("Срок:", format="DD.MM.YYYY", key=f"task_completion_next_deadline_{key_prefix}")
-            next_values["comment"] = st.text_area("Комментарий:", key=f"task_completion_next_comment_{key_prefix}", height=90)
+            next_values["comment"] = st.text_input("Комментарий:", key=f"task_completion_next_comment_{key_prefix}")
             next_values["files"] = st.file_uploader("Файлы новой задачи:", key=f"task_completion_next_files_{key_prefix}", accept_multiple_files=True)
     col_ok, col_cancel = st.columns(2)
     with col_ok:
@@ -7407,6 +7381,9 @@ elif st.session_state.active_tab == "Задачи":
       div[data-testid="stTabs"] button[role="tab"] { min-width:118px; }
     }
     </style>
+    <div class="tasks-page-heading">
+      <div class="tasks-page-title-row"><div class="tasks-page-mark"></div><div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div></div>
+    </div>
     """, unsafe_allow_html=True)
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
     with plan_sub1:
