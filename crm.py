@@ -1626,7 +1626,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
-                        st.markdown(f"**Тема:** {t.get('text', '')}")
+                        if _tp not in ("Отправить заказ", "Отправить образцы"):
+                            st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
@@ -1653,7 +1654,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
-                        st.markdown(f"**Тема:** {t.get('text', '')}")
+                        if _tp not in ("Отправить заказ", "Отправить образцы"):
+                            st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
@@ -1673,8 +1675,26 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
                     et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
-                    et_amount = st.text_input("\u0421\u0443\u043c\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u0430 (\u0440\u0443\u0431.):", value=str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "", key=f"edit_amount_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
-                    et_tk = st.text_input("\u0422\u0440\u0435\u043a:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                    _active_calcs_edit = [c for c in (d or {}).get("calculations", []) if not c.get("deleted")]
+                    _calc_ids_edit = [str(c.get("id")) for c in _active_calcs_edit]
+                    _calc_by_id_edit = {str(c.get("id")): c for c in _active_calcs_edit}
+                    _calc_select_key_edit = f"edit_order_calc_{key_prefix}"
+                    _selected_calc_id_edit = ""
+                    if et_type == "Отправить заказ" and _active_calcs_edit:
+                        _stored_calc_id = str(t.get("calculation_id", ""))
+                        _default_calc_id = _stored_calc_id if _stored_calc_id in _calc_ids_edit else _calc_ids_edit[0]
+                        if st.session_state.get(_calc_select_key_edit) not in _calc_ids_edit:
+                            st.session_state[_calc_select_key_edit] = _default_calc_id
+                        _selected_calc_id_edit = st.selectbox("Расчёт заказа:", _calc_ids_edit, format_func=lambda cid: _calc_by_id_edit[cid].get("name", "Расчёт"), key=_calc_select_key_edit)
+                        _selected_calc_edit = _calc_by_id_edit.get(str(_selected_calc_id_edit))
+                        _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
+                        _amount_key_edit = f"edit_amount_{key_prefix}"
+                        if _auto_amount_edit > 0:
+                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
+                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
+                    else:
+                        et_amount = st.text_input("Сумма заказа (руб.):", value=str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "", key=f"edit_amount_{key_prefix}", placeholder="Введите сумму")
+                    et_tk = st.text_input("Трек (подпиши если габариты не указаны):", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
                 else:
                     et_products = t.get("products", "")
                     et_city = t.get("ship_city", "")
@@ -1700,7 +1720,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["receiver"] = et_recv
                             t["receiver_phone"] = et_rphone
                             t["ship_pay"] = et_pay
-                            t["order_amount"] = int(et_amount) if et_amount and et_amount.strip().isdigit() else 0
+                            t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
+                            if et_type == "Отправить заказ" and _selected_calc_id_edit:
+                                t["calculation_id"] = str(_selected_calc_id_edit)
                             t["tk_num"] = et_tk
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
@@ -1756,7 +1778,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
                 st.markdown("---")
                 if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
-                if t.get('ship_city'): st.markdown(f"**Город:** {t['ship_city']}")
+                if t.get('type') in ("Отправить заказ", "Отправить образцы"):
+                    st.markdown(f"**Город:** {t.get('ship_city', '')}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
@@ -4099,6 +4122,16 @@ render_close_deal_dialog_trigger()
 
 cu = st.session_state.user_name
 
+# Доступна до рендеринга форм задач: сумма товаров без доставки с учётом скидок.
+def _deal_items_total(items):
+    total = 0.0
+    for item in items or []:
+        qty = max(0.0, float(item.get("quantity", 0) or 0))
+        price = max(0.0, float(item.get("unit_price", 0) or 0))
+        discount = min(100.0, max(0.0, float(item.get("discount", 0) or 0)))
+        total += qty * price * (1 - discount / 100.0)
+    return round(total, 2)
+
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
     ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
@@ -4111,8 +4144,25 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
         nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
-        norder_amount = st.text_input("Сумма заказа (руб.):", value="", key=f"nt_amount_{key_suffix}", placeholder="Введите сумму")
-        ntk_num = st.text_input("Трек:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
+        _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
+        _active_calcs_new = [c for c in (_deal_for_new_task or {}).get("calculations", []) if not c.get("deleted")]
+        _calc_ids_new = [str(c.get("id")) for c in _active_calcs_new]
+        _calc_by_id_new = {str(c.get("id")): c for c in _active_calcs_new}
+        _calc_select_key_new = f"nt_order_calc_{key_suffix}"
+        if ntype == "Отправить заказ" and _active_calcs_new:
+            if st.session_state.get(_calc_select_key_new) not in _calc_ids_new:
+                st.session_state[_calc_select_key_new] = _calc_ids_new[0]
+            _selected_calc_id_new = st.selectbox("Расчёт заказа:", _calc_ids_new, format_func=lambda cid: _calc_by_id_new[cid].get("name", "Расчёт"), key=_calc_select_key_new)
+            _selected_calc_new = _calc_by_id_new.get(str(_selected_calc_id_new))
+            _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
+            _amount_key_new = f"nt_amount_{key_suffix}"
+            if _auto_amount_new > 0:
+                st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
+            norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
+        else:
+            _selected_calc_id_new = ""
+            norder_amount = st.text_input("Сумма заказа (руб.):", value="", key=f"nt_amount_{key_suffix}", placeholder="Введите сумму")
+        ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
         ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     else:
@@ -4138,13 +4188,14 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "task_files": normalize_file_list(tfi_list), "manager": ntm or "",
                 "completion_report": "", "completion_files": [],
                 "deal_id": deal_id, "task_comment": ncomment.strip(),
-                "order_amount": int(norder_amount) if norder_amount and norder_amount.strip().isdigit() else 0, "last_modified": now_str(),
+                "order_amount": round(float(norder_amount.replace(",", ".")), 2) if norder_amount and norder_amount.strip() else 0, "last_modified": now_str(),
                 "task_number": tn, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                 "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                 "task_comments": [], "flagged": False,
                 "products": nproducts, "ship_city": nship_city, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
-                "ship_pay": nship_pay, "tk_num": ntk_num.strip()
+                "ship_pay": nship_pay, "tk_num": ntk_num.strip(),
+                "calculation_id": str(_selected_calc_id_new) if ntype == "Отправить заказ" and _selected_calc_id_new else ""
             }
             cl = get_client_by_id(cl_id)
             if cl:
@@ -6014,7 +6065,10 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     if _et_pay_key in st.session_state: t["ship_pay"] = st.session_state[_et_pay_key]
                     if _et_amount_key in st.session_state:
                         _amt = st.session_state[_et_amount_key]
-                        t["order_amount"] = int(_amt) if _amt and str(_amt).strip().isdigit() else 0
+                        try:
+                            t["order_amount"] = round(float(str(_amt).replace(",", ".")), 2) if _amt and str(_amt).strip() else 0
+                        except (TypeError, ValueError):
+                            t["order_amount"] = 0
                     if _et_tk_key in st.session_state: t["tk_num"] = st.session_state[_et_tk_key]
                     # Deadline
                     _dl_key = f"dl_inline_{key_prefix}"
