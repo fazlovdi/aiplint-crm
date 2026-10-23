@@ -3131,6 +3131,10 @@ def _create_browser_session(user, remember=True):
             cookie_manager.delete("remembered_user")
         except Exception:
             pass
+    # CookieManager writes through a browser component. Give the browser time to
+    # complete the cookie update before the login handler triggers st.rerun().
+    # Without this, a fast PIN login can rerun before auth_token reaches the browser.
+    time.sleep(0.5)
 
 
 def _passkey_b64url_encode(value):
@@ -3237,6 +3241,8 @@ def _passkey_create_login_session(user):
         expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
         key="set_remembered_user_cookie",
     )
+    # Allow the browser component to persist both cookies before the next rerun.
+    time.sleep(0.5)
 
 
 def _passkey_process_login_result(result, pending):
