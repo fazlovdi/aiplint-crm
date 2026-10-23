@@ -1376,11 +1376,9 @@ def _crm_dialog(title, width="large"):
             # внутри dialog-fragment Streamlit. Перерисовываем только его,
             # не перезапуская всю страницу CRM и списки активной вкладки.
             if st.session_state.get("_crm_inside_dialog_host", False):
-                try:
-                    st.rerun(scope="fragment")
-                except TypeError:
-                    # Совместимость со старыми версиями Streamlit.
-                    st.rerun()
+                # st.dialog не во всех версиях Streamlit поддерживает scope="fragment".
+                # Полный rerun безопасен: активное окно хранится в _crm_active_dialog.
+                st.rerun()
             return None
         _request_dialog.__name__ = func.__name__
         _request_dialog.__doc__ = func.__doc__
@@ -1618,10 +1616,50 @@ def process_due_reminders():
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
 def _render_task_shipping_fields(task, client, deal, key_prefix):
-    """Inline status and estimated shipping date, saved immediately from the existing task dialog."""
+    """Поля отправки: изменение даты/статуса сохраняется по устойчивым ID записи."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
     status_key = f"task_shipping_status_{key_prefix}"
     date_key = f"task_estimated_ship_date_{key_prefix}"
+
+    task_number = str(task.get("task_number", ""))
+    client_id = str((client or {}).get("id", task.get("client_id", "")) or "")
+    deal_id = str((deal or {}).get("id", task.get("deal_id", "")) or "")
+    task_type = str(task.get("type", "") or "")
+
+    def _persist_shipping_fields():
+        store = st.session_state.get("crm_store", {})
+        found_client = next((x for x in store.get("clients", [])
+                             if str(x.get("id", "")) == client_id), None)
+        # Support the application's legacy client lookup/storage layout.
+        if found_client is None:
+            try:
+                found_client = get_client_by_id(client_id)
+            except Exception:
+                found_client = None
+        if not found_client:
+            return
+        found_task = next((x for x in found_client.get("tasks", [])
+                           if str(x.get("task_number", "")) == task_number
+                           and str(x.get("deal_id", "") or "") == deal_id
+                           and str(x.get("type", "") or "") == task_type), None)
+        if not found_task:
+            return
+        status_value = st.session_state.get(status_key, found_task.get("shipping_status", "")) or ""
+        date_value = st.session_state.get(date_key)
+        date_iso = date_value.isoformat() if date_value else ""
+        found_task["shipping_status"] = status_value
+        found_task["estimated_ship_date"] = date_iso
+        found_task["last_modified"] = now_str()
+        found_client["last_modified"] = now_str()
+        if deal_id:
+            found_deal = next((x for x in store.get("deals", [])
+                               if str(x.get("id", "")) == deal_id), None)
+            if found_deal:
+                found_deal["last_modified"] = now_str()
+        # Pass a copy so save_data does not replace the live store object while
+        # the current dialog is rendering and leave its references stale.
+        save_data(copy.deepcopy(store))
+
     current_status = task.get("shipping_status", "") or ""
     current_date_raw = task.get("estimated_ship_date", "") or ""
     try:
@@ -1629,31 +1667,26 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
     except (TypeError, ValueError):
         current_date = None
 
+    if status_key not in st.session_state:
+        st.session_state[status_key] = current_status
+    if date_key not in st.session_state:
+        st.session_state[date_key] = current_date
+
     st.selectbox(
         "Статус",
         options=statuses,
         index=statuses.index(current_status) if current_status in statuses else None,
         placeholder="Выберите статус",
         key=status_key,
+        on_change=_persist_shipping_fields,
     )
-    selected_date = st.date_input(
+    st.date_input(
         "Ориентировочная дата отправки",
         value=current_date,
         format="DD.MM.YYYY",
         key=date_key,
+        on_change=_persist_shipping_fields,
     )
-
-    selected_status = st.session_state.get(status_key, current_status) or ""
-    selected_date_value = selected_date.isoformat() if selected_date else ""
-    if selected_status != current_status or selected_date_value != current_date_raw:
-        task["shipping_status"] = selected_status
-        task["estimated_ship_date"] = selected_date_value
-        task["last_modified"] = now_str()
-        client["last_modified"] = now_str()
-        if deal:
-            deal["last_modified"] = now_str()
-        save_data(st.session_state.crm_store)
-
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
@@ -5561,7 +5594,9 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 for _ti, _task in enumerate(_deal_tasks_list):
                     _task_col, _date_col, _open_col = st.columns([2, 2, 1])
                     with _task_col:
-                        st.markdown(f"**{html.escape(str(_task.get('task_number', '')))}**")
+                        _task_number_label = html.escape(str(_task.get("task_number", "")))
+                        _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
+                        st.markdown(f"**{_task_number_label}** · {_task_type_label}")
                     with _date_col:
                         _created = str(_task.get("created_at", "") or "")
                         try:
