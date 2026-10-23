@@ -1127,6 +1127,87 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
         st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
 
 
+
+def _task_products_from_calculation(deal, calculation_id):
+    """Возвращает позиции расчёта для задачи, без стоимости и доставки."""
+    if not deal or not calculation_id:
+        return []
+    calc = next((x for x in deal.get("calculations", []) if str(x.get("id")) == str(calculation_id) and not x.get("deleted")), None)
+    if not calc:
+        return []
+    catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+    result = []
+    for row in _calculation_rows(calc, catalog):
+        sku = str(row.get("sku", "") or "").strip()
+        name = str(row.get("name", "") or "").strip()
+        qty = row.get("quantity", 0)
+        try:
+            qty_text = f"{float(qty):g}"
+        except (TypeError, ValueError):
+            qty_text = str(qty)
+        unit = str(row.get("unit", "шт.") or "шт.")
+        title = " ".join(x for x in (sku, name) if x)
+        if title:
+            result.append(f"{title} — {qty_text} {unit}")
+    return result
+
+
+def render_task_products_editor(deal, key_prefix, existing_products="", existing_calc_id=""):
+    """Выбор расчёта и список товарных позиций с возможностью добавить строку вручную."""
+    active = [c for c in (deal or {}).get("calculations", []) if not c.get("deleted")]
+    calc_ids = [str(c.get("id")) for c in active]
+    calc_by_id = {str(c.get("id")): c for c in active}
+    if key_prefix.startswith("nt_"):
+        _suffix = key_prefix[3:]
+        calc_key = f"nt_order_calc_{_suffix}"
+        products_key = f"nt_prod_{_suffix}"
+    elif key_prefix.startswith("edit_"):
+        _suffix = key_prefix[5:]
+        calc_key = f"edit_order_calc_{_suffix}"
+        products_key = f"edit_prod_{_suffix}"
+    else:
+        calc_key = f"{key_prefix}_order_calc"
+        products_key = f"{key_prefix}_prod"
+    last_calc_key = f"{key_prefix}_last_products_calc"
+    if products_key not in st.session_state:
+        st.session_state[products_key] = str(existing_products or "")
+    selected_id = ""
+    if active:
+        if st.session_state.get(calc_key) not in calc_ids:
+            st.session_state[calc_key] = str(existing_calc_id) if str(existing_calc_id) in calc_ids else calc_ids[0]
+        selected_id = st.selectbox(
+            "Расчёт заказа:", calc_ids,
+            format_func=lambda cid: calc_by_id[cid].get("name", "Расчёт"),
+            key=calc_key
+        )
+        if st.session_state.get(last_calc_key) != str(selected_id):
+            st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
+            st.session_state[last_calc_key] = str(selected_id)
+    else:
+        st.caption("В сделке пока нет сохранённых расчётов.")
+    products = str(st.session_state.get(products_key, "") or "")
+    st.markdown("**Товары:**")
+    if products.strip():
+        for line in products.splitlines():
+            if line.strip():
+                st.markdown(f"- {html.escape(line.strip())}", unsafe_allow_html=True)
+    else:
+        st.caption("Товары не добавлены.")
+    add_key = f"{key_prefix}_add_product"
+    st.markdown(f"<style>.st-key-{add_key} input::placeholder {{font-size:0.78rem!important;font-style:italic!important;color:#9AA3AD!important;opacity:1!important;}}</style>", unsafe_allow_html=True)
+    _add_col, _btn_col = st.columns([5, 1])
+    with _add_col:
+        st.text_input("Добавить товар", key=add_key, placeholder="Добавить товар...", label_visibility="collapsed")
+    with _btn_col:
+        if st.button("Добавить", key=f"{key_prefix}_add_product_btn", use_container_width=True):
+            new_line = str(st.session_state.get(add_key, "") or "").strip()
+            if new_line:
+                current = str(st.session_state.get(products_key, "") or "").strip()
+                st.session_state[products_key] = (current + "\n" if current else "") + new_line
+                st.session_state[add_key] = ""
+                st.rerun()
+    return str(selected_id), str(st.session_state.get(products_key, "") or "")
+
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     products_html = esc(task.get('products', '')).replace('\n', '<br>')
@@ -1664,36 +1745,28 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             if show_edit_task:
                 # Inline editing mode
-                et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
                 et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
+                if et_type not in ("Отправить заказ", "Отправить образцы"):
+                    et_topic = st.text_input("Тема:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
+                else:
+                    et_topic = et_type
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
                 et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
-                    et_products = st.text_area("\u0422\u043e\u0432\u0430\u0440\u044b:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
+                    _selected_calc_id_edit, et_products = render_task_products_editor(
+                        d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
+                    )
                     et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
                     et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
-                    _active_calcs_edit = [c for c in (d or {}).get("calculations", []) if not c.get("deleted")]
-                    _calc_ids_edit = [str(c.get("id")) for c in _active_calcs_edit]
-                    _calc_by_id_edit = {str(c.get("id")): c for c in _active_calcs_edit}
-                    _calc_select_key_edit = f"edit_order_calc_{key_prefix}"
-                    _selected_calc_id_edit = ""
-                    if et_type == "Отправить заказ" and _active_calcs_edit:
-                        _stored_calc_id = str(t.get("calculation_id", ""))
-                        _default_calc_id = _stored_calc_id if _stored_calc_id in _calc_ids_edit else _calc_ids_edit[0]
-                        if st.session_state.get(_calc_select_key_edit) not in _calc_ids_edit:
-                            st.session_state[_calc_select_key_edit] = _default_calc_id
-                        _selected_calc_id_edit = st.selectbox("Расчёт заказа:", _calc_ids_edit, format_func=lambda cid: _calc_by_id_edit[cid].get("name", "Расчёт"), key=_calc_select_key_edit)
-                        _selected_calc_edit = _calc_by_id_edit.get(str(_selected_calc_id_edit))
-                        _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _amount_key_edit = f"edit_amount_{key_prefix}"
-                        if _auto_amount_edit > 0:
-                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
-                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                    else:
-                        et_amount = st.text_input("Сумма заказа (руб.):", value=str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "", key=f"edit_amount_{key_prefix}", placeholder="Введите сумму")
+                    _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
+                    _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
+                    _amount_key_edit = f"edit_amount_{key_prefix}"
+                    if _auto_amount_edit > 0:
+                        st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
+                    et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
                     et_tk = st.text_input("Трек (подпиши если габариты не указаны):", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
                 else:
                     et_products = t.get("products", "")
@@ -1721,7 +1794,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["receiver_phone"] = et_rphone
                             t["ship_pay"] = et_pay
                             t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
-                            if et_type == "Отправить заказ" and _selected_calc_id_edit:
+                            if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
                                 t["calculation_id"] = str(_selected_calc_id_edit)
                             t["tk_num"] = et_tk
                             t["last_modified"] = now_str()
@@ -4134,34 +4207,31 @@ def _deal_items_total(items):
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
-    ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
+    if ntype not in ("Отправить заказ", "Отправить образцы"):
+        ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
+    else:
+        ntopic = ntype
     ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
     ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
+    _selected_calc_id_new = ""
     if ntype in ("Отправить заказ", "Отправить образцы"):
-        nproducts = st.text_area("Товары:", key=f"nt_prod_{key_suffix}")
+        _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
+        _selected_calc_id_new, nproducts = render_task_products_editor(
+            _deal_for_new_task, f"nt_{key_suffix}",
+            st.session_state.get(f"nt_{key_suffix}_prod", ""),
+            st.session_state.get(f"nt_{key_suffix}_order_calc", "")
+        )
         nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
         nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
         nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
         nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
-        _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
-        _active_calcs_new = [c for c in (_deal_for_new_task or {}).get("calculations", []) if not c.get("deleted")]
-        _calc_ids_new = [str(c.get("id")) for c in _active_calcs_new]
-        _calc_by_id_new = {str(c.get("id")): c for c in _active_calcs_new}
-        _calc_select_key_new = f"nt_order_calc_{key_suffix}"
-        if ntype == "Отправить заказ" and _active_calcs_new:
-            if st.session_state.get(_calc_select_key_new) not in _calc_ids_new:
-                st.session_state[_calc_select_key_new] = _calc_ids_new[0]
-            _selected_calc_id_new = st.selectbox("Расчёт заказа:", _calc_ids_new, format_func=lambda cid: _calc_by_id_new[cid].get("name", "Расчёт"), key=_calc_select_key_new)
-            _selected_calc_new = _calc_by_id_new.get(str(_selected_calc_id_new))
-            _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
-            _amount_key_new = f"nt_amount_{key_suffix}"
-            if _auto_amount_new > 0:
-                st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
-            norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
-        else:
-            _selected_calc_id_new = ""
-            norder_amount = st.text_input("Сумма заказа (руб.):", value="", key=f"nt_amount_{key_suffix}", placeholder="Введите сумму")
+        _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
+        _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
+        _amount_key_new = f"nt_amount_{key_suffix}"
+        if _auto_amount_new > 0:
+            st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
+        norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
         ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
         ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
@@ -4177,7 +4247,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
-        if not ntopic.strip():
+        if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
         else:
             tfi_list = save_uploaded_files(ntf, cl_id, "task_file") if ntf else []
@@ -4195,7 +4265,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "products": nproducts, "ship_city": nship_city, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
                 "ship_pay": nship_pay, "tk_num": ntk_num.strip(),
-                "calculation_id": str(_selected_calc_id_new) if ntype == "Отправить заказ" and _selected_calc_id_new else ""
+                "calculation_id": str(_selected_calc_id_new) if _selected_calc_id_new else ""
             }
             cl = get_client_by_id(cl_id)
             if cl:
@@ -5482,6 +5552,31 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.session_state["dialog_create_deal_task_deal_id"] = deal_id
                 st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
                 st.rerun()
+            _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
+            _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
+            if _deal_tasks_list:
+                st.markdown("**Задачи по сделке**")
+                for _ti, _task in enumerate(_deal_tasks_list):
+                    _task_col, _date_col, _open_col = st.columns([2, 2, 1])
+                    with _task_col:
+                        st.markdown(f"**{html.escape(str(_task.get('task_number', '')))}**")
+                    with _date_col:
+                        _created = str(_task.get("created_at", "") or "")
+                        try:
+                            _created = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y")
+                        except Exception:
+                            _created = _created[:10]
+                        st.caption(_created or "—")
+                    with _open_col:
+                        if st.button("Открыть", key=f"deal_task_open_{deal_id}_{_ti}", use_container_width=True):
+                            _push_dialog_return()
+                            st.session_state["dialog_task_number"] = str(_task.get("task_number", ""))
+                            st.session_state["dialog_task_client_id"] = cl.get("id") if cl else d.get("client_id")
+                            st.session_state["dialog_task_deal_id"] = str(deal_id)
+                            st.session_state["dialog_task_key"] = f"deal_task_{deal_id}_{_task.get('task_number', '')}"
+                            st.rerun()
+            else:
+                st.caption("Задач по сделке пока нет.")
             st.markdown("---")
             render_deal_products_block(d, key_prefix)
             st.markdown("---")
@@ -6042,8 +6137,12 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     _et_type_key = f"edit_type_{key_prefix}"
                     _et_mgr_key = f"edit_mgr_{key_prefix}"
                     _et_comment_key = f"edit_comment_{key_prefix}"
-                    if _et_topic_key in st.session_state:
+                    if _et_type_key in st.session_state and st.session_state[_et_type_key] in ("Отправить заказ", "Отправить образцы"):
+                        t["text"] = st.session_state[_et_type_key]
+                    elif _et_topic_key in st.session_state:
                         t["text"] = st.session_state[_et_topic_key]
+                    elif t.get("type") in ("Отправить заказ", "Отправить образцы"):
+                        t["text"] = t.get("type", "")
                     if _et_type_key in st.session_state:
                         t["type"] = st.session_state[_et_type_key]
                     if _et_mgr_key in st.session_state:
