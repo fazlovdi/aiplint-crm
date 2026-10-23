@@ -1696,7 +1696,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _manual_key = f"edit_prod_manual_{key_prefix}"
                         if _manual_key not in st.session_state:
                             st.session_state[_manual_key] = str(t.get("products_manual", "") or "")
-                        st.markdown("**Товары:**" + ("\n" + "\n".join(_base_lines) if _base_lines else ""))
+                        # Показываем выбранные из расчёта товары строго построчно.
+                        st.text("Товары:" + ("\n" + "\n".join(_base_lines) if _base_lines else ""))
                         et_products_manual = st.text_area("", key=_manual_key, placeholder="Добавить товары...", label_visibility="collapsed")
                         et_products = "\n".join(_base_lines + ([et_products_manual.strip()] if et_products_manual.strip() else []))
                     else:
