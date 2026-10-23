@@ -3694,12 +3694,10 @@ def internal_task_detail_dialog(it_id):
 
 
 if not st.session_state.authenticated:
-        # Не оставляем токены авторизации в адресной строке.
-        try:
-            if cookies.get("auth_token"):
-                cookie_manager.delete("auth_token")
-        except (KeyError, TypeError):
-            pass
+        # Не удаляем auth_token на этом этапе: CookieManager может ещё не успеть
+        # вернуть cookie после обновления страницы. Раннее удаление уничтожает
+        # сохранённую авторизацию и заставляет пользователя вводить PIN заново.
+        pass
 
 MGR_PLACEHOLDER = "Выбери ответственного"
 
