@@ -1533,10 +1533,38 @@ def process_due_reminders():
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
 def _render_task_shipping_fields(task, client, deal, key_prefix):
-    """Inline status and estimated shipping date, saved immediately from the existing task dialog."""
+    """Shipping status/date controls with callback-based persistence to avoid stale dialog objects."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
+    task_id = str(task.get("id", ""))
+    client_id = str(client.get("id", ""))
+    deal_id = str(deal.get("id", "")) if deal else ""
     status_key = f"task_shipping_status_{key_prefix}"
     date_key = f"task_estimated_ship_date_{key_prefix}"
+
+    def _save_shipping_fields():
+        store = st.session_state.get("crm_store", {})
+        fresh_task = next((x for x in store.get("tasks", []) if str(x.get("id")) == task_id), None)
+        # Tasks may be embedded in client/deal records rather than the top-level collection.
+        fresh_client = next((x for x in store.get("clients", []) if str(x.get("id")) == client_id), None)
+        fresh_deal = next((x for x in store.get("deals", []) if str(x.get("id")) == deal_id), None) if deal_id else None
+        if fresh_task is None and fresh_client:
+            fresh_task = next((x for x in fresh_client.get("tasks", []) if str(x.get("id")) == task_id), None)
+        if fresh_task is None and fresh_deal:
+            fresh_task = next((x for x in fresh_deal.get("tasks", []) if str(x.get("id")) == task_id), None)
+        if fresh_task is None:
+            # Keep a fallback for legacy tasks passed by reference.
+            fresh_task = task
+        selected_status = st.session_state.get(status_key, fresh_task.get("shipping_status", "")) or ""
+        selected_date = st.session_state.get(date_key)
+        fresh_task["shipping_status"] = selected_status
+        fresh_task["estimated_ship_date"] = selected_date.isoformat() if selected_date else ""
+        fresh_task["last_modified"] = now_str()
+        if fresh_client:
+            fresh_client["last_modified"] = now_str()
+        if fresh_deal:
+            fresh_deal["last_modified"] = now_str()
+        save_data(store)
+
     current_status = task.get("shipping_status", "") or ""
     current_date_raw = task.get("estimated_ship_date", "") or ""
     try:
@@ -1545,29 +1573,14 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
         current_date = None
 
     st.selectbox(
-        "Статус",
-        options=statuses,
+        "Статус", options=statuses,
         index=statuses.index(current_status) if current_status in statuses else None,
-        placeholder="Выберите статус",
-        key=status_key,
+        placeholder="Выберите статус", key=status_key, on_change=_save_shipping_fields,
     )
-    selected_date = st.date_input(
-        "Ориентировочная дата отправки",
-        value=current_date,
-        format="DD.MM.YYYY",
-        key=date_key,
+    st.date_input(
+        "Ориентировочная дата отправки", value=current_date,
+        format="DD.MM.YYYY", key=date_key, on_change=_save_shipping_fields,
     )
-
-    selected_status = st.session_state.get(status_key, current_status) or ""
-    selected_date_value = selected_date.isoformat() if selected_date else ""
-    if selected_status != current_status or selected_date_value != current_date_raw:
-        task["shipping_status"] = selected_status
-        task["estimated_ship_date"] = selected_date_value
-        task["last_modified"] = now_str()
-        client["last_modified"] = now_str()
-        if deal:
-            deal["last_modified"] = now_str()
-        save_data(st.session_state.crm_store)
 
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
@@ -1781,17 +1794,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            # Сначала фиксируем новый статус. Затем закрываем окно задачи,
-                            # чтобы основная доска перерисовалась с актуальным списком:
-                            # задача сразу исчезает из «Новые» и появляется в «В работе/На сегодня».
+                            # Сохраняем статус, но оставляем карточку задачи открытой.
                             save_data(st.session_state.crm_store)
-                            st.session_state.pop("dialog_task_key", None)
-                            st.session_state.pop("dialog_task_number", None)
-                            st.session_state.pop("dialog_task_client_id", None)
-                            st.session_state.pop("dialog_task_deal_id", None)
-                            st.session_state.pop("_open_created_task", None)
-                            _pop_dialog_return()
-                            st.session_state["_in_dialog"] = False
                             st.toast("Задача взята в работу", icon="✅")
                             st.rerun()
                     show_key = f"show_complete_{key_prefix}"
@@ -4203,7 +4207,7 @@ def render_deal_card_expanded(d, cl):
         if st.session_state.get(dc_clr_key):
             st.session_state[f"dc_input_{d['id']}"] = ""
             st.session_state[dc_clr_key] = False
-        nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
+        nc = st.text_area("Добавить комментарий:", key=f"dc_input_{d['id']}", height=90)
         if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
             if nc.strip():
                 d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
@@ -4906,7 +4910,7 @@ def render_deal_products_block(d, key_prefix):
         deal_calculation_dialog(d["id"], calc["id"])
 
 
-@_crm_dialog("Расчёт сделки", width="large")
+@_crm_dialog("Создание расчёта", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
     """Отдельное окно редактирования расчёта в стиле окон задач."""
     def _calc_refresh():
@@ -4943,6 +4947,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.session_state[name_key] = _calculation_display_name(deal, calc)
 
     close_css = f"calc_close_row_{key}"
+    st.markdown(f'<style>.st-key-{close_css} .stButton > button {{ width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important; }}</style>', unsafe_allow_html=True)
     st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:100%!important;min-width:150px!important;min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:normal!important;}} .st-key-{close_css} .stButton > button:hover {{filter:brightness(0.97);}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
         offer_col, invoice_col, _spacer, close_col = st.columns([7.0, 7.0, 5.0, 1.0])
@@ -6087,7 +6092,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
             managers = get_managers_list()
             next_values["manager"] = st.selectbox("Ответственный:", managers, index=None, key=f"task_completion_next_manager_{key_prefix}", placeholder=MGR_PLACEHOLDER)
             next_values["deadline"] = st.date_input("Срок:", format="DD.MM.YYYY", key=f"task_completion_next_deadline_{key_prefix}")
-            next_values["comment"] = st.text_input("Комментарий:", key=f"task_completion_next_comment_{key_prefix}")
+            next_values["comment"] = st.text_area("Комментарий:", key=f"task_completion_next_comment_{key_prefix}", height=90)
             next_values["files"] = st.file_uploader("Файлы новой задачи:", key=f"task_completion_next_files_{key_prefix}", accept_multiple_files=True)
     col_ok, col_cancel = st.columns(2)
     with col_ok:
@@ -7382,7 +7387,7 @@ elif st.session_state.active_tab == "Задачи":
     }
     </style>
     <div class="tasks-page-heading">
-      <div class="tasks-page-title-row"><div class="tasks-page-mark"></div><div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div></div>
+
     </div>
     """, unsafe_allow_html=True)
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
