@@ -1798,7 +1798,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
                 if t.get('tk_num'):
-                    st.markdown(f"**\u0422\u0440\u0435\u043a:** `{t['tk_num']}`")
+                    st.markdown(f"**Трек (подпиши если габариты не указаны):** `{t['tk_num']}`")
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {linkify_text(t['task_comment'])}", unsafe_allow_html=True)
@@ -4154,8 +4154,12 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
         nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
-        norder_amount = st.text_input("Сумма заказа (руб.):", value="", key=f"nt_amount_{key_suffix}", placeholder="Введите сумму")
-        ntk_num = st.text_input("Трек:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
+        _auto_order_amount = _deal_items_total(_selected_calc.get("items", [])) if ntype == "Отправить заказ" and deal_id and _selected_calc_label in _calc_labels else 0
+        _amount_key = f"nt_amount_{key_suffix}"
+        if ntype == "Отправить заказ" and deal_id and _selected_calc_label in _calc_labels:
+            st.session_state[_amount_key] = f"{_auto_order_amount:g}"
+        norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_order_amount:g}" if _auto_order_amount else "", key=_amount_key, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_order_amount))
+        ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
         ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}", height=100)
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     else:
