@@ -1135,7 +1135,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div><div class="row"><b>Тема:</b> {esc(task.get('text', ''))}</div><div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -1533,38 +1533,10 @@ def process_due_reminders():
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
 def _render_task_shipping_fields(task, client, deal, key_prefix):
-    """Shipping status/date controls with callback-based persistence to avoid stale dialog objects."""
+    """Inline status and estimated shipping date, saved immediately from the existing task dialog."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
-    task_id = str(task.get("id", ""))
-    client_id = str(client.get("id", ""))
-    deal_id = str(deal.get("id", "")) if deal else ""
     status_key = f"task_shipping_status_{key_prefix}"
     date_key = f"task_estimated_ship_date_{key_prefix}"
-
-    def _save_shipping_fields():
-        store = st.session_state.get("crm_store", {})
-        fresh_task = next((x for x in store.get("tasks", []) if str(x.get("id")) == task_id), None)
-        # Tasks may be embedded in client/deal records rather than the top-level collection.
-        fresh_client = next((x for x in store.get("clients", []) if str(x.get("id")) == client_id), None)
-        fresh_deal = next((x for x in store.get("deals", []) if str(x.get("id")) == deal_id), None) if deal_id else None
-        if fresh_task is None and fresh_client:
-            fresh_task = next((x for x in fresh_client.get("tasks", []) if str(x.get("id")) == task_id), None)
-        if fresh_task is None and fresh_deal:
-            fresh_task = next((x for x in fresh_deal.get("tasks", []) if str(x.get("id")) == task_id), None)
-        if fresh_task is None:
-            # Keep a fallback for legacy tasks passed by reference.
-            fresh_task = task
-        selected_status = st.session_state.get(status_key, fresh_task.get("shipping_status", "")) or ""
-        selected_date = st.session_state.get(date_key)
-        fresh_task["shipping_status"] = selected_status
-        fresh_task["estimated_ship_date"] = selected_date.isoformat() if selected_date else ""
-        fresh_task["last_modified"] = now_str()
-        if fresh_client:
-            fresh_client["last_modified"] = now_str()
-        if fresh_deal:
-            fresh_deal["last_modified"] = now_str()
-        save_data(store)
-
     current_status = task.get("shipping_status", "") or ""
     current_date_raw = task.get("estimated_ship_date", "") or ""
     try:
@@ -1573,14 +1545,29 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
         current_date = None
 
     st.selectbox(
-        "Статус", options=statuses,
+        "Статус",
+        options=statuses,
         index=statuses.index(current_status) if current_status in statuses else None,
-        placeholder="Выберите статус", key=status_key, on_change=_save_shipping_fields,
+        placeholder="Выберите статус",
+        key=status_key,
     )
-    st.date_input(
-        "Ориентировочная дата отправки", value=current_date,
-        format="DD.MM.YYYY", key=date_key, on_change=_save_shipping_fields,
+    selected_date = st.date_input(
+        "Ориентировочная дата отправки",
+        value=current_date,
+        format="DD.MM.YYYY",
+        key=date_key,
     )
+
+    selected_status = st.session_state.get(status_key, current_status) or ""
+    selected_date_value = selected_date.isoformat() if selected_date else ""
+    if selected_status != current_status or selected_date_value != current_date_raw:
+        task["shipping_status"] = selected_status
+        task["estimated_ship_date"] = selected_date_value
+        task["last_modified"] = now_str()
+        client["last_modified"] = now_str()
+        if deal:
+            deal["last_modified"] = now_str()
+        save_data(st.session_state.crm_store)
 
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
@@ -1639,8 +1626,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
-                        if t.get("type") not in ("Отправить заказ", "Отправить образцы"):
-                            st.markdown(f"**Тема:** {t.get('text', '')}")
+                        st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
@@ -1667,8 +1653,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
-                        if t.get("type") not in ("Отправить заказ", "Отправить образцы"):
-                            st.markdown(f"**Тема:** {t.get('text', '')}")
+                        st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
@@ -1677,54 +1662,22 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             if show_edit_task:
                 # Inline editing mode
-                _old_task_type = t.get("type", "Связаться")
-                et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}") if _old_task_type not in ("Отправить заказ", "Отправить образцы") else t.get("text", "")
+                et_topic = st.text_input("\u0422\u0435\u043c\u0430:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
                 et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}", height=100)
+                et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
-                    if et_type == "Отправить заказ" and d:
-                        _edit_calcs = [c for c in d.get("calculations", []) if not c.get("deleted")]
-                        _edit_calc_map = {str(c.get("id")): c for c in _edit_calcs}
-                        _current_calc_id = str(t.get("products_calc_id", "") or "")
-                        _calc_ids = [""] + list(_edit_calc_map.keys())
-                        _default_idx = _calc_ids.index(_current_calc_id) if _current_calc_id in _calc_ids else 0
-                        _chosen_calc_id = st.selectbox("Товары из расчёта:", _calc_ids, index=_default_idx, format_func=lambda cid: "— Выберите расчёт —" if not cid else str(_edit_calc_map[cid].get("name") or _calculation_display_name(d,_edit_calc_map[cid])), key=f"edit_prod_calc_selected_{key_prefix}")
-                        _chosen_calc = _edit_calc_map.get(str(_chosen_calc_id))
-                        _base_lines = []
-                        if _chosen_calc:
-                            for _row in _calculation_rows(_chosen_calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)):
-                                _base_lines.append(f"{_row['sku']} — {_row['name']} — {_row['quantity']:g} {_row['unit']}")
-                        # Автоматически обновляем сумму заказа по выбранному расчёту,
-                        # используя стоимость товаров с учётом скидок, но без доставки.
-                        _edit_amount_key = f"edit_amount_{key_prefix}"
-                        _auto_edit_amount = _deal_items_total(_chosen_calc.get("items", [])) if _chosen_calc else 0
-                        if _chosen_calc:
-                            st.session_state[_edit_amount_key] = f"{_auto_edit_amount:g}"
-                        elif _edit_amount_key not in st.session_state:
-                            st.session_state[_edit_amount_key] = str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""
-                        _manual_key = f"edit_prod_manual_{key_prefix}"
-                        if _manual_key not in st.session_state:
-                            st.session_state[_manual_key] = str(t.get("products_manual", "") or "")
-                        # Показываем выбранные из расчёта товары строго построчно.
-                        st.text("Товары:" + ("\n" + "\n".join(_base_lines) if _base_lines else ""))
-                        et_products_manual = st.text_area("", key=_manual_key, placeholder="Добавить товары...", label_visibility="collapsed")
-                        et_products = "\n".join(_base_lines + ([et_products_manual.strip()] if et_products_manual.strip() else []))
-                    else:
-                        et_products_manual = ""
-                        et_products = st.text_area("Товары:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
+                    et_products = st.text_area("\u0422\u043e\u0432\u0430\u0440\u044b:", value=t.get("products", ""), key=f"edit_prod_{key_prefix}")
+                    et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
                     et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
-                    _edit_amount_key = f"edit_amount_{key_prefix}"
-                    if et_type == "Отправить заказ" and d and _chosen_calc:
-                        _auto_edit_amount = _deal_items_total(_chosen_calc.get("items", []))
-                        st.session_state[_edit_amount_key] = f"{_auto_edit_amount:g}"
-                    et_amount = st.text_input("\u0421\u0443\u043c\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u0430 (\u0440\u0443\u0431.):", key=_edit_amount_key, placeholder="Сумма из расчёта без доставки", disabled=bool(et_type == "Отправить заказ" and d and _chosen_calc and _auto_edit_amount))
-                    et_tk = st.text_input("Трек (подпиши если габариты не указаны):", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                    et_amount = st.text_input("\u0421\u0443\u043c\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u0430 (\u0440\u0443\u0431.):", value=str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "", key=f"edit_amount_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0441\u0443\u043c\u043c\u0443")
+                    et_tk = st.text_input("\u0422\u0440\u0435\u043a:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
                 else:
                     et_products = t.get("products", "")
+                    et_city = t.get("ship_city", "")
                     et_addr = t.get("ship_addr", "")
                     et_recv = t.get("receiver", "")
                     et_rphone = t.get("receiver_phone", "")
@@ -1742,14 +1695,12 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["manager"] = et_mgr
                             t["task_comment"] = et_comment
                             t["products"] = et_products
-                            if et_type == "Отправить заказ" and d:
-                                t["products_calc_id"] = st.session_state.get(f"edit_prod_calc_selected_{key_prefix}", "")
-                                t["products_manual"] = et_products_manual.strip()
+                            t["ship_city"] = et_city
                             t["ship_addr"] = et_addr
                             t["receiver"] = et_recv
                             t["receiver_phone"] = et_rphone
                             t["ship_pay"] = et_pay
-                            t["order_amount"] = float(et_amount.replace(" ", "").replace(",", ".")) if et_amount and et_amount.strip() else 0
+                            t["order_amount"] = int(et_amount) if et_amount and et_amount.strip().isdigit() else 0
                             t["tk_num"] = et_tk
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
@@ -1804,15 +1755,13 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if d: d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
                 st.markdown("---")
-                if t.get('products'):
-                    _display_products = str(t.get("products", "") or "").strip()
-                    _display_product_lines = [line.strip() for line in _display_products.replace("\r\n", "\n").split("\n") if line.strip()]
-                    st.text("Товары:\n" + "\n".join(_display_product_lines))
+                if t.get('products'): st.markdown(f"**\u0422\u043e\u0432\u0430\u0440\u044b:** {t['products']}")
+                if t.get('ship_city'): st.markdown(f"**Город:** {t['ship_city']}")
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
                 if t.get('tk_num'):
-                    st.markdown(f"**Трек:** `{t['tk_num']}`")
+                    st.markdown(f"**\u0422\u0440\u0435\u043a:** `{t['tk_num']}`")
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                 if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {linkify_text(t['task_comment'])}", unsafe_allow_html=True)
@@ -1836,8 +1785,17 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            # Сохраняем статус, но оставляем карточку задачи открытой.
+                            # Сначала фиксируем новый статус. Затем закрываем окно задачи,
+                            # чтобы основная доска перерисовалась с актуальным списком:
+                            # задача сразу исчезает из «Новые» и появляется в «В работе/На сегодня».
                             save_data(st.session_state.crm_store)
+                            st.session_state.pop("dialog_task_key", None)
+                            st.session_state.pop("dialog_task_number", None)
+                            st.session_state.pop("dialog_task_client_id", None)
+                            st.session_state.pop("dialog_task_deal_id", None)
+                            st.session_state.pop("_open_created_task", None)
+                            _pop_dialog_return()
+                            st.session_state["_in_dialog"] = False
                             st.toast("Задача взята в работу", icon="✅")
                             st.rerun()
                     show_key = f"show_complete_{key_prefix}"
@@ -1890,7 +1848,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                                             "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                                             "task_comments": [], "flagged": False,
-                                            "products": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "tk_num": ""
+                                            "products": "", "ship_city": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "tk_num": ""
                                         }
                                         cl.setdefault("tasks", []).append(new_task)
                                         if nt_mgr2:
@@ -2077,6 +2035,7 @@ def migrate_task_files(t):
     if "reviewed" not in t: t["reviewed"] = False
     if "type" not in t: t["type"] = "Связаться"
     if "products" not in t: t["products"] = ""
+    if "ship_city" not in t: t["ship_city"] = ""
     if "ship_addr" not in t: t["ship_addr"] = ""
     if "receiver" not in t: t["receiver"] = ""
     if "receiver_phone" not in t: t["receiver_phone"] = ""
@@ -2196,6 +2155,7 @@ def _load_data_from_json():
                         if "flagged" not in t: t["flagged"] = False
                         if "type" not in t: t["type"] = "Связаться"
                         if "products" not in t: t["products"] = ""
+                        if "ship_city" not in t: t["ship_city"] = ""
                         if "ship_addr" not in t: t["ship_addr"] = ""
                         if "receiver" not in t: t["receiver"] = ""
                         if "receiver_phone" not in t: t["receiver_phone"] = ""
@@ -4141,53 +4101,33 @@ cu = st.session_state.user_name
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
-    _topic_required = ntype not in ("Отправить заказ", "Отправить образцы")
-    ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}") if _topic_required else "Заказ" if ntype == "Отправить заказ" else "Образцы"
+    ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
     ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
     ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
     if ntype in ("Отправить заказ", "Отправить образцы"):
-        nproducts = ""
-        if ntype == "Отправить заказ" and deal_id:
-            _order_deal = get_deal_by_id(deal_id) or {}
-            _order_calcs = [c for c in _order_deal.get("calculations", []) if not c.get("deleted")]
-            _calc_labels = {f"{c.get('name') or _calculation_display_name(_order_deal,c)}": c for c in _order_calcs}
-            _selected_calc_label = st.selectbox("Товары из расчёта:", ["— Выберите расчёт —"] + list(_calc_labels), key=f"nt_order_calc_{key_suffix}")
-            if _selected_calc_label in _calc_labels:
-                _selected_calc = _calc_labels[_selected_calc_label]
-                _catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
-                _calc_lines = []
-                for _row in _calculation_rows(_selected_calc, _catalog):
-                    _calc_lines.append(f"{_row['sku']} — {_row['name']} — {_row['quantity']:g} {_row['unit']}")
-                nproducts = "\n".join(_calc_lines)
-                st.markdown("**Товары:**\n" + "\n".join(f"- {line}" for line in _calc_lines) if _calc_lines else "**Товары:**")
-            else:
-                st.markdown("**Товары:**")
-            nproducts_manual = st.text_area("", key=f"nt_prod_manual_{key_suffix}", placeholder="Добавить товары...", help="Добавить товары...", label_visibility="collapsed")
-            if nproducts_manual.strip(): nproducts = (nproducts + "\n" if nproducts else "") + nproducts_manual.strip()
+        nproducts = st.text_area("Товары:", key=f"nt_prod_{key_suffix}")
+        nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
         nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
         nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
         nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
-        _auto_order_amount = _deal_items_total(_selected_calc.get("items", [])) if ntype == "Отправить заказ" and deal_id and _selected_calc_label in _calc_labels else 0
-        _amount_key = f"nt_amount_{key_suffix}"
-        if ntype == "Отправить заказ" and deal_id and _selected_calc_label in _calc_labels:
-            st.session_state[_amount_key] = f"{_auto_order_amount:g}"
-        norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_order_amount:g}" if _auto_order_amount else "", key=_amount_key, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_order_amount))
-        ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
-        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}", height=100)
+        norder_amount = st.text_input("Сумма заказа (руб.):", value="", key=f"nt_amount_{key_suffix}", placeholder="Введите сумму")
+        ntk_num = st.text_input("Трек:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
+        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     else:
         nproducts = ""
+        nship_city = ""
         nship_addr = ""
         nreceiver = ""
         nreceiver_phone = ""
         nship_pay = ""
         norder_amount = ""
         ntk_num = ""
-        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}", height=100)
+        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
     if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
-        if _topic_required and not ntopic.strip():
+        if not ntopic.strip():
             st.warning("Введите тему задачи")
         else:
             tfi_list = save_uploaded_files(ntf, cl_id, "task_file") if ntf else []
@@ -4198,11 +4138,11 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "task_files": normalize_file_list(tfi_list), "manager": ntm or "",
                 "completion_report": "", "completion_files": [],
                 "deal_id": deal_id, "task_comment": ncomment.strip(),
-                "order_amount": float(norder_amount.replace(" ", "").replace(",", ".")) if norder_amount and norder_amount.strip() else 0, "last_modified": now_str(),
+                "order_amount": int(norder_amount) if norder_amount and norder_amount.strip().isdigit() else 0, "last_modified": now_str(),
                 "task_number": tn, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                 "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                 "task_comments": [], "flagged": False,
-                "products": nproducts, "products_calc_id": str(_selected_calc.get("id")) if ntype == "Отправить заказ" and deal_id and _selected_calc_label in _calc_labels else "", "products_manual": nproducts_manual.strip() if ntype == "Отправить заказ" and deal_id else "", "ship_addr": nship_addr,
+                "products": nproducts, "ship_city": nship_city, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
                 "ship_pay": nship_pay, "tk_num": ntk_num.strip()
             }
@@ -4271,7 +4211,7 @@ def render_deal_card_expanded(d, cl):
         if st.session_state.get(dc_clr_key):
             st.session_state[f"dc_input_{d['id']}"] = ""
             st.session_state[dc_clr_key] = False
-        nc = st.text_area("Добавить комментарий:", key=f"dc_input_{d['id']}", height=90)
+        nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
         if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
             if nc.strip():
                 d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
@@ -4521,10 +4461,7 @@ def _pdf_paragraph(text, style, escape=True):
 
 
 def _calculation_rows(calc, catalog):
-    pmap = {}
-    for p in catalog:
-        if p.get("id") is not None: pmap[str(p.get("id"))] = p
-        if p.get("sku") is not None: pmap[str(p.get("sku"))] = p
+    pmap = {str(p.get("id", p.get("sku", ""))): p for p in catalog}
     rows=[]
     for item in calc.get("items", []):
         product = pmap.get(str(item.get("product_id", "")), {})
@@ -4537,7 +4474,7 @@ def _calculation_rows(calc, catalog):
             "sku": product.get("sku", item.get("sku", item.get("product_id", ""))),
             "name": item.get("product_name", product.get("name", "Товар")),
             "color": item.get("color_ral", ""),
-            "spec": (product.get("characteristics") or product.get("description") or product.get("specification") or product.get("note") or product.get("details") or item.get("description") or ""),
+            "spec": product.get("characteristics", product.get("description", "")),
             "unit": item.get("unit", product.get("unit", "шт.")),
             "price": price, "discount": discount, "after": after,
             "quantity": qty, "amount": amount,
@@ -4551,14 +4488,13 @@ def _make_commercial_offer_pdf(deal, client, calc):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
-    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
     font, bold = _pdf_font_setup()
     out=io.BytesIO()
     doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=9*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_LEFT, textColor=colors.black, spaceAfter=3*mm)
-    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#bc1661"), spaceBefore=2*mm, spaceAfter=1.5*mm)
+    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#242C36"), spaceAfter=4*mm)
+    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#242C36"), spaceBefore=2*mm, spaceAfter=1.5*mm)
     body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm)
     small=ParagraphStyle("OfferSmall", parent=body, fontSize=6.4, leading=8)
     cell=ParagraphStyle("OfferCell", parent=small, fontSize=6.2, leading=7.5)
@@ -4566,12 +4502,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
     date=moscow_now().date()
     validity=date+timedelta(days=30)
     date_ru=date.strftime("%d.%m.%Y")
-    logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
-    logo_cell=Image(logo_path, width=70*mm, height=30*mm, kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>", title)
-    title_center=ParagraphStyle("OfferTitleCentered", parent=title, alignment=TA_CENTER, textColor=colors.black, spaceAfter=0, fontSize=15, leading=18)
-    header_tbl=Table([[logo_cell, Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title_center)]], colWidths=[75*mm, 192*mm], rowHeights=[30*mm], hAlign="LEFT")
-    header_tbl.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
-    flow=[header_tbl, Spacer(1, 1*mm),
+    flow=[Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
           Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')} &nbsp;&nbsp; Срок действия предложения: 30 дней (до {validity.strftime('%d.%m.%Y')})", body),
           Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
           Paragraph("Наименование организации: ИП Фазлов Дамир Ибрагимович<br/>ИНН: 731701704975<br/>Адрес производства: г. Казань, ул. Кулагина, д. 3<br/>Телефон / Email: +7 (900) 329-33-00 / info@iplinth.ru", body),
@@ -4579,41 +4510,30 @@ def _make_commercial_offer_pdf(deal, client, calc):
           Paragraph("2. СМЕТА НА ПОСТАВКУ МАТЕРИАЛОВ", h),
           Paragraph("Условия налогообложения: все цены указаны без НДС в связи с применением УСН.", small), Spacer(1, 2*mm)]
     rows=_calculation_rows(calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG))
-    has_discount=any(float(r.get("discount",0) or 0)>0 for r in rows)
-    headers=["№","Артикул / наименование","Цвет","Описание","Ед. изм.","Цена"] + (["Скидка","Цена со скидкой"] if has_discount else []) + ["Кол-во","Сумма"]
-    table_data=[[Paragraph(x,cellhead) for x in headers]]
+    table_data=[[Paragraph(x,cellhead) for x in ["№","Артикул / наименование","Цвет","Технические характеристики","Ед. изм.","Цена","Скидка","Цена со скидкой","Кол-во","Сумма"]]]
     for i,r in enumerate(rows,1):
         item_name=f"<b>{html.escape(str(r['sku']))}</b><br/>{html.escape(str(r['name']))}"
-        line=[Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell)]
-        if has_discount: line += [Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell)]
-        line += [Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)]
-        table_data.append(line)
+        table_data.append([Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell), Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell), Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)])
     if not rows:
-        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell)] + [""]*(len(headers)-2))
+        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell), "", "", "", "", "", "", "", ""])
     total=sum(r['amount'] for r in rows)
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
     if delivery:
-        table_data.append(["", Paragraph("Доставка",cell)] + [""]*(len(headers)-3) + [Paragraph(_money(delivery),cell)])
-    table_data.append([""]*(len(headers)-2) + [Paragraph("ИТОГО:",cell), Paragraph(_money(total+delivery),cell)])
-    widths=[9*mm,48*mm,17*mm,46*mm,13*mm,20*mm] + ([15*mm,24*mm] if has_discount else []) + [14*mm,24*mm]
+        table_data.append(["", Paragraph("Доставка",cell), "", "", "", "", "", "", "", Paragraph(_money(delivery),cell)])
+    table_data.append(["", "", "", "", "", "", "", "", Paragraph("ИТОГО:",cell), Paragraph(_money(total+delivery),cell)])
+    widths=[9*mm,48*mm,17*mm,46*mm,13*mm,20*mm,15*mm,24*mm,14*mm,24*mm]
     tbl=Table(table_data,colWidths=widths,repeatRows=1,hAlign="LEFT")
     tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#bc1661")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#E7A4C5")),("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#343D4A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#B9C0C9")),("VALIGN",(0,0),(-1,-1),"TOP"),
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F1F3F6")),("FONTNAME",(0,-1),(-1,-1),bold),
-        ("SPAN",(0,-1),(len(headers)-3,-1)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT"),
+        ("SPAN",(0,-1),(7,-1)),("ALIGN",(8,1),(-1,-1),"RIGHT"),
     ]))
     flow += [tbl, Spacer(1, 3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
-             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
-             Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h)]
-    asset_dir=os.path.dirname(os.path.abspath(__file__))
-    signature_path=os.path.join(asset_dir,"подпись.png")
-    stamp_path=os.path.join(asset_dir,"печать.png")
-    sig=Image(signature_path,width=28*mm,height=25*mm,kind="proportional") if os.path.exists(signature_path) else Paragraph("",body)
-    stamp=Image(stamp_path,width=27*mm,height=27*mm,kind="proportional") if os.path.exists(stamp_path) else Paragraph("",body)
-    flow.append(Table([[Paragraph("ИП Фазлов Дамир Ибрагимович",body),sig,stamp]],colWidths=[105*mm,35*mm,35*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),2)])))
+             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 5 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
+             Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h), Paragraph("ИП Фазлов Дамир Ибрагимович", body)]
     doc.build(flow)
     return out.getvalue()
 
@@ -4624,16 +4544,16 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, Image
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
     font,bold=_pdf_font_setup()
     out=io.BytesIO()
     doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=11*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_LEFT,spaceAfter=4*mm,textColor=colors.HexColor("#bc1661"))
+    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_LEFT,spaceAfter=4*mm,textColor=colors.HexColor("#202833"))
     body=ParagraphStyle("InvBody",parent=styles["BodyText"],fontName=font,fontSize=8,leading=10,spaceAfter=1.3*mm)
     small=ParagraphStyle("InvSmall",parent=body,fontSize=6.7,leading=8)
     cell=ParagraphStyle("InvCell",parent=small,fontSize=6.8,leading=8)
-    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER,textColor=colors.white)
+    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER)
     date=moscow_now().date()
     next_month=1 if date.month==12 else date.month+1
     year=date.year+1 if date.month==12 else date.year
@@ -4655,17 +4575,12 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
     suffix=calc_name.replace("Расчёт", "", 1).strip()
     invoice_no=f"Счёт {suffix} от {date.strftime('%d.%m.%Y')}"
-    logo_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "Логотип iPlinth с розовым шевроном-1.png")
-    logo=Image(logo_path,width=60*mm,height=26*mm,kind="proportional") if os.path.exists(logo_path) else Paragraph("<b>iPlinth</b>",title)
-    inv_title_center=ParagraphStyle("InvTitleCentered",parent=title,fontSize=13,leading=16,alignment=TA_CENTER,textColor=colors.black,spaceAfter=0)
-    inv_header=Table([[logo,Paragraph(f"<b>{html.escape(invoice_no)}</b>",inv_title_center)]],colWidths=[65*mm,115*mm],rowHeights=[26*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
-    flow=[inv_header,
-          Spacer(1,2*mm),Paragraph(f"Плательщик: {html.escape(payer_details)}",body),
-          Paragraph("Получатель:",body),
-          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body),
-                  Table([[Image(os.path.join(os.path.dirname(os.path.abspath(__file__)),"подпись.png"),width=20*mm,height=16*mm,kind="proportional") if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),"подпись.png")) else "",
-                          Image(os.path.join(os.path.dirname(os.path.abspath(__file__)),"печать.png"),width=22*mm,height=22*mm,kind="proportional") if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),"печать.png")) else ""]],colWidths=[24*mm,26*mm],style=TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0)]))]],colWidths=[125*mm,55*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#E7A4C5")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#FCEAF3")),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)])),
-          Spacer(1,3*mm)]
+    flow=[Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT)),
+          Paragraph("Получатель",body),
+          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#AEB6C2")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#F8F9FB")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
+          Spacer(1,5*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
+          Paragraph(f"Получатель: {seller}, ИНН {seller_inn}, р/с {account}, в банке {bank}, БИК {bik}, к/с {corr}",body),
+          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
         name=f"{html.escape(str(r['name']))}<br/><font size='6'>(Артикул: {html.escape(str(r['sku']))})</font>"
@@ -4674,12 +4589,15 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     if delivery:
         data.append([Paragraph(str(len(rows)+1),cell),Paragraph("Доставка",cell),Paragraph("1",cell),Paragraph("усл.",cell),Paragraph(_money(delivery),cell),Paragraph("Без НДС",cell),Paragraph(_money(delivery),cell)])
     tbl=Table(data,colWidths=[9*mm,72*mm,17*mm,18*mm,24*mm,18*mm,27*mm],repeatRows=1,hAlign="LEFT")
-    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#bc1661")),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#AEB6C2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E9EDF2")),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#AEB6C2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
     _line_count = len(rows) + (1 if delivery else 0)
     _count_mod = _line_count % 100
     _count_last = _line_count % 10
     _count_word = "наименование" if _count_last == 1 and _count_mod != 11 else ("наименования" if 2 <= _count_last <= 4 and not 12 <= _count_mod <= 14 else "наименований")
     flow += [tbl,Spacer(1,3*mm),Paragraph(f"Всего {_line_count} {_count_word} на сумму {_number_to_russian_words(int(total))} {int(round((total-int(total))*100)):02d} копеек.",body),Paragraph(f"<b>Итог к оплате: {_money(total)} ₽</b> &nbsp;&nbsp; Без НДС",ParagraphStyle("InvTotal",parent=body,fontName=bold,fontSize=10,alignment=TA_RIGHT)),Paragraph(f"Срок оплаты: Не позднее {due.strftime('%d.%m.%Y')} г.",body),Spacer(1,12*mm)]
+    sign=Table([[Paragraph(f"Получатель:<br/><br/>Индивидуальный предприниматель<br/>Фазлов Дамир Ибрагимович",body),Paragraph("Плательщик: ___________________________<br/><br/>Подпись / печать",body)]],colWidths=[90*mm,90*mm])
+    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),4)]))
+    flow.append(sign)
     doc.build(flow)
     return out.getvalue(), due.strftime("%d.%m.%Y")
 
@@ -4921,17 +4839,16 @@ def invoice_document_dialog(deal_id, calc_id):
             elif not calc.get("items"):
                 st.error("Добавь хотя бы одну товарную позицию в расчёт.")
             else:
-                with st.spinner("Формируется счёт PDF…"):
-                    try:
-                        pdf,due=_make_invoice_pdf(deal,client,calc,req)
-                        display=str(calc.get("name") or _calculation_display_name(deal,calc)).replace("Расчёт","Счёт",1)
-                        filename=f"{display} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
-                        _save_generated_document(deal,pdf,filename,"Счёт",calc,req)
-                        _open_pdf_link(pdf,filename,f"invoice_pdf_{deal_id}_{calc_id}")
-                        st.session_state[f"invoice_generated_note_{deal_id}_{calc_id}"]=f"Счёт сохранён в файлах сделки. Срок оплаты: {due}."
-                        st.success(f"Счёт сохранён в файлах сделки. Срок оплаты: {due}.")
-                    except Exception as exc:
-                        st.error(f"Не удалось сформировать счёт: {exc}")
+                try:
+                    pdf,due=_make_invoice_pdf(deal,client,calc,req)
+                    display=str(calc.get("name") or _calculation_display_name(deal,calc)).replace("Расчёт","Счёт",1)
+                    filename=f"{display} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+                    _save_generated_document(deal,pdf,filename,"Счёт",calc,req)
+                    _open_pdf_link(pdf,filename,f"invoice_pdf_{deal_id}_{calc_id}")
+                    st.session_state[f"invoice_generated_note_{deal_id}_{calc_id}"]=f"Счёт сохранён в файлах сделки. Срок оплаты: {due}."
+                    st.success(f"Счёт сохранён в файлах сделки. Срок оплаты: {due}.")
+                except Exception as exc:
+                    st.error(f"Не удалось сформировать счёт: {exc}")
     pdf_state=st.session_state.get(f"invoice_pdf_{deal_id}_{calc_id}")
     if pdf_state:
         st.markdown(f'<a href="data:application/pdf;base64,{pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:600">Открыть PDF в новой вкладке</a>',unsafe_allow_html=True)
@@ -4963,10 +4880,21 @@ def render_deal_products_block(d, key_prefix):
         calc.setdefault("name", f"Расчёт {idx + 1}")
         calc.setdefault("total", _deal_calc_total(calc))
         if calc.get("deleted"):
-            st.markdown(
-                f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{calc.get('name', 'Расчёт')} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
-                unsafe_allow_html=True,
-            )
+            deleted_col, restore_col = st.columns([3.2, 1.0])
+            with deleted_col:
+                st.markdown(
+                    f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{calc.get('name', 'Расчёт')} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
+                    unsafe_allow_html=True,
+                )
+            with restore_col:
+                if st.button("Восстановить", key=f"calc_restore_{d['id']}_{calc['id']}", use_container_width=True):
+                    calc["deleted"] = False
+                    calc.pop("deleted_at", None)
+                    calc.pop("deleted_by", None)
+                    d["last_modified"] = now_str()
+                    d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» восстановлен"})
+                    save_data(st.session_state.crm_store)
+                    st.rerun()
             continue
         name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
         with name_col:
@@ -4978,14 +4906,27 @@ def render_deal_products_block(d, key_prefix):
                 _push_dialog_return()
                 deal_calculation_dialog(d["id"], calc["id"])
         with delete_col:
+            confirm_key = f"confirm_delete_calc_{d['id']}_{calc['id']}"
             if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
-                calc["deleted"] = True
-                calc["deleted_at"] = now_str()
-                calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
-                d["last_modified"] = now_str()
-                d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
-                save_data(st.session_state.crm_store)
+                st.session_state[confirm_key] = True
                 st.rerun()
+            if st.session_state.get(confirm_key):
+                st.warning(f"Удалить расчёт «{calc.get('name', 'Расчёт')}»?")
+                confirm_col, cancel_col = st.columns(2)
+                with confirm_col:
+                    if st.button("Да, удалить", key=f"calc_delete_yes_{d['id']}_{calc['id']}", type="primary", use_container_width=True):
+                        calc["deleted"] = True
+                        calc["deleted_at"] = now_str()
+                        calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                        d["last_modified"] = now_str()
+                        d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
+                        st.session_state.pop(confirm_key, None)
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
+                with cancel_col:
+                    if st.button("Отмена", key=f"calc_delete_no_{d['id']}_{calc['id']}", use_container_width=True):
+                        st.session_state.pop(confirm_key, None)
+                        st.rerun()
 
     if st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True):
         calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(d, {"id": "__new__"}, len(calculations)), "items": [],
@@ -4997,11 +4938,18 @@ def render_deal_products_block(d, key_prefix):
         deal_calculation_dialog(d["id"], calc["id"])
 
 
-@_crm_dialog("Создание расчёта", width="large")
+@_crm_dialog("Расчёт сделки", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
     """Отдельное окно редактирования расчёта в стиле окон задач."""
     def _calc_refresh():
-        if st.session_state.get("_crm_inside_dialog_host", False):
+        # КП прикрепляется к блоку файлов родительского окна сделки, поэтому после его
+        # создания нужно обновить всё приложение; прочие действия оставляют fragment rerun.
+        if st.session_state.pop("_refresh_parent_deal_files", False):
+            try:
+                st.rerun(scope="app")
+            except (TypeError, ValueError):
+                st.rerun()
+        elif st.session_state.get("_crm_inside_dialog_host", False):
             try:
                 st.rerun(scope="fragment")
             except TypeError:
@@ -5034,14 +4982,9 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.session_state[name_key] = _calculation_display_name(deal, calc)
 
     close_css = f"calc_close_row_{key}"
-    # Force the active dialog host title to the calculation-specific title even when
-    # the dialog was opened from an existing deal-detail popup.
-    if st.session_state.get("_crm_active_dialog", {}).get("name") == "deal_calculation_dialog":
-        st.session_state["_crm_active_dialog"]["title"] = "Создание расчёта"
-    st.markdown(f'<style>.st-key-{close_css} .stButton > button {{ width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important; }}</style>', unsafe_allow_html=True)
-    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:nowrap!important;}} .st-key-{close_css} .st-key-{key}_make_offer button,.st-key-{close_css} .st-key-{key}_make_invoice button {{width:100%!important;min-width:190px!important;}} .st-key-{close_css} .st-key-{key}_close button {{width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;padding:0!important;}}</style>''', unsafe_allow_html=True)
+    st.markdown(f'''<style>.st-key-{close_css} .stButton > button {{width:100%!important;min-width:150px!important;min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:normal!important;}} .st-key-{close_css} .stButton > button:hover {{filter:brightness(0.97);}}</style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, close_col = st.columns([2.0, 2.0, 0.16], gap="small")
+        offer_col, invoice_col, _spacer, close_col = st.columns([7.0, 7.0, 5.0, 1.0])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
@@ -5062,6 +5005,7 @@ def deal_calculation_dialog(deal_id, calc_id):
                     _save_generated_document(deal, pdf, filename, "Коммерческое предложение", calc)
                     _open_pdf_link(pdf, filename, f"offer_pdf_{deal_id}_{calc_id}")
                     st.session_state[f"{key}_doc_message"] = "КП сохранено в файлах сделки."
+                    st.session_state["_refresh_parent_deal_files"] = True
                 except Exception as exc:
                     st.session_state[f"{key}_doc_error"] = f"Не удалось сформировать КП: {exc}"
                 _calc_refresh()
@@ -6056,6 +6000,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     # Extended fields
                     _et_prod_key = f"edit_prod_{key_prefix}"
                     _et_addr_key = f"edit_addr_{key_prefix}"
+                    _et_city_key = f"edit_city_{key_prefix}"
                     _et_recv_key = f"edit_recv_{key_prefix}"
                     _et_rphone_key = f"edit_rphone_{key_prefix}"
                     _et_pay_key = f"edit_pay_{key_prefix}"
@@ -6063,12 +6008,13 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     _et_tk_key = f"edit_tk_{key_prefix}"
                     if _et_prod_key in st.session_state: t["products"] = st.session_state[_et_prod_key]
                     if _et_addr_key in st.session_state: t["ship_addr"] = st.session_state[_et_addr_key]
+                    if _et_city_key in st.session_state: t["ship_city"] = st.session_state[_et_city_key]
                     if _et_recv_key in st.session_state: t["receiver"] = st.session_state[_et_recv_key]
                     if _et_rphone_key in st.session_state: t["receiver_phone"] = st.session_state[_et_rphone_key]
                     if _et_pay_key in st.session_state: t["ship_pay"] = st.session_state[_et_pay_key]
                     if _et_amount_key in st.session_state:
                         _amt = st.session_state[_et_amount_key]
-                        t["order_amount"] = float(str(_amt).replace(" ", "").replace(",", ".")) if _amt and str(_amt).strip() else 0
+                        t["order_amount"] = int(_amt) if _amt and str(_amt).strip().isdigit() else 0
                     if _et_tk_key in st.session_state: t["tk_num"] = st.session_state[_et_tk_key]
                     # Deadline
                     _dl_key = f"dl_inline_{key_prefix}"
@@ -6183,7 +6129,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
             managers = get_managers_list()
             next_values["manager"] = st.selectbox("Ответственный:", managers, index=None, key=f"task_completion_next_manager_{key_prefix}", placeholder=MGR_PLACEHOLDER)
             next_values["deadline"] = st.date_input("Срок:", format="DD.MM.YYYY", key=f"task_completion_next_deadline_{key_prefix}")
-            next_values["comment"] = st.text_area("Комментарий:", key=f"task_completion_next_comment_{key_prefix}", height=90)
+            next_values["comment"] = st.text_input("Комментарий:", key=f"task_completion_next_comment_{key_prefix}")
             next_values["files"] = st.file_uploader("Файлы новой задачи:", key=f"task_completion_next_files_{key_prefix}", accept_multiple_files=True)
     col_ok, col_cancel = st.columns(2)
     with col_ok:
@@ -6215,7 +6161,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                         "task_comment": next_values.get("comment", "").strip(), "order_amount": 0, "last_modified": now_str(),
                         "task_number": generate_task_number(prefix), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                         "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
-                        "task_comments": [], "flagged": False, "products": "", "ship_addr": "", "receiver": "",
+                        "task_comments": [], "flagged": False, "products": "", "ship_city": "", "ship_addr": "", "receiver": "",
                         "receiver_phone": "", "ship_pay": "", "tk_num": ""
                     }
                     cl.setdefault("tasks", []).append(new_task)
@@ -6660,7 +6606,10 @@ def deal_create_task_dialog(deal_id, client_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cdt_{deal_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
-    _has_unsaved = any(str(st.session_state.get(f"nt_{suffix}_cdt_{deal_id}", "") or "").strip() for suffix in ("topic", "c", "prod_manual", "addr", "recv", "rphone", "amount", "tk")) or bool(st.session_state.get(f"nt_file_cdt_{deal_id}")) or (st.session_state.get(f"nt_order_calc_cdt_{deal_id}", "— Выберите расчёт —") != "— Выберите расчёт —")
+    _has_unsaved = (
+        st.session_state.get(f"nt_topic_cdt_{deal_id}", "").strip() or
+        st.session_state.get(f"nt_c_cdt_{deal_id}", "").strip()
+    )
     _close_css_key = f"close_row_{_key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
@@ -7475,7 +7424,7 @@ elif st.session_state.active_tab == "Задачи":
     }
     </style>
     <div class="tasks-page-heading">
-
+      <div class="tasks-page-title-row"><div class="tasks-page-mark"></div><div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div></div>
     </div>
     """, unsafe_allow_html=True)
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
