@@ -3098,6 +3098,7 @@ def _create_browser_session(user, remember=True):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
+        "last_activity_at": moscow_now().isoformat(timespec="seconds"),
         "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
@@ -3213,6 +3214,7 @@ def _passkey_create_login_session(user):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
+        "last_activity_at": moscow_now().isoformat(timespec="seconds"),
         "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
@@ -3338,13 +3340,9 @@ def _user_has_auth_token(user, token):
         if isinstance(auth_session, dict):
             saved_hash = auth_session.get("token_hash", "")
             saved_token = auth_session.get("token", "")  # совместимость с ранними тестовыми/старыми записями
-            expires_at = auth_session.get("expires_at")
-            if expires_at:
-                try:
-                    if datetime.fromisoformat(str(expires_at)) < moscow_now():
-                        continue
-                except (TypeError, ValueError):
-                    continue
+            # Idle timeout is validated against the browser's last real activity below.
+            # A fixed server expiry would incorrectly reject a session while the user is active
+            # in a page that does not trigger Streamlit reruns (for example, while scrolling).
             if saved_hash and secrets.compare_digest(str(saved_hash), token_hash):
                 return True
         else:
@@ -3355,27 +3353,57 @@ def _user_has_auth_token(user, token):
 
 _auth_token = cookies.get("auth_token")
 _remembered_login = str(cookies.get("remembered_user") or "").strip()
+_browser_activity_at = None
+try:
+    _browser_activity_raw = str(cookies.get("crm_activity_ts") or "").strip()
+    if _browser_activity_raw.isdigit():
+        _browser_activity_at = datetime.fromtimestamp(int(_browser_activity_raw) / 1000, tz=ZoneInfo("Europe/Moscow")).replace(tzinfo=None)
+except (TypeError, ValueError, OSError):
+    _browser_activity_at = None
 if st.session_state.get("_force_password_login"):
     _remembered_login = ""
 
-# Restore a valid browser session after refresh/reopen. Server-side expiry is sliding:
-# it is extended only while the user is active, and inactivity over 60 minutes expires it.
+# Восстанавливаем сессию после обновления страницы. Срок действия хранится на сервере
+# и скользит при действиях в CRM; сам факт перезагрузки не продлевает уже истёкшую сессию.
 if _auth_token and not st.session_state.get("authenticated") and not st.session_state.get("_force_password_login"):
     for _cookie_user in st.session_state.crm_store.get("users", []):
         if _user_has_auth_token(_cookie_user, _auth_token):
+            _token_hash = hashlib.sha256(str(_auth_token).encode("utf-8")).hexdigest()
+            _server_last_activity = None
+            for _saved_session in _cookie_user.get("auth_sessions", []):
+                if isinstance(_saved_session, dict) and secrets.compare_digest(str(_saved_session.get("token_hash", "")), _token_hash):
+                    try:
+                        _server_last_activity = datetime.fromisoformat(str(_saved_session.get("last_activity_at") or _saved_session.get("created_at")))
+                    except (TypeError, ValueError):
+                        _server_last_activity = None
+                    break
+            if isinstance(_browser_activity_at, datetime) and (not isinstance(_server_last_activity, datetime) or _browser_activity_at > _server_last_activity):
+                _server_last_activity = _browser_activity_at
+            if isinstance(_server_last_activity, datetime) and moscow_now() - _server_last_activity >= timedelta(minutes=60):
+                st.session_state["_auth_expired"] = True
+                try:
+                    cookie_manager.delete("auth_token")
+                except Exception:
+                    pass
+                break
             st.session_state.authenticated = True
             st.session_state.user_role = _cookie_user.get("role")
             st.session_state.user_login = _cookie_user.get("login")
             st.session_state.user_name = _cookie_user.get("name", _cookie_user.get("login", ""))
             st.session_state.remember_login = True
-            st.session_state._auth_last_activity = moscow_now()
+            st.session_state._auth_last_activity = _server_last_activity if isinstance(_server_last_activity, datetime) else moscow_now()
             break
 
-# Периодический скрытый heartbeat удалён: он вызывал автоматические rerun и перерисовку диалогов.
-
+# Не используем периодический heartbeat: он вызывал rerun и перерисовку диалогов.
+# Каждый обычный rerun, вызванный действием в CRM, фиксирует активность; обновление
+# страницы восстанавливает только ещё не истёкшую серверную сессию.
 if st.session_state.get("authenticated"):
+    _now_activity = moscow_now()
     _last_activity = st.session_state.get("_auth_last_activity")
-    if isinstance(_last_activity, datetime) and moscow_now() - _last_activity >= timedelta(minutes=60):
+    if isinstance(_browser_activity_at, datetime) and (not isinstance(_last_activity, datetime) or _browser_activity_at > _last_activity):
+        _last_activity = _browser_activity_at
+        st.session_state._auth_last_activity = _browser_activity_at
+    if isinstance(_last_activity, datetime) and _now_activity - _last_activity >= timedelta(minutes=60):
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -3386,19 +3414,20 @@ if st.session_state.get("authenticated"):
             cookie_manager.delete("auth_token")
         except Exception:
             pass
-    elif _auth_token:
-        # Renew expiry only when enough time has passed to avoid a database write per rerun.
-        if not isinstance(_last_activity, datetime) or (moscow_now() - _last_activity).total_seconds() >= 60:
-            _token_hash = hashlib.sha256(str(_auth_token).encode("utf-8")).hexdigest()
+    else:
+        # Сохраняем последнюю активность и скользящий срок на сервере не чаще раза в минуту.
+        if not isinstance(_last_activity, datetime) or (_now_activity - _last_activity).total_seconds() >= 60:
+            _token_hash = hashlib.sha256(str(_auth_token or "").encode("utf-8")).hexdigest() if _auth_token else ""
             _expiry_changed = False
             for _active_user in st.session_state.crm_store.get("users", []):
                 for _active_session in _active_user.get("auth_sessions", []):
-                    if isinstance(_active_session, dict) and secrets.compare_digest(str(_active_session.get("token_hash", "")), _token_hash):
-                        _active_session["expires_at"] = (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds")
+                    if isinstance(_active_session, dict) and _token_hash and secrets.compare_digest(str(_active_session.get("token_hash", "")), _token_hash):
+                        _active_session["last_activity_at"] = _now_activity.isoformat(timespec="seconds")
+                        _active_session["expires_at"] = (_now_activity + timedelta(minutes=60)).isoformat(timespec="seconds")
                         _expiry_changed = True
             if _expiry_changed:
                 save_data(st.session_state.crm_store)
-            st.session_state._auth_last_activity = moscow_now()
+            st.session_state._auth_last_activity = _now_activity
     
 def _render_it_edit(it):
     """Inline edit form for internal task."""
@@ -3771,7 +3800,7 @@ if not st.session_state.authenticated:
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
             remember_login = st.checkbox("Запомнить меня в этом браузере", value=False, key="remember_login_checkbox")
             if remember_login:
-                st.caption("Сессия действует до 60 минут бездействия. При активности CRM продлевает сессию автоматически.")
+                st.caption("Сессия завершится после 60 минут бездействия. При действиях в CRM срок продлевается автоматически.")
                 _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="password", max_chars=8, key="new_login_pin")
                 _confirm_pin = st.text_input("Повторите PIN-код:", type="password", max_chars=8, key="confirm_login_pin")
             else:
@@ -3988,6 +4017,32 @@ with _header_center:
         f'<p style="text-align:center;color:#7F8C9A;font-size:0.95rem;margin:0!important;padding:0!important;">Продуктивного тебе дня, {html.escape(str(st.session_state.user_name))} 😊</p>',
         unsafe_allow_html=True,
     )
+# Track genuine browser activity without Streamlit reruns. This updates a short, non-secret
+# timestamp cookie only on real user input; no polling/heartbeat is used, so dialogs stay stable.
+if st.session_state.get("authenticated"):
+    components.html("""
+    <script>
+    (function(){
+      try {
+        const doc = parent.document;
+        if (doc.__crmActivityTrackerInstalled) return;
+        doc.__crmActivityTrackerInstalled = true;
+        let lastWrite = 0;
+        function markActivity(){
+          const now = Date.now();
+          if (now - lastWrite < 5000) return;
+          lastWrite = now;
+          doc.cookie = 'crm_activity_ts=' + now + '; Max-Age=31536000; Path=/; SameSite=Lax; Secure';
+        }
+        ['pointerdown','keydown','mousemove','wheel','scroll','touchstart','input','change'].forEach(function(evt){
+          doc.addEventListener(evt, markActivity, {capture:true, passive:true});
+        });
+        markActivity();
+      } catch(e) {}
+    })();
+    </script>
+    """, height=0, width=0, scrolling=False)
+
 with _header_right:
     components.html("""
     <div id="crm-live-clock" style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#5A6B7D;white-space:nowrap;width:100%;">
