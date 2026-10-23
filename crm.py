@@ -5074,7 +5074,9 @@ def render_deal_products_block(d, key_prefix):
         with edit_col:
             if st.button("Открыть", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
                 _push_dialog_return()
-                deal_calculation_dialog(d["id"], calc["id"])
+                st.session_state["dialog_calculation_deal_id"] = str(d["id"])
+                st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
+                st.rerun()
         with delete_col:
             confirm_key = f"confirm_delete_calc_{d['id']}_{calc['id']}"
             if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
@@ -5105,7 +5107,9 @@ def render_deal_products_block(d, key_prefix):
         calculations.append(calc)
         save_data(st.session_state.crm_store)
         _push_dialog_return()
-        deal_calculation_dialog(d["id"], calc["id"])
+        st.session_state["dialog_calculation_deal_id"] = str(d["id"])
+        st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
+        st.rerun()
 
 
 @_crm_dialog("Расчёт сделки", width="large")
@@ -5209,6 +5213,8 @@ def deal_calculation_dialog(deal_id, calc_id):
                     save_data(st.session_state.crm_store)
                     for k in (dirty_key, warning_key, name_key, snapshot_key):
                         st.session_state.pop(k, None)
+                    st.session_state.pop("dialog_calculation_deal_id", None)
+                    st.session_state.pop("dialog_calculation_calc_id", None)
                     _pop_dialog_return()
                     st.rerun()
 
@@ -5595,6 +5601,8 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 else:
                     st.warning("Выберите файл(ы)")
             st.markdown("---")
+            render_deal_products_block(d, key_prefix)
+            st.markdown("---")
             _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
             _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
             if _deal_tasks_list:
@@ -5629,9 +5637,6 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.session_state["dialog_create_deal_task_deal_id"] = deal_id
                 st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
                 st.rerun()
-            st.markdown("---")
-            render_deal_products_block(d, key_prefix)
-            st.markdown("---")
             st.markdown("**Внесённые изменения**")
             _deal_changes = d.get("change_log", [])
             if _deal_changes:
@@ -7530,7 +7535,11 @@ elif st.session_state.active_tab == "Сделки":
 
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
-    if _pending_reminder:
+    _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
+    _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
+    if _dialog_calculation_deal_id and _dialog_calculation_calc_id:
+        deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
+    elif _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
     elif _task_completion_state:
         task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
