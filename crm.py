@@ -6142,7 +6142,10 @@ def deal_calculation_dialog(deal_id, calc_id):
             st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_discount", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
         with cols[6]:
             st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem;text-align:right'>Цена</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='padding-top:0.15rem;text-align:right;font-size:0.8rem;color:#64748b;white-space:nowrap'>{float(item.get('unit_price', product.get('price', 0)) or 0):,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
+            # При смене товара показываем цену выбранной позиции из актуального прайса
+            # сразу в этом же рендере, а не старую цену предыдущего товара.
+            display_price = float(product.get("price", 0) or 0) if selected_pid != current_pid else float(item.get("unit_price", product.get("price", 0)) or 0)
+            st.markdown(f"<div style='padding-top:0.15rem;text-align:right;font-size:0.8rem;color:#64748b;white-space:nowrap'>{display_price:,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
         if st.button("Удалить позицию", key=f"{key}_{row_id}_remove"):
             calc["items"] = [x for x in items if x.get("row_id") != row_id]
             st.session_state[dirty_key] = True
@@ -6210,6 +6213,10 @@ def deal_calculation_dialog(deal_id, calc_id):
         for k in (dirty_key, warning_key, f"{key}_save_requested", snapshot_key):
             st.session_state.pop(k, None)
         st.toast("Расчёт сохранён", icon="✅")
+        # После сохранения окно расчёта закрывается. Не оставляем его ID в session_state,
+        # иначе глобальный диспетчер повторно открывает его при любом следующем клике.
+        st.session_state.pop("dialog_calculation_deal_id", None)
+        st.session_state.pop("dialog_calculation_calc_id", None)
         _pop_dialog_return()
         st.rerun()
 
@@ -8406,7 +8413,16 @@ elif st.session_state.active_tab == "Сделки":
     elif _invoice_dialog_state:
         invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
     elif _dialog_calculation_deal_id and _dialog_calculation_calc_id:
-        deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
+        _tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_dialog_calculation_deal_id)), None)
+        _tab_calc = next((c for c in (_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_dialog_calculation_calc_id) and not c.get("deleted")), None)
+        if _tab_calc_deal and _tab_calc:
+            deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
+        else:
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+            _active = st.session_state.get("_crm_active_dialog") or {}
+            if _active.get("name") == "deal_calculation_dialog":
+                st.session_state.pop("_crm_active_dialog", None)
     elif _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
     elif _task_completion_state:
@@ -9038,7 +9054,16 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
             _global_invoice_dialog_state.get("calc_id"),
         )
     elif _global_calc_deal_id and _global_calc_id:
-        deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
+        _global_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_global_calc_deal_id)), None)
+        _global_calc = next((c for c in (_global_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_global_calc_id) and not c.get("deleted")), None)
+        if _global_calc_deal and _global_calc:
+            deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
+        else:
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+            _active = st.session_state.get("_crm_active_dialog") or {}
+            if _active.get("name") == "deal_calculation_dialog":
+                st.session_state.pop("_crm_active_dialog", None)
 
 # Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
 # Внутри отображается исходное содержимое соответствующего диалога.
