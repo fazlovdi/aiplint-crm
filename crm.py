@@ -5273,6 +5273,368 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
                 _pop_dialog_return(); st.rerun()
 
 
+
+# -------------------- Интеграция с Точка.API --------------------
+def _tochka_config():
+    """Читает секреты интеграции из Streamlit Secrets или переменных окружения."""
+    secret_values = {}
+    try:
+        section = st.secrets.get("tochka", {})
+        if hasattr(section, "items"):
+            secret_values = dict(section.items())
+    except Exception:
+        secret_values = {}
+    env_names = {
+        "token": "TOCHKA_TOKEN",
+        "customer_code": "TOCHKA_CUSTOMER_CODE",
+        "account_id": "TOCHKA_ACCOUNT_ID",
+        "merchant_id": "TOCHKA_MERCHANT_ID",
+        "tax_system_code": "TOCHKA_TAX_SYSTEM_CODE",
+        "supplier_name": "TOCHKA_SUPPLIER_NAME",
+        "supplier_inn": "TOCHKA_SUPPLIER_INN",
+        "supplier_phone": "TOCHKA_SUPPLIER_PHONE",
+        "redirect_url": "TOCHKA_REDIRECT_URL",
+        "fail_redirect_url": "TOCHKA_FAIL_REDIRECT_URL",
+        "base_url": "TOCHKA_BASE_URL",
+    }
+    result = {}
+    for key, env_name in env_names.items():
+        value = secret_values.get(key) or os.environ.get(env_name, "")
+        if value:
+            result[key] = str(value).strip()
+    result.setdefault("base_url", "https://enter.tochka.com/uapi")
+    # Данные поставщика совпадают с данными, уже используемыми в PDF-счёте CRM;
+    # их можно переопределить в secrets.
+    result.setdefault("supplier_name", "ИП Фазлов Дамир Ибрагимович")
+    result.setdefault("supplier_inn", "731701704975")
+    result.setdefault("supplier_phone", "+79003293300")
+    return result
+
+
+def _tochka_missing_config(required):
+    cfg = _tochka_config()
+    return [key for key in required if not cfg.get(key)]
+
+
+def _tochka_request(method, path, payload=None, expect_pdf=False):
+    cfg = _tochka_config()
+    if not cfg.get("token"):
+        raise RuntimeError("Не настроен токен Точка.API. Добавьте [tochka].token в Streamlit Secrets.")
+    url = cfg["base_url"].rstrip("/") + "/" + path.lstrip("/")
+    headers = {
+        "Authorization": f"Bearer {cfg['token']}",
+        "Accept": "application/pdf" if expect_pdf else "application/json",
+    }
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    try:
+        response = requests.request(method, url, headers=headers, json=payload, timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Не удалось связаться с Точка.API: {exc}") from exc
+    if not response.ok:
+        detail = ""
+        try:
+            body = response.json()
+            detail = str(body.get("message") or body.get("Message") or body.get("code") or "")
+            errors = body.get("Errors") or body.get("errors") or []
+            if errors and not detail:
+                detail = "; ".join(str(x.get("message", "")) for x in errors[:2] if isinstance(x, dict))
+        except Exception:
+            detail = (response.text or "")[:350]
+        raise RuntimeError(f"Точка.API вернул HTTP {response.status_code}" + (f": {detail}" if detail else ""))
+    if expect_pdf:
+        return response.content
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RuntimeError("Точка.API вернул ответ в неожиданном формате.") from exc
+
+
+def _tochka_data(response):
+    return response.get("Data", response.get("data", response)) if isinstance(response, dict) else {}
+
+
+def _tochka_unit(value):
+    allowed = {"шт.", "тыс.шт.", "компл.", "пар.", "усл.ед.", "упак.", "услуга.", "пач.", "мин.", "ч.", "сут.", "г.", "кг.", "л.", "м.", "м2.", "м3.", "км.", "га.", "кВт.", "кВт.ч."}
+    value = str(value or "").strip()
+    aliases = {"м.п.": "м.", "пог. м": "м.", "пог.м": "м.", "м²": "м2.", "м2": "м2.", "м³": "м3.", "м3": "м3.", "усл.": "услуга.", "комплект": "компл.", "компл": "компл.", "шт": "шт."}
+    value = aliases.get(value.lower(), value)
+    return value if value in allowed else "шт."
+
+
+def _tochka_invoice_number(deal, calc):
+    calculations = deal.get("calculations", [])
+    index = next((i + 1 for i, item in enumerate(calculations) if str(item.get("id")) == str(calc.get("id"))), 1)
+    base = re.sub(r"[^0-9A-Za-zА-Яа-яЁё-]+", "-", str(_deal_doc_number(deal))).strip("-") or "CRM"
+    suffix = moscow_now().strftime("%y%m%d%H%M%S")
+    return f"{base[:20]}-{index}-{suffix}"[:40]
+
+
+def _tochka_build_invoice_payload(deal, calc, requisites):
+    cfg = _tochka_config()
+    if requisites.get("payer_type") not in ("company", "ip"):
+        raise ValueError("Точка.API не выставляет счёт по реквизитам физическому лицу. Для физлица используйте платёжную ссылку.")
+    if not str(requisites.get("inn", "")).strip():
+        raise ValueError("Для счёта в Точке нужен ИНН плательщика.")
+    if not str(requisites.get("legal_name", "")).strip():
+        raise ValueError("Укажите наименование организации или ФИО ИП.")
+    rows = _calculation_rows(calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG))
+    delivery = max(0.0, float(calc.get("delivery_amount", 0) or 0))
+    positions = []
+    for row in rows:
+        if row["quantity"] <= 0:
+            continue
+        positions.append({
+            "positionName": str(row["name"] or "Товар")[:256],
+            "unitCode": _tochka_unit(row["unit"]),
+            "ndsKind": "without_nds",
+            "price": f'{row["after"]:.2f}',
+            "quantity": f'{row["quantity"]:g}',
+            "totalAmount": f'{row["amount"]:.2f}',
+        })
+    if delivery > 0:
+        positions.append({
+            "positionName": "Доставка",
+            "unitCode": "услуга.",
+            "ndsKind": "without_nds",
+            "price": f"{delivery:.2f}",
+            "quantity": "1",
+            "totalAmount": f"{delivery:.2f}",
+        })
+    total = round(sum(float(p["totalAmount"]) for p in positions), 2)
+    if not positions or total <= 0:
+        raise ValueError("В расчёте нет позиций с положительной суммой.")
+    today = moscow_now().date()
+    next_month = 1 if today.month == 12 else today.month + 1
+    year = today.year + 1 if today.month == 12 else today.year
+    due = today.replace(year=year, month=next_month, day=monthrange(year, next_month)[1])
+    second_side = {
+        "taxCode": str(requisites.get("inn", "")).strip(),
+        "type": requisites.get("payer_type"),
+        "secondSideName": str(requisites.get("legal_name", "")).strip(),
+    }
+    optional_fields = {
+        "legalAddress": requisites.get("address"),
+        "kpp": requisites.get("kpp"),
+        "bankName": requisites.get("bank_name"),
+        "bankCorrAccount": requisites.get("corr_account"),
+    }
+    second_side.update({key: str(value).strip() for key, value in optional_fields.items() if value})
+    # В формате Точка accountId покупателя обычно содержит номер счёта и БИК через "/".
+    buyer_account = str(requisites.get("settlement_account") or "").strip()
+    buyer_bik = str(requisites.get("bik") or "").strip()
+    if buyer_account and buyer_bik:
+        second_side["accountId"] = f"{buyer_account}/{buyer_bik}"
+    invoice_number = _tochka_invoice_number(deal, calc)
+    return {
+        "Data": {
+            "accountId": cfg["account_id"],
+            "customerCode": cfg["customer_code"],
+            "SecondSide": second_side,
+            "Content": {
+                "Invoice": {
+                    "Positions": positions,
+                    "date": today.isoformat(),
+                    "totalAmount": f"{total:.2f}",
+                    "number": invoice_number,
+                    "basedOn": f'Сделка №{_deal_doc_number(deal)} · {calc.get("name", "Расчёт")}'[:250],
+                    "comment": f'Счёт из CRM по расчёту «{calc.get("name", "Расчёт")}»'[:250],
+                    "paymentExpiryDate": due.isoformat(),
+                }
+            },
+        }
+    }
+
+
+def _tochka_create_invoice(deal, calc, requisites):
+    missing = _tochka_missing_config(["token", "customer_code", "account_id"])
+    if missing:
+        raise RuntimeError("Не настроены параметры Точки: " + ", ".join(missing) + ".")
+    payload = _tochka_build_invoice_payload(deal, calc, requisites)
+    response = _tochka_request("POST", "/invoice/v1.0/bills", payload)
+    data = _tochka_data(response)
+    document_id = data.get("documentId") or data.get("documentID")
+    if not document_id:
+        raise RuntimeError("Точка не вернула documentId созданного счёта.")
+    return {
+        "kind": "invoice",
+        "bank": "Точка",
+        "document_id": str(document_id),
+        "invoice_number": payload["Data"]["Content"]["Invoice"]["number"],
+        "customer_code": _tochka_config().get("customer_code", ""),
+        "amount": float(payload["Data"]["Content"]["Invoice"]["totalAmount"]),
+        "status": "payment_waiting",
+        "created_at": now_str(),
+        "payment_expiry_date": payload["Data"]["Content"]["Invoice"]["paymentExpiryDate"],
+    }
+
+
+def _tochka_get_invoice_pdf(record):
+    customer_code = urllib.parse.quote(str(record.get("customer_code") or _tochka_config().get("customer_code", "")), safe="")
+    document_id = urllib.parse.quote(str(record.get("document_id", "")), safe="")
+    return _tochka_request("GET", f"/invoice/v1.0/bills/{customer_code}/{document_id}/file", expect_pdf=True)
+
+
+def _tochka_create_payment_link(deal, calc, requisites):
+    required = ["token", "customer_code", "tax_system_code", "supplier_name", "supplier_inn", "supplier_phone"]
+    missing = _tochka_missing_config(required)
+    if missing:
+        raise RuntimeError("Для платёжной ссылки с чеком настройте в secrets: " + ", ".join(missing) + ".")
+    if not str(requisites.get("email", "")).strip():
+        raise ValueError("Для платёжной ссылки с фискальным чеком нужен email покупателя.")
+    rows = _calculation_rows(calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG))
+    items = []
+    for row in rows:
+        if row["quantity"] <= 0 or row["after"] <= 0:
+            continue
+        items.append({
+            "vatType": "none",
+            "name": str(row["name"] or "Товар")[:256],
+            "amount": f'{row["after"]:.2f}',
+            "quantity": row["quantity"],
+            "paymentMethod": "full_prepayment",
+            "paymentObject": "goods",
+            "measure": _tochka_unit(row["unit"]),
+        })
+    delivery = max(0.0, float(calc.get("delivery_amount", 0) or 0))
+    if delivery > 0:
+        items.append({
+            "vatType": "none",
+            "name": "Доставка",
+            "amount": f"{delivery:.2f}",
+            "quantity": 1,
+            "paymentMethod": "full_prepayment",
+            "paymentObject": "service",
+            "measure": "услуга.",
+        })
+    total = round(sum(float(item["amount"]) * float(item["quantity"]) for item in items), 2)
+    if not items or total <= 0:
+        raise ValueError("В расчёте нет позиций с положительной суммой.")
+    purpose = f'Оплата по сделке №{_deal_doc_number(deal)}, {calc.get("name", "Расчёт")}'[:140]
+    payment_id = f"crm-{uuid.uuid4().hex[:32]}"[:45]
+    cfg = _tochka_config()
+    client_obj = {
+        "name": str(requisites.get("legal_name") or (get_client_by_id(deal.get("client_id")) or {}).get("name") or "Покупатель")[:256],
+        "email": str(requisites.get("email")).strip(),
+    }
+    if requisites.get("phone"):
+        client_obj["phone"] = str(requisites.get("phone")).strip()
+    data = {
+        "customerCode": cfg["customer_code"],
+        "amount": f"{total:.2f}",
+        "purpose": purpose,
+        "paymentMode": ["sbp", "card"],
+        "paymentLinkId": payment_id,
+        "taxSystemCode": cfg["tax_system_code"],
+        "Client": client_obj,
+        "Items": items,
+        "Supplier": {
+            "phone": cfg["supplier_phone"],
+            "name": cfg["supplier_name"],
+            "taxCode": cfg["supplier_inn"],
+        },
+    }
+    if cfg.get("merchant_id"):
+        data["merchantId"] = cfg["merchant_id"]
+    if cfg.get("redirect_url"):
+        data["redirectUrl"] = cfg["redirect_url"]
+    if cfg.get("fail_redirect_url"):
+        data["failRedirectUrl"] = cfg["fail_redirect_url"]
+    response = _tochka_request("POST", "/acquiring/v1.0/payments_with_receipt", {"Data": data})
+    result = _tochka_data(response)
+    operation_id = result.get("operationId")
+    payment_link = result.get("paymentLink")
+    if not operation_id or not payment_link:
+        raise RuntimeError("Точка не вернула operationId или ссылку на оплату.")
+    return {
+        "kind": "payment_link",
+        "bank": "Точка",
+        "operation_id": str(operation_id),
+        "payment_link": str(payment_link),
+        "payment_link_id": payment_id,
+        "amount": total,
+        "status": result.get("status", "CREATED"),
+        "created_at": now_str(),
+        "customer_code": cfg["customer_code"],
+    }
+
+
+def _tochka_refresh_status(record):
+    customer_code = urllib.parse.quote(str(record.get("customer_code") or _tochka_config().get("customer_code", "")), safe="")
+    if record.get("kind") == "invoice":
+        document_id = urllib.parse.quote(str(record.get("document_id", "")), safe="")
+        response = _tochka_request("GET", f"/invoice/v1.0/bills/{customer_code}/{document_id}/payment-status")
+        data = _tochka_data(response)
+        status = data.get("status") or data.get("paymentStatus") or data.get("payment_status")
+    else:
+        operation_id = urllib.parse.quote(str(record.get("operation_id", "")), safe="")
+        response = _tochka_request("GET", f"/acquiring/v1.0/payments/{operation_id}")
+        data = _tochka_data(response)
+        operations = data.get("Operation") or data.get("operation") or []
+        if isinstance(operations, list) and operations:
+            data = operations[0]
+        status = data.get("status")
+        if data.get("paidAt"):
+            record["paid_at"] = data["paidAt"]
+    if not status:
+        raise RuntimeError("В ответе Точки не найден статус платежа.")
+    record["status"] = str(status)
+    record["checked_at"] = now_str()
+    return record
+
+
+def _tochka_qr_png(url):
+    """Создаёт QR локально, без отправки платёжной ссылки сторонним сервисам."""
+    try:
+        import qrcode
+        image = qrcode.make(url)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+    except Exception:
+        pass
+    try:
+        from reportlab.graphics.barcode.qr import QrCodeWidget
+        from reportlab.graphics.shapes import Drawing
+        from reportlab.graphics import renderPM
+        widget = QrCodeWidget(url)
+        x1, y1, x2, y2 = widget.getBounds()
+        width, height = max(1, x2 - x1), max(1, y2 - y1)
+        size = 240
+        drawing = Drawing(size, size, transform=[size / width, 0, 0, size / height, 0, 0])
+        drawing.add(widget)
+        return renderPM.drawToString(drawing, fmt="PNG", dpi=150)
+    except Exception:
+        return None
+
+
+def _tochka_status_label(record):
+    status = str(record.get("status", "")).upper()
+    labels = {
+        "PAYMENT_WAITING": "Ожидает оплаты",
+        "PAYMENT_PAID": "Оплачен",
+        "PAYMENT_EXPIRED": "Истёк срок оплаты",
+        "CREATED": "Ссылка создана, ожидает оплаты",
+        "APPROVED": "Оплачен",
+        "AUTHORIZED": "Оплата авторизована, ожидает списания",
+        "ON-REFUND": "Возврат выполняется",
+        "REFUNDED": "Возвращён",
+        "REFUNDED_PARTIALLY": "Частично возвращён",
+        "EXPIRED": "Срок ссылки истёк",
+        "WAIT_FULL_PAYMENT": "Ожидает полного платежа",
+    }
+    return labels.get(status, record.get("status", "Статус неизвестен"))
+
+
+def _tochka_record_store(deal, calc, record):
+    calc.setdefault("tochka_documents", [])
+    calc["tochka_documents"].append(record)
+    calc["updated_at"] = now_str()
+    deal["last_modified"] = now_str()
+    save_data(st.session_state.crm_store)
+
+
+
 @_crm_dialog("Сформировать счёт", width="large")
 def invoice_document_dialog(deal_id, calc_id):
     deal=next((d for d in st.session_state.crm_store.get("deals",[]) if str(d.get("id"))==str(deal_id)),None)
@@ -5294,6 +5656,7 @@ def invoice_document_dialog(deal_id, calc_id):
                 deal_calculation_dialog(deal_id,calc_id)
     st.markdown(f"**Сделка:** {deal.get('deal_number',deal.get('title',''))}")
     st.markdown(f"**Расчёт:** {calc.get('name','Расчёт')}")
+    selected_req = None
     if not requisites:
         st.info("Для клиента пока не сохранены реквизиты плательщика.")
     else:
@@ -5304,7 +5667,7 @@ def invoice_document_dialog(deal_id, calc_id):
         state["selected_requisite_id"]=sel
         selected_req=next((r for r in requisites if str(r.get("id"))==str(sel)),None)
         if selected_req:
-            st.caption(f"ИНН: {selected_req.get('inn','—')}  ·  Адрес: {selected_req.get('address','—')}")
+            st.caption(f"Тип: { {'company':'Юрлицо','ip':'ИП','person':'Физлицо'}.get(selected_req.get('payer_type'),'—') } · ИНН: {selected_req.get('inn','—')} · Email: {selected_req.get('email','—')}")
     add_col,generate_col=st.columns(2)
     with add_col:
         if st.button("+ Добавить новые реквизиты",key=f"invoice_add_req_{deal_id}_{calc_id}",use_container_width=True):
@@ -5313,7 +5676,7 @@ def invoice_document_dialog(deal_id, calc_id):
             client_requisites_dialog(client.get("id"),True)
     with generate_col:
         if st.button("Сформировать счёт PDF",key=f"invoice_generate_{deal_id}_{calc_id}",type="primary",use_container_width=True):
-            req=next((r for r in requisites if str(r.get("id"))==str(state.get("selected_requisite_id"))),None)
+            req=selected_req
             if not req:
                 st.error("Сначала выбери реквизиты плательщика или добавь новые.")
             elif not calc.get("items"):
@@ -5333,6 +5696,76 @@ def invoice_document_dialog(deal_id, calc_id):
     if pdf_state:
         st.markdown(f'<a href="data:application/pdf;base64,{pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:600">Открыть PDF в новой вкладке</a>',unsafe_allow_html=True)
         st.download_button("Скачать PDF",data=base64.b64decode(pdf_state["data"]),file_name=pdf_state["filename"],mime="application/pdf",key=f"invoice_pdf_dl_{deal_id}_{calc_id}")
+
+    st.divider()
+    st.markdown("### Точка Банк")
+    st.caption("Счёт через API доступен юридическим лицам и ИП. Для физлиц используйте платёжную ссылку с онлайн-чеком.")
+    cfg = _tochka_config()
+    missing_invoice = _tochka_missing_config(["token", "customer_code", "account_id"])
+    missing_link = _tochka_missing_config(["token", "customer_code", "tax_system_code", "supplier_name", "supplier_inn", "supplier_phone"])
+    if missing_invoice:
+        st.info("Для банковского счёта добавьте параметры Точки в Streamlit Secrets: token, customer_code и account_id.")
+    t_invoice_col, t_link_col = st.columns(2)
+    with t_invoice_col:
+        invoice_disabled = not selected_req or selected_req.get("payer_type") not in ("company", "ip") or bool(missing_invoice) or not bool(calc.get("items"))
+        if st.button("Создать счёт в Точке", key=f"tochka_invoice_create_{deal_id}_{calc_id}", use_container_width=True, disabled=invoice_disabled):
+            try:
+                record = _tochka_create_invoice(deal, calc, selected_req)
+                _tochka_record_store(deal, calc, record)
+                # save_data() обновляет crm_store глубокой копией — повторно получаем
+                # актуальные объекты, чтобы PDF прикрепился к сохранённой сделке.
+                deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(deal_id)), deal)
+                calc = next((c for c in deal.get("calculations", []) if str(c.get("id")) == str(calc_id)), calc)
+                try:
+                    pdf = _tochka_get_invoice_pdf(record)
+                    filename = f"Счёт Точка {record['invoice_number']}.pdf"
+                    _save_generated_document(deal, pdf, filename, "Счёт Точка", calc, {"payer_type": selected_req.get("payer_type"), "tochka_document_id": record["document_id"], "bank": "Точка"})
+                    _open_pdf_link(pdf, filename, f"tochka_pdf_{deal_id}_{calc_id}_{record['document_id']}")
+                    st.success(f"Счёт создан в Точке № {record['invoice_number']} и сохранён в файлах сделки.")
+                except Exception as pdf_exc:
+                    st.warning(f"Счёт создан в Точке, но PDF пока не удалось получить: {pdf_exc}. Идентификатор сохранён в CRM.")
+            except Exception as exc:
+                st.error(f"Не удалось создать счёт в Точке: {exc}")
+    with t_link_col:
+        link_disabled = not selected_req or bool(missing_link) or not bool(calc.get("items"))
+        if st.button("Создать платёжную ссылку / QR", key=f"tochka_link_create_{deal_id}_{calc_id}", use_container_width=True, disabled=link_disabled):
+            try:
+                record = _tochka_create_payment_link(deal, calc, selected_req)
+                _tochka_record_store(deal, calc, record)
+                st.success("Платёжная ссылка Точки создана. Ссылка и QR-код доступны ниже.")
+            except Exception as exc:
+                st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
+    if missing_link:
+        st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
+    bank_records = calc.get("tochka_documents", []) or []
+    if bank_records:
+        st.markdown("#### Документы и оплаты Точки")
+        for index, record in enumerate(bank_records):
+            with st.container(border=True):
+                title = f"Банковский счёт № {record.get('invoice_number')}" if record.get("kind") == "invoice" else "Платёжная ссылка"
+                st.markdown(f"**{title}** · {_money(record.get('amount', 0))} ₽")
+                st.write(f"Статус: **{_tochka_status_label(record)}**")
+                if record.get("created_at"):
+                    st.caption(f"Создано: {record['created_at']}" + (f" · Проверено: {record['checked_at']}" if record.get("checked_at") else ""))
+                if record.get("kind") == "payment_link" and record.get("payment_link"):
+                    st.markdown(f"[Открыть платёжную ссылку]({record['payment_link']})")
+                    qr_png = _tochka_qr_png(record["payment_link"])
+                    if qr_png:
+                        st.image(qr_png, caption="QR-код для оплаты", width=220)
+                    else:
+                        st.caption("Не удалось создать QR-код в текущем окружении. Ссылка на оплату доступна выше.")
+                if record.get("kind") == "invoice":
+                    pdf_key = f"tochka_pdf_{deal_id}_{calc_id}_{record.get('document_id')}"
+                    bank_pdf_state = st.session_state.get(pdf_key)
+                    if bank_pdf_state:
+                        st.download_button("Скачать PDF счёта Точки", data=base64.b64decode(bank_pdf_state["data"]), file_name=bank_pdf_state["filename"], mime="application/pdf", key=f"tochka_pdf_dl_{deal_id}_{calc_id}_{index}")
+                if st.button("Обновить статус оплаты", key=f"tochka_status_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                    try:
+                        _tochka_refresh_status(record)
+                        save_data(st.session_state.crm_store)
+                        st.success(f"Статус обновлён: {_tochka_status_label(record)}")
+                    except Exception as exc:
+                        st.error(f"Не удалось обновить статус: {exc}")
 
 
 def render_deal_products_block(d, key_prefix):
