@@ -1063,7 +1063,17 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     div[class*="st-key-fdesc_"] div[data-testid="InputInstructions"] { display:none!important; }
     </style>""", unsafe_allow_html=True)
 
-    # Все файлы выводятся сразу, без сетки миниатюр и без пагинации.
+    # Большие коллекции не загружаем целиком на каждом открытии окна.
+    _lazy_key = f"files_loaded_{prefix}"
+    if len(files) > 8 and not st.session_state.get(_lazy_key, False):
+        st.caption(f"Файлов: {len(files)}")
+        for _idx, _item in enumerate(files):
+            _name = _item.get("file_name", _item.get("name", f"Файл {_idx+1}")) if isinstance(_item, dict) else str(_item)
+            st.markdown(f"- {html.escape(str(_name))}")
+        if st.button("Загрузить список файлов", key=f"load_file_list_{prefix}"):
+            st.session_state[_lazy_key] = True
+            st.rerun()
+        return
     file_paths = [ff.get("file_path", ff.get("path")) for ff in files]
     with ThreadPoolExecutor(max_workers=min(8, max(1, len(file_paths)))) as executor:
         file_bytes_list = list(executor.map(get_file_bytes, file_paths))
@@ -1695,6 +1705,40 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
         on_change=_persist_shipping_fields,
     )
 
+
+def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user"):
+    """Показывает комментарии; удаление только помечает запись и зачеркивает её."""
+    if not isinstance(comments, list):
+        return
+    for _i, _item in enumerate(comments):
+        if not isinstance(_item, dict):
+            continue
+        _meta = " · ".join(str(_item.get(k, "")) for k in (time_key, author_key) if _item.get(k))
+        _text = linkify_text(str(_item.get("text", "") or ""))
+        _deleted = bool(_item.get("deleted"))
+        _content, _action = st.columns([12, 1])
+        with _content:
+            _shown = f"<s>{_text}</s>" if _deleted else _text
+            st.markdown((f"- *{html.escape(_meta)}*: {_shown}" if _meta else f"- {_shown}"), unsafe_allow_html=True)
+        with _action:
+            if not _deleted and st.button("×", key=f"soft_comment_del_{key_prefix}_{_i}", help="Удалить комментарий"):
+                st.session_state[f"soft_comment_confirm_{key_prefix}_{_i}"] = True
+        _ck = f"soft_comment_confirm_{key_prefix}_{_i}"
+        if st.session_state.get(_ck) and not _deleted:
+            st.caption("Удалить комментарий? Он останется в истории зачёркнутым.")
+            _yes, _no = st.columns(2)
+            with _yes:
+                if st.button("Подтвердить удаление", key=f"soft_comment_yes_{key_prefix}_{_i}", type="primary"):
+                    _item["deleted"] = True
+                    _item["deleted_at"] = now_str()
+                    _item["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                    st.session_state.pop(_ck, None)
+                    commit_and_rerun(st.session_state.crm_store, "Комментарий зачёркнут")
+            with _no:
+                if st.button("Отмена", key=f"soft_comment_no_{key_prefix}_{_i}"):
+                    st.session_state.pop(_ck, None)
+                    st.rerun()
+
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
@@ -1930,17 +1974,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["last_modified"] = now_str()
                             cl["last_modified"] = now_str()
                             if d: d["last_modified"] = now_str()
-                            # Сначала фиксируем новый статус. Затем закрываем окно задачи,
-                            # чтобы основная доска перерисовалась с актуальным списком:
-                            # задача сразу исчезает из «Новые» и появляется в «В работе/На сегодня».
                             save_data(st.session_state.crm_store)
-                            st.session_state.pop("dialog_task_key", None)
-                            st.session_state.pop("dialog_task_number", None)
-                            st.session_state.pop("dialog_task_client_id", None)
-                            st.session_state.pop("dialog_task_deal_id", None)
-                            st.session_state.pop("_open_created_task", None)
-                            _pop_dialog_return()
-                            st.session_state["_in_dialog"] = False
                             st.toast("Задача взята в работу", icon="✅")
                             st.rerun()
                     show_key = f"show_complete_{key_prefix}"
@@ -2063,8 +2097,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             # Comments block (now above files) — no gap at top
             if t.get("task_comments"):
                 st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
-                for tc in t["task_comments"]:
-                    st.markdown(f"- *{tc.get('time', '')}* ({tc.get('user', '')}): {linkify_text(tc.get('text', ''))}", unsafe_allow_html=True)
+                render_soft_delete_comments(t["task_comments"], f"task_{key_prefix}", "time", "user")
             tc_clr_key = f"clr_tc_{key_prefix}"
             if st.session_state.get(tc_clr_key):
                 st.session_state[f"tc_input_{key_prefix}"] = ""
@@ -3099,7 +3132,7 @@ def _create_browser_session(user, remember=True):
     session_record = {
         "token_hash": token_hash,
         "created_at": now_str(),
-        "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
+        "expires_at": (moscow_now() + timedelta(hours=12)).isoformat(timespec="seconds"),
     }
     sessions.append(session_record)
     user.pop("auth_token", None)
@@ -3321,7 +3354,7 @@ def _passkey_create_login_session(user):
     sessions.append({
         "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "created_at": now_str(),
-        "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
+        "expires_at": (moscow_now() + timedelta(hours=12)).isoformat(timespec="seconds"),
     })
     user.pop("auth_token", None)
     # Limit unbounded growth while keeping recent device sessions.
@@ -3451,14 +3484,14 @@ st.components.v1.html("""
     };
     const now = Date.now();
     const previous = Number(readCookie('crm_last_activity'));
-    // Если предыдущая активность уже старше 60 минут, не продлеваем сессию одним поздним кликом.
-    if (previous && now - previous >= 60 * 60 * 1000) {
+    // Если предыдущая активность уже старше 12 часов, не продлеваем сессию одним поздним кликом.
+    if (previous && now - previous >= 12 * 60 * 60 * 1000) {
       writeCookie('crm_session_expired', '1');
     }
     if (!window.parent.__crmActivityTrackerInstalled) {
       window.parent.__crmActivityTrackerInstalled = true;
       const win = window.parent;
-      const IDLE_LIMIT = 60 * 60 * 1000;
+      const IDLE_LIMIT = 12 * 60 * 60 * 1000;
       let lastWrite = 0;
       let idleTimer = null;
       const expireAndReload = () => {
@@ -3528,13 +3561,9 @@ def _user_has_auth_token(user, token):
         if isinstance(auth_session, dict):
             saved_hash = auth_session.get("token_hash", "")
             saved_token = auth_session.get("token", "")  # совместимость с ранними тестовыми/старыми записями
-            expires_at = auth_session.get("expires_at")
-            if expires_at:
-                try:
-                    if datetime.fromisoformat(str(expires_at)) < moscow_now():
-                        continue
-                except (TypeError, ValueError):
-                    continue
+            # Expiry is evaluated against the last real browser activity below.
+            # Do not reject the token here solely because its stored expiry is old:
+            # an active browser may have written a newer activity cookie before rerun.
             if saved_hash and secrets.compare_digest(str(saved_hash), token_hash):
                 return True
         else:
@@ -3587,14 +3616,14 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
         if _user_has_auth_token(_cookie_user, _auth_token):
             _stored_expiry = _auth_token_expiry(_cookie_user, _auth_token)
             if _stored_expiry is not None:
-                _server_last_activity = _stored_expiry - timedelta(minutes=60)
+                _server_last_activity = _stored_expiry - timedelta(hours=12)
             else:
                 # Legacy tokens without expiry are migrated to the current inactivity policy.
                 _server_last_activity = _client_activity or moscow_now()
             _restored_last_activity = max(
                 [_server_last_activity] + ([_client_activity] if _client_activity else [])
             )
-            if moscow_now() - _restored_last_activity >= timedelta(minutes=60):
+            if moscow_now() - _restored_last_activity >= timedelta(hours=12):
                 st.session_state["_auth_expired"] = True
                 break
             st.session_state.authenticated = True
@@ -3611,7 +3640,7 @@ if st.session_state.get("authenticated"):
     _last_activity = st.session_state.get("_auth_last_activity")
     if not isinstance(_last_activity, datetime):
         _last_activity = _client_activity or moscow_now()
-    if _client_expired or moscow_now() - _last_activity >= timedelta(minutes=60):
+    if _client_expired or moscow_now() - _last_activity >= timedelta(hours=12):
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -3636,7 +3665,7 @@ if st.session_state.get("authenticated"):
                 for _active_user in st.session_state.crm_store.get("users", []):
                     for _active_session in _active_user.get("auth_sessions", []):
                         if isinstance(_active_session, dict) and secrets.compare_digest(str(_active_session.get("token_hash", "")), _token_hash):
-                            _active_session["expires_at"] = (_last_activity + timedelta(minutes=60)).isoformat(timespec="seconds")
+                            _active_session["expires_at"] = (_last_activity + timedelta(hours=12)).isoformat(timespec="seconds")
                             _expiry_changed = True
                 if _expiry_changed:
                     save_data(st.session_state.crm_store)
@@ -3898,7 +3927,7 @@ def check_login(username, password):
 
 if not st.session_state.authenticated:
     if st.session_state.pop("_auth_expired", False):
-        st.info("Сессия завершена после 60 минут бездействия. Войдите снова.")
+        st.info("Сессия завершена после 12 часов бездействия. Войдите снова.")
     # A remembered browser is identified by a non-secret login cookie, but must prove
     # knowledge of the PIN on every fresh page session.
     _remembered_user = get_user_by_login(_remembered_login) if _remembered_login else None
@@ -4033,7 +4062,7 @@ if not st.session_state.authenticated:
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
             remember_login = st.checkbox("Запомнить меня в этом браузере", value=False, key="remember_login_checkbox")
             if remember_login:
-                st.caption("Сессия действует до 60 минут бездействия. При активности CRM продлевает сессию автоматически.")
+                st.caption("Сессия действует до 12 часов бездействия. При активности CRM продлевает сессию автоматически.")
                 _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="default", max_chars=8, key="new_login_pin", placeholder="Придумайте PIN-код")
                 _confirm_pin = st.text_input("Повторите PIN-код:", type="default", max_chars=8, key="confirm_login_pin", placeholder="Повторите PIN-код")
                 st.markdown("""<style>
@@ -4370,7 +4399,7 @@ with st.sidebar:
                         u["auth_sessions"] = [{
                             "token_hash": hashlib.sha256(_new_token.encode("utf-8")).hexdigest(),
                             "created_at": now_str(),
-                            "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
+                            "expires_at": (moscow_now() + timedelta(hours=12)).isoformat(timespec="seconds"),
                         }]
                 save_data(st.session_state.crm_store)
                 cookie_manager.set(
@@ -4582,7 +4611,36 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         )
         nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
         nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
-        nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
+        _client_options = {str(c.get("id", "")): c for c in st.session_state.crm_store.get("clients", [])}
+        _client_display = {str(c.get("id", "")): str(c.get("name", "Клиент")) for c in _client_options.values()}
+        for _client_item in _client_options.values():
+            for _extra_phone in _client_item.get("extra_phones", []) or []:
+                if isinstance(_extra_phone, dict):
+                    _contact_key = f"{_client_item.get('id')}|{_extra_phone.get('phone','')}"
+                    _client_display[_contact_key] = f"{_client_item.get('name','Клиент')} — {(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
+        _receiver_row, _picker_row = st.columns([4, 1.5])
+        with _receiver_row:
+            nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
+        with _picker_row:
+            st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+            if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
+                st.session_state[f"nt_show_client_picker_{key_suffix}"] = not st.session_state.get(f"nt_show_client_picker_{key_suffix}", False)
+        if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
+            _picked_contact = st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента")
+            if st.button("Заполнить поля", key=f"nt_apply_client_{key_suffix}", use_container_width=True):
+                if _picked_contact:
+                    _parts = str(_picked_contact).split("|", 1)
+                    _picked_client = _client_options.get(_parts[0])
+                    if _picked_client:
+                        if len(_parts) > 1:
+                            _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
+                            st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
+                            st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
+                        else:
+                            st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
+                            st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
+                    st.session_state[f"nt_show_client_picker_{key_suffix}"] = False
+                    st.rerun()
         nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
         nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
         _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
@@ -4685,8 +4743,7 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         if d.get("deal_comments"):
             st.markdown("**Комментарии:**")
-            for cm in d["deal_comments"]:
-                st.markdown(f"- *{cm.get('time', '')}*: {linkify_text(cm.get('text', ''))}", unsafe_allow_html=True)
+            render_soft_delete_comments(d["deal_comments"], f"deal_card_{d['id']}", "time", "author")
         dc_clr_key = f"clr_dc_{d['id']}"
         if st.session_state.get(dc_clr_key):
             st.session_state[f"dc_input_{d['id']}"] = ""
@@ -4694,7 +4751,7 @@ def render_deal_card_expanded(d, cl):
         nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
         if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
             if nc.strip():
-                d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
+                d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
                 d["last_modified"] = now_str()
                 st.session_state[dc_clr_key] = True
                 commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
@@ -5226,8 +5283,14 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
                 st.error(f"Не удалось прочитать файл: {e}")
     c1,c2=st.columns(2)
     with c1:
+        _payer_type_key = f"{key}_payer_type"
+        def _payer_type_changed():
+            st.session_state[dirty] = True
+            if st.session_state.get(_payer_type_key) == "person":
+                st.session_state[f"{key}_legal_name"] = str(client.get("name", "") or "")
+        st.selectbox("Тип плательщика",["company","ip","person"],format_func=lambda x:{"company":"Юридическое лицо (ООО)","ip":"Индивидуальный предприниматель","person":"Физическое лицо"}[x],key=_payer_type_key,on_change=_payer_type_changed)
         st.text_input("Наименование юр. лица / ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.selectbox("Тип плательщика",["company","ip","person"],format_func=lambda x:{"company":"Юридическое лицо (ООО)","ip":"Индивидуальный предприниматель","person":"Физическое лицо"}[x],key=f"{key}_payer_type",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        _is_person_payer = st.session_state.get(_payer_type_key) == "person"
         st.text_input("ИНН",key=f"{key}_inn",on_change=lambda:st.session_state.__setitem__(dirty,True))
         st.text_input("КПП",key=f"{key}_kpp",on_change=lambda:st.session_state.__setitem__(dirty,True))
         st.text_area("Юридический адрес",key=f"{key}_address",height=75,on_change=lambda:st.session_state.__setitem__(dirty,True))
@@ -5244,8 +5307,8 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
         name=str(st.session_state.get(f"{key}_legal_name","")).strip()
         inn=str(st.session_state.get(f"{key}_inn","")).strip()
         address=str(st.session_state.get(f"{key}_address","")).strip()
-        if not name or not inn:
-            st.error("Укажи наименование плательщика и ИНН.")
+        if not name or (st.session_state.get(f"{key}_payer_type") != "person" and not inn):
+            st.error("Укажи ФИО физического лица либо наименование плательщика и ИНН для организации/ИП.")
         else:
             req={k:st.session_state.get(f"{key}_{k}","").strip() if isinstance(st.session_state.get(f"{key}_{k}",""),str) else st.session_state.get(f"{key}_{k}") for k,_ in fields}
             if existing_req:
@@ -5872,9 +5935,6 @@ def render_deal_products_block(d, key_prefix):
         with edit_col:
             if st.button("Открыть", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
                 _push_dialog_return()
-                # Расчёт должен иметь приоритет над устаревшими запросами других окон.
-                st.session_state.pop("dialog_invoice_request", None)
-                st.session_state.pop("dialog_client_requisites_client_id", None)
                 st.session_state["dialog_calculation_deal_id"] = str(d["id"])
                 st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
                 st.rerun()
@@ -5908,9 +5968,6 @@ def render_deal_products_block(d, key_prefix):
         calculations.append(calc)
         save_data(st.session_state.crm_store)
         _push_dialog_return()
-        # Не даём старому запросу другого окна перехватить открытие нового расчёта.
-        st.session_state.pop("dialog_invoice_request", None)
-        st.session_state.pop("dialog_client_requisites_client_id", None)
         st.session_state["dialog_calculation_deal_id"] = str(d["id"])
         st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
         st.rerun()
@@ -6371,8 +6428,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
         with right_col:
             if d.get("deal_comments"):
                 st.markdown("**Комментарии:**")
-                for cm in d["deal_comments"]:
-                    st.markdown(f"- *{cm.get('time', '')}*: {linkify_text(cm.get('text', ''))}", unsafe_allow_html=True)
+                render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
             dc_clr_key = f"dls_clr_dc_{deal_id}"
             if st.session_state.get(dc_clr_key):
                 st.session_state[f"dls_dc_input_{deal_id}"] = ""
@@ -6383,14 +6439,14 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
             if _dcc_clicked:
                 if nc.strip():
-                    d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nc.strip()})
+                    d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
                     d["last_modified"] = now_str()
                     st.session_state[dc_clr_key] = True
                     commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
                 else:
                     st.warning("Введите текст")
             st.markdown("---")
-            st.markdown("<div style='text-align:left;width:100%;'>**Файлы сделки:**</div>", unsafe_allow_html=True)
+            st.markdown("**Файлы сделки:**")
             st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
             render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True)
             st.markdown("**Загрузить файлы:**")
@@ -6449,6 +6505,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.session_state["dialog_create_deal_task_deal_id"] = deal_id
                 st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
                 st.rerun()
+            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             st.markdown("**Внесённые изменения**")
             _deal_changes = d.get("change_log", [])
             if _deal_changes:
@@ -6610,8 +6667,7 @@ def render_client_card_expanded(cl):
             render_reminders("client", cl.get("id", ""), cl.get("name", "Клиент"), f"client_{cl.get('id')}")
         with _right_col:
             st.markdown("**Комментарии:**")
-            for cc in cl.get("client_comments", []):
-                st.markdown(f"- *{cc.get('time', '')}*: {linkify_text(cc.get('text', ''))}", unsafe_allow_html=True)
+            render_soft_delete_comments(cl.get("client_comments", []), f"client_{cl['id']}", "time", "author")
             if not cl.get("client_comments"): st.caption("Пока нет комментариев")
             cc_clr_key = f"clr_cc_{cl['id']}"
             if st.session_state.get(cc_clr_key):
@@ -6623,7 +6679,7 @@ def render_client_card_expanded(cl):
                 _cc_clicked = st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True)
             if _cc_clicked:
                 if nci.strip():
-                    cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": nci.strip()})
+                    cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nci.strip()})
                     cl["last_modified"] = now_str()
                     st.session_state[cc_clr_key] = True
                     commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
@@ -6671,10 +6727,13 @@ def render_client_card_expanded(cl):
                     with _open_col:
                         if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
                             _push_dialog_return()
+                            for _stale_key in ("dialog_client_requisites_client_id", "dialog_invoice_request", "_pending_reminder_dialog", "dialog_task_completion", "dialog_deal_report", "dialog_create_deal_task_deal_id", "dialog_create_client_task_client_id", "dialog_create_client_task_deal_select_cl_id"):
+                                st.session_state.pop(_stale_key, None)
                             st.session_state["dialog_task_number"] = str(_task.get("task_number", ""))
                             st.session_state["dialog_task_client_id"] = str(cl.get("id", ""))
                             st.session_state["dialog_task_deal_id"] = ""
                             st.session_state["dialog_task_key"] = f"client_task_{cl['id']}_{_task.get('task_number', '')}"
+                            st.session_state["active_tab"] = "Клиенты"
                             st.rerun()
             else:
                 st.caption("Задач по клиенту пока нет.")
@@ -6850,22 +6909,19 @@ def render_client_in_tree(cl):
         if st.session_state.get(show_cd_key, False):
             with st.container(border=True):
                 cd_title = st.text_input("Тема:", key=f"cd_title_{cl['id']}")
+                cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
-                cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cd_ps_{cl['id']}")
                 if st.button("Создать", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
-                    if not cd_mgr:
-                        st.warning("Выберите ответственного")
-                    else:
-                        deals = st.session_state.crm_store.get("deals", [])
-                        did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
-                        dn = generate_deal_number()
-                        new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr, "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "change_log": [], "deal_chat": []}
-                        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
-                        cl["last_modified"] = now_str()
-                        st.session_state[show_cd_key] = False
-                        st.session_state.auto_expand_deal_id = did
-                        commit_and_rerun(st.session_state.crm_store, "Сделка создана")
+                    deals = st.session_state.crm_store.get("deals", [])
+                    did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+                    dn = generate_deal_number()
+                    new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr or "", "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "change_log": [], "deal_chat": []}
+                    st.session_state.crm_store.setdefault("deals", []).append(new_deal)
+                    cl["last_modified"] = now_str()
+                    st.session_state[show_cd_key] = False
+                    st.session_state.auto_expand_deal_id = did
+                    commit_and_rerun(st.session_state.crm_store, "Сделка создана")
 
 def render_client_form(fv):
     if st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False):
@@ -6946,9 +7002,7 @@ def add_client_dialog(fv):
                 st.session_state[f"new_cc_form_{fv}"] = ""
                 st.session_state[cc_form_clr] = False
             ncc = st.text_area("Комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
-            _fcc1, _fcc_btn, _fcc2 = st.columns([1, 2, 1])
-            with _fcc_btn:
-                _fcc_clicked = st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True)
+            _fcc_clicked = st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True)
             if _fcc_clicked:
                 if ncc.strip():
                     st.session_state.setdefault("pending_client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
@@ -6956,8 +7010,28 @@ def add_client_dialog(fv):
                     st.rerun()
                 else: st.warning("Введите текст")
             if st.session_state.get("pending_client_comments"):
-                for pc in st.session_state["pending_client_comments"]:
-                    st.markdown(f"- *{pc['time']}*: {pc['text']}")
+                for _pci, pc in enumerate(st.session_state["pending_client_comments"]):
+                    _pc_row, _pc_del = st.columns([10, 1])
+                    with _pc_row:
+                        _pc_text = html.escape(str(pc.get("text", "")))
+                        _pc_line = f"- *{pc.get('time', '')}*: {_pc_text}"
+                        st.markdown(f"<s>{_pc_line}</s>" if pc.get("deleted") else _pc_line, unsafe_allow_html=True)
+                    with _pc_del:
+                        if not pc.get("deleted") and st.button("×", key=f"pending_comment_delete_{fv}_{_pci}", help="Удалить комментарий"):
+                            st.session_state[f"pending_comment_confirm_{fv}_{_pci}"] = True
+                    _pck = f"pending_comment_confirm_{fv}_{_pci}"
+                    if st.session_state.get(_pck) and not pc.get("deleted"):
+                        st.warning("Удалить комментарий? Он останется зачёркнутым.")
+                        _pc_yes, _pc_no = st.columns(2)
+                        with _pc_yes:
+                            if st.button("Подтвердить", key=f"pending_comment_yes_{fv}_{_pci}", type="primary"):
+                                pc["deleted"] = True
+                                st.session_state.pop(_pck, None)
+                                st.rerun()
+                        with _pc_no:
+                            if st.button("Отмена", key=f"pending_comment_no_{fv}_{_pci}"):
+                                st.session_state.pop(_pck, None)
+                                st.rerun()
     st.markdown("---")
     ac_ph, ac_em, ac_ad = st.columns(3)
     with ac_ph:
@@ -6995,7 +7069,20 @@ def add_client_dialog(fv):
             cf = st.file_uploader("Прикрепить файлы:", key=f"cf_{fv}", accept_multiple_files=True)
     if st.button("Внести клиента в базу", use_container_width=True, type="primary", key=f"add_client_btn_{fv}"):
         if cn and cp:
-            if not cm: st.error("Выберите ответственного")
+            _new_name_norm = re.sub(r"\s+", " ", cn.strip()).casefold()
+            _new_phone_norm = re.sub(r"\D", "", cp)
+            _dupes = []
+            for _existing in st.session_state.crm_store.get("clients", []):
+                _old_name_norm = re.sub(r"\s+", " ", str(_existing.get("name", "")).strip()).casefold()
+                _old_phone_norm = re.sub(r"\D", "", str(_existing.get("phone", "")))
+                _phone_match = bool(_new_phone_norm and _old_phone_norm and ( _new_phone_norm == _old_phone_norm or (len(_new_phone_norm) >= 10 and len(_old_phone_norm) >= 10 and _new_phone_norm[-10:] == _old_phone_norm[-10:])))
+                if _phone_match or (_new_name_norm and _new_name_norm == _old_name_norm):
+                    _dupes.append(_existing)
+            if _dupes:
+                st.warning("Возможный дубль клиента уже существует:")
+                for _dup in _dupes[:5]:
+                    st.markdown(f"- **{html.escape(str(_dup.get('name', '')))}** · {html.escape(str(_dup.get('phone', '')))}")
+            elif not cm: st.error("Выберите ответственного")
             elif not cc: st.error("Выберите категорию")
             else:
                 clients = st.session_state.crm_store["clients"]
@@ -7652,35 +7739,32 @@ def create_deal_dialog(cl_id):
     _deal_create_left, _deal_create_right = st.columns(2)
     with _deal_create_left:
         cd_title = st.text_input("Тема:", key=f"cdlg_title_{cl_id}")
+        cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
         cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cdlg_budget_{cl_id}", placeholder="Введите сумму")
-        cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
         cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
     with _deal_create_right:
         st.markdown("**Комментарии**")
         cd_comment = st.text_area("Комментарий:", key=f"cdlg_comment_{cl_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
         cd_files = st.file_uploader("Файлы сделки:", key=f"cdlg_files_{cl_id}", accept_multiple_files=True)
     if st.button("Создать", key=f"cdlg_go_{cl_id}", use_container_width=True, type="primary"):
-        if not cd_mgr:
-            st.warning("Выберите ответственного")
-        else:
-            deals = st.session_state.crm_store.get("deals", [])
-            did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
-            dn = generate_deal_number()
-            new_deal = {"id": did, "client_id": cl_id, "title": dn, "deal_number": dn, "deal_title": cd_title.strip(),
-                        "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0,
-                        "status": "В работе", "manager": cd_mgr, "payment_status": cd_ps,
+        deals = st.session_state.crm_store.get("deals", [])
+        did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+        dn = generate_deal_number()
+        new_deal = {"id": did, "client_id": cl_id, "title": dn, "deal_number": dn, "deal_title": cd_title.strip(),
+                    "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0,
+                    "status": "В работе", "manager": cd_mgr or "", "payment_status": cd_ps,
                         "deal_comments": ([{"time": now_str(), "text": cd_comment.strip()}] if cd_comment.strip() else []), "deal_files": (normalize_file_list(save_uploaded_files(cd_files, cl_id, "deal_file")) if cd_files else []), "close_files": [], "archive_files": [],
                         "last_modified": now_str(), "created_at": now_str(),
                         "created_by": st.session_state.get("user_login", ""), "change_log": [], "deal_chat": []}
-            st.session_state.crm_store.setdefault("deals", []).append(new_deal)
-            _cl["last_modified"] = now_str()
-            save_data(st.session_state.crm_store)
-            st.toast("Сделка создана", icon="✅")
-            st.session_state.pop("dialog_create_deal_from_client", None)
-            st.session_state["_in_dialog"] = False
-            _push_dialog_return()
-            st.session_state["_open_created_deal"] = did
-            st.rerun()
+        st.session_state.crm_store.setdefault("deals", []).append(new_deal)
+        _cl["last_modified"] = now_str()
+        save_data(st.session_state.crm_store)
+        st.toast("Сделка создана", icon="✅")
+        st.session_state.pop("dialog_create_deal_from_client", None)
+        st.session_state["_in_dialog"] = False
+        _push_dialog_return()
+        st.session_state["_open_created_deal"] = did
+        st.rerun()
 
 
 # ============================================================
@@ -9067,28 +9151,6 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
             _active = st.session_state.get("_crm_active_dialog") or {}
             if _active.get("name") == "deal_calculation_dialog":
                 st.session_state.pop("_crm_active_dialog", None)
-
-# Финальная защита открытия расчёта: если в состоянии есть валидный запрос расчёта,
-# он имеет приоритет над оставшимися устаревшими запросами других окон.
-_final_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
-_final_calc_id = st.session_state.get("dialog_calculation_calc_id")
-if _final_calc_deal_id and _final_calc_id:
-    _final_calc_deal = next(
-        (d for d in st.session_state.crm_store.get("deals", [])
-         if str(d.get("id")) == str(_final_calc_deal_id)), None
-    )
-    _final_calc = next(
-        (c for c in (_final_calc_deal or {}).get("calculations", [])
-         if str(c.get("id")) == str(_final_calc_id) and not c.get("deleted")), None
-    )
-    if _final_calc_deal and _final_calc:
-        _current_dialog = st.session_state.get("_crm_active_dialog") or {}
-        if (_current_dialog.get("name") != "deal_calculation_dialog"
-                or tuple(_current_dialog.get("args", ())) != (_final_calc_deal_id, _final_calc_id)):
-            deal_calculation_dialog(_final_calc_deal_id, _final_calc_id)
-    else:
-        st.session_state.pop("dialog_calculation_deal_id", None)
-        st.session_state.pop("dialog_calculation_calc_id", None)
 
 # Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
 # Внутри отображается исходное содержимое соответствующего диалога.
