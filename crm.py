@@ -6213,12 +6213,9 @@ def deal_calculation_dialog(deal_id, calc_id):
         for k in (dirty_key, warning_key, f"{key}_save_requested", snapshot_key):
             st.session_state.pop(k, None)
         st.toast("Расчёт сохранён", icon="✅")
-        # После сохранения окно расчёта закрывается. Не оставляем его ID в session_state,
-        # иначе глобальный диспетчер повторно открывает его при любом следующем клике.
-        st.session_state.pop("dialog_calculation_deal_id", None)
-        st.session_state.pop("dialog_calculation_calc_id", None)
-        _pop_dialog_return()
-        st.rerun()
+        # После сохранения оставляем окно расчёта открытым, чтобы можно было
+        # продолжить работу с расчётом без повторного открытия окна.
+        _calc_refresh()
 
 def render_deal_detail(d, cl, cu, key_prefix):
     """Детали сделки в 2 колонки — как render_task_detail."""
