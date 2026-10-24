@@ -5872,6 +5872,9 @@ def render_deal_products_block(d, key_prefix):
         with edit_col:
             if st.button("Открыть", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
                 _push_dialog_return()
+                # Расчёт должен иметь приоритет над устаревшими запросами других окон.
+                st.session_state.pop("dialog_invoice_request", None)
+                st.session_state.pop("dialog_client_requisites_client_id", None)
                 st.session_state["dialog_calculation_deal_id"] = str(d["id"])
                 st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
                 st.rerun()
@@ -5905,6 +5908,9 @@ def render_deal_products_block(d, key_prefix):
         calculations.append(calc)
         save_data(st.session_state.crm_store)
         _push_dialog_return()
+        # Не даём старому запросу другого окна перехватить открытие нового расчёта.
+        st.session_state.pop("dialog_invoice_request", None)
+        st.session_state.pop("dialog_client_requisites_client_id", None)
         st.session_state["dialog_calculation_deal_id"] = str(d["id"])
         st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
         st.rerun()
@@ -9061,6 +9067,28 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
             _active = st.session_state.get("_crm_active_dialog") or {}
             if _active.get("name") == "deal_calculation_dialog":
                 st.session_state.pop("_crm_active_dialog", None)
+
+# Финальная защита открытия расчёта: если в состоянии есть валидный запрос расчёта,
+# он имеет приоритет над оставшимися устаревшими запросами других окон.
+_final_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
+_final_calc_id = st.session_state.get("dialog_calculation_calc_id")
+if _final_calc_deal_id and _final_calc_id:
+    _final_calc_deal = next(
+        (d for d in st.session_state.crm_store.get("deals", [])
+         if str(d.get("id")) == str(_final_calc_deal_id)), None
+    )
+    _final_calc = next(
+        (c for c in (_final_calc_deal or {}).get("calculations", [])
+         if str(c.get("id")) == str(_final_calc_id) and not c.get("deleted")), None
+    )
+    if _final_calc_deal and _final_calc:
+        _current_dialog = st.session_state.get("_crm_active_dialog") or {}
+        if (_current_dialog.get("name") != "deal_calculation_dialog"
+                or tuple(_current_dialog.get("args", ())) != (_final_calc_deal_id, _final_calc_id)):
+            deal_calculation_dialog(_final_calc_deal_id, _final_calc_id)
+    else:
+        st.session_state.pop("dialog_calculation_deal_id", None)
+        st.session_state.pop("dialog_calculation_calc_id", None)
 
 # Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
 # Внутри отображается исходное содержимое соответствующего диалога.
