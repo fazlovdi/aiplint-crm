@@ -3095,14 +3095,44 @@ def _create_browser_session(user, remember=True):
     if not isinstance(sessions, list):
         sessions = []
         user["auth_sessions"] = sessions
-    sessions.append({
-        "token_hash": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    session_record = {
+        "token_hash": token_hash,
         "created_at": now_str(),
         "expires_at": (moscow_now() + timedelta(minutes=60)).isoformat(timespec="seconds"),
-    })
+    }
+    sessions.append(session_record)
     user.pop("auth_token", None)
     user["auth_sessions"] = sessions[-30:]
     save_data(st.session_state.crm_store)
+
+    # save_data() refreshes crm_store with a deep-copied merged snapshot. Rebind the
+    # user and verify that the new token hash survived the merge before issuing the cookie.
+    login_key = str(user.get("login", ""))
+    user = next((u for u in st.session_state.crm_store.get("users", [])
+                 if str(u.get("login", "")) == login_key), None)
+    if user is None:
+        raise RuntimeError("Не удалось сохранить пользователя для новой сессии")
+    saved_sessions = user.get("auth_sessions", [])
+    token_is_saved = any(
+        isinstance(item, dict) and secrets.compare_digest(str(item.get("token_hash", "")), token_hash)
+        for item in saved_sessions
+    )
+    if not token_is_saved:
+        if not isinstance(saved_sessions, list):
+            saved_sessions = []
+        saved_sessions.append(session_record)
+        user["auth_sessions"] = saved_sessions[-30:]
+        user.pop("auth_token", None)
+        save_data(st.session_state.crm_store)
+        user = next((u for u in st.session_state.crm_store.get("users", [])
+                     if str(u.get("login", "")) == login_key), None)
+        if user is None or not any(
+            isinstance(item, dict) and secrets.compare_digest(str(item.get("token_hash", "")), token_hash)
+            for item in user.get("auth_sessions", [])
+        ):
+            raise RuntimeError("Токен сессии не сохранился в базе CRM")
+
     st.session_state.authenticated = True
     st.session_state.user_role = user.get("role")
     st.session_state.user_login = user.get("login")
@@ -3151,29 +3181,51 @@ def _create_browser_session(user, remember=True):
         components.html(f"""
         <script>
         (() => {{
+          const status = document.getElementById('auth-cookie-write-status');
           try {{
-            const doc = window.parent.document;
-            const secure = window.parent.location.protocol === 'https:' ? '; Secure' : '';
+            const win = window.parent;
+            const doc = win.document;
+            const secure = win.location.protocol === 'https:' ? '; Secure' : '';
             const base = '; path=/; SameSite=Lax' + secure;
             const token = {_cookie_token_js};
             const login = {_cookie_login_js};
+            const remember = {_cookie_remember_js};
+            const readCookie = (name) => {{
+              const prefix = name + '=';
+              const item = doc.cookie.split('; ').find(v => v.startsWith(prefix));
+              return item ? decodeURIComponent(item.slice(prefix.length)) : '';
+            }};
             doc.cookie = 'auth_token=' + encodeURIComponent(token) + base + '; max-age=315360000';
             doc.cookie = 'crm_last_activity=' + encodeURIComponent(String(Date.now())) + base + '; max-age=315360000';
             doc.cookie = 'crm_session_expired=' + base + '; max-age=0';
-            if ({_cookie_remember_js}) {{
+            if (remember) {{
               doc.cookie = 'remembered_user=' + encodeURIComponent(login) + base + '; max-age=315360000';
             }} else {{
               doc.cookie = 'remembered_user=' + base + '; max-age=0';
             }}
-            window.setTimeout(() => window.parent.location.reload(), 250);
+            // Never reload just because cookie assignment did not throw: browsers can silently
+            // reject a cookie. Confirm that the exact session token is readable first.
+            const deadline = Date.now() + 2500;
+            const confirmAndReload = () => {{
+              const tokenSaved = readCookie('auth_token') === token;
+              const loginSaved = !remember || readCookie('remembered_user') === login;
+              if (tokenSaved && loginSaved) {{
+                if (status) status.textContent = 'Сессия сохранена. Выполняется вход…';
+                win.setTimeout(() => win.location.reload(), 150);
+              }} else if (Date.now() < deadline) {{
+                win.setTimeout(confirmAndReload, 100);
+              }} else {{
+                if (status) status.textContent = 'Браузер не сохранил токен авторизации. Разрешите cookies для этого сайта и повторите вход. PIN-код сохранён.';
+              }}
+            }};
+            confirmAndReload();
           }} catch (e) {{
-            const status = document.getElementById('auth-cookie-write-status');
-            if (status) status.textContent = 'Не удалось сохранить сессию в браузере. Разрешите cookies и повторите вход.';
+            if (status) status.textContent = 'Не удалось сохранить сессию в браузере. Разрешите cookies для этого сайта и повторите вход.';
           }}
         }})();
         </script>
-        <div id="auth-cookie-write-status" style="font-size:12px;color:#b42318"></div>
-        """, height=0, width=0)
+        <div id="auth-cookie-write-status" style="font-size:12px;color:#b42318;padding:6px 0"></div>
+        """, height=42, width=500)
         # Stop this run so the browser-side cookie write/reload, not an immediate Python
         # rerun, completes the login transition.
         st.stop()
@@ -3854,18 +3906,12 @@ if not st.session_state.authenticated:
                     "Войти по PIN-коду", use_container_width=True, type="primary",
                     key="remembered_pin_login_btn",
                 )
-                _pin_attempt = bool(_pin_input and re.fullmatch(r"\d{4,8}", _pin_input or ""))
-                if _pin_attempt and _pin_verify(_remembered_user, _pin_input):
-                    _create_browser_session(_remembered_user, remember=True)
-                    st.toast("Успешный вход", icon="🔓")
-                    st.rerun()
-                elif _pin_submit:
-                    if _pin_verify(_remembered_user, _pin_input):
+                if _pin_submit:
+                    if re.fullmatch(r"\d{4,8}", _pin_input or "") and _pin_verify(_remembered_user, _pin_input):
                         _create_browser_session(_remembered_user, remember=True)
-                        st.toast("Успешный вход", icon="🔓")
-                        st.rerun()
+                        st.toast("PIN подтверждён. Выполняется вход…", icon="🔓")
                     else:
-                        st.error("Неверный PIN-код.")
+                        st.error("Неверный PIN-код. Проверьте, что введены 4–8 цифр.")
                 if st.button("Войти по логину и паролю", use_container_width=True, key="switch_to_password_login"):
                     try:
                         cookie_manager.delete("remembered_user")
