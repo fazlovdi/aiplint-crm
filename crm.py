@@ -3138,6 +3138,7 @@ def _create_browser_session(user, remember=True):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = bool(remember)
+    st.session_state._auth_token_current = token
     st.session_state._auth_last_activity = moscow_now()
     try:
         _activity_now_ms = str(int(time.time() * 1000))
@@ -3150,11 +3151,15 @@ def _create_browser_session(user, remember=True):
         pass
     # One signed-by-randomness bearer cookie; server-side record limits it to 60 minutes
     # of inactivity. The browser cookie can persist, but an expired server session cannot.
-    cookie_manager.set(
-        "auth_token", token,
-        expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650 if remember else 1),
-        key="set_auth_token_cookie",
-    )
+    if remember:
+        cookie_manager.set(
+            "auth_token", token,
+            expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+            key="set_auth_token_cookie",
+        )
+    else:
+        # Session cookie: keep this login only for the current browser session.
+        cookie_manager.set("auth_token", token, key="set_auth_token_cookie")
     # This cookie selects the PIN screen on this browser. It contains only the
     # login identifier, never the PIN or password; authentication still requires
     # the valid auth_token or a correct PIN.
@@ -3195,8 +3200,9 @@ def _create_browser_session(user, remember=True):
               const item = doc.cookie.split('; ').find(v => v.startsWith(prefix));
               return item ? decodeURIComponent(item.slice(prefix.length)) : '';
             }};
-            doc.cookie = 'auth_token=' + encodeURIComponent(token) + base + '; max-age=315360000';
-            doc.cookie = 'crm_last_activity=' + encodeURIComponent(String(Date.now())) + base + '; max-age=315360000';
+            const persistence = remember ? '; max-age=315360000' : '';
+            doc.cookie = 'auth_token=' + encodeURIComponent(token) + base + persistence;
+            doc.cookie = 'crm_last_activity=' + encodeURIComponent(String(Date.now())) + base + persistence;
             doc.cookie = 'crm_session_expired=' + base + '; max-age=0';
             if (remember) {{
               doc.cookie = 'remembered_user=' + encodeURIComponent(login) + base + '; max-age=315360000';
@@ -3561,6 +3567,7 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
             st.session_state.user_login = _cookie_user.get("login")
             st.session_state.user_name = _cookie_user.get("name", _cookie_user.get("login", ""))
             st.session_state.remember_login = True
+            st.session_state._auth_token_current = _auth_token
             st.session_state._auth_last_activity = _restored_last_activity
             break
 
@@ -3575,6 +3582,7 @@ if st.session_state.get("authenticated"):
         st.session_state.user_login = None
         st.session_state.user_name = None
         st.session_state.pop("_auth_last_activity", None)
+        st.session_state.pop("_auth_token_current", None)
         st.session_state["_auth_expired"] = True
         try:
             cookie_manager.delete("auth_token")
@@ -3888,9 +3896,13 @@ if not st.session_state.authenticated:
                       el.setAttribute('pattern','[0-9]*');
                       el.setAttribute('enterkeyhint','go');
                       el.setAttribute('autocomplete','off');
+                      el.setAttribute('autocorrect','off');
+                      el.setAttribute('autocapitalize','off');
                       el.setAttribute('name','crm_pin_code');
                       el.setAttribute('data-lpignore','true');
                       el.setAttribute('data-1p-ignore','true');
+                      el.setAttribute('data-bwignore','true');
+                      el.setAttribute('data-form-type','other');
                       el.setAttribute('spellcheck','false');
                     });
                   }
@@ -3959,8 +3971,47 @@ if not st.session_state.authenticated:
             remember_login = st.checkbox("Запомнить меня в этом браузере", value=False, key="remember_login_checkbox")
             if remember_login:
                 st.caption("Сессия действует до 60 минут бездействия. При активности CRM продлевает сессию автоматически.")
-                _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="password", max_chars=8, key="new_login_pin")
-                _confirm_pin = st.text_input("Повторите PIN-код:", type="password", max_chars=8, key="confirm_login_pin")
+                _new_pin = st.text_input("Создайте PIN-код (4–8 цифр):", type="default", max_chars=8, key="new_login_pin", placeholder="Придумайте PIN-код")
+                _confirm_pin = st.text_input("Повторите PIN-код:", type="default", max_chars=8, key="confirm_login_pin", placeholder="Повторите PIN-код")
+                st.markdown("""<style>
+                .st-key-new_login_pin input,
+                .st-key-confirm_login_pin input {
+                    -webkit-text-security: disc !important;
+                    text-security: disc !important;
+                }
+                </style>""", unsafe_allow_html=True)
+                st.markdown("""<script>
+                (function(){
+                  const tunePinFields = () => {
+                    const doc = parent.document;
+                    const rules = [
+                      ['.st-key-new_login_pin input', 'crm_pin_create'],
+                      ['.st-key-confirm_login_pin input', 'crm_pin_confirm']
+                    ];
+                    rules.forEach(([selector, fieldName]) => {
+                      doc.querySelectorAll(selector).forEach((el) => {
+                        el.setAttribute('autocomplete', 'off');
+                        el.setAttribute('autocorrect', 'off');
+                        el.setAttribute('autocapitalize', 'off');
+                        el.setAttribute('spellcheck', 'false');
+                        el.setAttribute('name', fieldName);
+                        el.setAttribute('data-lpignore', 'true');
+                        el.setAttribute('data-1p-ignore', 'true');
+                        el.setAttribute('data-bwignore', 'true');
+                        el.setAttribute('data-form-type', 'other');
+                        el.setAttribute('inputmode', 'numeric');
+                        el.setAttribute('pattern', '[0-9]*');
+                      });
+                    });
+                  };
+                  tunePinFields();
+                  const root = parent.document.querySelector('[data-testid="stAppViewContainer"]') || parent.document.body;
+                  if (root && !root.__crmPinFieldsObserver) {
+                    root.__crmPinFieldsObserver = new MutationObserver(tunePinFields);
+                    root.__crmPinFieldsObserver.observe(root, {childList:true, subtree:true});
+                  }
+                })();
+                </script>""", unsafe_allow_html=True)
             else:
                 _new_pin = _confirm_pin = ""
             if st.button("Войти", use_container_width=True, type="primary"):
@@ -4299,7 +4350,7 @@ with st.sidebar:
                 st.rerun()
     st.markdown("---")
     if st.button("Выйти", use_container_width=True):
-        _tok = cookies.get("auth_token")
+        _tok = cookies.get("auth_token") or st.session_state.get("_auth_token_current")
         if _tok:
             _changed = False
             for u in st.session_state.crm_store.get("users", []):
@@ -4339,6 +4390,7 @@ with st.sidebar:
         st.session_state.user_name = None
         st.session_state.remember_login = False
         st.session_state.pop("_auth_last_activity", None)
+        st.session_state.pop("_auth_token_current", None)
         st.rerun()
 
 # Compute counters for tabs — only by authorized user
