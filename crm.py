@@ -3686,7 +3686,48 @@ if not st.session_state.authenticated:
     with mc:
         with st.container(border=True):
             iu = st.text_input("Логин:", placeholder="Введите логин", key="login_username")
+            _allow_browser_password_save = st.checkbox(
+                "Сохранить пароль в браузере",
+                value=False,
+                key="login_save_password",
+                help="Если снять галочку, CRM попросит браузер не предлагать сохранение этого пароля.",
+            )
             ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
+            # Streamlit text_input has no autocomplete parameter. Set it in the parent
+            # document so password managers only recognize this as a login password
+            # when the user explicitly opted in.
+            components.html(
+                f"""
+                <script>
+                (() => {{
+                    const allowSave = {str(bool(_allow_browser_password_save)).lower()};
+                    const applyAutocomplete = () => {{
+                        try {{
+                            const doc = window.parent.document;
+                            const username = doc.querySelector('input[placeholder="Введите логин"]');
+                            const password = doc.querySelector('input[placeholder="Введите пароль"]');
+                            if (username) username.setAttribute('autocomplete', allowSave ? 'username' : 'off');
+                            if (password) {{
+                                password.setAttribute('autocomplete', allowSave ? 'current-password' : 'new-password');
+                                if (!allowSave) {{
+                                    password.setAttribute('data-lpignore', 'true');
+                                    password.setAttribute('data-1p-ignore', 'true');
+                                }} else {{
+                                    password.removeAttribute('data-lpignore');
+                                    password.removeAttribute('data-1p-ignore');
+                                }}
+                            }}
+                        }} catch (e) {{}}
+                    }};
+                    applyAutocomplete();
+                    setTimeout(applyAutocomplete, 100);
+                    setTimeout(applyAutocomplete, 400);
+                }})();
+                </script>
+                """,
+                height=0,
+                width=0,
+            )
             if st.button("Войти", use_container_width=True, type="primary"):
                 try:
                     _user_for_login = next((u for u in st.session_state.crm_store.get("users", []) if u.get("login") == iu.strip()), None)
