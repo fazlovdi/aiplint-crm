@@ -3887,33 +3887,44 @@ if not st.session_state.authenticated:
                     text-security: disc !important;
                 }
                 </style>""", unsafe_allow_html=True)
-                st.markdown("""<script>
+                st.components.v1.html("""<script>
                 (function(){
                   function tunePin(){
-                    const inputs = parent.document.querySelectorAll('input[placeholder="Введите PIN-код"]');
-                    inputs.forEach(function(el){
-                      el.setAttribute('inputmode','numeric');
-                      el.setAttribute('pattern','[0-9]*');
-                      el.setAttribute('enterkeyhint','go');
-                      el.setAttribute('autocomplete','off');
-                      el.setAttribute('autocorrect','off');
-                      el.setAttribute('autocapitalize','off');
-                      el.setAttribute('name','crm_pin_code');
-                      el.setAttribute('data-lpignore','true');
-                      el.setAttribute('data-1p-ignore','true');
-                      el.setAttribute('data-bwignore','true');
-                      el.setAttribute('data-form-type','other');
-                      el.setAttribute('spellcheck','false');
-                    });
+                    try {
+                      const doc = window.parent.document;
+                      doc.querySelectorAll('input[placeholder="Введите PIN-код"]').forEach(function(el){
+                        el.setAttribute('inputmode','numeric');
+                        el.setAttribute('pattern','[0-9]*');
+                        el.setAttribute('enterkeyhint','go');
+                        el.setAttribute('autocomplete','new-password');
+                        el.setAttribute('autocorrect','off');
+                        el.setAttribute('autocapitalize','off');
+                        el.setAttribute('name','crm_pin_' + Math.random().toString(36).slice(2));
+                        el.setAttribute('data-lpignore','true');
+                        el.setAttribute('data-1p-ignore','true');
+                        el.setAttribute('data-bwignore','true');
+                        el.setAttribute('data-form-type','other');
+                        el.setAttribute('data-autofill','off');
+                        el.setAttribute('spellcheck','false');
+                        el.setAttribute('readonly','readonly');
+                        if (!el.dataset.crmPinAutofillGuard) {
+                          el.dataset.crmPinAutofillGuard = '1';
+                          el.addEventListener('focus', function(){ el.removeAttribute('readonly'); });
+                          el.addEventListener('blur', function(){ el.setAttribute('readonly','readonly'); });
+                        }
+                      });
+                    } catch(e) {}
                   }
                   tunePin();
-                  const root = parent.document.querySelector('[data-testid="stAppViewContainer"]') || parent.document.body;
-                  if (root && !root.__pinInputModeObserver) {
-                    root.__pinInputModeObserver = new MutationObserver(tunePin);
-                    root.__pinInputModeObserver.observe(root, {childList:true, subtree:true});
-                  }
+                  try {
+                    const root = window.parent.document.querySelector('[data-testid="stAppViewContainer"]') || window.parent.document.body;
+                    if (root && !root.__pinInputModeObserver) {
+                      root.__pinInputModeObserver = new MutationObserver(tunePin);
+                      root.__pinInputModeObserver.observe(root, {childList:true, subtree:true});
+                    }
+                  } catch(e) {}
                 })();
-                </script>""", unsafe_allow_html=True)
+                </script>""", height=0)
                 _pin_submit = st.button(
                     "Войти по PIN-коду", use_container_width=True, type="primary",
                     key="remembered_pin_login_btn",
@@ -3980,38 +3991,49 @@ if not st.session_state.authenticated:
                     text-security: disc !important;
                 }
                 </style>""", unsafe_allow_html=True)
-                st.markdown("""<script>
+                st.components.v1.html("""<script>
                 (function(){
                   const tunePinFields = () => {
-                    const doc = parent.document;
-                    const rules = [
-                      ['.st-key-new_login_pin input', 'crm_pin_create'],
-                      ['.st-key-confirm_login_pin input', 'crm_pin_confirm']
-                    ];
-                    rules.forEach(([selector, fieldName]) => {
-                      doc.querySelectorAll(selector).forEach((el) => {
-                        el.setAttribute('autocomplete', 'off');
-                        el.setAttribute('autocorrect', 'off');
-                        el.setAttribute('autocapitalize', 'off');
-                        el.setAttribute('spellcheck', 'false');
-                        el.setAttribute('name', fieldName);
-                        el.setAttribute('data-lpignore', 'true');
-                        el.setAttribute('data-1p-ignore', 'true');
-                        el.setAttribute('data-bwignore', 'true');
-                        el.setAttribute('data-form-type', 'other');
-                        el.setAttribute('inputmode', 'numeric');
-                        el.setAttribute('pattern', '[0-9]*');
+                    try {
+                      const doc = window.parent.document;
+                      const rules = [
+                        ['.st-key-new_login_pin input', 'create'],
+                        ['.st-key-confirm_login_pin input', 'confirm']
+                      ];
+                      rules.forEach(([selector, fieldName]) => {
+                        doc.querySelectorAll(selector).forEach((el) => {
+                          el.setAttribute('autocomplete', 'new-password');
+                          el.setAttribute('autocorrect', 'off');
+                          el.setAttribute('autocapitalize', 'off');
+                          el.setAttribute('spellcheck', 'false');
+                          el.setAttribute('name', 'crm_pin_' + fieldName + '_' + Math.random().toString(36).slice(2));
+                          el.setAttribute('data-lpignore', 'true');
+                          el.setAttribute('data-1p-ignore', 'true');
+                          el.setAttribute('data-bwignore', 'true');
+                          el.setAttribute('data-form-type', 'other');
+                          el.setAttribute('data-autofill', 'off');
+                          el.setAttribute('inputmode', 'numeric');
+                          el.setAttribute('pattern', '[0-9]*');
+                          el.setAttribute('readonly', 'readonly');
+                          if (!el.dataset.crmPinAutofillGuard) {
+                            el.dataset.crmPinAutofillGuard = '1';
+                            el.addEventListener('focus', () => el.removeAttribute('readonly'));
+                            el.addEventListener('blur', () => el.setAttribute('readonly', 'readonly'));
+                          }
+                        });
                       });
-                    });
+                    } catch(e) {}
                   };
                   tunePinFields();
-                  const root = parent.document.querySelector('[data-testid="stAppViewContainer"]') || parent.document.body;
-                  if (root && !root.__crmPinFieldsObserver) {
-                    root.__crmPinFieldsObserver = new MutationObserver(tunePinFields);
-                    root.__crmPinFieldsObserver.observe(root, {childList:true, subtree:true});
-                  }
+                  try {
+                    const root = window.parent.document.querySelector('[data-testid="stAppViewContainer"]') || window.parent.document.body;
+                    if (root && !root.__crmPinFieldsObserver) {
+                      root.__crmPinFieldsObserver = new MutationObserver(tunePinFields);
+                      root.__crmPinFieldsObserver.observe(root, {childList:true, subtree:true});
+                    }
+                  } catch(e) {}
                 })();
-                </script>""", unsafe_allow_html=True)
+                </script>""", height=0)
             else:
                 _new_pin = _confirm_pin = ""
             if st.button("Войти", use_container_width=True, type="primary"):
