@@ -8236,7 +8236,19 @@ if st.session_state.active_tab == "Клиенты":
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
     _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
     _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
-    if _req_dialog_client_id:
+    _client_tab_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
+    _client_tab_calc_id = st.session_state.get("dialog_calculation_calc_id")
+    # Расчёт — дочернее окно сделки. Оно должно иметь приоритет над карточкой
+    # клиента/сделки, иначе старое состояние родительского окна перехватывает rerun.
+    if _client_tab_calc_deal_id and _client_tab_calc_id:
+        _client_tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_client_tab_calc_deal_id)), None)
+        _client_tab_calc = next((c for c in (_client_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_client_tab_calc_id) and not c.get("deleted")), None)
+        if _client_tab_calc_deal and _client_tab_calc:
+            deal_calculation_dialog(_client_tab_calc_deal_id, _client_tab_calc_id)
+        else:
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+    elif _req_dialog_client_id:
         client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
     elif _invoice_dialog_state:
         invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
