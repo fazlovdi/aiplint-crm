@@ -5180,6 +5180,10 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
     for k,_ in fields:
         if f"{key}_{k}" not in st.session_state:
             default_value = (existing_req or {}).get(k, "company" if k == "payer_type" else "")
+            if k == "email" and not str(default_value or "").strip():
+                _initial_payer_type = (existing_req or {}).get("payer_type", "company")
+                if _initial_payer_type == "person":
+                    default_value = str(client.get("email", "") or "").strip()
             st.session_state[f"{key}_{k}"] = default_value
     close_css=f"{key}_close_row"
     st.markdown(f'<style>.st-key-{close_css} .stButton>button{{width:36px!important;height:36px!important;min-width:36px!important;padding:0!important;background:#fff!important;border:1px solid #DCE0E5!important;color:#5A6B7D!important;}}</style>',unsafe_allow_html=True)
@@ -5281,34 +5285,49 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
                     st.warning("Не удалось найти реквизиты в файле. Если это скан, нужен OCR или файл с выделяемым текстом.")
             except Exception as e:
                 st.error(f"Не удалось прочитать файл: {e}")
-    c1,c2=st.columns(2)
-    with c1:
-        _payer_type_key = f"{key}_payer_type"
-        def _payer_type_changed():
-            st.session_state[dirty] = True
-            if st.session_state.get(_payer_type_key) == "person":
-                st.session_state[f"{key}_legal_name"] = str(client.get("name", "") or "")
-        st.selectbox("Тип плательщика",["company","ip","person"],format_func=lambda x:{"company":"Юридическое лицо (ООО)","ip":"Индивидуальный предприниматель","person":"Физическое лицо"}[x],key=_payer_type_key,on_change=_payer_type_changed)
-        st.text_input("Наименование юр. лица / ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        _is_person_payer = st.session_state.get(_payer_type_key) == "person"
-        st.text_input("ИНН",key=f"{key}_inn",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("КПП",key=f"{key}_kpp",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_area("Юридический адрес",key=f"{key}_address",height=75,on_change=lambda:st.session_state.__setitem__(dirty,True))
-    with c2:
-        st.text_input("Наименование банка",key=f"{key}_bank_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("БИК",key=f"{key}_bik",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("Корреспондентский счёт",key=f"{key}_corr_account",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("Расчётный счёт",key=f"{key}_settlement_account",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("Телефон",key=f"{key}_phone",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("Email",key=f"{key}_email",on_change=lambda:st.session_state.__setitem__(dirty,True))
+    _payer_type_key = f"{key}_payer_type"
+    def _payer_type_changed():
+        st.session_state[dirty] = True
+        if st.session_state.get(_payer_type_key) == "person":
+            # Для физлица используем ФИО и email из карточки клиента, если они заполнены.
+            client_name = str(client.get("name", "") or "").strip()
+            client_email = str(client.get("email", "") or "").strip()
+            if client_name:
+                st.session_state[f"{key}_legal_name"] = client_name
+            if client_email:
+                st.session_state[f"{key}_email"] = client_email
+
+    st.selectbox("Тип плательщика",["company","ip","person"],format_func=lambda x:{"company":"Юридическое лицо (ООО)","ip":"Индивидуальный предприниматель","person":"Физическое лицо"}[x],key=_payer_type_key,on_change=_payer_type_changed)
+    _is_person_payer = st.session_state.get(_payer_type_key) == "person"
+    if _is_person_payer:
+        st.text_input("ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("Email (обязательно)",key=f"{key}_email",on_change=lambda:st.session_state.__setitem__(dirty,True))
+    else:
+        c1,c2=st.columns(2)
+        with c1:
+            st.text_input("Наименование юр. лица / ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("ИНН",key=f"{key}_inn",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("КПП",key=f"{key}_kpp",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_area("Юридический адрес",key=f"{key}_address",height=75,on_change=lambda:st.session_state.__setitem__(dirty,True))
+        with c2:
+            st.text_input("Наименование банка",key=f"{key}_bank_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("БИК",key=f"{key}_bik",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("Корреспондентский счёт",key=f"{key}_corr_account",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("Расчётный счёт",key=f"{key}_settlement_account",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("Телефон",key=f"{key}_phone",on_change=lambda:st.session_state.__setitem__(dirty,True))
+            st.text_input("Email",key=f"{key}_email",on_change=lambda:st.session_state.__setitem__(dirty,True))
     save_now=st.button("Сохранить реквизиты",key=f"{key}_save",type="primary",use_container_width=True)
     save_warn=bool(st.session_state.pop(f"{key}_save_requested",False))
     if save_now or save_warn:
         name=str(st.session_state.get(f"{key}_legal_name","")).strip()
         inn=str(st.session_state.get(f"{key}_inn","")).strip()
         address=str(st.session_state.get(f"{key}_address","")).strip()
-        if not name or (st.session_state.get(f"{key}_payer_type") != "person" and not inn):
+        payer_type = st.session_state.get(f"{key}_payer_type")
+        email = str(st.session_state.get(f"{key}_email", "") or "").strip()
+        if not name or (payer_type != "person" and not inn):
             st.error("Укажи ФИО физического лица либо наименование плательщика и ИНН для организации/ИП.")
+        elif payer_type == "person" and not email:
+            st.error("Для физического лица Email обязателен для заполнения.")
         else:
             req={k:st.session_state.get(f"{key}_{k}","").strip() if isinstance(st.session_state.get(f"{key}_{k}",""),str) else st.session_state.get(f"{key}_{k}") for k,_ in fields}
             if existing_req:
