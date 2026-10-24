@@ -9019,6 +9019,27 @@ if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("ac
     _pending_reminder = st.session_state["_pending_reminder_dialog"]
     create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
 
+# Глобальная диспетчеризация дочерних окон: нужна не только на вкладке «Сделки»,
+# поскольку карточка сделки может быть открыта из другого раздела CRM.
+# Приоритет сохраняем такой же, как в диспетчере вкладки «Сделки».
+if not st.session_state.get("_crm_dialog_requested_this_run", False):
+    _global_req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
+    _global_invoice_dialog_state = st.session_state.get("dialog_invoice_request")
+    _global_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
+    _global_calc_id = st.session_state.get("dialog_calculation_calc_id")
+    if _global_req_dialog_client_id:
+        client_requisites_dialog(
+            _global_req_dialog_client_id,
+            bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)),
+        )
+    elif _global_invoice_dialog_state:
+        invoice_document_dialog(
+            _global_invoice_dialog_state.get("deal_id"),
+            _global_invoice_dialog_state.get("calc_id"),
+        )
+    elif _global_calc_deal_id and _global_calc_id:
+        deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
+
 # Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
 # Внутри отображается исходное содержимое соответствующего диалога.
 if not st.session_state.get("_crm_dialog_requested_this_run", False):
