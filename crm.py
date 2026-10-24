@@ -5354,6 +5354,21 @@ def _tochka_data(response):
     return response.get("Data", response.get("data", response)) if isinstance(response, dict) else {}
 
 
+def _tochka_check_connection():
+    """Read-only smoke test: validates JWT access to customers and accounts endpoints.
+
+    Does not create invoices, payment links, or any other bank operation.
+    The response bodies are intentionally not shown in the UI because they can
+    contain customer and banking details.
+    """
+    missing = _tochka_missing_config(["token", "customer_code", "account_id"])
+    if missing:
+        raise RuntimeError("Не заполнены параметры Точки в Streamlit Secrets: " + ", ".join(missing))
+    _tochka_request("GET", "/open-banking/v1.0/customers")
+    _tochka_request("GET", "/open-banking/v1.0/accounts")
+    return True
+
+
 def _tochka_unit(value):
     allowed = {"шт.", "тыс.шт.", "компл.", "пар.", "усл.ед.", "упак.", "услуга.", "пач.", "мин.", "ч.", "сут.", "г.", "кг.", "л.", "м.", "м2.", "м3.", "км.", "га.", "кВт.", "кВт.ч."}
     value = str(value or "").strip()
@@ -5700,6 +5715,15 @@ def invoice_document_dialog(deal_id, calc_id):
     st.divider()
     st.markdown("### Точка Банк")
     st.caption("Счёт через API доступен юридическим лицам и ИП. Для физлиц используйте платёжную ссылку с онлайн-чеком.")
+    with st.container(border=True):
+        st.markdown("**Проверка подключения (без создания документов)**")
+        st.caption("Проверяет доступ JWT к списку клиентов и расчётных счетов. Ответы API с банковскими реквизитами не выводятся на экран.")
+        if st.button("Проверить подключение к Точке", key=f"tochka_connection_check_{deal_id}_{calc_id}", use_container_width=True):
+            try:
+                _tochka_check_connection()
+                st.success("Подключение к API Точки работает: оба проверочных запроса выполнены. Счета и платёжные ссылки не создавались.")
+            except Exception as exc:
+                st.error(f"Проверка подключения не пройдена: {exc}")
     cfg = _tochka_config()
     missing_invoice = _tochka_missing_config(["token", "customer_code", "account_id"])
     missing_link = _tochka_missing_config(["token", "customer_code", "tax_system_code", "supplier_name", "supplier_inn", "supplier_phone"])
