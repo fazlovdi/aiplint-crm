@@ -5998,9 +5998,8 @@ def deal_calculation_dialog(deal_id, calc_id):
                 deal["budget"] = calc["total"]
                 deal["last_modified"] = now_str()
                 save_data(st.session_state.crm_store)
-                # Переключаем единое окно CRM с расчёта на счёт.
-                # Если оставить эти идентификаторы, корневой диспетчер на следующем
-                # rerun повторно запросит окно расчёта и перезапишет окно счёта.
+                # Переключаем единое окно с расчёта на счёт: очищаем состояние
+                # расчёта, чтобы диспетчер вкладки «Сделки» не открыл его снова.
                 st.session_state.pop("dialog_calculation_deal_id", None)
                 st.session_state.pop("dialog_calculation_calc_id", None)
                 st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
@@ -8396,9 +8395,17 @@ elif st.session_state.active_tab == "Сделки":
 
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
+    _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
     _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
     _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
-    if _dialog_calculation_deal_id and _dialog_calculation_calc_id:
+    # На вкладке «Сделки» дочерние окна должны иметь приоритет над карточкой сделки.
+    # Иначе после нажатия «Сформировать счёт» старый dialog_deal_key открывает сделку.
+    if _req_dialog_client_id:
+        client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
+    elif _invoice_dialog_state:
+        invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
+    elif _dialog_calculation_deal_id and _dialog_calculation_calc_id:
         deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
     elif _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
