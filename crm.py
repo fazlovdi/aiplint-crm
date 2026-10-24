@@ -5777,6 +5777,8 @@ def _tochka_auto_refresh_payment_status(deal, calc):
     """Проверяет неоплаченные документы не чаще раза в минуту, пока открыто окно счёта."""
     changed = False
     for record in calc.get("tochka_documents", []) or []:
+        if record.get("deleted"):
+            continue
         if str(record.get("status", "")).strip().upper() in {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
             if _tochka_apply_paid_status(deal, record):
                 changed = True
@@ -5940,32 +5942,64 @@ def invoice_document_dialog(deal_id, calc_id):
     if bank_records:
         st.markdown("#### Документы и оплаты Точки")
         for index, record in enumerate(bank_records):
+            deleted = bool(record.get("deleted"))
+            confirm_key = f"tochka_delete_confirm_{deal_id}_{calc_id}_{index}"
             with st.container(border=True):
                 title = f"Банковский счёт № {record.get('invoice_number')}" if record.get("kind") == "invoice" else "Платёжная ссылка"
-                st.markdown(f"**{title}** · {_money(record.get('amount', 0))} ₽")
-                st.write(f"Статус: **{_tochka_status_label(record)}**")
+                amount_text = f"{title} · {_money(record.get('amount', 0))} ₽"
+                if deleted:
+                    st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;font-weight:600'>{amount_text}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-decoration:line-through;color:#9299A3'>Статус: {_tochka_status_label(record)}</div>", unsafe_allow_html=True)
+                    st.caption("Документ удалён из активного списка, запись сохранена в истории.")
+                else:
+                    st.markdown(f"**{amount_text}**")
+                    st.write(f"Статус: **{_tochka_status_label(record)}**")
                 if record.get("created_at"):
-                    st.caption(f"Создано: {record['created_at']}" + (f" · Проверено: {record['checked_at']}" if record.get("checked_at") else ""))
-                if record.get("kind") == "payment_link" and record.get("payment_link"):
+                    created_text = f"Создано: {record['created_at']}" + (f" · Проверено: {record['checked_at']}" if record.get("checked_at") else "")
+                    if deleted:
+                        st.markdown(f"<div style='text-decoration:line-through;color:#9299A3'>{created_text}</div>", unsafe_allow_html=True)
+                    else:
+                        st.caption(created_text)
+                if not deleted and record.get("kind") == "payment_link" and record.get("payment_link"):
                     st.markdown(f"[Открыть платёжную ссылку]({record['payment_link']})")
                     qr_png = _tochka_qr_png(record["payment_link"])
                     if qr_png:
                         st.image(qr_png, caption="QR-код для оплаты", width=220)
                     else:
                         st.caption("Не удалось создать QR-код в текущем окружении. Ссылка на оплату доступна выше.")
-                if record.get("kind") == "invoice":
+                if not deleted and record.get("kind") == "invoice":
                     pdf_key = f"tochka_pdf_{deal_id}_{calc_id}_{record.get('document_id')}"
                     bank_pdf_state = st.session_state.get(pdf_key)
                     if bank_pdf_state:
                         st.download_button("Скачать PDF счёта Точки", data=base64.b64decode(bank_pdf_state["data"]), file_name=bank_pdf_state["filename"], mime="application/pdf", key=f"tochka_pdf_dl_{deal_id}_{calc_id}_{index}")
-                if st.button("Обновить статус оплаты", key=f"tochka_status_{deal_id}_{calc_id}_{index}", use_container_width=True):
-                    try:
-                        _tochka_refresh_status(record)
-                        _tochka_apply_paid_status(deal, record)
-                        save_data(st.session_state.crm_store)
-                        st.success(f"Статус обновлён: {_tochka_status_label(record)}")
-                    except Exception as exc:
-                        st.error(f"Не удалось обновить статус: {exc}")
+                if not deleted:
+                    refresh_col, delete_col = st.columns([3, 1])
+                    with refresh_col:
+                        if st.button("Обновить статус оплаты", key=f"tochka_status_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                            try:
+                                _tochka_refresh_status(record)
+                                _tochka_apply_paid_status(deal, record)
+                                save_data(st.session_state.crm_store)
+                                st.success(f"Статус обновлён: {_tochka_status_label(record)}")
+                            except Exception as exc:
+                                st.error(f"Не удалось обновить статус: {exc}")
+                    with delete_col:
+                        if st.button("Удалить", key=f"tochka_delete_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                            st.session_state[confirm_key] = True
+                    if st.session_state.get(confirm_key):
+                        st.warning("Зачеркнуть этот документ? Он останется в истории CRM.")
+                        yes_col, no_col = st.columns(2)
+                        with yes_col:
+                            if st.button("Да, удалить", key=f"tochka_delete_yes_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                                record["deleted"] = True
+                                record["deleted_at"] = now_str()
+                                st.session_state.pop(confirm_key, None)
+                                save_data(st.session_state.crm_store)
+                                st.rerun()
+                        with no_col:
+                            if st.button("Отмена", key=f"tochka_delete_no_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                                st.session_state.pop(confirm_key, None)
+                                st.rerun()
 
 
 def render_deal_products_block(d, key_prefix):
