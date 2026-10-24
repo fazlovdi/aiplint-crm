@@ -3906,12 +3906,7 @@ if not st.session_state.authenticated:
                         el.setAttribute('data-form-type','other');
                         el.setAttribute('data-autofill','off');
                         el.setAttribute('spellcheck','false');
-                        el.setAttribute('readonly','readonly');
-                        if (!el.dataset.crmPinAutofillGuard) {
-                          el.dataset.crmPinAutofillGuard = '1';
-                          el.addEventListener('focus', function(){ el.removeAttribute('readonly'); });
-                          el.addEventListener('blur', function(){ el.setAttribute('readonly','readonly'); });
-                        }
+                        // Do not use readonly: it can prevent Streamlit inputs from accepting keystrokes.
                       });
                     } catch(e) {}
                   }
@@ -4014,12 +4009,7 @@ if not st.session_state.authenticated:
                           el.setAttribute('data-autofill', 'off');
                           el.setAttribute('inputmode', 'numeric');
                           el.setAttribute('pattern', '[0-9]*');
-                          el.setAttribute('readonly', 'readonly');
-                          if (!el.dataset.crmPinAutofillGuard) {
-                            el.dataset.crmPinAutofillGuard = '1';
-                            el.addEventListener('focus', () => el.removeAttribute('readonly'));
-                            el.addEventListener('blur', () => el.setAttribute('readonly', 'readonly'));
-                          }
+                          // Keep the input editable; readonly interferes with Streamlit rerenders.
                         });
                       });
                     } catch(e) {}
