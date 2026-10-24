@@ -4698,6 +4698,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     return False
 
 def render_deal_card_expanded(d, cl):
+    # При открытом окне сделки проверяем оплату по документам Точки не чаще раза в минуту.
+    for _calc in d.get("calculations", []) or []:
+        _tochka_auto_refresh_payment_status(d, _calc)
     with st.container(border=True):
         st.markdown(f"**{d.get('deal_number', d.get('title', ''))}**")
         st.markdown(format_created_date(d), unsafe_allow_html=True)
@@ -4705,7 +4708,7 @@ def render_deal_card_expanded(d, cl):
         ps = d.get("payment_status", "Не оплачено")
         inject_payment_container_css(d["id"], ps)
         with st.container(key=f"ps_wrap_{d['id']}"):
-            new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"ps_{d['id']}")
+            new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=f"ps_{d['id']}")
         if new_ps != ps:
             d["payment_status"] = new_ps
             d["last_modified"] = now_str()
@@ -5704,11 +5707,99 @@ def _tochka_refresh_status(record):
         status = data.get("status")
         if data.get("paidAt"):
             record["paid_at"] = data["paidAt"]
+
+    # Сумма фактической оплаты сохраняется только из явно обозначенных полей API.
+    # Поле amount само по себе не используем: оно может означать полную сумму ссылки/счёта.
+    paid_amount = None
+    for key in ("paidAmount", "amountPaid", "paid_amount", "paidSum", "paymentAmount", "amountPaidTotal"):
+        value = data.get(key)
+        if value not in (None, "") and not isinstance(value, (dict, list, bool)):
+            try:
+                paid_amount = float(str(value).replace(" ", "").replace(",", "."))
+                break
+            except (TypeError, ValueError):
+                pass
+    if paid_amount is not None and paid_amount >= 0:
+        record["paid_amount"] = paid_amount
+
     if not status:
         raise RuntimeError("В ответе Точки не найден статус платежа.")
     record["status"] = str(status)
     record["checked_at"] = now_str()
     return record
+
+
+def _tochka_apply_paid_status(deal, record):
+    """Синхронизирует статус полной/частичной оплаты и уведомляет ответственного."""
+    status = str(record.get("status", "")).strip().upper()
+    paid_statuses = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    partial_statuses = {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT", "PARTIALLYPAID", "PARTIAL_PAID"}
+    try:
+        paid_amount = float(record.get("paid_amount", 0) or 0)
+        total_amount = float(record.get("amount", 0) or 0)
+    except (TypeError, ValueError):
+        paid_amount, total_amount = 0.0, 0.0
+
+    # Явный статус частичной оплаты от банка имеет приоритет. Иначе используем
+    # фактически оплаченную сумму, только если API действительно вернул её.
+    if status in partial_statuses or ("paid_amount" in record and paid_amount > 0 and total_amount > 0 and paid_amount < total_amount - 0.01):
+        new_status = "Оплачен частично"
+    elif status in paid_statuses or ("paid_amount" in record and total_amount > 0 and paid_amount >= total_amount - 0.01):
+        new_status = "Оплачено"
+    else:
+        return False
+
+    changed = deal.get("payment_status") != new_status
+    deal["payment_status"] = new_status
+    deal["last_modified"] = now_str()
+
+    # Уведомляем ответственного о частичной и полной оплате, но не дублируем одно событие.
+    notification_flag = "partial_notification_sent" if new_status == "Оплачен частично" else "paid_notification_sent"
+    if not record.get(notification_flag):
+        manager = deal.get("manager", "")
+        if manager:
+            deal_label = str(deal.get("deal_number") or deal.get("title") or deal.get("id") or "")
+            amount = record.get("paid_amount") if new_status == "Оплачен частично" else record.get("amount")
+            amount_text = f" на сумму {float(amount):,.2f} ₽".replace(",", " ") if amount not in (None, "") else ""
+            if new_status == "Оплачен частично":
+                message = f"По сделке №{deal_label} поступила частичная оплата{amount_text}."
+                tg_message = f"💳 <b>Частичная оплата</b>\nСделка: {deal_label}{amount_text}"
+            else:
+                message = f"Заказ по сделке №{deal_label} оплачен{amount_text}."
+                tg_message = f"💳 <b>Заказ оплачен</b>\nСделка: {deal_label}{amount_text}"
+            add_notification(manager, message, tg_message)
+            record[notification_flag] = True
+            changed = True
+    return changed
+
+
+def _tochka_auto_refresh_payment_status(deal, calc):
+    """Проверяет неоплаченные документы не чаще раза в минуту, пока открыто окно счёта."""
+    changed = False
+    for record in calc.get("tochka_documents", []) or []:
+        if str(record.get("status", "")).strip().upper() in {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
+            if _tochka_apply_paid_status(deal, record):
+                changed = True
+            continue
+        checked_at = record.get("checked_at", "")
+        try:
+            checked_dt = datetime.strptime(str(checked_at), "%Y-%m-%d %H:%M:%S") if checked_at else None
+        except Exception:
+            checked_dt = None
+        if checked_dt and (moscow_now() - checked_dt).total_seconds() < 60:
+            continue
+        try:
+            old_status = str(record.get("status", ""))
+            _tochka_refresh_status(record)
+            if str(record.get("status", "")) != old_status:
+                changed = True
+            if _tochka_apply_paid_status(deal, record):
+                changed = True
+        except Exception:
+            # Автопроверка не должна мешать работе формы; пользователь может проверить вручную.
+            continue
+    if changed:
+        save_data(st.session_state.crm_store)
 
 
 def _tochka_qr_png(url):
@@ -5741,6 +5832,9 @@ def _tochka_status_label(record):
     labels = {
         "PAYMENT_WAITING": "Ожидает оплаты",
         "PAYMENT_PAID": "Оплачен",
+        "PAYMENT_PARTIALLY_PAID": "Оплачен частично",
+        "PARTIALLY_PAID": "Оплачен частично",
+        "PARTIAL_PAYMENT": "Оплачен частично",
         "PAYMENT_EXPIRED": "Истёк срок оплаты",
         "CREATED": "Ссылка создана, ожидает оплаты",
         "APPROVED": "Оплачен",
@@ -5771,6 +5865,7 @@ def invoice_document_dialog(deal_id, calc_id):
     calc=next((c for c in deal.get("calculations",[]) if str(c.get("id"))==str(calc_id)),None)
     if not calc:
         st.error("Расчёт не найден"); return
+    _tochka_auto_refresh_payment_status(deal, calc)
     client=get_client_by_id(deal.get("client_id")) or {}
     requisites=[r for r in client.setdefault("requisites",[]) if not r.get("deleted")]
     state=st.session_state.get("dialog_invoice_request") or {"deal_id":deal_id,"calc_id":calc_id,"selected_requisite_id":""}
@@ -5796,47 +5891,14 @@ def invoice_document_dialog(deal_id, calc_id):
         selected_req=next((r for r in requisites if str(r.get("id"))==str(sel)),None)
         if selected_req:
             st.caption(f"Тип: { {'company':'Юрлицо','ip':'ИП','person':'Физлицо'}.get(selected_req.get('payer_type'),'—') } · ИНН: {selected_req.get('inn','—')} · Email: {selected_req.get('email','—')}")
-    add_col,generate_col=st.columns(2)
-    with add_col:
-        if st.button("+ Добавить новые реквизиты",key=f"invoice_add_req_{deal_id}_{calc_id}",use_container_width=True):
-            st.session_state["dialog_client_requisites_client_id"]=client.get("id")
-            st.session_state["dialog_client_requisites_return_to_invoice"]=True
-            client_requisites_dialog(client.get("id"),True)
-    with generate_col:
-        if st.button("Сформировать счёт PDF",key=f"invoice_generate_{deal_id}_{calc_id}",type="primary",use_container_width=True):
-            req=selected_req
-            if not req:
-                st.error("Сначала выбери реквизиты плательщика или добавь новые.")
-            elif not calc.get("items"):
-                st.error("Добавь хотя бы одну товарную позицию в расчёт.")
-            else:
-                try:
-                    pdf,due=_make_invoice_pdf(deal,client,calc,req)
-                    display=str(calc.get("name") or _calculation_display_name(deal,calc)).replace("Расчёт","Счёт",1)
-                    filename=f"{display} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
-                    _save_generated_document(deal,pdf,filename,"Счёт",calc,req)
-                    _open_pdf_link(pdf,filename,f"invoice_pdf_{deal_id}_{calc_id}")
-                    st.session_state[f"invoice_generated_note_{deal_id}_{calc_id}"]=f"Счёт сохранён в файлах сделки. Срок оплаты: {due}."
-                    st.success(f"Счёт сохранён в файлах сделки. Срок оплаты: {due}.")
-                except Exception as exc:
-                    st.error(f"Не удалось сформировать счёт: {exc}")
-    pdf_state=st.session_state.get(f"invoice_pdf_{deal_id}_{calc_id}")
-    if pdf_state:
-        st.markdown(f'<a href="data:application/pdf;base64,{pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:9px 14px;border-radius:8px;font-weight:600">Открыть PDF в новой вкладке</a>',unsafe_allow_html=True)
-        st.download_button("Скачать PDF",data=base64.b64decode(pdf_state["data"]),file_name=pdf_state["filename"],mime="application/pdf",key=f"invoice_pdf_dl_{deal_id}_{calc_id}")
+    if st.button("+ Добавить новые реквизиты",key=f"invoice_add_req_{deal_id}_{calc_id}",use_container_width=True):
+        st.session_state["dialog_client_requisites_client_id"]=client.get("id")
+        st.session_state["dialog_client_requisites_return_to_invoice"]=True
+        client_requisites_dialog(client.get("id"),True)
 
     st.divider()
     st.markdown("### Точка Банк")
     st.caption("Счёт через API доступен юридическим лицам и ИП. Для физлиц используйте платёжную ссылку с онлайн-чеком.")
-    with st.container(border=True):
-        st.markdown("**Проверка подключения (без создания документов)**")
-        st.caption("Проверяет доступ JWT к списку клиентов и расчётных счетов. Ответы API с банковскими реквизитами не выводятся на экран.")
-        if st.button("Проверить подключение к Точке", key=f"tochka_connection_check_{deal_id}_{calc_id}", use_container_width=True):
-            try:
-                _tochka_check_connection()
-                st.success("Подключение к API Точки работает: оба проверочных запроса выполнены. Счета и платёжные ссылки не создавались.")
-            except Exception as exc:
-                st.error(f"Проверка подключения не пройдена: {exc}")
     cfg = _tochka_config()
     missing_invoice = _tochka_missing_config(["token", "customer_code", "account_id"])
     missing_link = _tochka_missing_config(["token", "customer_code", "tax_system_code", "supplier_name", "supplier_inn", "supplier_phone"])
@@ -5899,6 +5961,7 @@ def invoice_document_dialog(deal_id, calc_id):
                 if st.button("Обновить статус оплаты", key=f"tochka_status_{deal_id}_{calc_id}_{index}", use_container_width=True):
                     try:
                         _tochka_refresh_status(record)
+                        _tochka_apply_paid_status(deal, record)
                         save_data(st.session_state.crm_store)
                         st.success(f"Статус обновлён: {_tochka_status_label(record)}")
                     except Exception as exc:
@@ -6069,7 +6132,7 @@ def deal_calculation_dialog(deal_id, calc_id):
                     st.session_state[f"{key}_doc_error"] = f"Не удалось сформировать КП: {exc}"
                 _calc_refresh()
         with invoice_col:
-            if st.button("Сформировать счёт", key=f"{key}_make_invoice", use_container_width=True):
+            if st.button("Счёт на оплату", key=f"{key}_make_invoice", use_container_width=True):
                 calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
                 calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
                 calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
@@ -6301,6 +6364,9 @@ def deal_calculation_dialog(deal_id, calc_id):
 
 def render_deal_detail(d, cl, cu, key_prefix):
     """Детали сделки в 2 колонки — как render_task_detail."""
+    # Синхронизируем оплату Точки при просмотре сделки; проверки ограничены интервалом в минуту.
+    for _calc in d.get("calculations", []) or []:
+        _tochka_auto_refresh_payment_status(d, _calc)
     deal_id = d["id"]
     d.setdefault("change_log", [])
     with st.container(border=True, key=f"deal_detail_{key_prefix}"):
@@ -6360,7 +6426,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             with _pay_col:
                 inject_payment_container_css(deal_id, ps)
                 with st.container(key=f"ps_wrap_{deal_id}"):
-                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0 if ps == "Не оплачено" else 1, key=f"dls_ps_{deal_id}")
+                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=f"dls_ps_{deal_id}")
             with _mgr_col:
                 new_mgr_dd = st.selectbox("Ответственный:", mgr_options_dd, index=current_idx_dd, key=f"deal_mgr_inline_{deal_id}", placeholder=MGR_PLACEHOLDER)
             if new_ps != ps:
@@ -6930,7 +6996,7 @@ def render_client_in_tree(cl):
                 cd_title = st.text_input("Тема:", key=f"cd_title_{cl['id']}")
                 cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
-                cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cd_ps_{cl['id']}")
+                cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cd_ps_{cl['id']}")
                 if st.button("Создать", key=f"cd_go_{cl['id']}", use_container_width=True, type="primary"):
                     deals = st.session_state.crm_store.get("deals", [])
                     did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
@@ -7760,7 +7826,7 @@ def create_deal_dialog(cl_id):
         cd_title = st.text_input("Тема:", key=f"cdlg_title_{cl_id}")
         cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
         cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cdlg_budget_{cl_id}", placeholder="Введите сумму")
-        cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
+        cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
     with _deal_create_right:
         st.markdown("**Комментарии**")
         cd_comment = st.text_area("Комментарий:", key=f"cdlg_comment_{cl_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
