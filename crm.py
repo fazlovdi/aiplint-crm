@@ -5968,9 +5968,8 @@ def deal_calculation_dialog(deal_id, calc_id):
                 deal["last_modified"] = now_str()
                 save_data(st.session_state.crm_store)
                 st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
-                # Переключаем единый dialog-host с окна расчёта на окно счёта.
-                # Если оставить эти ключи, нижний диспетчер повторно откроет расчёт
-                # и перезапишет активное окно до его отображения.
+                # При переходе из расчёта в счёт снимаем состояние расчёта,
+                # иначе диспетчер окон в конце скрипта снова активирует расчёт/сделку.
                 st.session_state.pop("dialog_calculation_deal_id", None)
                 st.session_state.pop("dialog_calculation_calc_id", None)
                 invoice_document_dialog(deal_id, calc_id)
@@ -8367,7 +8366,12 @@ elif st.session_state.active_tab == "Сделки":
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
     _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
     _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
-    if _dialog_calculation_deal_id and _dialog_calculation_calc_id:
+    # Счёт — дочернее окно расчёта. Оно должно иметь приоритет над окном
+    # расчёта и карточкой сделки в общем диспетчере диалогов.
+    _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
+    if _invoice_dialog_state:
+        invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
+    elif _dialog_calculation_deal_id and _dialog_calculation_calc_id:
         deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
     elif _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
