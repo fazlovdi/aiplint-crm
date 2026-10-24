@@ -5968,6 +5968,11 @@ def deal_calculation_dialog(deal_id, calc_id):
                 deal["last_modified"] = now_str()
                 save_data(st.session_state.crm_store)
                 st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
+                # Переключаем единый dialog-host с окна расчёта на окно счёта.
+                # Если оставить эти ключи, нижний диспетчер повторно откроет расчёт
+                # и перезапишет активное окно до его отображения.
+                st.session_state.pop("dialog_calculation_deal_id", None)
+                st.session_state.pop("dialog_calculation_calc_id", None)
                 invoice_document_dialog(deal_id, calc_id)
         with close_col:
             if st.button("✕", key=f"{key}_close", use_container_width=True):
