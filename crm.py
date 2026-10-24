@@ -5998,6 +5998,11 @@ def deal_calculation_dialog(deal_id, calc_id):
                 deal["budget"] = calc["total"]
                 deal["last_modified"] = now_str()
                 save_data(st.session_state.crm_store)
+                # Переключаем единое окно CRM с расчёта на счёт.
+                # Если оставить эти идентификаторы, корневой диспетчер на следующем
+                # rerun повторно запросит окно расчёта и перезапишет окно счёта.
+                st.session_state.pop("dialog_calculation_deal_id", None)
+                st.session_state.pop("dialog_calculation_calc_id", None)
                 st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
                 invoice_document_dialog(deal_id, calc_id)
         with close_col:
