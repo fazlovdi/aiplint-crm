@@ -3140,6 +3140,47 @@ def _create_browser_session(user, remember=True):
         except Exception:
             pass
 
+    # CookieManager updates can be lost when the caller immediately triggers st.rerun().
+    # Write the bearer/session cookies synchronously in the browser, then reload only after
+    # the browser confirms the writes have been issued. This also makes the PIN screen
+    # survive a hard page refresh instead of falling back to username/password.
+    try:
+        _cookie_token_js = json.dumps(token)
+        _cookie_login_js = json.dumps(str(user.get("login", "")))
+        _cookie_remember_js = "true" if remember else "false"
+        components.html(f"""
+        <script>
+        (() => {{
+          try {{
+            const doc = window.parent.document;
+            const secure = window.parent.location.protocol === 'https:' ? '; Secure' : '';
+            const base = '; path=/; SameSite=Lax' + secure;
+            const token = {_cookie_token_js};
+            const login = {_cookie_login_js};
+            doc.cookie = 'auth_token=' + encodeURIComponent(token) + base + '; max-age=315360000';
+            doc.cookie = 'crm_last_activity=' + encodeURIComponent(String(Date.now())) + base + '; max-age=315360000';
+            doc.cookie = 'crm_session_expired=' + base + '; max-age=0';
+            if ({_cookie_remember_js}) {{
+              doc.cookie = 'remembered_user=' + encodeURIComponent(login) + base + '; max-age=315360000';
+            }} else {{
+              doc.cookie = 'remembered_user=' + base + '; max-age=0';
+            }}
+            window.setTimeout(() => window.parent.location.reload(), 250);
+          }} catch (e) {{
+            const status = document.getElementById('auth-cookie-write-status');
+            if (status) status.textContent = 'Не удалось сохранить сессию в браузере. Разрешите cookies и повторите вход.';
+          }}
+        }})();
+        </script>
+        <div id="auth-cookie-write-status" style="font-size:12px;color:#b42318"></div>
+        """, height=0, width=0)
+        # Stop this run so the browser-side cookie write/reload, not an immediate Python
+        # rerun, completes the login transition.
+        st.stop()
+    except Exception:
+        # Keep the regular Streamlit cookie manager as a fallback on unusual deployments.
+        pass
+
 
 def _passkey_b64url_encode(value):
     return base64.urlsafe_b64encode(bytes(value)).decode("ascii").rstrip("=")
