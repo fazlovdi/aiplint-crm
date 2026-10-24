@@ -3099,7 +3099,9 @@ def _create_browser_session(user, remember=True):
     # CookieManager writes through a browser component. Give the browser time to
     # complete the cookie update before the login handler triggers st.rerun().
     # Wait for the browser to persist the session token before rerunning.
-    time.sleep(0.5)
+    # CookieManager may not finish writing its cookie before an immediate Streamlit rerun.
+    # The login handler also writes this token directly in the browser before reloading.
+    return token
 
 
 def _passkey_b64url_encode(value):
@@ -3686,13 +3688,13 @@ if not st.session_state.authenticated:
     with mc:
         with st.container(border=True):
             iu = st.text_input("Логин:", placeholder="Введите логин", key="login_username")
+            ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
             _allow_browser_password_save = st.checkbox(
                 "Сохранить пароль в браузере",
                 value=False,
                 key="login_save_password",
-                help="Если снять галочку, CRM попросит браузер не предлагать сохранение этого пароля.",
+                help="Отметьте, если хотите разрешить браузеру предлагать сохранение пароля.",
             )
-            ip = st.text_input("Пароль:", type="password", placeholder="Введите пароль", key="login_password")
             # Streamlit text_input has no autocomplete parameter. Set it in the parent
             # document so password managers only recognize this as a login password
             # when the user explicitly opted in.
@@ -3722,6 +3724,7 @@ if not st.session_state.authenticated:
                     applyAutocomplete();
                     setTimeout(applyAutocomplete, 100);
                     setTimeout(applyAutocomplete, 400);
+                    setTimeout(applyAutocomplete, 1000);
                 }})();
                 </script>
                 """,
@@ -3740,9 +3743,28 @@ if not st.session_state.authenticated:
                             cookie_manager.delete("remembered_user")
                         except Exception:
                             pass
-                        _create_browser_session(_user_for_login, remember=True)
+                        _new_auth_token = _create_browser_session(_user_for_login, remember=True)
                         st.toast("Успешный вход", icon="🔓")
-                        st.rerun()
+                        # Write the same server-registered token directly in the browser before
+                        # reloading. This avoids a race where Streamlit reruns before the
+                        # CookieManager component has committed the cookie.
+                        components.html(
+                            f"""
+                            <script>
+                            (() => {{
+                                try {{
+                                    const token = "{_new_auth_token}";
+                                    window.parent.document.cookie =
+                                        "auth_token=" + token +
+                                        "; Max-Age=315360000; Path=/; SameSite=Lax; Secure";
+                                    setTimeout(() => window.parent.location.reload(), 250);
+                                }} catch (e) {{}}
+                            }})();
+                            </script>
+                            """,
+                            height=0,
+                            width=0,
+                        )
                     else:
                         st.error("Неверный логин или пароль.")
                 except Exception as _login_exc:
