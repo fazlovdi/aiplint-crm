@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, html, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time
+import json, os, re, html, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time, certifi
 from pathlib import Path
 
 # WebAuthn / Passkeys. Если зависимость ещё не установлена, парольный вход продолжает работать.
@@ -5327,8 +5327,39 @@ def _tochka_request(method, path, payload=None, expect_pdf=False):
     }
     if payload is not None:
         headers["Content-Type"] = "application/json"
+    # Extend Requests' normal CA bundle with the official certificates stored
+    # beside crm.py. Certificate verification stays enabled.
+    _cert_root = Path(__file__).resolve().parent
+    _custom_cert_paths = [
+        _cert_root / "russian_trusted_root_ca_pem.crt",
+        _cert_root / "russian_trusted_sub_ca_pem.crt",
+    ]
+    _existing_custom_certs = [p for p in _custom_cert_paths if p.is_file()]
+    _verify_bundle = certifi.where()
+    if _existing_custom_certs:
+        _bundle_path = _cert_root / ".tochka_ca_bundle.pem"
+        try:
+            _bundle_is_current = _bundle_path.is_file() and all(
+                _bundle_path.stat().st_mtime >= p.stat().st_mtime
+                for p in _existing_custom_certs
+            )
+        except OSError:
+            _bundle_is_current = False
+        if not _bundle_is_current:
+            with open(_bundle_path, "wb") as _bundle:
+                with open(certifi.where(), "rb") as _default_ca:
+                    _bundle.write(_default_ca.read())
+                    _bundle.write(b"\n")
+                for _cert_path in _existing_custom_certs:
+                    with open(_cert_path, "rb") as _custom_ca:
+                        _bundle.write(_custom_ca.read())
+                        _bundle.write(b"\n")
+        _verify_bundle = str(_bundle_path)
     try:
-        response = requests.request(method, url, headers=headers, json=payload, timeout=30)
+        response = requests.request(
+            method, url, headers=headers, json=payload, timeout=30,
+            verify=_verify_bundle,
+        )
     except requests.RequestException as exc:
         raise RuntimeError(f"Не удалось связаться с Точка.API: {exc}") from exc
     if not response.ok:
@@ -5968,10 +5999,6 @@ def deal_calculation_dialog(deal_id, calc_id):
                 deal["last_modified"] = now_str()
                 save_data(st.session_state.crm_store)
                 st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
-                # При переходе из расчёта в счёт снимаем состояние расчёта,
-                # иначе диспетчер окон в конце скрипта снова активирует расчёт/сделку.
-                st.session_state.pop("dialog_calculation_deal_id", None)
-                st.session_state.pop("dialog_calculation_calc_id", None)
                 invoice_document_dialog(deal_id, calc_id)
         with close_col:
             if st.button("✕", key=f"{key}_close", use_container_width=True):
@@ -8366,12 +8393,7 @@ elif st.session_state.active_tab == "Сделки":
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
     _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
     _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
-    # Счёт — дочернее окно расчёта. Оно должно иметь приоритет над окном
-    # расчёта и карточкой сделки в общем диспетчере диалогов.
-    _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
-    if _invoice_dialog_state:
-        invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
-    elif _dialog_calculation_deal_id and _dialog_calculation_calc_id:
+    if _dialog_calculation_deal_id and _dialog_calculation_calc_id:
         deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
     elif _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
