@@ -3907,14 +3907,36 @@ if not st.session_state.authenticated:
                         el.setAttribute('data-autofill','off');
                         el.setAttribute('spellcheck','false');
                         // Do not use readonly: it can prevent Streamlit inputs from accepting keystrokes.
+                        if (!el.dataset.crmPinEnterBound) {
+                          el.dataset.crmPinEnterBound = '1';
+                          el.addEventListener('keydown', function(ev){
+                            if (ev.key === 'Enter' && !ev.isComposing) {
+                              ev.preventDefault();
+                              const btn = doc.querySelector('.st-key-remembered_pin_login_btn button');
+                              if (btn && !btn.disabled) btn.click();
+                            }
+                          });
+                        }
                       });
                     } catch(e) {}
                   }
+                  function focusPin(){
+                    try {
+                      const doc = window.parent.document;
+                      const el = doc.querySelector('input[placeholder="Введите PIN-код"]');
+                      if (el && doc.activeElement !== el) el.focus({preventScroll:true});
+                    } catch(e) {}
+                  }
                   tunePin();
+                  // Autofocus when the PIN screen first appears; retries allow Streamlit to finish rendering.
+                  setTimeout(focusPin, 100);
+                  setTimeout(focusPin, 350);
                   try {
                     const root = window.parent.document.querySelector('[data-testid="stAppViewContainer"]') || window.parent.document.body;
                     if (root && !root.__pinInputModeObserver) {
-                      root.__pinInputModeObserver = new MutationObserver(tunePin);
+                      root.__pinInputModeObserver = new MutationObserver(function(){
+                        tunePin();
+                      });
                       root.__pinInputModeObserver.observe(root, {childList:true, subtree:true});
                     }
                   } catch(e) {}
