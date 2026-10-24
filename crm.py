@@ -3457,24 +3457,59 @@ st.components.v1.html("""
     }
     if (!window.parent.__crmActivityTrackerInstalled) {
       window.parent.__crmActivityTrackerInstalled = true;
+      const win = window.parent;
+      const IDLE_LIMIT = 60 * 60 * 1000;
       let lastWrite = 0;
+      let idleTimer = null;
+      const expireAndReload = () => {
+        writeCookie('crm_session_expired', '1');
+        // Clear the activity timestamp to prevent repeated reloads on the login screen.
+        writeCookie('crm_last_activity', '');
+        // Trigger a Streamlit page load so server-side auth state is cleared and
+        // the authorization screen is rendered even when the user does nothing.
+        win.location.reload();
+      };
+      const scheduleIdleLogout = () => {
+        if (idleTimer !== null) win.clearTimeout(idleTimer);
+        const last = Number(readCookie('crm_last_activity')) || Date.now();
+        const remaining = Math.max(0, IDLE_LIMIT - (Date.now() - last));
+        idleTimer = win.setTimeout(() => {
+          const latest = Number(readCookie('crm_last_activity')) || last;
+          if (Date.now() - latest >= IDLE_LIMIT) {
+            expireAndReload();
+          } else {
+            scheduleIdleLogout();
+          }
+        }, remaining + 50);
+      };
       const markActivity = () => {
         const current = Date.now();
         const old = Number(readCookie('crm_last_activity'));
-        if (old && current - old >= 60 * 60 * 1000) {
-          writeCookie('crm_session_expired', '1');
+        if (old && current - old >= IDLE_LIMIT) {
+          expireAndReload();
           return;
         }
         writeCookie('crm_session_expired', '');
-        // Cookie writes are throttled to avoid excessive browser work; no Streamlit rerun is triggered.
-        if (current - lastWrite >= 1000) {
+        // Update activity cookie and reset the browser-side idle timer.
+        if (current - lastWrite >= 1000 || !old) {
           writeCookie('crm_last_activity', String(current));
           lastWrite = current;
         }
+        scheduleIdleLogout();
       };
+      // If the tab was already idle for an hour before this page script ran,
+      // expire immediately rather than treating the page load as activity.
+      const initialActivity = Number(readCookie('crm_last_activity'));
+      if (initialActivity && Date.now() - initialActivity >= IDLE_LIMIT) {
+        expireAndReload();
+        return;
+      }
+      scheduleIdleLogout();
       ['pointerdown', 'keydown', 'touchstart', 'scroll', 'click', 'input', 'wheel'].forEach(
         eventName => doc.addEventListener(eventName, markActivity, {passive: true, capture: true})
       );
+      win.addEventListener('pageshow', scheduleIdleLogout);
+      win.addEventListener('focus', scheduleIdleLogout);
     }
   } catch (_) {}
 })();
