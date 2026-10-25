@@ -6080,15 +6080,23 @@ def invoice_document_dialog(deal_id, calc_id):
                 st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
     if missing_link:
         st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
-    bank_records = calc.get("tochka_documents", []) or []
+    # Документы хранятся у расчёта, но в окне сделки показываем историю по всем расчётам,
+    # чтобы старую ссылку можно было найти, даже если сейчас открыт другой расчёт.
+    bank_records = []
+    for _record_calc in deal.get("calculations", []) or []:
+        for _record in _record_calc.get("tochka_documents", []) or []:
+            bank_records.append((_record_calc, _record))
+    bank_records.sort(key=lambda pair: str(pair[1].get("created_at", "")), reverse=True)
     if bank_records:
-        st.markdown("#### Документы и оплаты Точки")
-        for index, record in enumerate(bank_records):
+        st.markdown("#### Документы и оплаты Точки по сделке")
+        for index, (record_calc, record) in enumerate(bank_records):
+            record_calc_id = str(record_calc.get("id", calc_id))
             deleted = bool(record.get("deleted"))
-            confirm_key = f"tochka_delete_confirm_{deal_id}_{calc_id}_{index}"
+            confirm_key = f"tochka_delete_confirm_{deal_id}_{record_calc_id}_{index}"
             with st.container(border=True):
                 title = f"Банковский счёт № {record.get('invoice_number')}" if record.get("kind") == "invoice" else "Платёжная ссылка"
                 amount_text = f"{title} · {_money(record.get('amount', 0))} ₽"
+                st.caption(f"Расчёт: {record_calc.get('name', 'Расчёт')}")
                 if deleted:
                     st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;font-weight:600'>{amount_text}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div style='text-decoration:line-through;color:#9299A3'>Статус: {_tochka_status_label(record)}</div>", unsafe_allow_html=True)
@@ -6104,20 +6112,21 @@ def invoice_document_dialog(deal_id, calc_id):
                         st.caption(created_text)
                 if not deleted and record.get("kind") == "payment_link" and record.get("payment_link"):
                     st.markdown(f"[Открыть платёжную ссылку]({record['payment_link']})")
+                    st.code(record["payment_link"], language=None)
                     qr_png = _tochka_qr_png(record["payment_link"])
                     if qr_png:
                         st.image(qr_png, caption="QR-код для оплаты", width=220)
                     else:
                         st.caption("Не удалось создать QR-код в текущем окружении. Ссылка на оплату доступна выше.")
                 if not deleted and record.get("kind") == "invoice":
-                    pdf_key = f"tochka_pdf_{deal_id}_{calc_id}_{record.get('document_id')}"
+                    pdf_key = f"tochka_pdf_{deal_id}_{record_calc_id}_{record.get('document_id')}"
                     bank_pdf_state = st.session_state.get(pdf_key)
                     if bank_pdf_state:
-                        st.download_button("Скачать PDF счёта Точки", data=base64.b64decode(bank_pdf_state["data"]), file_name=bank_pdf_state["filename"], mime="application/pdf", key=f"tochka_pdf_dl_{deal_id}_{calc_id}_{index}")
+                        st.download_button("Скачать PDF счёта Точки", data=base64.b64decode(bank_pdf_state["data"]), file_name=bank_pdf_state["filename"], mime="application/pdf", key=f"tochka_pdf_dl_{deal_id}_{record_calc_id}_{index}")
                 if not deleted:
                     refresh_col, delete_col = st.columns([3, 1])
                     with refresh_col:
-                        if st.button("Обновить статус оплаты", key=f"tochka_status_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                        if st.button("Обновить статус оплаты", key=f"tochka_status_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                             try:
                                 _tochka_refresh_status(record)
                                 _tochka_apply_paid_status(deal, record)
@@ -6126,20 +6135,20 @@ def invoice_document_dialog(deal_id, calc_id):
                             except Exception as exc:
                                 st.error(f"Не удалось обновить статус: {exc}")
                     with delete_col:
-                        if st.button("Удалить", key=f"tochka_delete_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                        if st.button("Удалить", key=f"tochka_delete_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                             st.session_state[confirm_key] = True
                     if st.session_state.get(confirm_key):
                         st.warning("Зачеркнуть этот документ? Он останется в истории CRM.")
                         yes_col, no_col = st.columns(2)
                         with yes_col:
-                            if st.button("Да, удалить", key=f"tochka_delete_yes_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                            if st.button("Да, удалить", key=f"tochka_delete_yes_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                                 record["deleted"] = True
                                 record["deleted_at"] = now_str()
                                 st.session_state.pop(confirm_key, None)
                                 save_data(st.session_state.crm_store)
                                 st.rerun()
                         with no_col:
-                            if st.button("Отмена", key=f"tochka_delete_no_{deal_id}_{calc_id}_{index}", use_container_width=True):
+                            if st.button("Отмена", key=f"tochka_delete_no_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                                 st.session_state.pop(confirm_key, None)
                                 st.rerun()
 
