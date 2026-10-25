@@ -5434,7 +5434,25 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
                 client.setdefault("requisites",[]).append(req)
             client["last_modified"]=now_str()
             client.setdefault("change_log",[]).append({"date":now_str(),"author":st.session_state.get("user_name",st.session_state.get("user_login","")),"fields":f"{'Обновлены' if existing_req else 'Добавлены'} реквизиты «{name}»"})
+            # Сохраняем реквизиты и затем проверяем результат уже в актуальном
+            # хранилище сессии: при конфликте с другой сессией трёхстороннее
+            # слияние могло оставить последнюю версию клиента без нашей записи.
+            _saved_req_id = str(req.get("id", ""))
             save_data(st.session_state.crm_store)
+            _saved_client = get_client_by_id(client_id)
+            _saved_reqs = (_saved_client or {}).get("requisites", []) or []
+            if _saved_client is not None and _saved_req_id and not any(
+                str(_saved_r.get("id", "")) == _saved_req_id for _saved_r in _saved_reqs
+            ):
+                # Повторно добавляем только отсутствующую запись в уже обновлённый
+                # объект клиента, не перезаписывая остальные данные CRM.
+                _saved_client.setdefault("requisites", []).append(copy.deepcopy(req))
+                _saved_client["last_modified"] = now_str()
+                save_data(st.session_state.crm_store)
+                _verified_client = get_client_by_id(client_id)
+                if not any(str(_saved_r.get("id", "")) == _saved_req_id for _saved_r in ((_verified_client or {}).get("requisites", []) or [])):
+                    st.error("Не удалось подтвердить сохранение реквизитов в базе. Окно оставлено открытым — попробуй сохранить ещё раз.")
+                    return
             st.session_state.pop("dialog_client_requisites_client_id",None)
             st.session_state.pop("dialog_client_requisites_return_to_invoice",None)
             for k,_ in fields: st.session_state.pop(f"{key}_{k}",None)
