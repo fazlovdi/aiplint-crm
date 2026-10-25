@@ -5113,52 +5113,90 @@ def _make_commercial_offer_pdf(deal, client, calc):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable, Image
     font, bold = _pdf_font_setup()
     out=io.BytesIO()
-    doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=9*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
+    doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=2*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#242C36"), spaceAfter=4*mm)
-    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=colors.HexColor("#242C36"), spaceBefore=2*mm, spaceAfter=1.5*mm)
-    body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm)
+    brand=colors.HexColor("#bc1661")
+    title=ParagraphStyle("OfferTitle", parent=styles["Title"], fontName=bold, fontSize=15, leading=19, alignment=TA_CENTER, textColor=colors.HexColor("#202833"), spaceAfter=8*mm)
+    h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=brand, spaceBefore=2*mm, spaceAfter=1.5*mm)
+    body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm, textColor=colors.HexColor("#343D4A"))
     small=ParagraphStyle("OfferSmall", parent=body, fontSize=6.4, leading=8)
     cell=ParagraphStyle("OfferCell", parent=small, fontSize=6.2, leading=7.5)
     cellhead=ParagraphStyle("OfferCellHead", parent=cell, fontName=bold, alignment=TA_CENTER, textColor=colors.white)
     date=moscow_now().date()
     validity=date+timedelta(days=30)
-    date_ru=date.strftime("%d.%m.%Y")
-    flow=[Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
-          Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')} &nbsp;&nbsp; Срок действия предложения: 30 дней (до {validity.strftime('%d.%m.%Y')})", body),
+    # Use the same brand logo treatment as the Ozon invoice PDF.
+    def _offer_asset_image(filename, width_mm, max_height_mm=None):
+        candidates=[os.path.join(os.getcwd(), filename), os.path.join(os.path.dirname(os.path.abspath(__file__)), filename), os.path.join("assets", filename), os.path.join("static", filename)]
+        path=next((x for x in candidates if os.path.isfile(x)), None)
+        if not path: return None
+        try:
+            im=Image(path); im.drawWidth=width_mm*mm
+            ratio=im.imageHeight/float(im.imageWidth or 1); im.drawHeight=im.drawWidth*ratio
+            if max_height_mm and im.drawHeight>max_height_mm*mm:
+                scale=(max_height_mm*mm)/im.drawHeight; im.drawWidth*=scale; im.drawHeight*=scale
+            im.hAlign="LEFT"
+            return im
+        except Exception: return None
+    logo=_offer_asset_image("Логотип iPlinth с розовым шевроном-1.png", 125, 35)
+    header=Table([[logo or Paragraph("iPlinth",body), Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')}<br/>Срок действия: 30 дней (до {validity.strftime('%d.%m.%Y')})", body)]], colWidths=[150*mm,127*mm], hAlign="LEFT")
+    header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    flow=[header, Spacer(1,4*mm), Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
           Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
           Paragraph("Наименование организации: ИП Фазлов Дамир Ибрагимович<br/>ИНН: 731701704975<br/>Адрес производства: г. Казань, ул. Кулагина, д. 3<br/>Телефон / Email: +7 (900) 329-33-00 / info@iplinth.ru", body),
           Paragraph(f"Кому: {html.escape(str(client.get('name','') or ''))}", body),
           Paragraph("2. СМЕТА НА ПОСТАВКУ МАТЕРИАЛОВ", h),
-          Paragraph("Условия налогообложения: все цены указаны без НДС в связи с применением УСН.", small), Spacer(1, 2*mm)]
+          Paragraph("Условия налогообложения: все цены указаны без НДС в связи с применением УСН.", small), Spacer(1,2*mm)]
     rows=_calculation_rows(calc, st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG))
-    table_data=[[Paragraph(x,cellhead) for x in ["№","Артикул / наименование","Цвет","Технические характеристики","Ед. изм.","Цена","Скидка","Цена со скидкой","Кол-во","Сумма"]]]
+    show_discount=any(float(r.get("discount",0) or 0)>0 for r in rows)
+    headers=["№","Артикул / наименование","Цвет","Технические характеристики","Ед. изм.","Цена"]
+    if show_discount: headers += ["Скидка","Цена со скидкой"]
+    headers += ["Кол-во","Сумма"]
+    table_data=[[Paragraph(x,cellhead) for x in headers]]
     for i,r in enumerate(rows,1):
         item_name=f"<b>{html.escape(str(r['sku']))}</b><br/>{html.escape(str(r['name']))}"
-        table_data.append([Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell), Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell), Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)])
+        line=[Paragraph(str(i),cell), Paragraph(item_name,cell), Paragraph(html.escape(str(r['color'] or '—')),cell), Paragraph(html.escape(str(r['spec'] or '—')),cell), Paragraph(html.escape(str(r['unit'] or '')),cell), Paragraph(_money(r['price']),cell)]
+        if show_discount: line += [Paragraph(f"{r['discount']:g}%",cell), Paragraph(_money(r['after']),cell)]
+        line += [Paragraph(f"{r['quantity']:g}",cell), Paragraph(_money(r['amount']),cell)]
+        table_data.append(line)
     if not rows:
-        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell), "", "", "", "", "", "", "", ""])
+        table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell)] + [""]*(len(headers)-2))
     total=sum(r['amount'] for r in rows)
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
     if delivery:
-        table_data.append(["", Paragraph("Доставка",cell), "", "", "", "", "", "", "", Paragraph(_money(delivery),cell)])
-    table_data.append(["", "", "", "", "", "", "", "", Paragraph("ИТОГО:",cell), Paragraph(_money(total+delivery),cell)])
-    widths=[9*mm,48*mm,17*mm,46*mm,13*mm,20*mm,15*mm,24*mm,14*mm,24*mm]
+        delivery_row=[""]*len(headers); delivery_row[1]=Paragraph("Доставка",cell); delivery_row[-1]=Paragraph(_money(delivery),cell); table_data.append(delivery_row)
+    total_row=[""]*len(headers); total_row[-2]=Paragraph("ИТОГО:",cell); total_row[-1]=Paragraph(_money(total+delivery),cell); table_data.append(total_row)
+    if show_discount:
+        widths=[8*mm,43*mm,15*mm,43*mm,12*mm,19*mm,13*mm,22*mm,13*mm,22*mm]
+    else:
+        widths=[9*mm,49*mm,17*mm,55*mm,14*mm,25*mm,18*mm,28*mm]
     tbl=Table(table_data,colWidths=widths,repeatRows=1,hAlign="LEFT")
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#343D4A")),("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#B9C0C9")),("VALIGN",(0,0),(-1,-1),"TOP"),
+    last_row=len(table_data)-1
+    tbl_style=[("BACKGROUND",(0,0),(-1,0),brand),("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#E5A8C4")),("VALIGN",(0,0),(-1,-1),"TOP"),
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F1F3F6")),("FONTNAME",(0,-1),(-1,-1),bold),
-        ("SPAN",(0,-1),(7,-1)),("ALIGN",(8,1),(-1,-1),"RIGHT"),
-    ]))
-    flow += [tbl, Spacer(1, 3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
-             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 5 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
-             Spacer(1, 2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h), Paragraph("ИП Фазлов Дамир Ибрагимович", body)]
+        ("BACKGROUND",(0,last_row),(-1,last_row),colors.HexColor("#FCEEF4")),("FONTNAME",(0,last_row),(-1,last_row),bold),
+        ("SPAN",(0,last_row),(len(headers)-3,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT")]
+    tbl.setStyle(TableStyle(tbl_style))
+    flow += [tbl, Spacer(1,3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
+             Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
+             Spacer(1,2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h)]
+    stamp=_offer_asset_image("печать.png",35,28)
+    signature=_offer_asset_image("подпись.png",35,18)
+    class _OfferStampSignature(Flowable):
+        def __init__(self, stamp_img, signature_img):
+            super().__init__(); self.stamp_img=stamp_img; self.signature_img=signature_img; self.width=85*mm; self.height=30*mm
+        def draw(self):
+            if self.stamp_img:
+                self.canv.saveState(); self.canv.drawImage(self.stamp_img.filename,0,0,width=self.stamp_img.drawWidth,height=self.stamp_img.drawHeight,preserveAspectRatio=True,mask='auto'); self.canv.restoreState()
+            if self.signature_img:
+                self.canv.drawImage(self.signature_img.filename,-8*mm,7*mm,width=self.signature_img.drawWidth,height=self.signature_img.drawHeight,preserveAspectRatio=True,mask='auto')
+    sign=Table([[Paragraph("ИП Фазлов Дамир Ибрагимович<br/>Подпись и печать",body),_OfferStampSignature(stamp,signature)]],colWidths=[90*mm,90*mm])
+    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2)]))
+    flow.append(sign)
     doc.build(flow)
     return out.getvalue()
 
@@ -9544,6 +9582,9 @@ elif st.session_state.active_tab == "Товары и прайс":
     st.caption("Редактирование каталога применяется к новым добавлениям товаров. Цены уже сохранённых позиций в сделках не меняются.")
     _is_catalog_admin = st.session_state.get("user_role") == "admin"
     _catalog = st.session_state.crm_store.setdefault("products", copy.deepcopy(DEFAULT_PRODUCT_CATALOG))
+    # Ensure older catalog rows expose the Characteristics column in the editor.
+    for _product_row in _catalog:
+        _product_row.setdefault("characteristics", "")
     if _is_catalog_admin:
         st.info("Изменяйте текущие цены, добавляйте новые товары и снимайте позиции с продажи через флажок «Активен». Удалять товар не нужно: архивные позиции остаются в истории сделок.")
         _edited_catalog = st.data_editor(
@@ -9556,6 +9597,7 @@ elif st.session_state.active_tab == "Товары и прайс":
                 "id": st.column_config.TextColumn("ID", help="Служебный идентификатор; для новых товаров можно оставить пустым"),
                 "sku": st.column_config.TextColumn("Артикул"),
                 "name": st.column_config.TextColumn("Наименование", required=True),
+                "characteristics": st.column_config.TextColumn("Характеристики"),
                 "unit": st.column_config.TextColumn("Ед. изм.", required=True),
                 "price": st.column_config.NumberColumn("Цена, ₽", min_value=0, step=10, format="%.2f", required=True),
                 "note": st.column_config.TextColumn("Примечание"),
@@ -9591,7 +9633,7 @@ elif st.session_state.active_tab == "Товары и прайс":
                     except (TypeError, ValueError): _old_price = 0.0
                     if round(_old_price, 2) != round(_price, 2):
                         _price_changes.append({"date":now_str(),"product_id":_pid,"sku":_sku,"name":_name,"old_price":_old_price,"new_price":_price,"author":st.session_state.get("user_name", st.session_state.get("user_login", ""))})
-                _clean_rows.append({"id":_pid,"sku":_sku,"name":_name,"unit":str(_row.get("unit", "шт.") or "шт."),"price":_price,"note":str(_row.get("note", "") or ""),"active":bool(_row.get("active", True))})
+                _clean_rows.append({"id":_pid,"sku":_sku,"name":_name,"characteristics":str(_row.get("characteristics", "") or ""),"unit":str(_row.get("unit", "шт.") or "шт."),"price":_price,"note":str(_row.get("note", "") or ""),"active":bool(_row.get("active", True))})
             st.session_state.crm_store["products"] = _clean_rows
             st.session_state.crm_store.setdefault("product_price_history", []).extend(_price_changes)
             save_data(st.session_state.crm_store)
