@@ -8804,7 +8804,7 @@ elif st.session_state.active_tab == "Сделки":
     if deal_sort_mode == "По дате создания":
         fdeals.sort(key=lambda d: str(d.get("created_at") or ""), reverse=True)
     elif deal_sort_mode == "По номеру сделки":
-        fdeals.sort(key=lambda d: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", str(d.get("deal_number") or d.get("title") or ""))], reverse=True)
+        fdeals.sort(key=lambda d: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", str(d.get("deal_number") or d.get("title") or ""))], reverse=False)
     else:
         fdeals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
     new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
@@ -9112,7 +9112,7 @@ elif st.session_state.active_tab == "Задачи":
             if task_sort_mode == "По номеру задачи":
                 return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
             return str(task.get("last_modified") or task.get("created_at") or "")
-        _sort_reverse = True
+        _sort_reverse = task_sort_mode != "По номеру задачи"
         aat.sort(key=_task_sort_key, reverse=_sort_reverse)
         new_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
         review_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
@@ -9237,7 +9237,7 @@ elif st.session_state.active_tab == "Задачи":
             if task_sort_mode == "По номеру задачи":
                 return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
             return str(task.get("last_modified") or task.get("created_at") or "")
-        archived_tasks.sort(key=_archived_task_sort_key, reverse=True)
+        archived_tasks.sort(key=_archived_task_sort_key, reverse=(task_sort_mode != "По номеру задачи"))
         if archived_tasks:
             for at in archived_tasks[:50]:
                 task = at["task_obj"]
