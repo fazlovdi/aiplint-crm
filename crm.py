@@ -5169,16 +5169,19 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, Flowable
+    from reportlab.lib.utils import ImageReader
+    from PIL import Image as PILImage
     font,bold=_pdf_font_setup()
     out=io.BytesIO()
-    doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=11*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
+    doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=8*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
-    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_LEFT,spaceAfter=4*mm,textColor=colors.HexColor("#202833"))
-    body=ParagraphStyle("InvBody",parent=styles["BodyText"],fontName=font,fontSize=8,leading=10,spaceAfter=1.3*mm)
+    brand=colors.HexColor("#bc1661")
+    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_CENTER,spaceAfter=4*mm,textColor=colors.HexColor("#202833"))
+    body=ParagraphStyle("InvBody",parent=styles["BodyText"],fontName=font,fontSize=8,leading=10,spaceAfter=1.3*mm,textColor=colors.HexColor("#343D4A"))
     small=ParagraphStyle("InvSmall",parent=body,fontSize=6.7,leading=8)
     cell=ParagraphStyle("InvCell",parent=small,fontSize=6.8,leading=8)
-    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER)
+    head=ParagraphStyle("InvHead",parent=cell,fontName=bold,alignment=TA_CENTER,textColor=colors.white)
     date=moscow_now().date()
     next_month=1 if date.month==12 else date.month+1
     year=date.year+1 if date.month==12 else date.year
@@ -5191,37 +5194,65 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}, {requisites.get('address','')}"
     else:
         payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}"+(f"/КПП {requisites.get('kpp','')}" if requisites.get('kpp') else "")+f", {requisites.get('address','')}"
-    seller="ИП Фазлов Дамир Ибрагимович"
-    bank="ООО \"Банк Точка\""
-    seller_inn="731701704975"
-    account="40802810801500486358"
-    bik="044525104"
-    corr="30101810745374525104"
     calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
     suffix=calc_name.replace("Расчёт", "", 1).strip()
     invoice_no=f"Счёт {suffix} от {date.strftime('%d.%m.%Y')}"
-    flow=[Paragraph(f"{_money(total)} ₽",ParagraphStyle("InvAmount",parent=title,fontSize=16,alignment=TA_RIGHT)),
-          Paragraph("Получатель",body),
-          Table([[Paragraph(f"<b>{seller}</b><br/>ИНН {seller_inn}<br/>Банк получателя: {bank}<br/>БИК {bik}<br/>Кор. счёт {corr}<br/>Счёт {account}<br/>Без НДС",body)]],colWidths=[180*mm],style=TableStyle([("BOX",(0,0),(-1,-1),0.6,colors.HexColor("#AEB6C2")),("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#F8F9FB")),("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)])),
-          Spacer(1,5*mm),Paragraph(f"<b>{html.escape(invoice_no)}</b>",title),
-          Paragraph(f"Получатель: {seller}, ИНН {seller_inn}, р/с {account}, в банке {bank}, БИК {bik}, к/с {corr}",body),
-          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
+
+    # Images are expected in the repository root next to crm.py. Try common deployment paths.
+    def _asset_image(filename, width_mm, max_height_mm=None):
+        candidates=[os.path.join(os.getcwd(), filename), os.path.join(os.path.dirname(os.path.abspath(__file__)), filename), os.path.join("assets", filename), os.path.join("static", filename)]
+        path=next((x for x in candidates if os.path.isfile(x)), None)
+        if not path:
+            return None
+        try:
+            im=Image(path)
+            im.drawWidth=width_mm*mm
+            ratio=im.imageHeight / float(im.imageWidth or 1)
+            im.drawHeight=im.drawWidth*ratio
+            if max_height_mm and im.drawHeight > max_height_mm*mm:
+                scale=(max_height_mm*mm)/im.drawHeight
+                im.drawWidth*=scale; im.drawHeight*=scale
+            im.hAlign="LEFT"
+            return im
+        except Exception:
+            return None
+
+    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", (210*0.25), 24)
+    flow=[]
+    if logo:
+        flow += [logo, Spacer(1,3*mm)]
+    flow += [Paragraph(html.escape(invoice_no),title),
+             Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
-        name=f"{html.escape(str(r['name']))}<br/><font size='6'>(Артикул: {html.escape(str(r['sku']))})</font>"
+        name=f"<b>{html.escape(str(r['name']))}</b><br/><font size='6'>(Артикул: {html.escape(str(r['sku']))})</font>"
         if r['color']: name += f"<br/><font size='6'>Цвет/RAL: {html.escape(str(r['color']))}</font>"
         data.append([Paragraph(str(i),cell),Paragraph(name,cell),Paragraph(f"{r['quantity']:g}",cell),Paragraph(html.escape(str(r['unit'])),cell),Paragraph(_money(r['after']),cell),Paragraph("Без НДС",cell),Paragraph(_money(r['amount']),cell)])
     if delivery:
         data.append([Paragraph(str(len(rows)+1),cell),Paragraph("Доставка",cell),Paragraph("1",cell),Paragraph("усл.",cell),Paragraph(_money(delivery),cell),Paragraph("Без НДС",cell),Paragraph(_money(delivery),cell)])
     tbl=Table(data,colWidths=[9*mm,72*mm,17*mm,18*mm,24*mm,18*mm,27*mm],repeatRows=1,hAlign="LEFT")
-    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E9EDF2")),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#AEB6C2")),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
-    _line_count = len(rows) + (1 if delivery else 0)
-    _count_mod = _line_count % 100
-    _count_last = _line_count % 10
-    _count_word = "наименование" if _count_last == 1 and _count_mod != 11 else ("наименования" if 2 <= _count_last <= 4 and not 12 <= _count_mod <= 14 else "наименований")
-    flow += [tbl,Spacer(1,3*mm),Paragraph(f"Всего {_line_count} {_count_word} на сумму {_number_to_russian_words(int(total))} {int(round((total-int(total))*100)):02d} копеек.",body),Paragraph(f"<b>Итог к оплате: {_money(total)} ₽</b> &nbsp;&nbsp; Без НДС",ParagraphStyle("InvTotal",parent=body,fontName=bold,fontSize=10,alignment=TA_RIGHT)),Paragraph(f"Срок оплаты: Не позднее {due.strftime('%d.%m.%Y')} г.",body),Spacer(1,12*mm)]
-    sign=Table([[Paragraph(f"Получатель:<br/><br/>Индивидуальный предприниматель<br/>Фазлов Дамир Ибрагимович",body),Paragraph("Плательщик: ___________________________<br/><br/>Подпись / печать",body)]],colWidths=[90*mm,90*mm])
-    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),4)]))
+    tbl.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),brand),("GRID",(0,0),(-1,-1),0.4,brand),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5)]))
+    _line_count=len(rows)+(1 if delivery else 0)
+    _count_mod=_line_count%100; _count_last=_line_count%10
+    _count_word="наименование" if _count_last==1 and _count_mod!=11 else ("наименования" if 2<=_count_last<=4 and not 12<=_count_mod<=14 else "наименований")
+    flow += [tbl,Spacer(1,3*mm),Paragraph(f"Всего {_line_count} {_count_word} на сумму {_number_to_russian_words(int(total))} {int(round((total-int(total))*100)):02d} копеек.",body),Paragraph(f"<b>Итог к оплате: {_money(total)} ₽</b> &nbsp;&nbsp; Без НДС",ParagraphStyle("InvTotal",parent=body,fontName=bold,fontSize=10,alignment=TA_RIGHT,textColor=brand)),Paragraph(f"Срок оплаты: Не позднее {due.strftime('%d.%m.%Y')} г.",body),Spacer(1,8*mm)]
+
+    stamp=_asset_image("печать.png", 35, 28)
+    signature=_asset_image("подпись.png", 35, 18)
+    # Put signature on top of the stamp while keeping both aligned in one row.
+    class _StampSignature(Flowable):
+        def __init__(self, stamp_img, signature_img):
+            super().__init__(); self.stamp_img=stamp_img; self.signature_img=signature_img
+            self.width=85*mm; self.height=30*mm
+        def draw(self):
+            if self.stamp_img:
+                self.canv.saveState(); self.canv.translate(0,0); self.canv.drawImage(self.stamp_img.filename, 0, 0, width=self.stamp_img.drawWidth, height=self.stamp_img.drawHeight, preserveAspectRatio=True, mask='auto'); self.canv.restoreState()
+            if self.signature_img:
+                sw=self.signature_img.drawWidth; sh=self.signature_img.drawHeight
+                # Signature overlaps the stamp, slightly above its centre.
+                self.canv.drawImage(self.signature_img.filename, 7*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
+    sign=Table([[Paragraph("Поставщик: ИП Фазлов Дамир Ибрагимович<br/>Подпись и печать",body),_StampSignature(stamp,signature)]],colWidths=[90*mm,90*mm])
+    sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2)]))
     flow.append(sign)
     doc.build(flow)
     return out.getvalue(), due.strftime("%d.%m.%Y")
@@ -6577,6 +6608,7 @@ def invoice_document_dialog(deal_id, calc_id):
                         ozon_refresh_col, ozon_delete_col = st.columns([3, 1])
                         with ozon_refresh_col:
                             st.caption("Это PDF-документ, сформированный CRM; банковский статус оплаты для него не запрашивается.")
+                            st.markdown("<div style='color:#d00000;font-weight:800;margin-top:4px;'>ПРОВЕРЬ ОПЛАТУ И СМЕНИ СТАТУС ОПЛАТЫ САМОСТОЯТЕЛЬНО!</div>", unsafe_allow_html=True)
                         with ozon_delete_col:
                             if st.button("Удалить", key=f"ozon_delete_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
                                 st.session_state[f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"] = True
