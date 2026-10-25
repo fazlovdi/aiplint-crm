@@ -6132,9 +6132,15 @@ def invoice_document_dialog(deal_id, calc_id):
                             except Exception as exc:
                                 st.error(f"Не удалось обновить статус: {exc}")
                     with delete_col:
-                        if st.button("Удалить", key=f"tochka_delete_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
+                        _record_status_code = str(record.get("status", "")).strip().upper()
+                        _record_is_fully_paid = _record_status_code in {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+                        _record_is_partially_paid = _record_status_code in {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT"}
+                        if _record_is_fully_paid or _record_is_partially_paid:
+                            _paid_label = "Оплачен" if _record_is_fully_paid else "Частично оплачен"
+                            st.markdown(f"<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>{_paid_label}</div>", unsafe_allow_html=True)
+                        elif st.button("Удалить", key=f"tochka_delete_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                             st.session_state[confirm_key] = True
-                    if st.session_state.get(confirm_key):
+                    if not (_record_is_fully_paid or _record_is_partially_paid) and st.session_state.get(confirm_key):
                         st.warning("Зачеркнуть этот документ? Он останется в истории CRM.")
                         yes_col, no_col = st.columns(2)
                         with yes_col:
@@ -6148,6 +6154,19 @@ def invoice_document_dialog(deal_id, calc_id):
                             if st.button("Отмена", key=f"tochka_delete_no_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                                 st.session_state.pop(confirm_key, None)
                                 st.rerun()
+
+
+def _calculation_payment_badge(calc):
+    """Возвращает отметку об оплате расчёта по статусам его банковских документов."""
+    records = [r for r in (calc.get("tochka_documents", []) or []) if not r.get("deleted")]
+    statuses = {str(r.get("status", "")).strip().upper() for r in records}
+    fully_paid = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    partially_paid = {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT"}
+    if statuses & fully_paid:
+        return "Оплачен"
+    if statuses & partially_paid:
+        return "Частично оплачен"
+    return ""
 
 
 def render_deal_products_block(d, key_prefix):
@@ -6191,6 +6210,7 @@ def render_deal_products_block(d, key_prefix):
                     save_data(st.session_state.crm_store)
                     st.rerun()
             continue
+        _calc_paid_badge = _calculation_payment_badge(calc)
         name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
         with name_col:
             st.markdown(f"**{calc.get('name', 'Расчёт')}**")
@@ -6203,11 +6223,14 @@ def render_deal_products_block(d, key_prefix):
                 st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
                 st.rerun()
         with delete_col:
-            confirm_key = f"confirm_delete_calc_{d['id']}_{calc['id']}"
-            if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
-                st.session_state[confirm_key] = True
-                st.rerun()
-            if st.session_state.get(confirm_key):
+            if _calc_paid_badge:
+                st.markdown(f"<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>{html.escape(_calc_paid_badge)}</div>", unsafe_allow_html=True)
+            else:
+                confirm_key = f"confirm_delete_calc_{d['id']}_{calc['id']}"
+                if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
+            if not _calc_paid_badge and st.session_state.get(confirm_key):
                 _confirm_ui_key = f"calc_delete_confirm_ui_{d['id']}_{calc['id']}"
                 st.markdown(f"""<style>
                 .st-key-{_confirm_ui_key} {{background:#FFF7F7!important;border:1px solid #F0C5C5!important;border-radius:10px!important;padding:0.7rem 0.8rem!important;margin:0.25rem 0 0.55rem!important;}}
@@ -7129,14 +7152,27 @@ def render_client_card_expanded(cl):
                         st.session_state["dialog_client_requisites_return_to_invoice"] = False
                         client_requisites_dialog(cl["id"], False, _req.get("id"))
                 with _req_cols[2]:
+                    _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
                     if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
-                        _req["deleted"] = True
-                        _req["deleted_at"] = now_str()
-                        _req["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
-                        cl["last_modified"] = now_str()
-                        cl.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Реквизиты «{_req_name}» помечены удалёнными"})
-                        save_data(st.session_state.crm_store)
+                        st.session_state[_req_confirm_key] = True
                         st.rerun()
+                if not _req.get("deleted") and st.session_state.get(_req_confirm_key):
+                    st.warning(f"Удалить реквизиты «{_req_name}»? Они останутся в истории карточки клиента.")
+                    _req_yes, _req_no = st.columns(2)
+                    with _req_yes:
+                        if st.button("Да, удалить", key=f"client_req_del_yes_{cl['id']}_{_req.get('id',_ri)}", type="primary", use_container_width=True):
+                            _req["deleted"] = True
+                            _req["deleted_at"] = now_str()
+                            _req["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                            cl["last_modified"] = now_str()
+                            cl.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Реквизиты «{_req_name}» помечены удалёнными"})
+                            st.session_state.pop(_req_confirm_key, None)
+                            save_data(st.session_state.crm_store)
+                            st.rerun()
+                    with _req_no:
+                        if st.button("Отмена", key=f"client_req_del_no_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
+                            st.session_state.pop(_req_confirm_key, None)
+                            st.rerun()
             if st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary"):
                 _push_dialog_return()
                 st.session_state["dialog_client_requisites_client_id"] = cl["id"]
