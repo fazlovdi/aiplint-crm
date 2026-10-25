@@ -9688,9 +9688,9 @@ if st.session_state.active_tab == "Клиенты":
             with _h_city: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
             with _h_phone: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
             with _h_category: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
-            with _h_deals: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сделки</div>", unsafe_allow_html=True)
-            with _h_tasks: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-19px)'>Задачи</div>", unsafe_allow_html=True)
-            with _h_sum: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сумма сделок</div>", unsafe_allow_html=True)
+            with _h_deals: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-4px)'>Сделки</div>", unsafe_allow_html=True)
+            with _h_tasks: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Задачи</div>", unsafe_allow_html=True)
+            with _h_sum: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Сумма сделок</div>", unsafe_allow_html=True)
 
         for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
