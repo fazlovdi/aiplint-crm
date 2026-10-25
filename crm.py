@@ -2262,6 +2262,38 @@ DEFAULT_PRODUCT_CATALOG = [
     {"id":"APLNT1060","sku":"APLNT1060","name":"Шпатель для подготовки основания","unit":"шт.","price":1390.0,"note":"В наличии","active":True},
     {"id":"APLNT1102","sku":"APLNT1102","name":"Образцы магнитного и тонкого плинтусов","unit":"компл.","price":0.0,"note":"Бесплатно","active":True},
 ]
+# Характеристики товаров перенесены из актуального файла «Прайс.xlsx».
+PRODUCT_CHARACTERISTICS_BY_SKU = {
+    'APLNT1003': 'Магнитный профиль в комплекте со вставкой под покраску',
+    'APLNT1007': 'Магнитный профиль в комплекте с основой для керамогранита',
+    'APLNT1001': 'Профиль с нижним основанием для ламината/шпона собственного производства',
+    'APLNT1002': 'Профиль с укороченным нижним основанием под любые вставки',
+    'APLNT1050': 'Ультратонкий алюминиевый, высота 40 мм, видимая толщина всего 1 мм',
+    'APLNT1051': 'Ультратонкий алюминиевый, высота 60 мм, видимая толщина всего 1 мм',
+    'APLNT1052': 'С нишей для светодиодной подсветки, высота 40 мм, толщина 1 мм',
+    'APLNT1053': 'С нишей для светодиодной подсветки, высота 60 мм, толщина 1 мм',
+    'APLNT1004': 'Высокая плотность, толщина 11 мм, высота 64 мм. Готова под финишную покраску стены',
+    'APLNT1006': 'Эксклюзивный декор из гибкого камня на заказ, длина до 3.2 м',
+    'APLNT1005': 'Гибкий радиусный профиль со вставкой под покраску на заказ',
+    'APLNT1007-R': 'Радиусный профиль для криволинейных стен на заказ',
+    'APLNT1010-1': 'COB лента без точек, 24V, цвет 3000К (тёплый белый), ширина 5 мм',
+    'APLNT1010-2': 'COB лента без точек, 24V, цвет 4000К (нейтральный белый), ширина 5 мм',
+    'APLNT1010-3': 'COB лента без точек, 24V, цвет 6500К (холодный белый), ширина 5 мм',
+    'APLNT1020-1': 'С регулировкой яркости и плавным пуском',
+    'APLNT1020-2': 'С регулировкой яркости и плавным пуском',
+    'APLNT1020-3': 'С регулировкой яркости и плавным пуском',
+    'APLNT1030': 'Встроенный датчик освещенности, дальность 6 м, 220V',
+    'APLNT1060': 'Для идеальной подготовки основания, глубина 17 мм, высота 80 мм',
+}
+
+# Заполняем характеристики в каталоге по артикулу; остальные поля и цены не меняем.
+for _default_product in DEFAULT_PRODUCT_CATALOG:
+    _default_sku = str(_default_product.get("sku", "") or "").strip()
+    _default_id = str(_default_product.get("id", "") or "").strip()
+    _default_spec = PRODUCT_CHARACTERISTICS_BY_SKU.get(_default_id) or PRODUCT_CHARACTERISTICS_BY_SKU.get(_default_sku)
+    if _default_spec:
+        _default_product["characteristics"] = _default_spec
+
 DISCOUNT_TYPES = {"Без скидки": 0, "Дилерская": 30, "Дизайнер / строитель": 10, "Акционная": 5, "Индивидуальная": 0}
 
 def migrate_data(data):
@@ -3072,6 +3104,19 @@ if "crm_store" not in st.session_state:
 # Каталог товаров добавляется совместимо с уже работающей базой.
 if "products" not in st.session_state.crm_store:
     st.session_state.crm_store["products"] = copy.deepcopy(DEFAULT_PRODUCT_CATALOG)
+    save_data(st.session_state.crm_store)
+
+# Автоматически заполняем пустые характеристики в существующем каталоге.
+# Значения взяты из актуального «Прайс.xlsx»; цены и прочие поля не меняются.
+_products_specs_changed = False
+for _product_row in st.session_state.crm_store.get("products", []):
+    _product_id = str(_product_row.get("id", "") or "").strip()
+    _product_sku = str(_product_row.get("sku", "") or "").strip()
+    _product_spec = PRODUCT_CHARACTERISTICS_BY_SKU.get(_product_id) or PRODUCT_CHARACTERISTICS_BY_SKU.get(_product_sku)
+    if _product_spec and not str(_product_row.get("characteristics", "") or "").strip():
+        _product_row["characteristics"] = _product_spec
+        _products_specs_changed = True
+if _products_specs_changed:
     save_data(st.session_state.crm_store)
 # Показываем конфликт уже после rerun, чтобы предупреждение не исчезало сразу.
 _saved_conflicts = st.session_state.pop("crm_last_save_conflicts", None)
