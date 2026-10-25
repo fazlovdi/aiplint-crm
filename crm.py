@@ -5328,7 +5328,7 @@ def _make_torg12_pdf(deal, client, calc):
         ("Грузополучатель", buyer_full),
         ("Поставщик", supplier_full),
         ("Плательщик", buyer_full),
-        ("Основание", f"Расчёт № {doc_no}"),
+        ("Основание", f"Счёт № {doc_no}"),
     ]
     y0, row_h = 15, 9.3
     for i, (label, value) in enumerate(top_rows):
@@ -5370,10 +5370,16 @@ def _make_torg12_pdf(deal, client, calc):
     # Табличная часть — все 15 колонок формы ТОРГ-12.
     xs = [10, 25, 84, 92, 111, 123, 138, 148, 158, 180, 199, 221, 235, 250, 263, 288]
     y_top, y_h1, y_h2, y_h3, y_body = 82, 90, 96, 101, 107
-    # Общая рамка заголовка и вертикальные границы.
+    # Общая рамка и границы шапки с объединёнными ячейками, как в бланке ТОРГ-12.
     rect(xs[0], y_top, xs[-1]-xs[0], y_body-y_top)
-    for x in xs[1:-1]:
-        line(x, y_top, x, y_body)
+    # Границы верхнего уровня: не пересекаем объединённые заголовки.
+    for idx in [1, 3, 5, 6, 8, 9, 10, 11, 12, 14]:
+        line(xs[idx], y_top, xs[idx], y_h1)
+    # Нижние уровни таблицы.
+    for idx in [1, 3, 5, 6, 8, 9, 10, 11, 12, 14]:
+        line(xs[idx], y_h1, xs[idx], y_body)
+    for idx in [4, 7, 13]:
+        line(xs[idx], y_h2, xs[idx], y_body)
     line(xs[0], y_h1, xs[-1], y_h1)
     line(xs[1], y_h2, xs[-1], y_h2)
     line(xs[1], y_h3, xs[-1], y_h3)
@@ -5408,7 +5414,7 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[14]+xs[15])/2, 89.0, "НДС, руб. коп.", 4.8, align="center")
     for i, x in enumerate(xs[:-1]):
         if i < 15:
-            txt((x+xs[i+1])/2, 102.5, str(i+1), 4.8, align="center")
+            txt((x+xs[i+1])/2, 104.7, str(i+1), 4.8, align="center")
 
     # Строки товаров. НДС — 22%, как в приложенном образце; сумма расчёта трактуется как сумма с НДС.
     row_y = y_body
