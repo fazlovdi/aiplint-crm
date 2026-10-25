@@ -9645,12 +9645,18 @@ if st.session_state.active_tab == "Клиенты":
         # Единая шапка колонок для всего списка клиентов.
         st.markdown("""<style>
         .st-key-clients_columns_header {
-            position: sticky !important; top: 0.25rem !important; z-index: 1000 !important;
             background: #FFFFFF !important; border-bottom: 1px solid #DCE2EA !important;
             padding: 0.45rem 0 0.25rem 0 !important; margin-top: 0.15rem !important;
             box-shadow: 0 4px 7px rgba(30,45,65,0.07) !important;
         }
         .st-key-clients_columns_header p { margin-bottom: 0 !important; }
+        .clients-columns-fixed {
+            position: fixed !important; top: 0 !important; z-index: 9999 !important;
+            background: #FFFFFF !important; padding: 0.45rem 1rem 0.25rem 1rem !important;
+            box-shadow: 0 4px 7px rgba(30,45,65,0.12) !important;
+            border-bottom: 1px solid #DCE2EA !important; box-sizing: border-box !important;
+        }
+        .clients-columns-placeholder { display:block; height:0; }
         </style>""", unsafe_allow_html=True)
         with st.container(key="clients_columns_header"):
             _h_main, _h_city, _h_phone, _h_category, _h_deals, _h_tasks, _h_sum = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
@@ -9661,6 +9667,54 @@ if st.session_state.active_tab == "Клиенты":
             with _h_deals: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сделки</div>", unsafe_allow_html=True)
             with _h_tasks: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Задачи</div>", unsafe_allow_html=True)
             with _h_sum: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:right;padding:.2rem 0'>Сумма сделок</div>", unsafe_allow_html=True)
+
+        # Закрепляем шапку через JS: position:sticky в Streamlit часто ломается
+        # из-за внутренних контейнеров с overflow. Placeholder сохраняет место в потоке.
+        st.components.v1.html('''<script>
+(function(){
+  var w=window;
+  try { if(window.parent && window.parent!==window) w=window.parent; } catch(e) {}
+  var sel='.st-key-clients_columns_header';
+  function init(){
+    var el=w.document.querySelector(sel);
+    if(!el){setTimeout(init,250);return;}
+    if(el.dataset.clientsStickyReady==='1') return;
+    el.dataset.clientsStickyReady='1';
+    var ph=w.document.createElement('div');
+    ph.className='clients-columns-placeholder';
+    el.parentNode.insertBefore(ph,el);
+    var fixed=false, origTop=0, left=0, width=0;
+    function measure(){
+      var r=el.getBoundingClientRect();
+      origTop=r.top+w.scrollY; left=r.left; width=r.width;
+    }
+    function unfix(){
+      el.classList.remove('clients-columns-fixed');
+      el.style.left=''; el.style.width=''; el.style.top='';
+      ph.style.height='0px'; fixed=false;
+    }
+    function onScroll(){
+      if(!el.isConnected) return;
+      if(!fixed){
+        var r=el.getBoundingClientRect();
+        if(r.top<=0){
+          measure();
+          ph.style.height=r.height+'px';
+          el.style.left=left+'px'; el.style.width=width+'px';
+          el.classList.add('clients-columns-fixed'); fixed=true;
+        }
+      } else if(w.scrollY<origTop-2){ unfix(); }
+    }
+    w.addEventListener('scroll',onScroll,{passive:true});
+    w.addEventListener('resize',function(){
+      if(fixed){var r=ph.getBoundingClientRect();el.style.left=r.left+'px';el.style.width=r.width+'px';}
+      else measure();
+    },{passive:true});
+    measure(); setTimeout(onScroll,100); setTimeout(onScroll,500);
+  }
+  init();
+})();
+</script>''', height=0)
 
         for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
