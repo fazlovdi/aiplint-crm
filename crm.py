@@ -5266,6 +5266,7 @@ def client_requisites_view_dialog(client_id, return_to_invoice=False, requisite_
     if not req:
         st.error("Сохранённые реквизиты не найдены. Возможно, запись была удалена.")
         if st.button("Закрыть", key=f"req_view_missing_close_{client_id}_{requisite_id}"):
+            st.session_state.pop("dialog_client_requisites_view", None)
             if return_to_invoice:
                 inv = st.session_state.get("dialog_invoice_request") or {}
                 invoice_document_dialog(inv.get("deal_id"), inv.get("calc_id"))
@@ -5279,6 +5280,7 @@ def client_requisites_view_dialog(client_id, return_to_invoice=False, requisite_
         sp, cc = st.columns([20, 1])
         with cc:
             if st.button("✕", key=close_key, use_container_width=True):
+                st.session_state.pop("dialog_client_requisites_view", None)
                 if return_to_invoice:
                     inv = st.session_state.get("dialog_invoice_request") or {}
                     invoice_document_dialog(inv.get("deal_id"), inv.get("calc_id"))
@@ -6284,7 +6286,7 @@ def invoice_document_dialog(deal_id, calc_id):
     with req_view_col:
         if st.button("Посмотреть реквизиты", key=f"invoice_req_view_{deal_id}_{calc_id}", use_container_width=True, disabled=not selected_req):
             _push_dialog_return()
-            client_requisites_view_dialog(client.get("id"), True, selected_req.get("id"))
+            st.session_state["dialog_client_requisites_view"] = {"client_id": client.get("id"), "return_to_invoice": True, "requisite_id": selected_req.get("id")}
             st.rerun()
     if not requisites:
         st.info("Для клиента пока не сохранены реквизиты плательщика. Нажми «Добавить новые реквизиты».")
@@ -6392,6 +6394,44 @@ def invoice_document_dialog(deal_id, calc_id):
                 pass
     st.divider()
     st.markdown("### Созданные платежи и счета")
+    # PDF-счета, сформированные внутри CRM (в том числе для Ozon Pay), не являются банковскими
+    # платежными записями, поэтому показываем их отдельно в этой общей, всегда видимой истории.
+    generated = [doc for doc in (deal.get("generated_documents", []) or [])
+                 if str(doc.get("calculation_id", "")) == str(calc_id)
+                 and ("счёт" in str(doc.get("kind", "")).lower() or "счет" in str(doc.get("kind", "")).lower())]
+    generated.sort(key=lambda doc: str(doc.get("created_at", "")), reverse=True)
+    if generated:
+        st.markdown("#### PDF-счета")
+        for gen_index, gen_doc in enumerate(generated):
+            with st.container(border=True):
+                st.markdown(f"**{gen_doc.get('file_name', 'Счёт PDF')}**")
+                st.caption(f"{gen_doc.get('kind', 'Счёт')} · Создано: {gen_doc.get('created_at', '—')}")
+                # Для только что сформированного PDF байты доступны в session_state.
+                matching_pdf = None
+                for _pdf_key in (f"ozon_legal_invoice_pdf_{deal_id}_{calc_id}", f"tochka_pdf_{deal_id}_{calc_id}_{gen_doc.get('payer', {}).get('tochka_document_id', '')}"):
+                    _pdf_state = st.session_state.get(_pdf_key)
+                    if _pdf_state:
+                        if _pdf_state.get("bytes"):
+                            matching_pdf = (base64.b64decode(_pdf_state["bytes"]), _pdf_state.get("filename", gen_doc.get("file_name", "Счёт.pdf")))
+                            break
+                        if _pdf_state.get("data"):
+                            matching_pdf = (base64.b64decode(_pdf_state["data"]), _pdf_state.get("filename", gen_doc.get("file_name", "Счёт.pdf")))
+                            break
+                if matching_pdf is None:
+                    _file_obj = next((f for f in (deal.get("deal_files", []) or [])
+                                      if f.get("file_hash") == gen_doc.get("file_hash") or
+                                      (f.get("file_name") == gen_doc.get("file_name") and str(f.get("calculation_id", "")) == str(calc_id))), None)
+                    _local_path = (_file_obj or {}).get("file_path", "")
+                    if _local_path and os.path.isfile(_local_path):
+                        try:
+                            with open(_local_path, "rb") as _pdf_file:
+                                matching_pdf = (_pdf_file.read(), gen_doc.get("file_name", "Счёт.pdf"))
+                        except Exception:
+                            matching_pdf = None
+                if matching_pdf:
+                    st.download_button("Скачать PDF", data=matching_pdf[0], file_name=matching_pdf[1], mime="application/pdf", key=f"generated_doc_download_{deal_id}_{calc_id}_{gen_index}")
+                else:
+                    st.caption("PDF сохранён в файлах сделки. Если файл хранится во внешнем облаке, скачивание доступно в разделе файлов сделки.")
     # История документов находится вне переключателя банка и всегда видна.
     # Документы принадлежат конкретному расчёту: показываем только его счета и ссылки.
     # Вёрстку и отображение документов оставляем без изменений.
@@ -7534,7 +7574,7 @@ def render_client_card_expanded(cl):
                         # «Открыть» показывает сохранённую запись в отдельном окне просмотра.
                         # Значения читаются непосредственно из актуального объекта клиента,
                         # без ключей виджетов редактора, которые могли содержать пустое состояние.
-                        client_requisites_view_dialog(cl["id"], False, _req.get("id"))
+                        st.session_state["dialog_client_requisites_view"] = {"client_id": cl["id"], "return_to_invoice": False, "requisite_id": _req.get("id")}
                         st.rerun()
                 with _req_cols[2]:
                     _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
@@ -8983,13 +9023,16 @@ if st.session_state.active_tab == "Клиенты":
     
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    _req_view_state = st.session_state.get("dialog_client_requisites_view")
     _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
     _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
     _client_tab_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
     _client_tab_calc_id = st.session_state.get("dialog_calculation_calc_id")
     # Расчёт — дочернее окно сделки. Оно должно иметь приоритет над карточкой
     # клиента/сделки, иначе старое состояние родительского окна перехватывает rerun.
-    if _client_tab_calc_deal_id and _client_tab_calc_id:
+    if _req_view_state:
+        client_requisites_view_dialog(_req_view_state.get("client_id"), bool(_req_view_state.get("return_to_invoice")), _req_view_state.get("requisite_id"))
+    elif _client_tab_calc_deal_id and _client_tab_calc_id:
         _client_tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_client_tab_calc_deal_id)), None)
         _client_tab_calc = next((c for c in (_client_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_client_tab_calc_id) and not c.get("deleted")), None)
         if _client_tab_calc_deal and _client_tab_calc:
@@ -9326,13 +9369,16 @@ elif st.session_state.active_tab == "Сделки":
 
     _task_completion_state = st.session_state.get("dialog_task_completion")
     _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    _req_view_state = st.session_state.get("dialog_client_requisites_view")
     _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
     _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
     _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
     _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
     # На вкладке «Сделки» дочерние окна должны иметь приоритет над карточкой сделки.
     # Иначе после нажатия «Сформировать счёт» старый dialog_deal_key открывает сделку.
-    if _req_dialog_client_id:
+    if _req_view_state:
+        client_requisites_view_dialog(_req_view_state.get("client_id"), bool(_req_view_state.get("return_to_invoice")), _req_view_state.get("requisite_id"))
+    elif _req_dialog_client_id:
         client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
     elif _invoice_dialog_state:
         invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
@@ -9978,11 +10024,14 @@ if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("ac
 # поскольку карточка сделки может быть открыта из другого раздела CRM.
 # Приоритет сохраняем такой же, как в диспетчере вкладки «Сделки».
 if not st.session_state.get("_crm_dialog_requested_this_run", False):
+    _global_req_view_state = st.session_state.get("dialog_client_requisites_view")
     _global_req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
     _global_invoice_dialog_state = st.session_state.get("dialog_invoice_request")
     _global_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
     _global_calc_id = st.session_state.get("dialog_calculation_calc_id")
-    if _global_req_dialog_client_id:
+    if _global_req_view_state:
+        client_requisites_view_dialog(_global_req_view_state.get("client_id"), bool(_global_req_view_state.get("return_to_invoice")), _global_req_view_state.get("requisite_id"))
+    elif _global_req_dialog_client_id:
         client_requisites_dialog(
             _global_req_dialog_client_id,
             bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)),
