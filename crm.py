@@ -141,10 +141,15 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { font-size: 0.9rem; }
     .stButton > button { font-size: 0.85rem !important; }
     .stHorizontalBlock .stButton button { font-size: 0.85rem !important; }
-    /* Верхние кнопки переключения разделов: шрифт на 20% меньше */
-    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button,
+    /* Верхние кнопки переключения разделов: исходный размер шрифта, габариты кнопок уменьшены на 10% */
+    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button {
+        font-size: 0.85rem !important;
+        padding: 0.585rem 0.9rem !important;
+        border-radius: 10.8px !important;
+        min-height: 0 !important;
+    }
     .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button p,
-    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button span { font-size: 0.68rem !important; }
+    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button span { font-size: 0.85rem !important; }
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
 
