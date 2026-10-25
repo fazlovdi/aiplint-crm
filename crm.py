@@ -2133,21 +2133,57 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             if t.get("task_files"):
                 st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 render_file_thumbs(t["task_files"], f"{key_prefix}_files")
-            st.markdown("**\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0444\u0430\u0439\u043b\u044b \u0432 \u0437\u0430\u0434\u0430\u0447\u0443:**")
+            st.markdown("**Добавить файлы в задачу:**")
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
-            ntf_existing = st.file_uploader("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b\u044b:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
-            if st.button("\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
-                if ntf_existing:
-                    with st.spinner("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0444\u0430\u0439\u043b\u043e\u0432..."):
-                        fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
-                    if fi_list:
-                        t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
-                        t["last_modified"] = now_str()
-                        cl["last_modified"] = now_str()
-                        if d: d["last_modified"] = now_str()
-                        st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
-                        commit_and_rerun(st.session_state.crm_store, "\u0424\u0430\u0439\u043b\u044b \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u044b")
-                else: st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u0430\u0439\u043b(\u044b)")
+            ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
+            _task_file_upload_col, _task_file_pick_col = st.columns(2)
+            with _task_file_upload_col:
+                if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
+                    if ntf_existing:
+                        with st.spinner("Загрузка файлов..."):
+                            fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
+                        if fi_list:
+                            t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
+                            t["last_modified"] = now_str()
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
+                            commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
+                    else: st.warning("Выберите файл(ы)")
+            with _task_file_pick_col:
+                if st.button("Выбрать из загруженных", key=f"task_pick_existing_btn_{key_prefix}", use_container_width=True):
+                    _pick_key = f"task_pick_existing_open_{key_prefix}"
+                    st.session_state[_pick_key] = not st.session_state.get(_pick_key, False)
+            if st.session_state.get(f"task_pick_existing_open_{key_prefix}", False):
+                _source_task_files = (d or {}).get("deal_files", []) if d else cl.get("client_files", [])
+                _source_task_files = [f for f in (_source_task_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+                _task_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_source_task_files)}
+                if _task_file_options:
+                    _picked_task_file_keys = st.multiselect("Файлы из карточки клиента:" if not d else "Файлы из окна сделки:", list(_task_file_options), key=f"task_pick_existing_select_{key_prefix}")
+                    if st.button("Прикрепить выбранные", key=f"task_pick_existing_apply_{key_prefix}", use_container_width=True, type="primary"):
+                        _already_hashes = {str(f.get("file_hash", "") or f.get("file_path", "")) for f in t.get("task_files", []) if isinstance(f, dict)}
+                        _added = []
+                        for _picked_key in _picked_task_file_keys:
+                            _picked_file = dict(_task_file_options[_picked_key])
+                            _identity = str(_picked_file.get("file_hash", "") or _picked_file.get("file_path", "") or _picked_file.get("path", ""))
+                            if _identity and _identity not in _already_hashes:
+                                if not _picked_file.get("file_path") and _picked_file.get("path"):
+                                    _picked_file["file_path"] = _picked_file["path"]
+                                if not _picked_file.get("file_name") and _picked_file.get("name"):
+                                    _picked_file["file_name"] = _picked_file["name"]
+                                _added.append(_picked_file)
+                                _already_hashes.add(_identity)
+                        if _added:
+                            t.setdefault("task_files", []).extend(_added)
+                            t["last_modified"] = now_str()
+                            cl["last_modified"] = now_str()
+                            if d: d["last_modified"] = now_str()
+                            st.session_state[f"task_pick_existing_open_{key_prefix}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "Файлы прикреплены к задаче")
+                        else:
+                            st.info("Выберите файлы, которые ещё не прикреплены к задаче.")
+                else:
+                    st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
 
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
@@ -4714,7 +4750,8 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
         ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
         ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
-        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
+        _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
+        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
     else:
         nproducts = ""
         nship_city = ""
@@ -4725,17 +4762,60 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         norder_amount = ""
         ntk_num = ""
         ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
-        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}", accept_multiple_files=True)
+        _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
+        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
+    _create_file_upload_col, _create_file_pick_col = st.columns(2)
+    with _create_file_upload_col:
+        if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
+            if ntf:
+                _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
+                st.session_state.setdefault(f"nt_uploaded_files_{key_suffix}", []).extend(_new_uploaded_task_files)
+                st.session_state[f"nt_file_ver_{key_suffix}"] = _nt_file_ver + 1
+                st.rerun()
+            else:
+                st.warning("Выберите файл(ы) для загрузки.")
+    with _create_file_pick_col:
+        if st.button("Выбрать из загруженных", key=f"nt_pick_existing_btn_{key_suffix}", use_container_width=True):
+            _create_pick_key = f"nt_pick_existing_open_{key_suffix}"
+            st.session_state[_create_pick_key] = not st.session_state.get(_create_pick_key, False)
+    _create_source_deal = get_deal_by_id(deal_id) if deal_id else None
+    _create_source_client = get_client_by_id(cl_id)
+    _create_source_files = (_create_source_deal or {}).get("deal_files", []) if deal_id else (_create_source_client or {}).get("client_files", [])
+    _create_source_files = [f for f in (_create_source_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+    _create_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_create_source_files)}
+    if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
+        if _create_file_options:
+            st.multiselect("Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:", list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}")
+        else:
+            st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
     if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
         if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
         else:
-            tfi_list = save_uploaded_files(ntf, cl_id, "task_file") if ntf else []
+            tfi_list = list(st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or [])
+            if ntf:
+                tfi_list.extend(normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file")))
+            _picked_create_keys = st.session_state.get(f"nt_pick_existing_select_{key_suffix}", []) or []
+            _picked_create_files = []
+            for _picked_create_key in _picked_create_keys:
+                if _picked_create_key in _create_file_options:
+                    _picked_file = dict(_create_file_options[_picked_create_key])
+                    if not _picked_file.get("file_path") and _picked_file.get("path"):
+                        _picked_file["file_path"] = _picked_file["path"]
+                    if not _picked_file.get("file_name") and _picked_file.get("name"):
+                        _picked_file["file_name"] = _picked_file["name"]
+                    _picked_create_files.append(_picked_file)
+            _task_file_seen = {str(f.get("file_hash", "") or f.get("file_path", "")) for f in tfi_list if isinstance(f, dict)}
+            for _picked_file in _picked_create_files:
+                _identity = str(_picked_file.get("file_hash", "") or _picked_file.get("file_path", "") or _picked_file.get("path", ""))
+                if _identity and _identity not in _task_file_seen:
+                    tfi_list.append(_picked_file)
+                    _task_file_seen.add(_identity)
             prefix = "ЗС" if deal_id else "ЗК"
             tn = generate_task_number(prefix)
             te = {
                 "text": ntopic.strip(), "deadline": ntd.isoformat(), "done": False, "type": ntype,
-                "task_files": normalize_file_list(tfi_list), "manager": ntm or "",
+                "task_files": tfi_list, "manager": ntm or "",
                 "completion_report": "", "completion_files": [],
                 "deal_id": deal_id, "task_comment": ncomment.strip(),
                 "order_amount": round(float(norder_amount.replace(",", ".")), 2) if norder_amount and norder_amount.strip() else 0, "last_modified": now_str(),
@@ -4750,6 +4830,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             cl = get_client_by_id(cl_id)
             if cl:
                 cl.setdefault("tasks", []).append(te)
+                st.session_state.pop(f"nt_uploaded_files_{key_suffix}", None)
                 cl["last_modified"] = now_str()
                 if deal_id:
                     d = get_deal_by_id(deal_id)
