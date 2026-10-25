@@ -5140,7 +5140,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
             im.hAlign="LEFT"
             return im
         except Exception: return None
-    logo=_offer_asset_image("Логотип iPlinth с розовым шевроном-1.png", 125, 35)
+    logo=_offer_asset_image("Логотип iPlinth с розовым шевроном-1.png", 187.5, 52.5)
     header=Table([[logo or Paragraph("iPlinth",body), Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')}<br/>Срок действия: 30 дней (до {validity.strftime('%d.%m.%Y')})", body)]], colWidths=[150*mm,127*mm], hAlign="LEFT")
     header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     flow=[header, Spacer(1,4*mm), Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
@@ -5287,7 +5287,8 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[52*mm],hAlign="LEFT")
     header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     flow=[header,Spacer(1,5*mm),Paragraph(html.escape(invoice_no),title),Spacer(1,2*mm),
-          Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, ОГРНИП 322169000220971, р/с 40802810800000438327, в банке ООО &quot;ОЗОН Банк&quot;, БИК 044525068, к/с 30101810645374525068",body),
+          Paragraph(
+              f"Получатель: {html.escape('ИП Фазлов Дамир Ибрагимович' if requisites.get('payer_type') == 'person' else 'ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, ОГРНИП 322169000220971, р/с 40802810800000438327, в банке ООО \"ОЗОН Банк\", БИК 044525068, к/с 30101810645374525068')}", body),
           Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
@@ -9589,7 +9590,7 @@ elif st.session_state.active_tab == "Товары и прайс":
         st.info("Изменяйте текущие цены, добавляйте новые товары и снимайте позиции с продажи через флажок «Активен». Удалять товар не нужно: архивные позиции остаются в истории сделок.")
         _edited_catalog = st.data_editor(
             _catalog,
-            key="products_catalog_editor",
+            key="products_catalog_editor_v2",
             num_rows="dynamic",
             use_container_width=True,
             hide_index=True,
