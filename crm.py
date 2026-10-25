@@ -5265,6 +5265,12 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
     key=f"req_{client_id}_{'invoice' if return_to_invoice else 'client'}_{requisite_id or 'new'}"
     dirty=f"{key}_dirty"; warning=f"{key}_warning"
     fields=[("legal_name","Наименование юр. лица"),("payer_type","Тип плательщика"),("inn","ИНН"),("kpp","КПП"),("address","Юридический адрес"),("bank_name","Банк"),("bik","БИК"),("corr_account","Корр. счёт"),("settlement_account","Расчётный счёт"),("phone","Телефон"),("email","Email")]
+    # При явном открытии существующей записи заново загружаем сохранённые значения в поля Streamlit.
+    if st.session_state.pop(f"{key}_force_load", False):
+        for _field_name, _ in fields:
+            st.session_state.pop(f"{key}_{_field_name}", None)
+        st.session_state.pop(dirty, None)
+        st.session_state.pop(warning, None)
     for k,_ in fields:
         if f"{key}_{k}" not in st.session_state:
             default_value = (existing_req or {}).get(k, "company" if k == "payer_type" else "")
@@ -5505,9 +5511,15 @@ def _ozon_request(path, payload):
         body = {}
     if not response.ok:
         detail = body.get("message") or body.get("error") or body.get("code") or (response.text or "")[:300]
+        extra = body.get("details")
+        if extra:
+            detail = f"{detail}; детали: {str(extra)[:500]}"
         raise RuntimeError(f"Ozon Pay вернул HTTP {response.status_code}" + (f": {detail}" if detail else ""))
     if isinstance(body, dict) and body.get("code") not in (None, 0, "0") and body.get("message"):
-        raise RuntimeError(f"Ozon Pay: {body.get('message')}")
+        detail = body.get("message")
+        if body.get("details"):
+            detail = f"{detail}; детали: {str(body.get('details'))[:500]}"
+        raise RuntimeError(f"Ozon Pay: {detail}")
     return body
 
 
@@ -5521,7 +5533,7 @@ def _ozon_create_payment(deal, calc):
     ext_id = "iplinth-" + uuid.uuid4().hex
     # Ozon Pay protobuf ожидает int64 в value; передаём сумму в копейках,
     # а не строку с десятичной точкой (например, 12,90 ₽ -> 1290).
-    amount = {"currencyCode": "643", "value": int(round(total * 100))}
+    amount = {"currencyCode": "643", "value": str(int(round(total * 100)))}
     # По таблице подписей Ozon для createPayment: extId + accessKey + secretKey.
     sign = _ozon_signature(ext_id, cfg["access_key"])
     payload = {
@@ -7383,10 +7395,7 @@ def render_client_card_expanded(cl):
                         # Сбрасываем состояние именно этой записи, чтобы редактор заново
                         # загрузил актуальные поля из сохранённых реквизитов.
                         _req_dialog_key = f"req_{cl['id']}_client_{_req.get('id') or 'new'}"
-                        for _field_name, _ in [("legal_name", 0), ("payer_type", 0), ("inn", 0), ("kpp", 0), ("address", 0), ("bank_name", 0), ("bik", 0), ("corr_account", 0), ("settlement_account", 0), ("phone", 0), ("email", 0)]:
-                            st.session_state.pop(f"{_req_dialog_key}_{_field_name}", None)
-                        st.session_state.pop(f"{_req_dialog_key}_dirty", None)
-                        st.session_state.pop(f"{_req_dialog_key}_warning", None)
+                        st.session_state[f"{_req_dialog_key}_force_load"] = True
                         st.session_state["dialog_client_requisites_client_id"] = cl["id"]
                         st.session_state["dialog_client_requisites_return_to_invoice"] = False
                         client_requisites_dialog(cl["id"], False, _req.get("id"))
