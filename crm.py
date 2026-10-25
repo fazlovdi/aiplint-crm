@@ -5247,6 +5247,102 @@ def _make_commercial_offer_pdf(deal, client, calc):
     return out.getvalue()
 
 
+
+def _make_torg12_pdf(deal, client, calc):
+    """Формирует товарную накладную ТОРГ-12 по сохранённым позициям расчёта."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+    font, bold = _pdf_font_setup()
+    out = io.BytesIO()
+    doc_no = _deal_doc_number(deal)
+    date = moscow_now().date()
+    doc = SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=8*mm, leftMargin=8*mm,
+                            topMargin=7*mm, bottomMargin=8*mm,
+                            title=f"Товарная накладная ТОРГ-12 №{doc_no}")
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle("Torg12Title", parent=styles["Title"], fontName=bold, fontSize=12,
+                           leading=14, alignment=TA_CENTER, spaceAfter=3*mm)
+    body = ParagraphStyle("Torg12Body", parent=styles["BodyText"], fontName=font, fontSize=6.8,
+                          leading=8.2, spaceAfter=0.7*mm)
+    small = ParagraphStyle("Torg12Small", parent=body, fontSize=5.8, leading=6.8)
+    center = ParagraphStyle("Torg12Center", parent=small, alignment=TA_CENTER)
+    right = ParagraphStyle("Torg12Right", parent=small, alignment=TA_RIGHT)
+    head = ParagraphStyle("Torg12Head", parent=center, fontName=bold)
+    catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+    rows = _calculation_rows(calc, catalog)
+    if not rows:
+        raise ValueError("В расчёте нет товарных позиций для накладной.")
+
+    def esc(v):
+        return html.escape(str(v or "")).replace("\n", "<br/>")
+
+    # Если у клиента сохранены реквизиты, используем первые актуальные; иначе оставляем
+    # поля покупателя незаполненными, чтобы их можно было вписать при отгрузке.
+    reqs = [r for r in (client.get("requisites", []) or []) if not r.get("deleted")]
+    req = reqs[0] if reqs else {}
+    buyer_name = req.get("legal_name") or client.get("company") or client.get("name") or ""
+    buyer_inn = req.get("inn", "")
+    buyer_kpp = req.get("kpp", "")
+    buyer_address = req.get("address") or client.get("address") or client.get("main_address") or ""
+    supplier = "ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, ОГРНИП 322169000220971"
+    flow = [Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", title),
+            Paragraph(f"Унифицированная форма № ТОРГ-12 · № {esc(doc_no)} от {date.strftime('%d.%m.%Y')}", center),
+            Spacer(1, 2*mm)]
+    parties = [
+        [Paragraph("Грузоотправитель / поставщик", body), Paragraph(esc(supplier), body),
+         Paragraph("Грузополучатель", body), Paragraph(esc(buyer_name), body)],
+        [Paragraph("Адрес поставщика", body), Paragraph("г. Казань, ул. Кулагина, д. 3", body),
+         Paragraph("Адрес грузополучателя", body), Paragraph(esc(buyer_address), body)],
+        [Paragraph("ИНН / КПП", body), Paragraph("731701704975 / —", body),
+         Paragraph("ИНН / КПП", body), Paragraph(esc(buyer_inn + (" / " + buyer_kpp if buyer_kpp else "")), body)],
+        [Paragraph("Плательщик", body), Paragraph(esc(buyer_name), body),
+         Paragraph("Основание", body), Paragraph(f"Расчёт № {esc(doc_no)}", body)],
+    ]
+    party_tbl = Table(parties, colWidths=[31*mm, 106*mm, 31*mm, 91*mm])
+    party_tbl.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.grey),
+        ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F1F2F4")),
+        ("BACKGROUND",(2,0),(2,-1),colors.HexColor("#F1F2F4")),
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("LEFTPADDING",(0,0),(-1,-1),3), ("RIGHTPADDING",(0,0),(-1,-1),3),
+        ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
+    flow += [party_tbl, Spacer(1, 3*mm)]
+    headers = ["№", "Товар (наименование, артикул, цвет)", "Ед. изм.", "Кол-во", "Цена, руб.", "Сумма, руб.", "НДС"]
+    data = [[Paragraph(x, head) for x in headers]]
+    for i, r in enumerate(rows, 1):
+        label = esc(r.get("name"))
+        if r.get("sku"):
+            label += f"<br/><font size='5.5'>Артикул: {esc(r.get('sku'))}</font>"
+        if r.get("color"):
+            label += f"<br/><font size='5.5'>Цвет/RAL: {esc(r.get('color'))}</font>"
+        data.append([Paragraph(str(i), center), Paragraph(label, small),
+                     Paragraph(esc(r.get("unit") or "шт."), center),
+                     Paragraph(f"{r['quantity']:g}", right), Paragraph(_money(r["after"]), right),
+                     Paragraph(_money(r["amount"]), right), Paragraph("Без НДС", center)])
+    total_qty = sum(float(r["quantity"]) for r in rows)
+    total = round(sum(float(r["amount"]) for r in rows), 2)
+    data.append([Paragraph("", small), Paragraph("ИТОГО по товарной накладной", small), Paragraph("", small),
+                 Paragraph(f"{total_qty:g}", right), Paragraph("", small), Paragraph(_money(total), right), Paragraph("Без НДС", center)])
+    table = Table(data, colWidths=[9*mm, 104*mm, 20*mm, 22*mm, 30*mm, 32*mm, 22*mm], repeatRows=1)
+    table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E9D0DC")),
+        ("GRID",(0,0),(-1,-1),0.35,colors.grey), ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(0,0),(0,-1),"CENTER"), ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F5F6F8")),
+        ("FONTNAME",(0,-1),(-1,-1),bold), ("LEFTPADDING",(0,0),(-1,-1),3),
+        ("RIGHTPADDING",(0,0),(-1,-1),3), ("TOPPADDING",(0,0),(-1,-1),4),
+        ("BOTTOMPADDING",(0,0),(-1,-1),4)]))
+    flow += [table, Spacer(1, 3*mm),
+             Paragraph(f"Всего отпущено на сумму: <b>{_money(total)} руб.</b> Без НДС.", body),
+             Paragraph("Товар передал: __________________ / ИП Фазлов Дамир Ибрагимович /     М.П.", body),
+             Paragraph("Товар получил: __________________ / ______________________________ /     М.П.", body),
+             Paragraph("Дата получения: «____» ______________ 20____ г.", body)]
+    doc.build(flow)
+    return out.getvalue()
+
+
 def _make_invoice_pdf(deal, client, calc, requisites):
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
@@ -6921,7 +7017,7 @@ def deal_calculation_dialog(deal_id, calc_id):
     .st-key-{close_css} [data-testid="column"]:last-child .stButton > button:hover {{background:#EEF0F3!important;border-color:#C9CFD7!important;}}
     </style>''', unsafe_allow_html=True)
     with st.container(key=close_css):
-        offer_col, invoice_col, _spacer, close_col = st.columns([7.0, 7.0, 5.0, 1.0])
+        offer_col, invoice_col, torg_col, _spacer, close_col = st.columns([7.0, 7.0, 7.0, 5.0, 1.0])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
@@ -6967,6 +7063,31 @@ def deal_calculation_dialog(deal_id, calc_id):
                 # а не восстанавливать значение из предыдущего запуска Streamlit.
                 st.session_state.pop(f"invoice_req_select_{deal_id}_{calc_id}", None)
                 invoice_document_dialog(deal_id, calc_id)
+        with torg_col:
+            if st.button("Товарная накладная ТОРГ-12", key=f"{key}_make_torg12", use_container_width=True):
+                try:
+                    calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
+                    calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
+                    calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
+                    calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
+                    calc["total"] = _deal_calc_total(calc)
+                    if not calc.get("items"):
+                        raise ValueError("Добавь хотя бы одну товарную позицию в расчёт.")
+                    calc["_draft"] = False
+                    calc["updated_at"] = now_str()
+                    deal["budget"] = calc["total"]
+                    deal["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                    client = get_client_by_id(deal.get("client_id")) or {}
+                    pdf = _make_torg12_pdf(deal, client, calc)
+                    filename = f"ТОРГ-12 №{_deal_doc_number(deal)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+                    _save_generated_document(deal, pdf, filename, "Товарная накладная ТОРГ-12", calc)
+                    _open_pdf_link(pdf, filename, f"torg12_pdf_{deal_id}_{calc_id}")
+                    st.session_state[f"{key}_doc_message"] = "Товарная накладная ТОРГ-12 сохранена в файлах сделки."
+                    st.session_state["_refresh_parent_deal_files"] = True
+                except Exception as exc:
+                    st.session_state[f"{key}_doc_error"] = f"Не удалось сформировать ТОРГ-12: {exc}"
+                _calc_refresh()
         with close_col:
             if st.button("✕", key=f"{key}_close", use_container_width=True):
                 if st.session_state.get(dirty_key, False) and not st.session_state.get(warning_key, False):
@@ -6993,6 +7114,11 @@ def deal_calculation_dialog(deal_id, calc_id):
     if _offer_pdf_state:
         st.markdown(f'<a href="data:application/pdf;base64,{_offer_pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:8px 12px;border-radius:8px;font-weight:600;margin:3px 0">Открыть сформированное КП в новой вкладке</a>',unsafe_allow_html=True)
         st.download_button("Скачать КП PDF",data=base64.b64decode(_offer_pdf_state["data"]),file_name=_offer_pdf_state["filename"],mime="application/pdf",key=f"offer_pdf_dl_{deal_id}_{calc_id}")
+
+    _torg12_pdf_state = st.session_state.get(f"torg12_pdf_{deal_id}_{calc_id}")
+    if _torg12_pdf_state:
+        st.markdown(f'<a href="data:application/pdf;base64,{_torg12_pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:8px 12px;border-radius:8px;font-weight:600;margin:3px 0">Открыть ТОРГ-12 в новой вкладке</a>',unsafe_allow_html=True)
+        st.download_button("Скачать ТОРГ-12 PDF",data=base64.b64decode(_torg12_pdf_state["data"]),file_name=_torg12_pdf_state["filename"],mime="application/pdf",key=f"torg12_pdf_dl_{deal_id}_{calc_id}")
 
     if st.session_state.get(warning_key):
         warn_key = f"calc_unsaved_warn_{key}"
