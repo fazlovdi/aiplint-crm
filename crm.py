@@ -5174,7 +5174,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     from PIL import Image as PILImage
     font,bold=_pdf_font_setup()
     out=io.BytesIO()
-    doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=8*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
+    doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=2*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
     brand=colors.HexColor("#bc1661")
     title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_CENTER,spaceAfter=8*mm,textColor=colors.HexColor("#202833"))
@@ -5219,7 +5219,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         except Exception:
             return None
 
-    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", 210, 68)
+    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", 157.5, 51)
     # Платёжный QR по формату ST00012 (ГОСТ Р 56042-2014): реквизиты получателя,
     # назначение и точная сумма счёта. Это QR для перевода по банковским реквизитам,
     # а не QR СБП/эквайринга.
@@ -5246,7 +5246,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     )
     payment_qr=_PaymentQR(qr_payload, 25*mm)
     header_cells=[[logo or Paragraph("iPlinth",body), payment_qr]]
-    header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[69*mm],hAlign="LEFT")
+    header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[52*mm],hAlign="LEFT")
     header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     flow=[header,Spacer(1,5*mm),Paragraph(html.escape(invoice_no),title),Spacer(1,2*mm),
           Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, р/с 40802810801500486358, в банке ООО &quot;Банк Точка&quot;, БИК 044525104, к/с 30101810745374525104",body),
