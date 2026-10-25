@@ -7232,7 +7232,7 @@ def render_deal_products_block(d, key_prefix):
         st.rerun()
 
 
-@_crm_dialog(" ", width="large")
+@_crm_dialog("Расчёт сделки", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
     """Отдельное окно редактирования расчёта в стиле окон задач."""
     def _calc_refresh():
