@@ -5217,11 +5217,12 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         except Exception:
             return None
 
-    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", (210*0.25), 24)
+    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", (210*0.50), 48)
     flow=[]
     if logo:
         flow += [logo, Spacer(1,3*mm)]
     flow += [Paragraph(html.escape(invoice_no),title),
+             Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, р/с 40802810801500486358, в банке ООО &quot;Банк Точка&quot;, БИК 044525104, к/с 30101810745374525104",body),
              Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
@@ -5250,7 +5251,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
             if self.signature_img:
                 sw=self.signature_img.drawWidth; sh=self.signature_img.drawHeight
                 # Signature overlaps the stamp, slightly above its centre.
-                self.canv.drawImage(self.signature_img.filename, 7*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
+                self.canv.drawImage(self.signature_img.filename, 2*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
     sign=Table([[Paragraph("Поставщик: ИП Фазлов Дамир Ибрагимович<br/>Подпись и печать",body),_StampSignature(stamp,signature)]],colWidths=[90*mm,90*mm])
     sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2)]))
     flow.append(sign)
