@@ -9631,8 +9631,14 @@ if st.session_state.active_tab == "Клиенты":
                 text-align:left!important; justify-content:flex-start!important; padding:0.15rem 0!important;
             }}
             .st-key-client_name_{_style_id} button:hover {{ color:#BC1661!important; }}
+            .st-key-client_deals_{_style_id}, .st-key-client_tasks_{_style_id} {{
+                display:flex!important; justify-content:center!important; align-items:center!important;
+            }}
+            .st-key-client_deals_{_style_id} [data-testid='stButton'], .st-key-client_tasks_{_style_id} [data-testid='stButton'] {{
+                width:100%!important; display:flex!important; justify-content:center!important;
+            }}
             .st-key-client_deals_{_style_id} button,.st-key-client_tasks_{_style_id} button {{
-                background:rgba(255,255,255,0.65)!important; border:1px solid #E0E6EF!important;
+                width:100%!important; margin:0 auto!important; background:rgba(255,255,255,0.65)!important; border:1px solid #E0E6EF!important;
                 box-shadow:none!important; font-weight:700!important; font-size:0.82rem!important;
             }}
             .st-key-client_deals_{_style_id} button {{ color:{'#2E7D32' if _style_active_deals else '#526174'}!important; }}
@@ -9643,92 +9649,48 @@ if st.session_state.active_tab == "Клиенты":
             st.markdown("<style>" + "".join(_client_cards_css) + "</style>", unsafe_allow_html=True)
 
         # Единая шапка колонок для всего списка клиентов.
+        # Используем CSS sticky непосредственно на контейнере Streamlit:
+        # JS внутри st.components.v1.html работает в sandboxed iframe и не может
+        # надёжно управлять DOM родительской страницы.
         st.markdown("""<style>
         .st-key-clients_columns_header {
-            background: #FFFFFF !important; border-bottom: 1px solid #DCE2EA !important;
-            padding: 0.28rem 0 0.28rem 0 !important; margin-top: 0.15rem !important;
-            box-shadow: 0 4px 7px rgba(30,45,65,0.07) !important;
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 99999 !important;
+            background: #FFFFFF !important;
+            border-bottom: 1px solid #DCE2EA !important;
+            padding: 0.28rem 0 !important;
+            margin-top: 0.15rem !important;
+            box-shadow: 0 4px 7px rgba(30,45,65,0.12) !important;
+            box-sizing: border-box !important;
         }
         .st-key-clients_columns_header p { margin: 0 !important; }
         .st-key-clients_columns_header [data-testid='stMarkdownContainer'] { height:100% !important; }
-        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div { height:100% !important; display:flex !important; align-items:center !important; justify-content:center !important; }
-        .clients-columns-fixed {
-            position: fixed !important; top: 0 !important; z-index: 99999 !important;
-            background: #FFFFFF !important; padding: 0.28rem 1rem !important;
-            box-shadow: 0 4px 7px rgba(30,45,65,0.12) !important;
-            border-bottom: 1px solid #DCE2EA !important; box-sizing: border-box !important;
+        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div {
+            min-height: 30px !important; height:100% !important;
+            display:flex !important; align-items:center !important; justify-content:center !important;
         }
-        .clients-columns-placeholder { display:block; height:0; width:100%; visibility:hidden; }
+        .st-key-clients_columns_header [data-testid='stHorizontalBlock'] {
+            align-items: stretch !important;
+        }
+        .st-key-clients_columns_header [data-testid='stColumn'] {
+            display:flex !important; align-items:center !important; justify-content:center !important;
+        }
+        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div > div {
+            width:100% !important; text-align:center !important;
+        }
+        /* Кнопки счётчиков строго по центру тех же колонок, что и заголовки. */
+        .st-key-client_deals_ [data-testid='stButton'] { width:100%; }
         </style>""", unsafe_allow_html=True)
         with st.container(key="clients_columns_header"):
             _h_main, _h_city, _h_phone, _h_category, _h_deals, _h_tasks, _h_sum = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
-            with _h_main: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;padding:.2rem 0'>Клиент</div>", unsafe_allow_html=True)
-            with _h_city: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
-            with _h_phone: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
-            with _h_category: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
-            with _h_deals: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сделки</div>", unsafe_allow_html=True)
-            with _h_tasks: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Задачи</div>", unsafe_allow_html=True)
-            with _h_sum: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сумма сделок</div>", unsafe_allow_html=True)
-
-        # Закрепляем шапку через родительское окно Streamlit. Компонент находится
-        # в iframe, поэтому поиск элемента и обработчик прокрутки должны работать
-        # именно с document/window родительской страницы.
-        st.components.v1.html('''<script>
-(function(){
-  function init(){
-    var d, w;
-    try { w=window.parent; d=w.document; } catch(e) { return; }
-    var el=d.querySelector('.st-key-clients_columns_header');
-    if(!el){ setTimeout(init,200); return; }
-    if(el.dataset.clientsStickyReady==='1') return;
-    el.dataset.clientsStickyReady='1';
-    var ph=d.createElement('div');
-    ph.className='clients-columns-placeholder';
-    el.parentNode.insertBefore(ph,el);
-    var baseTop=0, fixed=false, raf=false;
-    function measure(){
-      if(!el.isConnected) return;
-      var r=el.getBoundingClientRect();
-      baseTop=r.top+(w.scrollY||d.documentElement.scrollTop||0);
-      if(!fixed){ ph.style.height=r.height+'px'; }
-    }
-    function setFixed(){
-      var r=ph.getBoundingClientRect();
-      el.style.left=r.left+'px';
-      el.style.width=r.width+'px';
-      el.style.top='0px';
-      el.style.margin='0';
-      el.classList.add('clients-columns-fixed');
-      ph.style.height=el.getBoundingClientRect().height+'px';
-      fixed=true;
-    }
-    function clearFixed(){
-      el.classList.remove('clients-columns-fixed');
-      el.style.left=''; el.style.width=''; el.style.top=''; el.style.margin='';
-      ph.style.height=el.offsetHeight+'px';
-      fixed=false;
-    }
-    function onScroll(){
-      raf=false;
-      if(!el.isConnected) return;
-      var y=w.scrollY||d.documentElement.scrollTop||0;
-      if(!fixed && y>=baseTop){ setFixed(); }
-      else if(fixed && y<baseTop-2){ clearFixed(); }
-    }
-    function schedule(){ if(!raf){ raf=true; w.requestAnimationFrame(onScroll); } }
-    measure();
-    w.addEventListener('scroll',schedule,{passive:true,capture:true});
-    d.addEventListener('scroll',schedule,{passive:true,capture:true});
-    w.addEventListener('resize',function(){
-      if(fixed){ var r=ph.getBoundingClientRect(); el.style.left=r.left+'px'; el.style.width=r.width+'px'; }
-      else measure();
-    },{passive:true});
-    setTimeout(measure,250); setTimeout(measure,800);
-    setTimeout(schedule,900);
-  }
-  init();
-})();
-</script>''', height=0)
+            with _h_main: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:left;padding:.2rem 0'>Клиент</div>", unsafe_allow_html=True)
+            with _h_city: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
+            with _h_phone: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
+            with _h_category: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
+            with _h_deals: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сделки</div>", unsafe_allow_html=True)
+            with _h_tasks: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Задачи</div>", unsafe_allow_html=True)
+            with _h_sum: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сумма сделок</div>", unsafe_allow_html=True)
 
         for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
@@ -9760,7 +9722,7 @@ if st.session_state.active_tab == "Клиенты":
                             st.session_state["dialog_client_tasks_key"] = _cid
                 with _sum_col:
                     _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
-                    st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:right;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:center;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
     # Показ диалогов
