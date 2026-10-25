@@ -9612,8 +9612,8 @@ if st.session_state.active_tab == "Клиенты":
             _style_tasks = _style_client.get("tasks", [])
             _style_overdue_tasks = any(not _st.get("done") and is_task_overdue(_st) for _st in _style_tasks)
             _style_active_tasks = any(not _st.get("done") for _st in _style_tasks)
-            _style_accent = "#C62828" if _style_overdue_tasks else ("#4CAF50" if _style_active_tasks or _style_active_deals else "#BC1661")
-            _style_bg = "#FFF8FB" if _style_accent == "#BC1661" else ("#FFF8F8" if _style_accent == "#C62828" else "#F5FBF6")
+            _style_accent = "#C62828" if _style_overdue_tasks else ("#4CAF50" if _style_active_tasks or _style_active_deals else "#AAB4C0")
+            _style_bg = "#F8FAFC" if _style_accent == "#AAB4C0" else ("#FFF8F8" if _style_accent == "#C62828" else "#F5FBF6")
             _client_cards_css.append(f"""
             .st-key-client_card_{_style_id} {{
                 background:{_style_bg}!important; border:1px solid #E0E6EF!important;
@@ -9642,6 +9642,26 @@ if st.session_state.active_tab == "Клиенты":
         if _client_cards_css:
             st.markdown("<style>" + "".join(_client_cards_css) + "</style>", unsafe_allow_html=True)
 
+        # Единая шапка колонок для всего списка клиентов.
+        st.markdown("""<style>
+        .st-key-clients_columns_header {
+            position: sticky !important; top: 0.25rem !important; z-index: 1000 !important;
+            background: #FFFFFF !important; border-bottom: 1px solid #DCE2EA !important;
+            padding: 0.45rem 0 0.25rem 0 !important; margin-top: 0.15rem !important;
+            box-shadow: 0 4px 7px rgba(30,45,65,0.07) !important;
+        }
+        .st-key-clients_columns_header p { margin-bottom: 0 !important; }
+        </style>""", unsafe_allow_html=True)
+        with st.container(key="clients_columns_header"):
+            _h_main, _h_city, _h_phone, _h_category, _h_deals, _h_tasks, _h_sum = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
+            with _h_main: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;padding:.2rem 0'>Клиент</div>", unsafe_allow_html=True)
+            with _h_city: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
+            with _h_phone: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
+            with _h_category: st.markdown("<div style='font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
+            with _h_deals: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Сделки</div>", unsafe_allow_html=True)
+            with _h_tasks: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0'>Задачи</div>", unsafe_allow_html=True)
+            with _h_sum: st.markdown("<div style='font-weight:700;font-size:.75rem;color:#2C3E50;text-align:right;padding:.2rem 0'>Сумма сделок</div>", unsafe_allow_html=True)
+
         for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
             cl_tasks_all = cl.get("tasks", [])
@@ -9663,17 +9683,14 @@ if st.session_state.active_tab == "Клиенты":
                 with _category_col:
                     st.markdown(f"<div style='font-size:.78rem;color:#526174;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('category', 'Не определён') or 'Не определён'))}</div>", unsafe_allow_html=True)
                 with _deals_col:
-                    st.caption("Сделки")
                     with st.container(key=f"client_deals_{_cid}"):
                         if st.button(str(len(cl_deals)), key=f"tbl_deals_btn_{_cid}", use_container_width=True):
                             st.session_state["dialog_client_deals_key"] = _cid
                 with _tasks_col:
-                    st.caption("Задачи")
                     with st.container(key=f"client_tasks_{_cid}"):
                         if st.button(str(len(cl_tasks_all)), key=f"tbl_tasks_{_cid}", use_container_width=True):
                             st.session_state["dialog_client_tasks_key"] = _cid
                 with _sum_col:
-                    st.caption("Сумма сделок")
                     _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
                     st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:right;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
     else:
