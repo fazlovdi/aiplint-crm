@@ -6080,23 +6080,19 @@ def invoice_document_dialog(deal_id, calc_id):
                 st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
     if missing_link:
         st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
-    # Документы хранятся у расчёта, но в окне сделки показываем историю по всем расчётам,
-    # чтобы старую ссылку можно было найти, даже если сейчас открыт другой расчёт.
-    bank_records = []
-    for _record_calc in deal.get("calculations", []) or []:
-        for _record in _record_calc.get("tochka_documents", []) or []:
-            bank_records.append((_record_calc, _record))
+    # Документы принадлежат конкретному расчёту: показываем только его историю.
+    # Повторно открывая этот расчёт, можно найти ранее созданную ссылку или счёт.
+    bank_records = [(calc, record) for record in (calc.get("tochka_documents", []) or [])]
     bank_records.sort(key=lambda pair: str(pair[1].get("created_at", "")), reverse=True)
     if bank_records:
-        st.markdown("#### Документы и оплаты Точки по сделке")
+        st.markdown("#### Счета и платёжные ссылки этого расчёта")
         for index, (record_calc, record) in enumerate(bank_records):
-            record_calc_id = str(record_calc.get("id", calc_id))
+            record_calc_id = str(calc.get("id", calc_id))
             deleted = bool(record.get("deleted"))
             confirm_key = f"tochka_delete_confirm_{deal_id}_{record_calc_id}_{index}"
             with st.container(border=True):
                 title = f"Банковский счёт № {record.get('invoice_number')}" if record.get("kind") == "invoice" else "Платёжная ссылка"
                 amount_text = f"{title} · {_money(record.get('amount', 0))} ₽"
-                st.caption(f"Расчёт: {record_calc.get('name', 'Расчёт')}")
                 if deleted:
                     st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;font-weight:600'>{amount_text}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div style='text-decoration:line-through;color:#9299A3'>Статус: {_tochka_status_label(record)}</div>", unsafe_allow_html=True)
