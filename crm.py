@@ -5254,6 +5254,57 @@ def _open_pdf_link(pdf_bytes, filename, key):
     st.session_state[key]={"data":b64,"filename":filename}
 
 
+@_crm_dialog("Реквизиты плательщика", width="large")
+def client_requisites_view_dialog(client_id, return_to_invoice=False, requisite_id=None):
+    """Просмотр сохранённых реквизитов без редактирования; всегда читает актуальную запись из CRM."""
+    client = get_client_by_id(client_id)
+    if not client:
+        st.error("Клиент не найден")
+        return
+    req = next((r for r in (client.get("requisites", []) or [])
+                if str(r.get("id")) == str(requisite_id) and not r.get("deleted")), None)
+    if not req:
+        st.error("Сохранённые реквизиты не найдены. Возможно, запись была удалена.")
+        if st.button("Закрыть", key=f"req_view_missing_close_{client_id}_{requisite_id}"):
+            if return_to_invoice:
+                inv = st.session_state.get("dialog_invoice_request") or {}
+                invoice_document_dialog(inv.get("deal_id"), inv.get("calc_id"))
+            else:
+                _pop_dialog_return()
+                st.rerun()
+        return
+
+    close_key = f"req_view_close_{client_id}_{requisite_id}_{'invoice' if return_to_invoice else 'client'}"
+    with st.container(key=f"{close_key}_row"):
+        sp, cc = st.columns([20, 1])
+        with cc:
+            if st.button("✕", key=close_key, use_container_width=True):
+                if return_to_invoice:
+                    inv = st.session_state.get("dialog_invoice_request") or {}
+                    invoice_document_dialog(inv.get("deal_id"), inv.get("calc_id"))
+                else:
+                    _pop_dialog_return()
+                    st.rerun()
+    st.caption("Сохранённые реквизиты · режим просмотра")
+    labels = [
+        ("legal_name", "Наименование юр. лица / ФИО плательщика"),
+        ("payer_type", "Тип плательщика"),
+        ("inn", "ИНН"), ("kpp", "КПП"), ("address", "Юридический адрес"),
+        ("bank_name", "Банк"), ("bik", "БИК"), ("corr_account", "Корреспондентский счёт"),
+        ("settlement_account", "Расчётный счёт"), ("phone", "Телефон"), ("email", "Email")]
+    payer_labels = {"company": "Юридическое лицо (ООО)", "ip": "Индивидуальный предприниматель", "person": "Физическое лицо"}
+    for i in range(0, len(labels), 2):
+        cols = st.columns(2)
+        for col, (field, label) in zip(cols, labels[i:i+2]):
+            value = req.get(field, "") or "—"
+            if field == "payer_type":
+                value = payer_labels.get(str(value), str(value))
+            with col:
+                st.text_input(label, value=str(value), key=f"req_view_{client_id}_{requisite_id}_{field}_{'invoice' if return_to_invoice else 'client'}", disabled=True)
+    if req.get("created_at"):
+        st.caption(f"Созданы: {req.get('created_at')}" + (f" · Обновлены: {req.get('updated_at')}" if req.get("updated_at") else ""))
+
+
 @_crm_dialog("Добавить реквизиты", width="large")
 def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=None):
     client=get_client_by_id(client_id)
@@ -5441,17 +5492,33 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
             save_data(st.session_state.crm_store)
             _saved_client = get_client_by_id(client_id)
             _saved_reqs = (_saved_client or {}).get("requisites", []) or []
-            if _saved_client is not None and _saved_req_id and not any(
-                str(_saved_r.get("id", "")) == _saved_req_id for _saved_r in _saved_reqs
-            ):
-                # Повторно добавляем только отсутствующую запись в уже обновлённый
-                # объект клиента, не перезаписывая остальные данные CRM.
-                _saved_client.setdefault("requisites", []).append(copy.deepcopy(req))
+            _saved_record = next((r for r in _saved_reqs if str(r.get("id", "")) == _saved_req_id), None)
+            _needs_repair = _saved_record is None or any(
+                str((_saved_record or {}).get(_field, "") or "") != str(req.get(_field, "") or "")
+                for _field, _ in fields
+            )
+            if _saved_client is not None and _saved_req_id and _needs_repair:
+                # После сохранения проверяем не только наличие ID, но и все поля.
+                # При конфликтном слиянии восстанавливаем значения записи реквизитов
+                # в актуальном объекте клиента, не трогая другие данные CRM.
+                if _saved_record is None:
+                    _saved_record = copy.deepcopy(req)
+                    _saved_client.setdefault("requisites", []).append(_saved_record)
+                else:
+                    for _field, _ in fields:
+                        _saved_record[_field] = copy.deepcopy(req.get(_field, ""))
+                    for _meta in ("created_at", "created_by", "updated_at", "updated_by", "deleted"):
+                        if _meta in req:
+                            _saved_record[_meta] = copy.deepcopy(req[_meta])
                 _saved_client["last_modified"] = now_str()
                 save_data(st.session_state.crm_store)
                 _verified_client = get_client_by_id(client_id)
-                if not any(str(_saved_r.get("id", "")) == _saved_req_id for _saved_r in ((_verified_client or {}).get("requisites", []) or [])):
-                    st.error("Не удалось подтвердить сохранение реквизитов в базе. Окно оставлено открытым — попробуй сохранить ещё раз.")
+                _verified_record = next((r for r in ((_verified_client or {}).get("requisites", []) or []) if str(r.get("id", "")) == _saved_req_id), None)
+                if _verified_record is None or any(
+                    str(_verified_record.get(_field, "") or "") != str(req.get(_field, "") or "")
+                    for _field, _ in fields
+                ):
+                    st.error("Не удалось подтвердить сохранение всех полей реквизитов в базе. Окно оставлено открытым — попробуй сохранить ещё раз.")
                     return
             st.session_state.pop("dialog_client_requisites_client_id",None)
             st.session_state.pop("dialog_client_requisites_return_to_invoice",None)
@@ -6205,9 +6272,15 @@ def invoice_document_dialog(deal_id, calc_id):
         ids=[str(r.get("id")) for r in requisites]
         selected=str(state.get("selected_requisite_id",ids[0]))
         if selected not in ids: selected=ids[0]
-        sel=st.selectbox("Реквизиты плательщика",ids,index=ids.index(selected),format_func=lambda rid:next((r.get("legal_name", "Реквизиты") for r in requisites if str(r.get("id"))==str(rid)),"Реквизиты"),key=f"invoice_req_select_{deal_id}_{calc_id}")
+        req_select_col, req_view_col = st.columns([4, 1.65], vertical_alignment="bottom")
+        with req_select_col:
+            sel=st.selectbox("Реквизиты плательщика",ids,index=ids.index(selected),format_func=lambda rid:next((r.get("legal_name", "Реквизиты") for r in requisites if str(r.get("id"))==str(rid)),"Реквизиты"),key=f"invoice_req_select_{deal_id}_{calc_id}")
         state["selected_requisite_id"]=sel
         selected_req=next((r for r in requisites if str(r.get("id"))==str(sel)),None)
+        with req_view_col:
+            if st.button("Посмотреть реквизиты", key=f"invoice_req_view_{deal_id}_{calc_id}", use_container_width=True, disabled=not selected_req):
+                _push_dialog_return()
+                client_requisites_view_dialog(client.get("id"), True, selected_req.get("id"))
         if selected_req:
             st.caption(f"Тип: { {'company':'Юрлицо','ip':'ИП','person':'Физлицо'}.get(selected_req.get('payer_type'),'—') } · ИНН: {selected_req.get('inn','—')} · Email: {selected_req.get('email','—')}")
     if st.button("+ Добавить новые реквизиты",key=f"invoice_add_req_{deal_id}_{calc_id}",use_container_width=True):
@@ -6275,6 +6348,29 @@ def invoice_document_dialog(deal_id, calc_id):
             st.success("Платёж Ozon Pay создан. Ссылка и QR-код доступны ниже.")
         except Exception as exc:
             st.error(f"Не удалось создать платёж Ozon Pay: {exc}")
+
+    st.markdown("#### Счёт для юридического лица")
+    st.caption("Ozon Pay создаёт платёж по СБП, но не формирует банковский счёт для юрлица. Здесь можно сформировать PDF-счёт на оплату по банковским реквизитам поставщика; это отдельный способ оплаты, не счёт от Ozon.")
+    invoice_pdf_key = f"ozon_legal_invoice_pdf_{deal_id}_{calc_id}"
+    if st.button("Сформировать счёт для юрлица (PDF)", key=f"ozon_legal_invoice_make_{deal_id}_{calc_id}", use_container_width=True,
+                 disabled=not selected_req or selected_req.get("payer_type") not in ("company", "ip") or not bool(calc.get("items"))):
+        try:
+            pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, selected_req)
+            filename = f"Счёт {str(calc.get('name') or 'Расчёт').replace('Расчёт', '').strip() or 'Айплинт'} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+            _save_generated_document(deal, pdf_bytes, filename, "Счёт на оплату (PDF)", calc,
+                                     {"payer_type": selected_req.get("payer_type"), "bank": "Банковские реквизиты поставщика", "requisite_id": selected_req.get("id")})
+            st.session_state[invoice_pdf_key] = {"bytes": base64.b64encode(pdf_bytes).decode("ascii"), "filename": filename, "due_date": due_date}
+            st.success("PDF-счёт сформирован и сохранён в файлах сделки.")
+        except Exception as exc:
+            st.error(f"Не удалось сформировать PDF-счёт: {exc}")
+    saved_invoice_pdf = st.session_state.get(invoice_pdf_key)
+    if saved_invoice_pdf:
+        try:
+            st.download_button("Скачать счёт PDF", data=base64.b64decode(saved_invoice_pdf["bytes"]),
+                               file_name=saved_invoice_pdf["filename"], mime="application/pdf",
+                               key=f"{invoice_pdf_key}_download", use_container_width=True)
+        except Exception:
+            pass
     ozon_records = calc.get("ozon_documents", []) or []
     if ozon_records:
         st.markdown("#### Платежи Ozon Pay по этому расчёту")
@@ -7409,14 +7505,10 @@ def render_client_card_expanded(cl):
                 with _req_cols[1]:
                     if not _req.get("deleted") and st.button("Открыть", key=f"client_req_open_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
                         _push_dialog_return()
-                        # Streamlit сохраняет значения виджетов между открытиями диалога.
-                        # Сбрасываем состояние именно этой записи, чтобы редактор заново
-                        # загрузил актуальные поля из сохранённых реквизитов.
-                        _req_dialog_key = f"req_{cl['id']}_client_{_req.get('id') or 'new'}"
-                        st.session_state[f"{_req_dialog_key}_force_load"] = True
-                        st.session_state["dialog_client_requisites_client_id"] = cl["id"]
-                        st.session_state["dialog_client_requisites_return_to_invoice"] = False
-                        client_requisites_dialog(cl["id"], False, _req.get("id"))
+                        # «Открыть» показывает сохранённую запись в отдельном окне просмотра.
+                        # Значения читаются непосредственно из актуального объекта клиента,
+                        # без ключей виджетов редактора, которые могли содержать пустое состояние.
+                        client_requisites_view_dialog(cl["id"], False, _req.get("id"))
                 with _req_cols[2]:
                     _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
                     if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
