@@ -1063,22 +1063,33 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     div[class*="st-key-fdesc_"] div[data-testid="InputInstructions"] { display:none!important; }
     </style>""", unsafe_allow_html=True)
 
-    # Большие коллекции не загружаем целиком на каждом открытии окна.
-    _lazy_key = f"files_loaded_{prefix}"
-    if len(files) > 8 and not st.session_state.get(_lazy_key, False):
-        st.caption(f"Файлов: {len(files)}")
-        for _idx, _item in enumerate(files):
-            _name = _item.get("file_name", _item.get("name", f"Файл {_idx+1}")) if isinstance(_item, dict) else str(_item)
-            st.markdown(f"- {html.escape(str(_name))}")
-        if st.button("Загрузить список файлов", key=f"load_file_list_{prefix}"):
-            st.session_state[_lazy_key] = True
-            st.rerun()
-        return
-    file_paths = [ff.get("file_path", ff.get("path")) for ff in files]
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(file_paths)))) as executor:
+    # По умолчанию показываем и загружаем содержимое только первых трёх файлов,
+    # чтобы окна с большим количеством вложений открывались быстрее.
+    _show_all_key = f"files_show_all_{prefix}"
+    _show_all = bool(st.session_state.get(_show_all_key, False))
+
+    # Сначала новые вложения: используем дату файла, если она есть, затем
+    # timestamp из имени сохранённого файла; для старых вложений без даты
+    # сохраняем естественный порядок списка (новые добавляются в конец).
+    def _file_recency(entry):
+        _original_idx, _file = entry
+        _date_value = str(_file.get("created_at") or _file.get("uploaded_at") or _file.get("last_modified") or "")
+        if _date_value:
+            return (2, _date_value)
+        _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
+        _match = re.search(r"_(\d{9,})_", _path_value)
+        if _match:
+            return (2, _match.group(1))
+        return (1, _original_idx)
+
+    _sorted_file_entries = sorted(enumerate(files), key=_file_recency, reverse=True)
+    _visible_count = len(files) if _show_all else min(3, len(files))
+    _visible_files = _sorted_file_entries[:_visible_count]
+    file_paths = [ff.get("file_path", ff.get("path")) for _, ff in _visible_files]
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(file_paths)))) as executor:
         file_bytes_list = list(executor.map(get_file_bytes, file_paths))
 
-    for i, (ff, fb) in enumerate(zip(files, file_bytes_list)):
+    for (i, ff), fb in zip(_visible_files, file_bytes_list):
         fp = ff.get("file_path", ff.get("path"))
         fn = ff.get("file_name", ff.get("name", "файл"))
         ext = os.path.splitext(str(fn))[1].lower()
@@ -1136,6 +1147,13 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
 
         st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
 
+    if len(files) > 3:
+        _remaining = len(files) - _visible_count
+        _button_label = "Скрыть дополнительные файлы" if _show_all else "Показать все файлы"
+        _button_key = f"show_all_files_btn_{prefix}"
+        if st.button(_button_label, key=_button_key, use_container_width=True):
+            st.session_state[_show_all_key] = not _show_all
+            st.rerun()
 
 
 def _task_products_from_calculation(deal, calculation_id):
@@ -4817,9 +4835,9 @@ def render_deal_card_expanded(d, cl):
                     d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "Сделка поставлена на паузу")
         elif current_status == "На паузе":
+            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             if d.get("pause_reason"):
                 st.markdown(f"<div style='font-size:0.9rem;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
-            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             if st.button("Вернуть в работу", key=f"deal_unpause_{d['id']}", use_container_width=True):
                 d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
                 d.pop("paused_from_status", None)
@@ -6184,22 +6202,30 @@ def render_deal_products_block(d, key_prefix):
                 st.session_state[confirm_key] = True
                 st.rerun()
             if st.session_state.get(confirm_key):
-                st.warning(f"Удалить расчёт «{calc.get('name', 'Расчёт')}»?")
-                confirm_col, cancel_col = st.columns(2)
-                with confirm_col:
-                    if st.button("Да, удалить", key=f"calc_delete_yes_{d['id']}_{calc['id']}", type="primary", use_container_width=True):
-                        calc["deleted"] = True
-                        calc["deleted_at"] = now_str()
-                        calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
-                        d["last_modified"] = now_str()
-                        d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
-                        st.session_state.pop(confirm_key, None)
-                        save_data(st.session_state.crm_store)
-                        st.rerun()
-                with cancel_col:
-                    if st.button("Отмена", key=f"calc_delete_no_{d['id']}_{calc['id']}", use_container_width=True):
-                        st.session_state.pop(confirm_key, None)
-                        st.rerun()
+                _confirm_ui_key = f"calc_delete_confirm_ui_{d['id']}_{calc['id']}"
+                st.markdown(f"""<style>
+                .st-key-{_confirm_ui_key} {{background:#FFF7F7!important;border:1px solid #F0C5C5!important;border-radius:10px!important;padding:0.7rem 0.8rem!important;margin:0.25rem 0 0.55rem!important;}}
+                .st-key-{_confirm_ui_key} [data-testid="stMarkdownContainer"] p {{margin:0.15rem 0 0.55rem!important;color:#8B3030!important;font-weight:600!important;line-height:1.35!important;}}
+                .st-key-{_confirm_ui_key} [data-testid="stHorizontalBlock"] {{gap:0.6rem!important;align-items:center!important;}}
+                .st-key-{_confirm_ui_key} .stButton button {{min-height:38px!important;height:auto!important;white-space:normal!important;border-radius:8px!important;font-weight:600!important;padding:0.45rem 0.55rem!important;}}
+                </style>""", unsafe_allow_html=True)
+                with st.container(key=_confirm_ui_key):
+                    st.markdown(f"Удалить расчёт «{html.escape(str(calc.get('name', 'Расчёт')))}»?")
+                    confirm_col, cancel_col = st.columns([1, 1], gap="small")
+                    with confirm_col:
+                        if st.button("Да, удалить", key=f"calc_delete_yes_{d['id']}_{calc['id']}", type="primary", use_container_width=True):
+                            calc["deleted"] = True
+                            calc["deleted_at"] = now_str()
+                            calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                            d["last_modified"] = now_str()
+                            d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
+                            st.session_state.pop(confirm_key, None)
+                            save_data(st.session_state.crm_store)
+                            st.rerun()
+                    with cancel_col:
+                        if st.button("Отмена", key=f"calc_delete_no_{d['id']}_{calc['id']}", use_container_width=True):
+                            st.session_state.pop(confirm_key, None)
+                            st.rerun()
 
     if st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True):
         calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(d, {"id": "__new__"}, len(calculations)), "items": [],
@@ -6375,7 +6401,7 @@ def deal_calculation_dialog(deal_id, calc_id):
     st.markdown("### Расчёт сделки")
     name_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
     with name_col:
-        st.text_input("Название расчёта", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+        st.text_input("Название расчёта:", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
     catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
     active_products = [p for p in catalog if p.get("active", True)]
     if not active_products:
@@ -6386,11 +6412,25 @@ def deal_calculation_dialog(deal_id, calc_id):
     if calc.get("discount_type") not in dtype_options:
         calc["discount_type"] = "Без скидки"
     dtype_key = f"{key}_discount_type"
+    def _on_discount_type_change():
+        _new_type = st.session_state.get(dtype_key, "Без скидки")
+        if _new_type == "Индивидуальная":
+            _new_discount = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
+        else:
+            _new_discount = float(DISCOUNT_TYPES.get(_new_type, 0))
+        # Синхронно обновляем значения скидки всех строк, включая уже отрисованные
+        # виджеты: при следующем рендере проценты сразу соответствуют выбранному типу.
+        for _row in calc.get("items", []):
+            _rid = _row.get("row_id")
+            if _rid:
+                st.session_state[f"{key}_{_rid}_discount"] = _new_discount
+                _row["discount"] = _new_discount
+        st.session_state[dirty_key] = True
     dtype_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
     with dtype_col:
-        selected_dtype = st.selectbox("Тип скидки по умолчанию для новых товаров", dtype_options,
+        selected_dtype = st.selectbox("Тип скидки:", dtype_options,
             index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
-            on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+            on_change=_on_discount_type_change)
     custom_key = f"{key}_individual_discount"
     if selected_dtype == "Индивидуальная":
         custom_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
@@ -6767,9 +6807,9 @@ def render_deal_detail(d, cl, cu, key_prefix):
             # Кнопка паузы/возврата в самом низу правой колонки, по ширине как «Создать напоминание».
             _stage_now = d.get("status", "Новый")
             if _stage_now in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
+                st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
                 if _stage_now == "На паузе" and d.get("pause_reason"):
                     st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
-                st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
                 if _stage_now != "На паузе":
                     _pause_reason = st.text_area("Причина:", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы")
                 else:
@@ -8664,7 +8704,7 @@ elif st.session_state.active_tab == "Сделки":
         closed_deals = [d for d in all_deals if d.get("status") == "Сделка закрыта"]
         if closed_search:
             closed_deals = [d for d in closed_deals if closed_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
-        closed_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+        closed_deals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
         if closed_deals:
             for d in closed_deals:
                 render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
@@ -8675,7 +8715,7 @@ elif st.session_state.active_tab == "Сделки":
         arch_deals = [d for d in all_deals if d.get("status") == "Архив"]
         if arch_search:
             arch_deals = [d for d in arch_deals if arch_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
-        arch_deals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+        arch_deals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
         if arch_deals:
             for d in arch_deals:
                 render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
@@ -8683,11 +8723,16 @@ elif st.session_state.active_tab == "Сделки":
             st.caption("Архив пуст.")
     # Search + manager filter — same style as Clients tab
     with st.container(key="deals_sticky_header"):
-        fc1, fc2 = st.columns([3, 2])
+        fc1, fc2, fc3 = st.columns([3, 2.4, 2])
         with fc1:
             _deal_search_now = st.text_input("Поиск", key="deal_tab_search", placeholder="Поиск...", label_visibility="collapsed")
             deal_search = (_deal_search_now or "").strip().lower()
         with fc2:
+            deal_sort_mode = st.selectbox(
+                "Сортировка", ["По дате создания", "По дате изменения", "По номеру сделки"],
+                index=1, key="deal_tab_sort", label_visibility="collapsed"
+            )
+        with fc3:
             _deal_mgr_list = ["Все"] + get_managers_list()
             _cu_name_deal = st.session_state.get("user_name", "")
             _default_idx_deal = 0
@@ -8756,7 +8801,12 @@ elif st.session_state.active_tab == "Сделки":
         fdeals.append(d)
     if _board_stage_changed:
         save_data(st.session_state.crm_store)
-    fdeals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
+    if deal_sort_mode == "По дате создания":
+        fdeals.sort(key=lambda d: str(d.get("created_at") or ""), reverse=True)
+    elif deal_sort_mode == "По номеру сделки":
+        fdeals.sort(key=lambda d: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", str(d.get("deal_number") or d.get("title") or ""))], reverse=True)
+    else:
+        fdeals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
     new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
     work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
     waiting_payment_deals = [d for d in fdeals if d.get("status", "") == "Ожидание оплаты"]
@@ -8980,11 +9030,8 @@ elif st.session_state.active_tab == "Задачи":
     # Верхняя шапка раздела задач: современный компактный стиль без изменения общей навигации CRM.
     st.markdown("""
     <style>
-    .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0.15rem 0 0.8rem 0; padding: 0.1rem 0 0.85rem 0; border-bottom:1px solid #E3E8EF; }
-    .tasks-page-title-row { display:flex; align-items:center; gap:12px; }
-    .tasks-page-title { color:#26384A; font-size:1.9rem; line-height:1.15; font-weight:750; letter-spacing:-0.04em; }
-    .tasks-page-subtitle { color:#8492A6; font-size:0.86rem; margin-top:0.25rem; }
-    .tasks-page-mark { width:5px; height:34px; border-radius:8px; background:#BC1661; }
+    .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0; padding: 0; border:0; }
+    .tasks-page-title-row, .tasks-page-title, .tasks-page-subtitle, .tasks-page-mark { display:none !important; }
     div[data-testid="stTabs"] { margin-top:0.1rem; }
     div[data-testid="stTabs"] > div[role="tablist"] { gap:0.35rem; border-bottom:1px solid #E3E8EF; padding:0.15rem 0 0.45rem 0; }
     div[data-testid="stTabs"] button[role="tab"] { border:1px solid #E0E6EF; border-radius:9px 9px 0 0; padding:0.55rem 1.15rem; color:#65758B; font-weight:600; background:rgba(255,255,255,0.55); }
@@ -8998,17 +9045,18 @@ elif st.session_state.active_tab == "Задачи":
       div[data-testid="stTabs"] button[role="tab"] { min-width:118px; }
     }
     </style>
-    <div class="tasks-page-heading">
-      <div class="tasks-page-title-row"><div class="tasks-page-mark"></div><div><div class="tasks-page-title">Задачи</div><div class="tasks-page-subtitle">Планирование и контроль задач</div></div></div>
-    </div>
     """, unsafe_allow_html=True)
     plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
     with plan_sub1:
-        st.markdown("<div class='tasks-filter-caption'>Поиск и фильтрация</div>", unsafe_allow_html=True)
-        col_sq, col_mf = st.columns([3.2, 1.8], gap="small")
+        col_sq, col_sort, col_mf = st.columns([3.2, 2.4, 1.8], gap="small")
         with col_sq:
             _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="⌕  Поиск по задачам...", label_visibility="collapsed")
             task_search = (_task_search_now or "").strip().lower()
+        with col_sort:
+            task_sort_mode = st.selectbox(
+                "Сортировка", ["По дате создания", "По дате изменения", "По номеру задачи"],
+                index=1, key="task_tab_sort", label_visibility="collapsed"
+            )
         with col_mf:
             _task_mgr_list = ["Все"] + get_managers_list()
             _cu_name_task = st.session_state.get("user_name", "")
@@ -9055,9 +9103,19 @@ elif st.session_state.active_tab == "Задачи":
                         new_tasks.append(entry)
                     else:
                         aat.append(entry)
-        aat.sort(key=lambda x: x["sort_date"])
-        new_tasks.sort(key=lambda x: x["sort_date"])
-        review_tasks.sort(key=lambda x: x["sort_date"])
+        # Сортировка по выбору пользователя применяется внутри каждой колонки;
+        # дедлайн по-прежнему определяет колонку «На сегодня»/«Предстоящие».
+        def _task_sort_key(entry):
+            task = entry["task_obj"]
+            if task_sort_mode == "По дате создания":
+                return str(task.get("created_at") or "")
+            if task_sort_mode == "По номеру задачи":
+                return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
+            return str(task.get("last_modified") or task.get("created_at") or "")
+        _sort_reverse = True
+        aat.sort(key=_task_sort_key, reverse=_sort_reverse)
+        new_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
+        review_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
         tt_list = [t for t in aat if t["sort_date"] <= now_time.date()]
         ft_list = [t for t in aat if t["sort_date"] > now_time.date()]
         def render_task_block(t, sk):
@@ -9172,7 +9230,14 @@ elif st.session_state.active_tab == "Задачи":
             for ti, tk in enumerate(cl.get("tasks", [])):
                 if tk.get("done", False) and tk.get("reviewed", False):
                     archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
-        archived_tasks.sort(key=lambda x: x["task_obj"].get("last_modified", ""), reverse=True)
+        def _archived_task_sort_key(entry):
+            task = entry["task_obj"]
+            if task_sort_mode == "По дате создания":
+                return str(task.get("created_at") or "")
+            if task_sort_mode == "По номеру задачи":
+                return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
+            return str(task.get("last_modified") or task.get("created_at") or "")
+        archived_tasks.sort(key=_archived_task_sort_key, reverse=True)
         if archived_tasks:
             for at in archived_tasks[:50]:
                 task = at["task_obj"]
