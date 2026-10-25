@@ -5196,6 +5196,8 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}"+(f"/КПП {requisites.get('kpp','')}" if requisites.get('kpp') else "")+f", {requisites.get('address','')}"
     calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
     suffix=calc_name.replace("Расчёт", "", 1).strip()
+    # В назначении платежа и номерах документов используем только обычный дефис.
+    suffix=suffix.replace("—", "-").replace("–", "-").replace("−", "-")
     invoice_no=f"Счёт {suffix} от {date.strftime('%d.%m.%Y')}"
 
     # Images are expected in the repository root next to crm.py. Try common deployment paths.
@@ -5217,7 +5219,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         except Exception:
             return None
 
-    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", 105, 34)
+    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", 210, 68)
     # Платёжный QR по формату ST00012 (ГОСТ Р 56042-2014): реквизиты получателя,
     # назначение и точная сумма счёта. Это QR для перевода по банковским реквизитам,
     # а не QR СБП/эквайринга.
@@ -5244,7 +5246,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     )
     payment_qr=_PaymentQR(qr_payload, 25*mm)
     header_cells=[[logo or Paragraph("iPlinth",body), payment_qr]]
-    header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[35*mm],hAlign="LEFT")
+    header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[69*mm],hAlign="LEFT")
     header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     flow=[header,Spacer(1,5*mm),Paragraph(html.escape(invoice_no),title),Spacer(1,2*mm),
           Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, р/с 40802810801500486358, в банке ООО &quot;Банк Точка&quot;, БИК 044525104, к/с 30101810745374525104",body),
@@ -5276,7 +5278,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
             if self.signature_img:
                 sw=self.signature_img.drawWidth; sh=self.signature_img.drawHeight
                 # Signature overlaps the stamp, slightly above its centre.
-                self.canv.drawImage(self.signature_img.filename, -18*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
+                self.canv.drawImage(self.signature_img.filename, -8*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
     sign=Table([[Paragraph("Поставщик: ИП Фазлов Дамир Ибрагимович<br/>Подпись и печать",body),_StampSignature(stamp,signature)]],colWidths=[90*mm,90*mm])
     sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2)]))
     flow.append(sign)
