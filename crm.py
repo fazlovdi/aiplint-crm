@@ -5158,7 +5158,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable, Image
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable, Image, PageBreak
     font, bold = _pdf_font_setup()
     out=io.BytesIO()
     doc=SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=10*mm, leftMargin=10*mm, topMargin=2*mm, bottomMargin=10*mm, title=f"Коммерческое предложение №{_deal_doc_number(deal)}")
@@ -5168,6 +5168,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
     h=ParagraphStyle("OfferH", parent=styles["Heading2"], fontName=bold, fontSize=9, leading=11, textColor=brand, spaceBefore=2*mm, spaceAfter=1.5*mm)
     body=ParagraphStyle("OfferBody", parent=styles["BodyText"], fontName=font, fontSize=7.6, leading=10, spaceAfter=1.2*mm, textColor=colors.HexColor("#343D4A"))
     small=ParagraphStyle("OfferSmall", parent=body, fontSize=6.4, leading=8)
+    date_style=ParagraphStyle("OfferDateRight", parent=body, alignment=TA_RIGHT, spaceAfter=0)
     cell=ParagraphStyle("OfferCell", parent=small, fontSize=6.2, leading=7.5)
     cellhead=ParagraphStyle("OfferCellHead", parent=cell, fontName=bold, alignment=TA_CENTER, textColor=colors.white)
     date=moscow_now().date()
@@ -5186,7 +5187,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
             return im
         except Exception: return None
     logo=_offer_asset_image("Логотип iPlinth с розовым шевроном-1.png", 187.5, 52.5)
-    header=Table([[logo or Paragraph("iPlinth",body), Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')}<br/>Срок действия: 30 дней (до {validity.strftime('%d.%m.%Y')})", body)]], colWidths=[150*mm,127*mm], hAlign="LEFT")
+    header=Table([[logo or Paragraph("iPlinth",body), Paragraph(f"Дата выдачи: {date.strftime('%d.%m.%Y')}<br/>Срок действия: 30 дней (до {validity.strftime('%d.%m.%Y')})", date_style)]], colWidths=[150*mm,127*mm], hAlign="LEFT")
     header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     flow=[header, Spacer(1,4*mm), Paragraph(f"КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ № {html.escape(_deal_doc_number(deal))}", title),
           Paragraph("1. СВЕДЕНИЯ О ПОСТАВЩИКЕ", h),
@@ -5226,7 +5227,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
         ("BACKGROUND",(0,last_row),(-1,last_row),colors.HexColor("#FCEEF4")),("FONTNAME",(0,last_row),(-1,last_row),bold),
         ("SPAN",(0,last_row),(len(headers)-3,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT")]
     tbl.setStyle(TableStyle(tbl_style))
-    flow += [tbl, Spacer(1,3*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
+    flow += [tbl, PageBreak(), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
              Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
              Spacer(1,2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h)]
     stamp=_offer_asset_image("печать.png",35,28)
