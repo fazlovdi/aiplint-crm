@@ -5355,66 +5355,65 @@ def _make_torg12_pdf(deal, client, calc):
     txt(66, 73, "Товарная накладная", 14, bold, align="center")
     rect(107, 63, 73, 12)
     line(143.5, 63, 143.5, 75)
-    txt(125.2, 67.3, "Номер документа", 5.8, align="center")
-    txt(161.8, 67.3, "Дата составления", 5.8, align="center")
-    txt(125.2, 73.2, doc_no, 6.2, align="center")
-    txt(161.8, 73.2, date.strftime("%d.%m.%Y"), 6.2, align="center")
-    txt(190, 69, "Транспортная накладная", 5.8, align="center")
-    rect(223, 57, 65, 18)
-    line(223, 66, 288, 66)
-    line(263, 57, 263, 75)
-    txt(258, 62, "номер", 5.2, align="right")
-    txt(258, 71, "дата", 5.2, align="right")
-    txt(258, 74, "Вид операции:", 5.2, align="right")
+    txt(125.2, 67.0, "Номер документа", 5.5, align="center")
+    txt(161.8, 67.0, "Дата составления", 5.5, align="center")
+    txt(125.2, 73.1, doc_no, 6.0, align="center")
+    txt(161.8, 73.1, date.strftime("%d.%m.%Y"), 6.0, align="center")
+    # Надпись находится над своим блоком, а не поверх его рамки.
+    txt(255.5, 57.5, "Транспортная накладная", 5.6, align="center")
+    rect(223, 60, 65, 16)
+    line(223, 68, 288, 68)
+    line(263, 60, 263, 76)
+    txt(243, 65.0, "номер", 5.0, align="center")
+    txt(243, 73.0, "дата", 5.0, align="center")
+    txt(255.5, 79.5, "Вид операции: __________________", 4.8, align="center")
 
-    # Табличная часть — все 15 колонок формы ТОРГ-12.
+    # Табличная часть ТОРГ-12. Вертикали строятся по группам заголовков,
+    # а в строках товаров и итогов присутствуют границы всех 15 колонок.
     xs = [10, 25, 84, 92, 111, 123, 138, 148, 158, 180, 199, 221, 235, 250, 263, 288]
     y_top, y_h1, y_h2, y_h3, y_body = 82, 90, 96, 101, 107
-    # Общая рамка и границы шапки с объединёнными ячейками, как в бланке ТОРГ-12.
     rect(xs[0], y_top, xs[-1]-xs[0], y_body-y_top)
-    # Границы верхнего уровня: не пересекаем объединённые заголовки.
-    for idx in [1, 3, 5, 6, 8, 9, 10, 11, 12, 14]:
+    # Верхняя строка: границы между крупными группами колонок.
+    for idx in [1, 2, 4, 5, 7, 8, 9, 10, 11, 13]:
         line(xs[idx], y_top, xs[idx], y_h1)
-    # Нижние уровни таблицы.
-    for idx in [1, 3, 5, 6, 8, 9, 10, 11, 12, 14]:
+    # Подзаголовки: полная сетка там, где начинаются самостоятельные колонки.
+    for idx in range(1, 15):
         line(xs[idx], y_h1, xs[idx], y_body)
-    for idx in [4, 7, 13]:
-        line(xs[idx], y_h2, xs[idx], y_body)
     line(xs[0], y_h1, xs[-1], y_h1)
     line(xs[1], y_h2, xs[-1], y_h2)
     line(xs[1], y_h3, xs[-1], y_h3)
-    # Заголовки с объединениями ячеек.
-    txt((xs[0]+xs[1])/2, 87.3, "Номер по", 5.1, align="center")
-    txt((xs[0]+xs[1])/2, 90.0, "порядку", 5.1, align="center")
-    txt((xs[1]+xs[3])/2, 86.2, "Товар", 5.4, align="center")
-    txt((xs[1]+xs[3])/2, 94.6, "наименование, характеристика, сорт, артикул", 4.6, align="center")
-    txt((xs[1]+xs[3])/2, 100.2, "товара", 4.8, align="center")
-    txt((xs[3]+xs[5])/2, 87.3, "Единица измерения", 4.9, align="center")
-    txt((xs[3]+xs[4])/2, 100.2, "код", 4.8, align="center")
-    txt((xs[4]+xs[5])/2, 100.2, "наименование", 4.6, align="center")
-    txt((xs[5]+xs[6])/2, 87.3, "Вид", 5.0, align="center")
-    txt((xs[5]+xs[6])/2, 90.0, "упаковки", 5.0, align="center")
-    txt((xs[6]+xs[7])/2, 87.3, "Количество", 5.0, align="center")
-    txt((xs[6]+xs[7])/2, 94.5, "в одном", 4.5, align="center")
-    txt((xs[6]+xs[7])/2, 97.0, "месте", 4.5, align="center")
-    txt((xs[7]+xs[8])/2, 94.5, "мест,", 4.5, align="center")
-    txt((xs[7]+xs[8])/2, 97.0, "штук", 4.5, align="center")
-    txt((xs[8]+xs[9])/2, 87.3, "Масса", 4.8, align="center")
-    txt((xs[8]+xs[9])/2, 90.0, "брутто", 4.8, align="center")
-    txt((xs[9]+xs[10])/2, 87.3, "Количество", 4.7, align="center")
-    txt((xs[9]+xs[10])/2, 90.0, "(масса нетто)", 4.3, align="center")
-    txt((xs[10]+xs[11])/2, 87.3, "Цена, руб. коп.", 4.9, align="center")
-    txt((xs[11]+xs[12])/2, 86.2, "Сумма без учёта", 4.8, align="center")
-    txt((xs[11]+xs[12])/2, 89.0, "НДС, руб. коп.", 4.8, align="center")
-    txt((xs[12]+xs[14])/2, 86.2, "НДС", 5.1, align="center")
-    txt((xs[12]+xs[13])/2, 94.5, "ставка, %", 4.6, align="center")
-    txt((xs[13]+xs[14])/2, 94.5, "сумма, руб.", 4.6, align="center")
-    txt((xs[13]+xs[14])/2, 97.0, "коп.", 4.6, align="center")
-    txt((xs[14]+xs[15])/2, 86.2, "Сумма с учётом", 4.8, align="center")
-    txt((xs[14]+xs[15])/2, 89.0, "НДС, руб. коп.", 4.8, align="center")
+
+    # Крупные заголовки расположены внутри своих объединённых ячеек.
+    txt((xs[0]+xs[1])/2, 85.2, "Номер по", 4.8, align="center")
+    txt((xs[0]+xs[1])/2, 88.0, "порядку", 4.8, align="center")
+    txt((xs[1]+xs[2])/2, 85.8, "Товар", 5.2, align="center")
+    txt((xs[1]+xs[2])/2, 94.0, "наименование, характеристика, сорт, артикул", 4.1, align="center")
+    txt((xs[1]+xs[2])/2, 99.2, "товара", 4.5, align="center")
+    txt((xs[2]+xs[4])/2, 85.7, "Единица измерения", 4.7, align="center")
+    txt((xs[2]+xs[3])/2, 99.2, "код", 4.5, align="center")
+    txt((xs[3]+xs[4])/2, 99.2, "наименование", 4.0, align="center")
+    txt((xs[4]+xs[5])/2, 85.2, "Вид", 4.8, align="center")
+    txt((xs[4]+xs[5])/2, 88.0, "упаковки", 4.8, align="center")
+    txt((xs[5]+xs[7])/2, 85.5, "Количество", 4.7, align="center")
+    txt((xs[5]+xs[6])/2, 94.0, "в одном", 4.2, align="center")
+    txt((xs[5]+xs[6])/2, 98.0, "месте", 4.2, align="center")
+    txt((xs[6]+xs[7])/2, 94.0, "мест,", 4.2, align="center")
+    txt((xs[6]+xs[7])/2, 98.0, "штук", 4.2, align="center")
+    txt((xs[7]+xs[8])/2, 85.2, "Масса", 4.5, align="center")
+    txt((xs[7]+xs[8])/2, 88.0, "брутто", 4.5, align="center")
+    txt((xs[8]+xs[9])/2, 85.2, "Количество", 4.4, align="center")
+    txt((xs[8]+xs[9])/2, 88.0, "(масса нетто)", 4.0, align="center")
+    txt((xs[9]+xs[10])/2, 86.0, "Цена, руб. коп.", 4.4, align="center")
+    txt((xs[10]+xs[11])/2, 85.0, "Сумма без учёта", 4.2, align="center")
+    txt((xs[10]+xs[11])/2, 88.0, "НДС, руб. коп.", 4.2, align="center")
+    txt((xs[11]+xs[13])/2, 85.5, "НДС", 4.8, align="center")
+    txt((xs[11]+xs[12])/2, 94.0, "ставка, %", 4.1, align="center")
+    txt((xs[12]+xs[13])/2, 94.0, "сумма, руб.", 4.0, align="center")
+    txt((xs[12]+xs[13])/2, 98.0, "коп.", 4.0, align="center")
+    txt((xs[13]+xs[15])/2, 85.0, "Сумма с учётом", 4.2, align="center")
+    txt((xs[13]+xs[15])/2, 88.0, "НДС, руб. коп.", 4.2, align="center")
     for i, x in enumerate(xs[:-1]):
-        if i < 15:
-            txt((x+xs[i+1])/2, 104.7, str(i+1), 4.8, align="center")
+        txt((x+xs[i+1])/2, 104.7, str(i+1), 4.6, align="center")
 
     # Строки товаров. НДС — 22%, как в приложенном образце; сумма расчёта трактуется как сумма с НДС.
     row_y = y_body
@@ -5446,7 +5445,7 @@ def _make_torg12_pdf(deal, client, calc):
             label += f" (Артикул: {esc(r.get('sku'))})"
         if r.get("color"):
             label += f", {esc(r.get('color'))}"
-        wrap(label, xs[1]+1.5, row_y+3, xs[3]-xs[1]-3, 5.0, leading=2.5, maxlines=max(1, int(h/2.5)))
+        wrap(label, xs[1]+1.5, row_y+3, xs[2]-xs[1]-3, 4.7, leading=2.5, maxlines=max(1, int(h/2.5)))
         unit = esc(r.get("unit") or "шт.")
         okei = "006" if unit.lower() in ("м", "м.", "метр", "метры") else ("796" if unit.lower() in ("шт", "шт.") else "")
         txt((xs[3]+xs[4])/2, row_y+h/2+1.5, okei, 5.0, align="center")
