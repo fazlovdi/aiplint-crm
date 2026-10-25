@@ -5249,97 +5249,298 @@ def _make_commercial_offer_pdf(deal, client, calc):
 
 
 def _make_torg12_pdf(deal, client, calc):
-    """Формирует товарную накладную ТОРГ-12 по сохранённым позициям расчёта."""
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    """Формирует ТОРГ-12 в одностраничной компоновке по предоставленному образцу."""
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.pdfgen import canvas
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    from reportlab.lib.utils import simpleSplit
 
     font, bold = _pdf_font_setup()
     out = io.BytesIO()
     doc_no = _deal_doc_number(deal)
     date = moscow_now().date()
-    doc = SimpleDocTemplate(out, pagesize=landscape(A4), rightMargin=8*mm, leftMargin=8*mm,
-                            topMargin=7*mm, bottomMargin=8*mm,
-                            title=f"Товарная накладная ТОРГ-12 №{doc_no}")
-    styles = getSampleStyleSheet()
-    title = ParagraphStyle("Torg12Title", parent=styles["Title"], fontName=bold, fontSize=12,
-                           leading=14, alignment=TA_CENTER, spaceAfter=3*mm)
-    body = ParagraphStyle("Torg12Body", parent=styles["BodyText"], fontName=font, fontSize=6.8,
-                          leading=8.2, spaceAfter=0.7*mm)
-    small = ParagraphStyle("Torg12Small", parent=body, fontSize=5.8, leading=6.8)
-    center = ParagraphStyle("Torg12Center", parent=small, alignment=TA_CENTER)
-    right = ParagraphStyle("Torg12Right", parent=small, alignment=TA_RIGHT)
-    head = ParagraphStyle("Torg12Head", parent=center, fontName=bold)
     catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
     rows = _calculation_rows(calc, catalog)
     if not rows:
         raise ValueError("В расчёте нет товарных позиций для накладной.")
 
     def esc(v):
-        return html.escape(str(v or "")).replace("\n", "<br/>")
+        return str(v or "").replace("\n", " ").strip()
 
-    # Если у клиента сохранены реквизиты, используем первые актуальные; иначе оставляем
-    # поля покупателя незаполненными, чтобы их можно было вписать при отгрузке.
+    def money(v):
+        return _money(round(float(v or 0), 2)).replace(" ", "\u00a0")
+
     reqs = [r for r in (client.get("requisites", []) or []) if not r.get("deleted")]
     req = reqs[0] if reqs else {}
     buyer_name = req.get("legal_name") or client.get("company") or client.get("name") or ""
     buyer_inn = req.get("inn", "")
     buyer_kpp = req.get("kpp", "")
     buyer_address = req.get("address") or client.get("address") or client.get("main_address") or ""
-    supplier = "ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, ОГРНИП 322169000220971"
-    flow = [Paragraph("ТОВАРНАЯ НАКЛАДНАЯ", title),
-            Paragraph(f"Унифицированная форма № ТОРГ-12 · № {esc(doc_no)} от {date.strftime('%d.%m.%Y')}", center),
-            Spacer(1, 2*mm)]
-    parties = [
-        [Paragraph("Грузоотправитель / поставщик", body), Paragraph(esc(supplier), body),
-         Paragraph("Грузополучатель", body), Paragraph(esc(buyer_name), body)],
-        [Paragraph("Адрес поставщика", body), Paragraph("г. Казань, ул. Кулагина, д. 3", body),
-         Paragraph("Адрес грузополучателя", body), Paragraph(esc(buyer_address), body)],
-        [Paragraph("ИНН / КПП", body), Paragraph("731701704975 / —", body),
-         Paragraph("ИНН / КПП", body), Paragraph(esc(buyer_inn + (" / " + buyer_kpp if buyer_kpp else "")), body)],
-        [Paragraph("Плательщик", body), Paragraph(esc(buyer_name), body),
-         Paragraph("Основание", body), Paragraph(f"Расчёт № {esc(doc_no)}", body)],
+    supplier = "ИП Фазлов Дамир Ибрагимович, ИНН 731701704975"
+    supplier_full = ("ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, "
+                     "420064, РОССИЯ, ТАТАРСТАН Респ, КАЗАНЬ г, РАУИСА ГАРЕЕВА ул, "
+                     "ДОМ 113, кв 156, р/с 40802810801500486358, в банке ООО «Банк Точка», "
+                     "БИК 044525104, к/с 30101810745374525104")
+    buyer_full = buyer_name
+    if buyer_inn:
+        buyer_full += f", ИНН {buyer_inn}"
+    if buyer_address:
+        buyer_full += f", {buyer_address}"
+    if buyer_kpp:
+        buyer_full += f", КПП {buyer_kpp}"
+
+    page_w, page_h = landscape(A4)
+    c = canvas.Canvas(out, pagesize=(page_w, page_h), pageCompression=1)
+    c.setTitle(f"Товарная накладная №{doc_no} от {date.strftime('%d.%m.%Y')}")
+    W, H = page_w/mm, page_h/mm
+
+    def txt(x, y, text, size=6.0, face=None, align="left"):
+        face = face or font
+        c.setFont(face, size)
+        text = esc(text)
+        if align == "center":
+            c.drawCentredString(x*mm, H*mm-y*mm, text)
+        elif align == "right":
+            c.drawRightString(x*mm, H*mm-y*mm, text)
+        else:
+            c.drawString(x*mm, H*mm-y*mm, text)
+
+    def line(x1, y1, x2, y2, width=0.35):
+        c.setLineWidth(width)
+        c.line(x1*mm, H*mm-y1*mm, x2*mm, H*mm-y2*mm)
+
+    def rect(x, y, w, h, width=0.35):
+        c.setLineWidth(width)
+        c.rect(x*mm, H*mm-(y+h)*mm, w*mm, h*mm, stroke=1, fill=0)
+
+    def wrap(text, x, y, maxw, size=5.3, face=None, leading=2.5, maxlines=3):
+        face = face or font
+        words = simpleSplit(esc(text), face, size, maxw*mm)
+        c.setFont(face, size)
+        for j, part in enumerate(words[:maxlines]):
+            c.drawString(x*mm, H*mm-(y+j*leading)*mm, part)
+
+    # Верхние реквизиты — без заливок, как в исходной унифицированной форме.
+    x_label, x_val, x_end = 10, 37, 222
+    top_rows = [
+        ("Грузоотправитель", supplier_full),
+        ("Грузополучатель", buyer_full),
+        ("Поставщик", supplier_full),
+        ("Плательщик", buyer_full),
+        ("Основание", f"Расчёт № {doc_no}"),
     ]
-    party_tbl = Table(parties, colWidths=[31*mm, 106*mm, 31*mm, 91*mm])
-    party_tbl.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.grey),
-        ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#F1F2F4")),
-        ("BACKGROUND",(2,0),(2,-1),colors.HexColor("#F1F2F4")),
-        ("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("LEFTPADDING",(0,0),(-1,-1),3), ("RIGHTPADDING",(0,0),(-1,-1),3),
-        ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3)]))
-    flow += [party_tbl, Spacer(1, 3*mm)]
-    headers = ["№", "Товар (наименование, артикул, цвет)", "Ед. изм.", "Кол-во", "Цена, руб.", "Сумма, руб.", "НДС"]
-    data = [[Paragraph(x, head) for x in headers]]
-    for i, r in enumerate(rows, 1):
+    y0, row_h = 15, 9.3
+    for i, (label, value) in enumerate(top_rows):
+        y = y0 + i*row_h
+        txt(x_label, y+3.2, label, 6.0)
+        wrap(value, x_val, y+2.5, x_end-x_val-2, 5.5, leading=2.4, maxlines=2)
+        line(x_val, y+7.2, x_end, y+7.2, 0.3)
+
+    # Коды формы справа.
+    txt(278, 7, "Код", 5.5, align="center")
+    txt(250, 17, "Форма по ОКУД", 5.2, align="right")
+    txt(250, 26, "по ОКПО", 5.2, align="right")
+    txt(250, 35, "Вид деятельности по ОКПД", 5.2, align="right")
+    txt(250, 44, "по ОКПО", 5.2, align="right")
+    txt(250, 53, "по ОКПО", 5.2, align="right")
+    rect(263, 8, 25, 45)
+    for yy in [17, 26, 35, 44]:
+        line(263, yy, 288, yy)
+    txt(275.5, 24, "2019777673", 5.5, align="center")
+    txt(275.5, 42, "2019777673", 5.5, align="center")
+    txt(275.5, 51, "2010059549", 5.5, align="center")
+
+    # Заголовок и блок номера/даты/транспортной накладной.
+    txt(66, 73, "Товарная накладная", 14, bold, align="center")
+    rect(107, 63, 73, 12)
+    line(143.5, 63, 143.5, 75)
+    txt(125.2, 67.3, "Номер документа", 5.8, align="center")
+    txt(161.8, 67.3, "Дата составления", 5.8, align="center")
+    txt(125.2, 73.2, doc_no, 6.2, align="center")
+    txt(161.8, 73.2, date.strftime("%d.%m.%Y"), 6.2, align="center")
+    txt(190, 69, "Транспортная накладная", 5.8, align="center")
+    rect(223, 57, 65, 18)
+    line(223, 66, 288, 66)
+    line(263, 57, 263, 75)
+    txt(258, 62, "номер", 5.2, align="right")
+    txt(258, 71, "дата", 5.2, align="right")
+    txt(258, 74, "Вид операции:", 5.2, align="right")
+
+    # Табличная часть — все 15 колонок формы ТОРГ-12.
+    xs = [10, 25, 84, 92, 111, 123, 138, 148, 158, 180, 199, 221, 235, 250, 263, 288]
+    y_top, y_h1, y_h2, y_h3, y_body = 82, 90, 96, 101, 107
+    # Общая рамка заголовка и вертикальные границы.
+    rect(xs[0], y_top, xs[-1]-xs[0], y_body-y_top)
+    for x in xs[1:-1]:
+        line(x, y_top, x, y_body)
+    line(xs[0], y_h1, xs[-1], y_h1)
+    line(xs[1], y_h2, xs[-1], y_h2)
+    line(xs[1], y_h3, xs[-1], y_h3)
+    # Заголовки с объединениями ячеек.
+    txt((xs[0]+xs[1])/2, 87.3, "Номер по", 5.1, align="center")
+    txt((xs[0]+xs[1])/2, 90.0, "порядку", 5.1, align="center")
+    txt((xs[1]+xs[3])/2, 86.2, "Товар", 5.4, align="center")
+    txt((xs[1]+xs[3])/2, 94.6, "наименование, характеристика, сорт, артикул", 4.6, align="center")
+    txt((xs[1]+xs[3])/2, 100.2, "товара", 4.8, align="center")
+    txt((xs[3]+xs[5])/2, 87.3, "Единица измерения", 4.9, align="center")
+    txt((xs[3]+xs[4])/2, 100.2, "код", 4.8, align="center")
+    txt((xs[4]+xs[5])/2, 100.2, "наименование", 4.6, align="center")
+    txt((xs[5]+xs[6])/2, 87.3, "Вид", 5.0, align="center")
+    txt((xs[5]+xs[6])/2, 90.0, "упаковки", 5.0, align="center")
+    txt((xs[6]+xs[7])/2, 87.3, "Количество", 5.0, align="center")
+    txt((xs[6]+xs[7])/2, 94.5, "в одном", 4.5, align="center")
+    txt((xs[6]+xs[7])/2, 97.0, "месте", 4.5, align="center")
+    txt((xs[7]+xs[8])/2, 94.5, "мест,", 4.5, align="center")
+    txt((xs[7]+xs[8])/2, 97.0, "штук", 4.5, align="center")
+    txt((xs[8]+xs[9])/2, 87.3, "Масса", 4.8, align="center")
+    txt((xs[8]+xs[9])/2, 90.0, "брутто", 4.8, align="center")
+    txt((xs[9]+xs[10])/2, 87.3, "Количество", 4.7, align="center")
+    txt((xs[9]+xs[10])/2, 90.0, "(масса нетто)", 4.3, align="center")
+    txt((xs[10]+xs[11])/2, 87.3, "Цена, руб. коп.", 4.9, align="center")
+    txt((xs[11]+xs[12])/2, 86.2, "Сумма без учёта", 4.8, align="center")
+    txt((xs[11]+xs[12])/2, 89.0, "НДС, руб. коп.", 4.8, align="center")
+    txt((xs[12]+xs[14])/2, 86.2, "НДС", 5.1, align="center")
+    txt((xs[12]+xs[13])/2, 94.5, "ставка, %", 4.6, align="center")
+    txt((xs[13]+xs[14])/2, 94.5, "сумма, руб.", 4.6, align="center")
+    txt((xs[13]+xs[14])/2, 97.0, "коп.", 4.6, align="center")
+    txt((xs[14]+xs[15])/2, 86.2, "Сумма с учётом", 4.8, align="center")
+    txt((xs[14]+xs[15])/2, 89.0, "НДС, руб. коп.", 4.8, align="center")
+    for i, x in enumerate(xs[:-1]):
+        if i < 15:
+            txt((x+xs[i+1])/2, 102.5, str(i+1), 4.8, align="center")
+
+    # Строки товаров. НДС — 22%, как в приложенном образце; сумма расчёта трактуется как сумма с НДС.
+    row_y = y_body
+    item_heights = []
+    for r in rows:
         label = esc(r.get("name"))
         if r.get("sku"):
-            label += f"<br/><font size='5.5'>Артикул: {esc(r.get('sku'))}</font>"
+            label += f" (Артикул: {esc(r.get('sku'))})"
         if r.get("color"):
-            label += f"<br/><font size='5.5'>Цвет/RAL: {esc(r.get('color'))}</font>"
-        data.append([Paragraph(str(i), center), Paragraph(label, small),
-                     Paragraph(esc(r.get("unit") or "шт."), center),
-                     Paragraph(f"{r['quantity']:g}", right), Paragraph(_money(r["after"]), right),
-                     Paragraph(_money(r["amount"]), right), Paragraph("Без НДС", center)])
-    total_qty = sum(float(r["quantity"]) for r in rows)
-    total = round(sum(float(r["amount"]) for r in rows), 2)
-    data.append([Paragraph("", small), Paragraph("ИТОГО по товарной накладной", small), Paragraph("", small),
-                 Paragraph(f"{total_qty:g}", right), Paragraph("", small), Paragraph(_money(total), right), Paragraph("Без НДС", center)])
-    table = Table(data, colWidths=[9*mm, 104*mm, 20*mm, 22*mm, 30*mm, 32*mm, 22*mm], repeatRows=1)
-    table.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E9D0DC")),
-        ("GRID",(0,0),(-1,-1),0.35,colors.grey), ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ALIGN",(0,0),(0,-1),"CENTER"), ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#F5F6F8")),
-        ("FONTNAME",(0,-1),(-1,-1),bold), ("LEFTPADDING",(0,0),(-1,-1),3),
-        ("RIGHTPADDING",(0,0),(-1,-1),3), ("TOPPADDING",(0,0),(-1,-1),4),
-        ("BOTTOMPADDING",(0,0),(-1,-1),4)]))
-    flow += [table, Spacer(1, 3*mm),
-             Paragraph(f"Всего отпущено на сумму: <b>{_money(total)} руб.</b> Без НДС.", body),
-             Paragraph("Товар передал: __________________ / ИП Фазлов Дамир Ибрагимович /     М.П.", body),
-             Paragraph("Товар получил: __________________ / ______________________________ /     М.П.", body),
-             Paragraph("Дата получения: «____» ______________ 20____ г.", body)]
-    doc.build(flow)
+            label += f", {esc(r.get('color'))}"
+        wrapped = simpleSplit(label, font, 5.0, (xs[3]-xs[1]-2)*mm)
+        h = max(8.5, min(15.0, len(wrapped)*2.5+3.5))
+        item_heights.append(h)
+    # If many items, reduce row heights to retain the original one-page form.
+    available = 43.0
+    if sum(item_heights) > available:
+        scale = available / sum(item_heights)
+        item_heights = [max(5.5, h*scale) for h in item_heights]
+    for i, (r, h) in enumerate(zip(rows, item_heights), 1):
+        line(xs[0], row_y+h, xs[-1], row_y+h)
+        for x in xs[1:-1]:
+            line(x, row_y, x, row_y+h)
+        total_inc = float(r["amount"])
+        net = round(total_inc / 1.22, 2)
+        vat = round(total_inc-net, 2)
+        txt((xs[0]+xs[1])/2, row_y+h/2+1.5, str(i), 5.2, align="center")
+        label = esc(r.get("name"))
+        if r.get("sku"):
+            label += f" (Артикул: {esc(r.get('sku'))})"
+        if r.get("color"):
+            label += f", {esc(r.get('color'))}"
+        wrap(label, xs[1]+1.5, row_y+3, xs[3]-xs[1]-3, 5.0, leading=2.5, maxlines=max(1, int(h/2.5)))
+        unit = esc(r.get("unit") or "шт.")
+        okei = "006" if unit.lower() in ("м", "м.", "метр", "метры") else ("796" if unit.lower() in ("шт", "шт.") else "")
+        txt((xs[3]+xs[4])/2, row_y+h/2+1.5, okei, 5.0, align="center")
+        txt((xs[4]+xs[5])/2, row_y+h/2+1.5, unit, 5.0, align="center")
+        txt((xs[9]+xs[10])/2-1, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="right")
+        txt((xs[10]+xs[11])/2-1, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="right")
+        txt((xs[11]+xs[12])/2-1, row_y+h/2+1.5, money(net), 4.8, align="right")
+        txt((xs[12]+xs[13])/2, row_y+h/2+1.5, "22", 4.8, align="center")
+        txt((xs[13]+xs[14])/2-1, row_y+h/2+1.5, money(vat), 4.8, align="right")
+        txt((xs[14]+xs[15])/2-1, row_y+h/2+1.5, money(total_inc), 4.8, align="right")
+        row_y += h
+
+    # Итоговая строка.
+    line(xs[0], row_y+5.5, xs[-1], row_y+5.5)
+    txt((xs[1]+xs[6])/2, row_y+3.6, "Всего по накладной", 5.2, bold, align="center")
+    qty_total = sum(float(r["quantity"]) for r in rows)
+    inc_total = round(sum(float(r["amount"]) for r in rows), 2)
+    net_total = round(inc_total/1.22, 2)
+    vat_total = round(inc_total-net_total, 2)
+    txt((xs[9]+xs[10])/2-1, row_y+3.6, f"{qty_total:g}", 5.0, align="right")
+    txt((xs[10]+xs[11])/2-1, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="right")
+    txt((xs[11]+xs[12])/2-1, row_y+3.6, money(net_total), 4.8, align="right")
+    txt((xs[12]+xs[13])/2, row_y+3.6, "22", 4.8, align="center")
+    txt((xs[13]+xs[14])/2-1, row_y+3.6, money(vat_total), 4.8, align="right")
+    txt((xs[14]+xs[15])/2-1, row_y+3.6, money(inc_total), 4.8, align="right")
+
+    # Нижняя часть формы: строки приложения, суммы прописью и подписи.
+    y = row_y+10
+    txt(10, y+2, "Товарная накладная имеет приложение на", 5.2)
+    line(65, y+2.5, 170, y+2.5)
+    txt(171, y+2, "листах и содержит", 5.2)
+    line(197, y+2.5, 219, y+2.5)
+    txt(220, y+2, "порядковых номеров записей.", 5.2)
+    txt(10, y+11, "Всего мест", 5.2)
+    line(29, y+11.5, 130, y+11.5)
+    txt(76, y+14, "(прописью)", 3.8, align="center")
+    txt(152, y+11, "Масса груза (нетто)", 5.2)
+    line(188, y+11.5, 287, y+11.5)
+    txt(220, y+14, "(прописью)", 3.8, align="center")
+    txt(152, y+20, "Масса груза (брутто)", 5.2)
+    line(188, y+20.5, 287, y+20.5)
+    txt(220, y+23, "(прописью)", 3.8, align="center")
+    txt(10, y+30, "Приложение (паспорта, сертификаты и т.п.) на", 5.2)
+    line(83, y+30.5, 134, y+30.5)
+    txt(135, y+30, "листах", 5.2)
+    txt(152, y+30, "По доверенности №", 5.2)
+    line(182, y+30.5, 205, y+30.5)
+    txt(207, y+30, "от «____» __________ года", 5.2)
+    txt(10, y+39, "Всего отпущено на сумму", 5.2)
+    amount_words = f"{money(inc_total)} руб. 00 коп."
+    line(45, y+39.5, 130, y+39.5)
+    txt(46, y+39, amount_words, 5.0)
+    txt(10, y+48, "Отпуск груза разрешил", 5.2)
+    line(39, y+48.5, 69, y+48.5)
+    txt(54, y+51, "(должность)", 3.7, align="center")
+    line(71, y+48.5, 102, y+48.5)
+    txt(86, y+51, "(подпись)", 3.7, align="center")
+    line(104, y+48.5, 133, y+48.5)
+    txt(118, y+51, "(расшифровка подписи)", 3.4, align="center")
+    txt(10, y+57, "Главный (старший) бухгалтер", 5.2)
+    line(66, y+57.5, 96, y+57.5)
+    txt(81, y+60, "(подпись)", 3.7, align="center")
+    line(98, y+57.5, 127, y+57.5)
+    txt(112, y+60, "(расшифровка подписи)", 3.4, align="center")
+    txt(10, y+66, "Отпуск груза произвёл", 5.2)
+    line(39, y+66.5, 69, y+66.5)
+    txt(54, y+69, "(должность)", 3.7, align="center")
+    line(71, y+66.5, 102, y+66.5)
+    txt(86, y+69, "(подпись)", 3.7, align="center")
+    line(104, y+66.5, 133, y+66.5)
+    txt(118, y+69, "(расшифровка подписи)", 3.4, align="center")
+    txt(36, y+80, "М.П.", 5.2)
+    txt(65, y+80, "« _____ » ______________________ _____ года", 5.0)
+
+    # Правая колонка подписей и получения груза.
+    line(150, y+26, 150, y+81)
+    txt(153, y+39, "выданной ______________________________________________", 5.2)
+    line(153, y+45, 288, y+45)
+    line(153, y+51, 288, y+51)
+    txt(153, y+57, "Груз принял", 5.2)
+    line(192, y+57.5, 222, y+57.5)
+    txt(207, y+60, "(должность)", 3.7, align="center")
+    line(224, y+57.5, 254, y+57.5)
+    txt(239, y+60, "(подпись)", 3.7, align="center")
+    line(256, y+57.5, 288, y+57.5)
+    txt(272, y+60, "(расшифровка подписи)", 3.3, align="center")
+    txt(153, y+66, "Груз получил", 5.2)
+    line(192, y+66.5, 222, y+66.5)
+    txt(207, y+69, "(должность)", 3.7, align="center")
+    line(224, y+66.5, 254, y+66.5)
+    txt(239, y+69, "(подпись)", 3.7, align="center")
+    line(256, y+66.5, 288, y+66.5)
+    txt(272, y+69, "(расшифровка подписи)", 3.3, align="center")
+    txt(179, y+80, "М.П.", 5.2)
+    txt(206, y+80, "« _____ » __________________ _____ года", 4.8)
+
+    # Номер/дата листа внизу, как в образце.
+    txt(10, 205, f"Товарная накладная №{doc_no} от {date.strftime('%d.%m.%Y')}. Лист 1 из 1", 4.2)
+    c.showPage()
+    c.save()
     return out.getvalue()
 
 
