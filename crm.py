@@ -10731,13 +10731,10 @@ if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm
 
         _crm_dialog_title = _active_crm_dialog.get("title", "CRM")
         _crm_dialog_width = _active_crm_dialog.get("width", "large")
-        # Совместимость с версиями Streamlit, в которых st.dialog ещё не
-        # поддерживает параметр width.
+        # Наиболее совместимый вызов: не передаём width, поскольку старые версии Streamlit
+        # могут завершаться ошибкой при создании диалога с этим параметром.
         _crm_dialog_api = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
         if _crm_dialog_api is None:
             raise RuntimeError("Текущая версия Streamlit не поддерживает диалоговые окна. Обновите Streamlit в requirements.txt.")
-        try:
-            _crm_dialog_host = _crm_dialog_api(_crm_dialog_title, width=_crm_dialog_width)(_crm_render_active_dialog)
-        except TypeError:
-            _crm_dialog_host = _crm_dialog_api(_crm_dialog_title)(_crm_render_active_dialog)
+        _crm_dialog_host = _crm_dialog_api(_crm_dialog_title)(_crm_render_active_dialog)
         _crm_dialog_host()
