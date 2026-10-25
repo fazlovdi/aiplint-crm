@@ -10731,8 +10731,23 @@ if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm
 
         _crm_dialog_title = _active_crm_dialog.get("title", "CRM")
         _crm_dialog_width = _active_crm_dialog.get("width", "large")
-        # Наиболее совместимый вызов: не передаём width, поскольку старые версии Streamlit
-        # могут завершаться ошибкой при создании диалога с этим параметром.
+        # Вызов без аргумента width совместим со старыми версиями Streamlit,
+        # а фактическую ширину окна задаём CSS, чтобы диалоги не становились узкими.
+        if _crm_dialog_width == "medium":
+            _crm_dialog_css_width = "min(88vw, 760px)"
+            _crm_dialog_css_max = "760px"
+        else:
+            _crm_dialog_css_width = "min(94vw, 1280px)"
+            _crm_dialog_css_max = "1280px"
+        st.markdown(
+            "<style>"
+            "div[data-testid='stDialog'] > div, section[data-testid='stDialog'] > div {"
+            f"width: {_crm_dialog_css_width} !important; "
+            f"max-width: {_crm_dialog_css_max} !important; "
+            "}"
+            "</style>",
+            unsafe_allow_html=True,
+        )
         _crm_dialog_api = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
         if _crm_dialog_api is None:
             raise RuntimeError("Текущая версия Streamlit не поддерживает диалоговые окна. Обновите Streamlit в requirements.txt.")
