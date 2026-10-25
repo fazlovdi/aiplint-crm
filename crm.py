@@ -141,6 +141,10 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { font-size: 0.9rem; }
     .stButton > button { font-size: 0.85rem !important; }
     .stHorizontalBlock .stButton button { font-size: 0.85rem !important; }
+    /* Верхние кнопки переключения разделов: шрифт на 20% меньше */
+    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button,
+    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button p,
+    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button span { font-size: 0.68rem !important; }
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
 
@@ -4372,7 +4376,7 @@ with _header_center:
         background: transparent !important;
         color: var(--text-color) !important;
         font-family: inherit !important;
-        font-size: 3.5rem !important;
+        font-size: 2.8rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
         text-align: center !important;
@@ -4396,7 +4400,7 @@ with _header_center:
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button span,
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button div {
         font-family: inherit !important;
-        font-size: 3.5rem !important;
+        font-size: 2.8rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
         margin: 0 !important;
@@ -4410,7 +4414,7 @@ with _header_center:
     [class*="crm_refresh_db_title"] p,
     [class*="crm_refresh_db_title"] span,
     [class*="crm_refresh_db_title"] div {
-        font-size: 3.5rem !important;
+        font-size: 2.8rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
     }
