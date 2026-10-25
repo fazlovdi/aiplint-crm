@@ -5177,7 +5177,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=13*mm,leftMargin=13*mm,topMargin=8*mm,bottomMargin=12*mm,title=f"Счёт №{_deal_doc_number(deal)}")
     styles=getSampleStyleSheet()
     brand=colors.HexColor("#bc1661")
-    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_CENTER,spaceAfter=4*mm,textColor=colors.HexColor("#202833"))
+    title=ParagraphStyle("InvTitle",parent=styles["Title"],fontName=bold,fontSize=13,leading=16,alignment=TA_CENTER,spaceAfter=8*mm,textColor=colors.HexColor("#202833"))
     body=ParagraphStyle("InvBody",parent=styles["BodyText"],fontName=font,fontSize=8,leading=10,spaceAfter=1.3*mm,textColor=colors.HexColor("#343D4A"))
     small=ParagraphStyle("InvSmall",parent=body,fontSize=6.7,leading=8)
     cell=ParagraphStyle("InvCell",parent=small,fontSize=6.8,leading=8)
@@ -5217,13 +5217,38 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         except Exception:
             return None
 
-    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", (210*0.50), 48)
-    flow=[]
-    if logo:
-        flow += [logo, Spacer(1,3*mm)]
-    flow += [Paragraph(html.escape(invoice_no),title),
-             Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, р/с 40802810801500486358, в банке ООО &quot;Банк Точка&quot;, БИК 044525104, к/с 30101810745374525104",body),
-             Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
+    logo=_asset_image("Логотип iPlinth с розовым шевроном-1.png", 105, 34)
+    # Платёжный QR по формату ST00012 (ГОСТ Р 56042-2014): реквизиты получателя,
+    # назначение и точная сумма счёта. Это QR для перевода по банковским реквизитам,
+    # а не QR СБП/эквайринга.
+    from reportlab.graphics.barcode.qr import QrCodeWidget
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics import renderPDF
+    class _PaymentQR(Flowable):
+        def __init__(self, payload, size=25*mm):
+            super().__init__(); self.payload=payload; self.width=size; self.height=size
+        def draw(self):
+            widget=QrCodeWidget(self.payload)
+            x1,y1,x2,y2=widget.getBounds()
+            drawing=Drawing(self.width,self.height,transform=[self.width/max(x2-x1,1),0,0,self.height/max(y2-y1,1),0,0])
+            drawing.add(widget)
+            renderPDF.draw(drawing,self.canv,0,0)
+    amount_kopecks=int(round(total*100))
+    qr_payload=(
+        "ST00012|Name=ИП Фазлов Дамир Ибрагимович"
+        "|PersonalAcc=40802810801500486358"
+        "|BankName=ООО Банк Точка|BIC=044525104"
+        "|CorrespAcc=30101810745374525104"
+        "|PayeeINN=731701704975"
+        f"|Purpose=Оплата {invoice_no}|Sum={amount_kopecks}"
+    )
+    payment_qr=_PaymentQR(qr_payload, 25*mm)
+    header_cells=[[logo or Paragraph("iPlinth",body), payment_qr]]
+    header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[35*mm],hAlign="LEFT")
+    header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    flow=[header,Spacer(1,5*mm),Paragraph(html.escape(invoice_no),title),Spacer(1,2*mm),
+          Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, р/с 40802810801500486358, в банке ООО &quot;Банк Точка&quot;, БИК 044525104, к/с 30101810745374525104",body),
+          Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
         name=f"<b>{html.escape(str(r['name']))}</b><br/><font size='6'>(Артикул: {html.escape(str(r['sku']))})</font>"
@@ -5251,7 +5276,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
             if self.signature_img:
                 sw=self.signature_img.drawWidth; sh=self.signature_img.drawHeight
                 # Signature overlaps the stamp, slightly above its centre.
-                self.canv.drawImage(self.signature_img.filename, 2*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
+                self.canv.drawImage(self.signature_img.filename, -18*mm, 7*mm, width=sw, height=sh, preserveAspectRatio=True, mask='auto')
     sign=Table([[Paragraph("Поставщик: ИП Фазлов Дамир Ибрагимович<br/>Подпись и печать",body),_StampSignature(stamp,signature)]],colWidths=[90*mm,90*mm])
     sign.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2)]))
     flow.append(sign)
