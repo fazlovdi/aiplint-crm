@@ -6080,12 +6080,9 @@ def invoice_document_dialog(deal_id, calc_id):
                 st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
     if missing_link:
         st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
-    # Документы хранятся у расчёта, но в окне сделки показываем историю по всем расчётам,
-    # чтобы старую ссылку можно было найти, даже если сейчас открыт другой расчёт.
-    bank_records = []
-    for _record_calc in deal.get("calculations", []) or []:
-        for _record in _record_calc.get("tochka_documents", []) or []:
-            bank_records.append((_record_calc, _record))
+    # Документы принадлежат конкретному расчёту: показываем только его счета и ссылки.
+    # Вёрстку и отображение документов оставляем без изменений.
+    bank_records = [(calc, record) for record in (calc.get("tochka_documents", []) or [])]
     bank_records.sort(key=lambda pair: str(pair[1].get("created_at", "")), reverse=True)
     if bank_records:
         st.markdown("#### Документы и оплаты Точки по сделке")
