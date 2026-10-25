@@ -5529,6 +5529,8 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
                 inv=st.session_state.get("dialog_invoice_request") or {}
                 inv["selected_requisite_id"]=req["id"]
                 st.session_state["dialog_invoice_request"]=inv
+                if inv.get("deal_id") is not None and inv.get("calc_id") is not None:
+                    st.session_state[f"invoice_req_select_{inv.get('deal_id')}_{inv.get('calc_id')}"] = str(req["id"])
                 invoice_document_dialog(inv.get("deal_id"),inv.get("calc_id"))
             else:
                 _pop_dialog_return(); st.rerun()
@@ -6266,165 +6268,131 @@ def invoice_document_dialog(deal_id, calc_id):
     st.markdown(f"**Сделка:** {deal.get('deal_number',deal.get('title',''))}")
     st.markdown(f"**Расчёт:** {calc.get('name','Расчёт')}")
     selected_req = None
+    ids=[str(r.get("id")) for r in requisites]
+    selected=str(state.get("selected_requisite_id", "") or "")
+    if selected not in ids: selected=""
+    req_select_col, req_view_col = st.columns([4, 1.65], vertical_alignment="bottom")
+    with req_select_col:
+        sel=st.selectbox(
+            "Реквизиты плательщика:", [""] + ids,
+            index=(ids.index(selected) + 1) if selected else 0,
+            format_func=lambda rid: "Выбери сохранённые реквизиты" if not rid else next((r.get("legal_name", "Реквизиты") for r in requisites if str(r.get("id"))==str(rid)), "Реквизиты"),
+            key=f"invoice_req_select_{deal_id}_{calc_id}",
+        )
+    state["selected_requisite_id"] = sel or ""
+    selected_req=next((r for r in requisites if str(r.get("id"))==str(sel)),None) if sel else None
+    with req_view_col:
+        if st.button("Посмотреть реквизиты", key=f"invoice_req_view_{deal_id}_{calc_id}", use_container_width=True, disabled=not selected_req):
+            _push_dialog_return()
+            client_requisites_view_dialog(client.get("id"), True, selected_req.get("id"))
+            st.rerun()
     if not requisites:
-        st.info("Для клиента пока не сохранены реквизиты плательщика.")
-    else:
-        ids=[str(r.get("id")) for r in requisites]
-        selected=str(state.get("selected_requisite_id",ids[0]))
-        if selected not in ids: selected=ids[0]
-        req_select_col, req_view_col = st.columns([4, 1.65], vertical_alignment="bottom")
-        with req_select_col:
-            sel=st.selectbox("Реквизиты плательщика",ids,index=ids.index(selected),format_func=lambda rid:next((r.get("legal_name", "Реквизиты") for r in requisites if str(r.get("id"))==str(rid)),"Реквизиты"),key=f"invoice_req_select_{deal_id}_{calc_id}")
-        state["selected_requisite_id"]=sel
-        selected_req=next((r for r in requisites if str(r.get("id"))==str(sel)),None)
-        with req_view_col:
-            if st.button("Посмотреть реквизиты", key=f"invoice_req_view_{deal_id}_{calc_id}", use_container_width=True, disabled=not selected_req):
-                _push_dialog_return()
-                client_requisites_view_dialog(client.get("id"), True, selected_req.get("id"))
-        if selected_req:
-            st.caption(f"Тип: { {'company':'Юрлицо','ip':'ИП','person':'Физлицо'}.get(selected_req.get('payer_type'),'—') } · ИНН: {selected_req.get('inn','—')} · Email: {selected_req.get('email','—')}")
+        st.info("Для клиента пока не сохранены реквизиты плательщика. Нажми «Добавить новые реквизиты».")
+    elif not selected_req:
+        st.warning("Обязательно выбери реквизиты плательщика перед созданием счёта или платежа.")
+    if selected_req:
+        st.caption(f"Тип: { {'company':'Юрлицо','ip':'ИП','person':'Физлицо'}.get(selected_req.get('payer_type'),'—') } · ИНН: {selected_req.get('inn','—')} · Email: {selected_req.get('email','—')}")
     if st.button("+ Добавить новые реквизиты",key=f"invoice_add_req_{deal_id}_{calc_id}",use_container_width=True):
         st.session_state["dialog_client_requisites_client_id"]=client.get("id")
         st.session_state["dialog_client_requisites_return_to_invoice"]=True
         client_requisites_dialog(client.get("id"),True)
+        st.rerun()
 
-    st.divider()
-    st.markdown("### Точка Банк")
-    st.caption("Счёт через API доступен юридическим лицам и ИП. Для физлиц используйте платёжную ссылку с онлайн-чеком.")
-    cfg = _tochka_config()
-    missing_invoice = _tochka_missing_config(["token", "customer_code", "account_id"])
-    missing_link = _tochka_missing_config(["token", "customer_code", "tax_system_code", "supplier_name", "supplier_inn", "supplier_phone"])
-    if missing_invoice:
-        st.info("Для банковского счёта добавьте параметры Точки в Streamlit Secrets: token, customer_code и account_id.")
-    t_invoice_col, t_link_col = st.columns(2)
-    with t_invoice_col:
-        invoice_disabled = not selected_req or selected_req.get("payer_type") not in ("company", "ip") or bool(missing_invoice) or not bool(calc.get("items"))
-        if st.button("Создать счёт в Точке", key=f"tochka_invoice_create_{deal_id}_{calc_id}", use_container_width=True, disabled=invoice_disabled):
-            try:
-                record = _tochka_create_invoice(deal, calc, selected_req)
-                _tochka_record_store(deal, calc, record)
-                # save_data() обновляет crm_store глубокой копией — повторно получаем
-                # актуальные объекты, чтобы PDF прикрепился к сохранённой сделке.
-                deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(deal_id)), deal)
-                calc = next((c for c in deal.get("calculations", []) if str(c.get("id")) == str(calc_id)), calc)
+    st.markdown("**Банк для формирования счёта или платежа**")
+    bank_choice = st.selectbox(
+        "Выбери банк", ["Точка Банк", "Ozon Pay"],
+        index=0 if st.session_state.get(f"invoice_bank_choice_{deal_id}_{calc_id}", "Точка Банк") == "Точка Банк" else 1,
+        key=f"invoice_bank_choice_{deal_id}_{calc_id}", label_visibility="collapsed",
+    )
+
+    if bank_choice == "Точка Банк":
+        st.divider()
+        st.markdown("### Точка Банк")
+        st.caption("Счёт через API доступен юридическим лицам и ИП. Для физлиц используйте платёжную ссылку с онлайн-чеком.")
+        cfg = _tochka_config()
+        missing_invoice = _tochka_missing_config(["token", "customer_code", "account_id"])
+        missing_link = _tochka_missing_config(["token", "customer_code", "tax_system_code", "supplier_name", "supplier_inn", "supplier_phone"])
+        if missing_invoice:
+            st.info("Для банковского счёта добавьте параметры Точки в Streamlit Secrets: token, customer_code и account_id.")
+        t_invoice_col, t_link_col = st.columns(2)
+        with t_invoice_col:
+            invoice_disabled = not selected_req or selected_req.get("payer_type") not in ("company", "ip") or bool(missing_invoice) or not bool(calc.get("items"))
+            if st.button("Создать счёт в Точке", key=f"tochka_invoice_create_{deal_id}_{calc_id}", use_container_width=True, disabled=invoice_disabled):
                 try:
-                    pdf = _tochka_get_invoice_pdf(record)
-                    filename = f"Счёт Точка {record['invoice_number']}.pdf"
-                    _save_generated_document(deal, pdf, filename, "Счёт Точка", calc, {"payer_type": selected_req.get("payer_type"), "tochka_document_id": record["document_id"], "bank": "Точка"})
-                    _open_pdf_link(pdf, filename, f"tochka_pdf_{deal_id}_{calc_id}_{record['document_id']}")
-                    st.success(f"Счёт создан в Точке № {record['invoice_number']} и сохранён в файлах сделки.")
-                except Exception as pdf_exc:
-                    st.warning(f"Счёт создан в Точке, но PDF пока не удалось получить: {pdf_exc}. Идентификатор сохранён в CRM.")
-            except Exception as exc:
-                st.error(f"Не удалось создать счёт в Точке: {exc}")
-    with t_link_col:
-        link_disabled = not selected_req or bool(missing_link) or not bool(calc.get("items"))
-        if st.button("Создать платёжную ссылку / QR", key=f"tochka_link_create_{deal_id}_{calc_id}", use_container_width=True, disabled=link_disabled):
+                    record = _tochka_create_invoice(deal, calc, selected_req)
+                    _tochka_record_store(deal, calc, record)
+                    # save_data() обновляет crm_store глубокой копией — повторно получаем
+                    # актуальные объекты, чтобы PDF прикрепился к сохранённой сделке.
+                    deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(deal_id)), deal)
+                    calc = next((c for c in deal.get("calculations", []) if str(c.get("id")) == str(calc_id)), calc)
+                    try:
+                        pdf = _tochka_get_invoice_pdf(record)
+                        filename = f"Счёт Точка {record['invoice_number']}.pdf"
+                        _save_generated_document(deal, pdf, filename, "Счёт Точка", calc, {"payer_type": selected_req.get("payer_type"), "tochka_document_id": record["document_id"], "bank": "Точка"})
+                        _open_pdf_link(pdf, filename, f"tochka_pdf_{deal_id}_{calc_id}_{record['document_id']}")
+                        st.success(f"Счёт создан в Точке № {record['invoice_number']} и сохранён в файлах сделки.")
+                    except Exception as pdf_exc:
+                        st.warning(f"Счёт создан в Точке, но PDF пока не удалось получить: {pdf_exc}. Идентификатор сохранён в CRM.")
+                except Exception as exc:
+                    st.error(f"Не удалось создать счёт в Точке: {exc}")
+        with t_link_col:
+            link_disabled = not selected_req or bool(missing_link) or not bool(calc.get("items"))
+            if st.button("Создать платёжную ссылку / QR", key=f"tochka_link_create_{deal_id}_{calc_id}", use_container_width=True, disabled=link_disabled):
+                try:
+                    record = _tochka_create_payment_link(deal, calc, selected_req)
+                    _tochka_record_store(deal, calc, record)
+                    st.success("Платёжная ссылка Точки создана. Ссылка и QR-код доступны ниже.")
+                except Exception as exc:
+                    st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
+        if missing_link:
+            st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
+    else:
+        st.divider()
+        st.markdown("### Ozon Pay")
+        st.caption("Приём оплаты через СБП. Статус можно проверить вручную; автоматические POST-уведомления требуют отдельного публичного webhook-адреса.")
+        ozon_cfg = _ozon_config()
+        ozon_missing = [key for key in ("access_key", "secret_key") if not ozon_cfg.get(key)]
+        if ozon_missing:
+            st.info("Для Ozon Pay добавьте в Streamlit Secrets раздел [ozon] с access_key и secret_key.")
+        ozon_create_disabled = bool(ozon_missing) or not bool(calc.get("items")) or _deal_calc_total(calc) <= 0
+        invoice_pdf_key = f"ozon_legal_invoice_pdf_{deal_id}_{calc_id}"
+        ozon_invoice_col, ozon_payment_col = st.columns(2)
+        with ozon_invoice_col:
+            if st.button("Сформировать счёт для юрлица (PDF)", key=f"ozon_legal_invoice_make_{deal_id}_{calc_id}", use_container_width=True,
+                         disabled=not selected_req or selected_req.get("payer_type") not in ("company", "ip") or not bool(calc.get("items"))):
+                try:
+                    pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, selected_req)
+                    filename = f"Счёт {str(calc.get('name') or 'Расчёт').replace('Расчёт', '').strip() or 'Айплинт'} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+                    _save_generated_document(deal, pdf_bytes, filename, "Счёт на оплату (PDF)", calc,
+                                             {"payer_type": selected_req.get("payer_type"), "bank": "Банковские реквизиты поставщика", "requisite_id": selected_req.get("id")})
+                    st.session_state[invoice_pdf_key] = {"bytes": base64.b64encode(pdf_bytes).decode("ascii"), "filename": filename, "due_date": due_date}
+                    st.success("PDF-счёт сформирован и сохранён в файлах сделки.")
+                except Exception as exc:
+                    st.error(f"Не удалось сформировать PDF-счёт: {exc}")
+        with ozon_payment_col:
+            if st.button("Создать платёжную ссылку Ozon Pay / QR", key=f"ozon_payment_create_{deal_id}_{calc_id}", use_container_width=True, disabled=ozon_create_disabled):
+                try:
+                    ozon_record = _ozon_create_payment(deal, calc)
+                    calc.setdefault("ozon_documents", []).append(ozon_record)
+                    calc["updated_at"] = now_str()
+                    if deal.get("status", "Новый") not in ("На паузе", "Сделка закрыта", "Архив") and deal.get("payment_status") != "Оплачено":
+                        deal["status"] = "Ожидание оплаты"
+                    deal["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                    st.success("Платёж Ozon Pay создан. Ссылка и QR-код доступны ниже.")
+                except Exception as exc:
+                    st.error(f"Не удалось создать платёж Ozon Pay: {exc}")
+        saved_invoice_pdf = st.session_state.get(invoice_pdf_key)
+        if saved_invoice_pdf:
             try:
-                record = _tochka_create_payment_link(deal, calc, selected_req)
-                _tochka_record_store(deal, calc, record)
-                st.success("Платёжная ссылка Точки создана. Ссылка и QR-код доступны ниже.")
-            except Exception as exc:
-                st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
-    if missing_link:
-        st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
+                st.download_button("Скачать счёт PDF", data=base64.b64decode(saved_invoice_pdf["bytes"]),
+                                   file_name=saved_invoice_pdf["filename"], mime="application/pdf",
+                                   key=f"{invoice_pdf_key}_download", use_container_width=True)
+            except Exception:
+                pass
     st.divider()
-    st.markdown("### Ozon Pay")
-    st.caption("Приём оплаты через СБП. Статус можно проверить вручную; автоматические POST-уведомления требуют отдельного публичного webhook-адреса.")
-    ozon_cfg = _ozon_config()
-    ozon_missing = [key for key in ("access_key", "secret_key") if not ozon_cfg.get(key)]
-    if ozon_missing:
-        st.info("Для Ozon Pay добавьте в Streamlit Secrets раздел [ozon] с access_key и secret_key.")
-    ozon_create_disabled = bool(ozon_missing) or not bool(calc.get("items")) or _deal_calc_total(calc) <= 0
-    if st.button("Создать платёжную ссылку Ozon Pay / QR", key=f"ozon_payment_create_{deal_id}_{calc_id}", use_container_width=True, disabled=ozon_create_disabled):
-        try:
-            ozon_record = _ozon_create_payment(deal, calc)
-            calc.setdefault("ozon_documents", []).append(ozon_record)
-            calc["updated_at"] = now_str()
-            if deal.get("status", "Новый") not in ("На паузе", "Сделка закрыта", "Архив") and deal.get("payment_status") != "Оплачено":
-                deal["status"] = "Ожидание оплаты"
-            deal["last_modified"] = now_str()
-            save_data(st.session_state.crm_store)
-            st.success("Платёж Ozon Pay создан. Ссылка и QR-код доступны ниже.")
-        except Exception as exc:
-            st.error(f"Не удалось создать платёж Ozon Pay: {exc}")
-
-    st.markdown("#### Счёт для юридического лица")
-    st.caption("Ozon Pay создаёт платёж по СБП, но не формирует банковский счёт для юрлица. Здесь можно сформировать PDF-счёт на оплату по банковским реквизитам поставщика; это отдельный способ оплаты, не счёт от Ozon.")
-    invoice_pdf_key = f"ozon_legal_invoice_pdf_{deal_id}_{calc_id}"
-    if st.button("Сформировать счёт для юрлица (PDF)", key=f"ozon_legal_invoice_make_{deal_id}_{calc_id}", use_container_width=True,
-                 disabled=not selected_req or selected_req.get("payer_type") not in ("company", "ip") or not bool(calc.get("items"))):
-        try:
-            pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, selected_req)
-            filename = f"Счёт {str(calc.get('name') or 'Расчёт').replace('Расчёт', '').strip() or 'Айплинт'} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
-            _save_generated_document(deal, pdf_bytes, filename, "Счёт на оплату (PDF)", calc,
-                                     {"payer_type": selected_req.get("payer_type"), "bank": "Банковские реквизиты поставщика", "requisite_id": selected_req.get("id")})
-            st.session_state[invoice_pdf_key] = {"bytes": base64.b64encode(pdf_bytes).decode("ascii"), "filename": filename, "due_date": due_date}
-            st.success("PDF-счёт сформирован и сохранён в файлах сделки.")
-        except Exception as exc:
-            st.error(f"Не удалось сформировать PDF-счёт: {exc}")
-    saved_invoice_pdf = st.session_state.get(invoice_pdf_key)
-    if saved_invoice_pdf:
-        try:
-            st.download_button("Скачать счёт PDF", data=base64.b64decode(saved_invoice_pdf["bytes"]),
-                               file_name=saved_invoice_pdf["filename"], mime="application/pdf",
-                               key=f"{invoice_pdf_key}_download", use_container_width=True)
-        except Exception:
-            pass
-    ozon_records = calc.get("ozon_documents", []) or []
-    if ozon_records:
-        st.markdown("#### Платежи Ozon Pay по этому расчёту")
-        for ozon_index, ozon_record in enumerate(sorted(ozon_records, key=lambda item: str(item.get("created_at", "")), reverse=True)):
-            ozon_deleted = bool(ozon_record.get("deleted"))
-            with st.container(border=True):
-                ozon_title = f"Платёж Ozon Pay · {_money(ozon_record.get('amount', 0))} ₽"
-                if ozon_deleted:
-                    st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;font-weight:600'>{ozon_title}</div>", unsafe_allow_html=True)
-                    st.caption("Платёж скрыт из активного списка, запись сохранена в истории.")
-                else:
-                    st.markdown(f"**{ozon_title}**")
-                    st.write(f"Статус: **{_tochka_status_label(ozon_record)}**")
-                    if ozon_record.get("payment_link"):
-                        st.markdown(f"[Открыть оплату Ozon Pay]({ozon_record['payment_link']})")
-                        st.code(ozon_record["payment_link"], language=None)
-                        ozon_qr = _tochka_qr_png(ozon_record["payment_link"])
-                        if ozon_qr:
-                            st.image(ozon_qr, caption="QR-код для оплаты через СБП", width=220)
-                if ozon_record.get("created_at"):
-                    st.caption(f"Создано: {ozon_record['created_at']}" + (f" · Проверено: {ozon_record['checked_at']}" if ozon_record.get("checked_at") else ""))
-                if not ozon_deleted:
-                    ozon_refresh_col, ozon_delete_col = st.columns([3, 1])
-                    with ozon_refresh_col:
-                        if st.button("Обновить статус оплаты", key=f"ozon_status_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
-                            try:
-                                _ozon_refresh_status(ozon_record)
-                                _tochka_apply_paid_status(deal, ozon_record)
-                                save_data(st.session_state.crm_store)
-                                st.success(f"Статус Ozon Pay обновлён: {_tochka_status_label(ozon_record)}")
-                            except Exception as exc:
-                                st.error(f"Не удалось обновить статус Ozon Pay: {exc}")
-                    with ozon_delete_col:
-                        ozon_status_code = str(ozon_record.get("status", "")).strip().upper()
-                        if ozon_status_code in {"PAYMENT_CONFIRMED", "PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
-                            st.markdown("<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>Оплачен</div>", unsafe_allow_html=True)
-                        elif st.button("Удалить", key=f"ozon_delete_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
-                            st.session_state[f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"] = True
-                    ozon_confirm_key = f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"
-                    if ozon_status_code not in {"PAYMENT_CONFIRMED", "PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"} and st.session_state.get(ozon_confirm_key):
-                        st.warning("Зачеркнуть этот платёж? Он останется в истории CRM.")
-                        ozon_yes, ozon_no = st.columns(2)
-                        with ozon_yes:
-                            if st.button("Да, удалить", key=f"ozon_delete_yes_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
-                                ozon_record["deleted"] = True
-                                ozon_record["deleted_at"] = now_str()
-                                st.session_state.pop(ozon_confirm_key, None)
-                                save_data(st.session_state.crm_store)
-                                st.rerun()
-                        with ozon_no:
-                            if st.button("Отмена", key=f"ozon_delete_no_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
-                                st.session_state.pop(ozon_confirm_key, None)
-                                st.rerun()
-
+    st.markdown("### Созданные платежи и счета")
+    # История документов находится вне переключателя банка и всегда видна.
     # Документы принадлежат конкретному расчёту: показываем только его счета и ссылки.
     # Вёрстку и отображение документов оставляем без изменений.
     bank_records = [(calc, record) for record in (calc.get("tochka_documents", []) or [])]
@@ -6498,6 +6466,61 @@ def invoice_document_dialog(deal_id, calc_id):
                         with no_col:
                             if st.button("Отмена", key=f"tochka_delete_no_{deal_id}_{record_calc_id}_{index}", use_container_width=True):
                                 st.session_state.pop(confirm_key, None)
+                                st.rerun()
+
+
+    ozon_records = calc.get("ozon_documents", []) or []
+    if ozon_records:
+        st.markdown("#### Платежи Ozon Pay по этому расчёту")
+        for ozon_index, ozon_record in enumerate(sorted(ozon_records, key=lambda item: str(item.get("created_at", "")), reverse=True)):
+            ozon_deleted = bool(ozon_record.get("deleted"))
+            with st.container(border=True):
+                ozon_title = f"Платёж Ozon Pay · {_money(ozon_record.get('amount', 0))} ₽"
+                if ozon_deleted:
+                    st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;font-weight:600'>{ozon_title}</div>", unsafe_allow_html=True)
+                    st.caption("Платёж скрыт из активного списка, запись сохранена в истории.")
+                else:
+                    st.markdown(f"**{ozon_title}**")
+                    st.write(f"Статус: **{_tochka_status_label(ozon_record)}**")
+                    if ozon_record.get("payment_link"):
+                        st.markdown(f"[Открыть оплату Ozon Pay]({ozon_record['payment_link']})")
+                        st.code(ozon_record["payment_link"], language=None)
+                        ozon_qr = _tochka_qr_png(ozon_record["payment_link"])
+                        if ozon_qr:
+                            st.image(ozon_qr, caption="QR-код для оплаты через СБП", width=220)
+                if ozon_record.get("created_at"):
+                    st.caption(f"Создано: {ozon_record['created_at']}" + (f" · Проверено: {ozon_record['checked_at']}" if ozon_record.get("checked_at") else ""))
+                if not ozon_deleted:
+                    ozon_refresh_col, ozon_delete_col = st.columns([3, 1])
+                    with ozon_refresh_col:
+                        if st.button("Обновить статус оплаты", key=f"ozon_status_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                            try:
+                                _ozon_refresh_status(ozon_record)
+                                _tochka_apply_paid_status(deal, ozon_record)
+                                save_data(st.session_state.crm_store)
+                                st.success(f"Статус Ozon Pay обновлён: {_tochka_status_label(ozon_record)}")
+                            except Exception as exc:
+                                st.error(f"Не удалось обновить статус Ozon Pay: {exc}")
+                    with ozon_delete_col:
+                        ozon_status_code = str(ozon_record.get("status", "")).strip().upper()
+                        if ozon_status_code in {"PAYMENT_CONFIRMED", "PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
+                            st.markdown("<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>Оплачен</div>", unsafe_allow_html=True)
+                        elif st.button("Удалить", key=f"ozon_delete_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                            st.session_state[f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"] = True
+                    ozon_confirm_key = f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"
+                    if ozon_status_code not in {"PAYMENT_CONFIRMED", "PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"} and st.session_state.get(ozon_confirm_key):
+                        st.warning("Зачеркнуть этот платёж? Он останется в истории CRM.")
+                        ozon_yes, ozon_no = st.columns(2)
+                        with ozon_yes:
+                            if st.button("Да, удалить", key=f"ozon_delete_yes_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                                ozon_record["deleted"] = True
+                                ozon_record["deleted_at"] = now_str()
+                                st.session_state.pop(ozon_confirm_key, None)
+                                save_data(st.session_state.crm_store)
+                                st.rerun()
+                        with ozon_no:
+                            if st.button("Отмена", key=f"ozon_delete_no_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                                st.session_state.pop(ozon_confirm_key, None)
                                 st.rerun()
 
 
@@ -6706,6 +6729,9 @@ def deal_calculation_dialog(deal_id, calc_id):
                 st.session_state.pop("dialog_calculation_deal_id", None)
                 st.session_state.pop("dialog_calculation_calc_id", None)
                 st.session_state["dialog_invoice_request"] = {"deal_id": deal_id, "calc_id": calc_id, "selected_requisite_id": ""}
+                # При каждом новом открытии выбора плательщика он должен быть пустым,
+                # а не восстанавливать значение из предыдущего запуска Streamlit.
+                st.session_state.pop(f"invoice_req_select_{deal_id}_{calc_id}", None)
                 invoice_document_dialog(deal_id, calc_id)
         with close_col:
             if st.button("✕", key=f"{key}_close", use_container_width=True):
@@ -7509,6 +7535,7 @@ def render_client_card_expanded(cl):
                         # Значения читаются непосредственно из актуального объекта клиента,
                         # без ключей виджетов редактора, которые могли содержать пустое состояние.
                         client_requisites_view_dialog(cl["id"], False, _req.get("id"))
+                        st.rerun()
                 with _req_cols[2]:
                     _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
                     if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
