@@ -7850,16 +7850,16 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
             render_entity_chat(d, "deal", deal_id)
-            if current_status in ("В работе", "Оплачено"):
-                st.markdown("---")
-                if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
-                    _push_dialog_return()
-                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
-                    st.rerun()
-                if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
-                    _push_dialog_return()
-                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
-                    st.rerun()
+            # Кнопки завершения и архивации доступны в любой колонке/статусе сделки.
+            st.markdown("---")
+            if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
+                _push_dialog_return()
+                st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
+                st.rerun()
+            if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
+                _push_dialog_return()
+                st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
+                st.rerun()
             if st.session_state.user_role == "admin":
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
