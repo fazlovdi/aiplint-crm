@@ -5238,9 +5238,9 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     amount_kopecks=int(round(total*100))
     qr_payload=(
         "ST00012|Name=ИП Фазлов Дамир Ибрагимович"
-        "|PersonalAcc=40802810801500486358"
-        "|BankName=ООО Банк Точка|BIC=044525104"
-        "|CorrespAcc=30101810745374525104"
+        "|PersonalAcc=40802810800000438327"
+        "|BankName=ООО ОЗОН Банк|BIC=044525068"
+        "|CorrespAcc=30101810645374525068"
         "|PayeeINN=731701704975"
         f"|Purpose=Оплата {invoice_no}|Sum={amount_kopecks}"
     )
@@ -5249,7 +5249,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     header=Table(header_cells,colWidths=[145*mm,30*mm],rowHeights=[52*mm],hAlign="LEFT")
     header.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(1,0),(1,0),"RIGHT"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     flow=[header,Spacer(1,5*mm),Paragraph(html.escape(invoice_no),title),Spacer(1,2*mm),
-          Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, р/с 40802810801500486358, в банке ООО &quot;Банк Точка&quot;, БИК 044525104, к/с 30101810745374525104",body),
+          Paragraph(f"Получатель: ИП Фазлов Дамир Ибрагимович, ИНН 731701704975, ОГРНИП 322169000220971, р/с 40802810800000438327, в банке ООО &quot;ОЗОН Банк&quot;, БИК 044525068, к/с 30101810645374525068",body),
           Paragraph(f"Плательщик: {html.escape(payer_details)}",body),Spacer(1,3*mm)]
     data=[[Paragraph(x,head) for x in ["№","Название товара или услуги","Кол-во","Ед. изм.","Цена","НДС","Сумма"]]]
     for i,r in enumerate(rows,1):
