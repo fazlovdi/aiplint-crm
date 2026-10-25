@@ -5444,6 +5444,140 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
 
 
 
+# -------------------- Интеграция с Ozon Pay Acquiring --------------------
+def _ozon_config():
+    """Читает ключи Ozon Pay из [ozon] в Streamlit Secrets или env."""
+    values = {}
+    try:
+        section = st.secrets.get("ozon", {})
+        if hasattr(section, "items"):
+            values = dict(section.items())
+    except Exception:
+        values = {}
+    aliases = {
+        "access_key": ("access_key", "token_id", "id_token", "accessKey"),
+        "secret_key": ("secret_key", "secretKey"),
+        "notification_secret_key": ("notification_secret_key", "notificationSecretKey"),
+        "redirect_url": ("redirect_url", "redirectUrl"),
+        "success_url": ("success_url", "successUrl"),
+        "fail_url": ("fail_url", "failUrl"),
+    }
+    env = {
+        "access_key": "OZON_ACCESS_KEY",
+        "secret_key": "OZON_SECRET_KEY",
+        "notification_secret_key": "OZON_NOTIFICATION_SECRET_KEY",
+        "redirect_url": "OZON_REDIRECT_URL",
+        "success_url": "OZON_SUCCESS_URL",
+        "fail_url": "OZON_FAIL_URL",
+    }
+    result = {}
+    for key, names in aliases.items():
+        value = next((values.get(n) for n in names if values.get(n)), None) or os.environ.get(env[key], "")
+        if value:
+            result[key] = str(value).strip()
+    result.setdefault("base_url", "https://payapi.ozon.ru")
+    # В личном кабинете для токена пользователь указал iplinth.ru как URL после оплаты.
+    result.setdefault("redirect_url", result.get("success_url") or "https://iplinth.ru/")
+    return result
+
+
+def _ozon_signature(*parts):
+    import hashlib
+    cfg = _ozon_config()
+    secret = cfg.get("secret_key")
+    if not secret:
+        raise RuntimeError("Не настроен secret_key Ozon Pay. Добавьте [ozon].secret_key в Streamlit Secrets.")
+    return hashlib.sha256(("".join("" if part is None else str(part) for part in parts) + secret).encode("utf-8")).hexdigest()
+
+
+def _ozon_request(path, payload):
+    cfg = _ozon_config()
+    if not cfg.get("access_key") or not cfg.get("secret_key"):
+        raise RuntimeError("Не настроены access_key и secret_key Ozon Pay в Streamlit Secrets.")
+    url = cfg.get("base_url", "https://payapi.ozon.ru").rstrip("/") + "/" + path.lstrip("/")
+    try:
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json", "Accept": "application/json"}, timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Не удалось связаться с Ozon Pay: {exc}") from exc
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if not response.ok:
+        detail = body.get("message") or body.get("error") or body.get("code") or (response.text or "")[:300]
+        raise RuntimeError(f"Ozon Pay вернул HTTP {response.status_code}" + (f": {detail}" if detail else ""))
+    if isinstance(body, dict) and body.get("code") not in (None, 0, "0") and body.get("message"):
+        raise RuntimeError(f"Ozon Pay: {body.get('message')}")
+    return body
+
+
+def _ozon_create_payment(deal, calc):
+    cfg = _ozon_config()
+    if not cfg.get("access_key") or not cfg.get("secret_key"):
+        raise RuntimeError("Добавьте в Streamlit Secrets раздел [ozon] с access_key и secret_key.")
+    total = round(float(_deal_calc_total(calc) or 0), 2)
+    if total <= 0:
+        raise ValueError("В расчёте нет положительной суммы для оплаты.")
+    ext_id = "iplinth-" + uuid.uuid4().hex
+    amount = {"currencyCode": "643", "value": f"{total:.2f}"}
+    # По таблице подписей Ozon для createPayment: extId + accessKey + secretKey.
+    sign = _ozon_signature(ext_id, cfg["access_key"])
+    payload = {
+        "accessKey": cfg["access_key"],
+        "amount": amount,
+        "extId": ext_id,
+        "payType": "SBP",
+        "redirectUrl": cfg.get("redirect_url") or "https://iplinth.ru/",
+        "requestSign": sign,
+        "ttl": 86400,
+    }
+    if cfg.get("notification_url"):
+        payload["notificationUrl"] = cfg["notification_url"]
+    response = _ozon_request("/v1/createPayment", payload)
+    data = response.get("data", response) if isinstance(response, dict) else {}
+    details = data.get("paymentDetails") or data.get("payment_details") or {}
+    sbp = details.get("sbp") or {}
+    payment_id = details.get("paymentId") or details.get("payment_id")
+    payment_payload = sbp.get("payload") or details.get("payload") or data.get("redirectUrl") or data.get("paymentLink") or data.get("payLink")
+    if not payment_id:
+        raise RuntimeError("Ozon Pay не вернул paymentDetails.paymentId. Проверьте ответ API и статус токена.")
+    if not payment_payload:
+        raise RuntimeError("Платёж создан, но Ozon Pay не вернул SBP payload/ссылку. Идентификатор сохранён не был; проверьте ответ API в кабинете Ozon.")
+    return {
+        "kind": "payment_link", "bank": "Ozon Pay", "payment_id": str(payment_id),
+        "ext_id": ext_id, "payment_link": str(payment_payload), "amount": total,
+        "status": details.get("status") or "PAYMENT_NEW", "created_at": now_str(),
+        "payment_method": "SBP", "ttl": 86400,
+    }
+
+
+def _ozon_refresh_status(record):
+    cfg = _ozon_config()
+    payment_id = str(record.get("payment_id") or "").strip()
+    if not payment_id:
+        raise RuntimeError("В записи Ozon Pay нет payment_id.")
+    sign = _ozon_signature(payment_id, cfg.get("access_key", ""))
+    response = _ozon_request("/v1/getPaymentDetails", {
+        "accessKey": cfg["access_key"], "id": payment_id, "requestSign": sign,
+    })
+    data = response.get("data", response) if isinstance(response, dict) else {}
+    items = data.get("items") or []
+    statuses = [str(item.get("status", "")).upper() for item in items if isinstance(item, dict) and item.get("status")]
+    if statuses:
+        # Подтверждённая оплата важнее промежуточных операций.
+        priority = ["PAYMENT_CONFIRMED", "PAYMENT_AUTHORIZED", "PAYMENT_PROCESSING", "PAYMENT_NEW", "PAYMENT_REJECTED", "PAYMENT_CANCELED"]
+        status = next((candidate for candidate in priority if candidate in statuses), statuses[0])
+        record["operations"] = items
+    else:
+        details = data.get("paymentDetails") or {}
+        status = details.get("status") or data.get("status")
+    if not status:
+        raise RuntimeError("Ozon Pay не вернул статус платежа.")
+    record["status"] = str(status)
+    record["checked_at"] = now_str()
+    return record
+
+
 # -------------------- Интеграция с Точка.API --------------------
 def _tochka_config():
     """Читает секреты интеграции из Streamlit Secrets или переменных окружения."""
@@ -5822,10 +5956,10 @@ def _tochka_bank_payment_status(deal):
         "PAYMENT_NOT_PAID", "NOT_PAID", "UNPAID", "INVOICE_CREATED", "WAITING",
         "PAYMENT_WAITING", "PAYMENT_CREATED", "REGISTERED"
     }
-    paid = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    paid = {"PAYMENT_PAID", "PAYMENT_CONFIRMED", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
     partial = {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT", "PARTIALLYPAID", "PARTIAL_PAID"}
     for calc in deal.get("calculations", []) or []:
-        for record in calc.get("tochka_documents", []) or []:
+        for record in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []):
             if record.get("deleted"):
                 continue
             status = str(record.get("status", "")).strip().upper()
@@ -5849,7 +5983,7 @@ def _tochka_bank_payment_status(deal):
 def _deal_has_active_payment_document(deal):
     """True, если в сделке есть хотя бы один активный счёт или платёжная ссылка Точки."""
     for calc in deal.get("calculations", []) or []:
-        for record in calc.get("tochka_documents", []) or []:
+        for record in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []):
             if not record.get("deleted") and record.get("kind") in ("invoice", "payment_link"):
                 return True
     return False
@@ -5874,7 +6008,7 @@ def _sync_deal_board_stage_from_payment(deal):
 def _tochka_apply_paid_status(deal, record):
     """Обрабатывает подтверждённую полную оплату; частичная оплата не меняет статус и не уведомляет."""
     status = str(record.get("status", "")).strip().upper()
-    paid_statuses = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    paid_statuses = {"PAYMENT_PAID", "PAYMENT_CONFIRMED", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
     try:
         paid_amount = float(record.get("paid_amount", 0) or 0)
         total_amount = float(record.get("amount", 0) or 0)
@@ -5915,10 +6049,10 @@ def _tochka_apply_paid_status(deal, record):
 def _tochka_auto_refresh_payment_status(deal, calc):
     """Проверяет неоплаченные документы не чаще раза в минуту, пока открыто окно счёта."""
     changed = False
-    for record in calc.get("tochka_documents", []) or []:
+    for record in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []):
         if record.get("deleted"):
             continue
-        if str(record.get("status", "")).strip().upper() in {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
+        if str(record.get("status", "")).strip().upper() in {"PAYMENT_PAID", "PAYMENT_CONFIRMED", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
             if _tochka_apply_paid_status(deal, record):
                 changed = True
             continue
@@ -5931,7 +6065,10 @@ def _tochka_auto_refresh_payment_status(deal, calc):
             continue
         try:
             old_status = str(record.get("status", ""))
-            _tochka_refresh_status(record)
+            if record.get("bank") == "Ozon Pay":
+                _ozon_refresh_status(record)
+            else:
+                _tochka_refresh_status(record)
             if str(record.get("status", "")) != old_status:
                 changed = True
             if _tochka_apply_paid_status(deal, record):
@@ -5973,6 +6110,12 @@ def _tochka_status_label(record):
     labels = {
         "PAYMENT_WAITING": "Ожидает оплаты",
         "PAYMENT_PAID": "Оплачен",
+        "PAYMENT_CONFIRMED": "Оплачен",
+        "PAYMENT_NEW": "Ожидает оплаты",
+        "PAYMENT_PROCESSING": "Обрабатывается",
+        "PAYMENT_REJECTED": "Оплата отклонена",
+        "PAYMENT_CANCELED": "Платёж отменён",
+        "PAYMENT_AUTHORIZED": "Оплата авторизована",
         "PAYMENT_PARTIALLY_PAID": "Оплачен частично",
         "PARTIALLY_PAID": "Оплачен частично",
         "PARTIAL_PAYMENT": "Оплачен частично",
@@ -6080,6 +6223,80 @@ def invoice_document_dialog(deal_id, calc_id):
                 st.error(f"Не удалось создать платёжную ссылку Точки: {exc}")
     if missing_link:
         st.caption("Для ссылок с фискальным чеком дополнительно нужны tax_system_code в Streamlit Secrets и email плательщика в реквизитах. Эквайринг должен быть подключён в Точке.")
+    st.divider()
+    st.markdown("### Ozon Pay")
+    st.caption("Приём оплаты через СБП. Статус можно проверить вручную; автоматические POST-уведомления требуют отдельного публичного webhook-адреса.")
+    ozon_cfg = _ozon_config()
+    ozon_missing = [key for key in ("access_key", "secret_key") if not ozon_cfg.get(key)]
+    if ozon_missing:
+        st.info("Для Ozon Pay добавьте в Streamlit Secrets раздел [ozon] с access_key и secret_key.")
+    ozon_create_disabled = bool(ozon_missing) or not bool(calc.get("items")) or _deal_calc_total(calc) <= 0
+    if st.button("Создать платёжную ссылку Ozon Pay / QR", key=f"ozon_payment_create_{deal_id}_{calc_id}", use_container_width=True, disabled=ozon_create_disabled):
+        try:
+            ozon_record = _ozon_create_payment(deal, calc)
+            calc.setdefault("ozon_documents", []).append(ozon_record)
+            calc["updated_at"] = now_str()
+            if deal.get("status", "Новый") not in ("На паузе", "Сделка закрыта", "Архив") and deal.get("payment_status") != "Оплачено":
+                deal["status"] = "Ожидание оплаты"
+            deal["last_modified"] = now_str()
+            save_data(st.session_state.crm_store)
+            st.success("Платёж Ozon Pay создан. Ссылка и QR-код доступны ниже.")
+        except Exception as exc:
+            st.error(f"Не удалось создать платёж Ozon Pay: {exc}")
+    ozon_records = calc.get("ozon_documents", []) or []
+    if ozon_records:
+        st.markdown("#### Платежи Ozon Pay по этому расчёту")
+        for ozon_index, ozon_record in enumerate(sorted(ozon_records, key=lambda item: str(item.get("created_at", "")), reverse=True)):
+            ozon_deleted = bool(ozon_record.get("deleted"))
+            with st.container(border=True):
+                ozon_title = f"Платёж Ozon Pay · {_money(ozon_record.get('amount', 0))} ₽"
+                if ozon_deleted:
+                    st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;font-weight:600'>{ozon_title}</div>", unsafe_allow_html=True)
+                    st.caption("Платёж скрыт из активного списка, запись сохранена в истории.")
+                else:
+                    st.markdown(f"**{ozon_title}**")
+                    st.write(f"Статус: **{_tochka_status_label(ozon_record)}**")
+                    if ozon_record.get("payment_link"):
+                        st.markdown(f"[Открыть оплату Ozon Pay]({ozon_record['payment_link']})")
+                        st.code(ozon_record["payment_link"], language=None)
+                        ozon_qr = _tochka_qr_png(ozon_record["payment_link"])
+                        if ozon_qr:
+                            st.image(ozon_qr, caption="QR-код для оплаты через СБП", width=220)
+                if ozon_record.get("created_at"):
+                    st.caption(f"Создано: {ozon_record['created_at']}" + (f" · Проверено: {ozon_record['checked_at']}" if ozon_record.get("checked_at") else ""))
+                if not ozon_deleted:
+                    ozon_refresh_col, ozon_delete_col = st.columns([3, 1])
+                    with ozon_refresh_col:
+                        if st.button("Обновить статус оплаты", key=f"ozon_status_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                            try:
+                                _ozon_refresh_status(ozon_record)
+                                _tochka_apply_paid_status(deal, ozon_record)
+                                save_data(st.session_state.crm_store)
+                                st.success(f"Статус Ozon Pay обновлён: {_tochka_status_label(ozon_record)}")
+                            except Exception as exc:
+                                st.error(f"Не удалось обновить статус Ozon Pay: {exc}")
+                    with ozon_delete_col:
+                        ozon_status_code = str(ozon_record.get("status", "")).strip().upper()
+                        if ozon_status_code in {"PAYMENT_CONFIRMED", "PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}:
+                            st.markdown("<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>Оплачен</div>", unsafe_allow_html=True)
+                        elif st.button("Удалить", key=f"ozon_delete_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                            st.session_state[f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"] = True
+                    ozon_confirm_key = f"ozon_delete_confirm_{deal_id}_{calc_id}_{ozon_index}"
+                    if ozon_status_code not in {"PAYMENT_CONFIRMED", "PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"} and st.session_state.get(ozon_confirm_key):
+                        st.warning("Зачеркнуть этот платёж? Он останется в истории CRM.")
+                        ozon_yes, ozon_no = st.columns(2)
+                        with ozon_yes:
+                            if st.button("Да, удалить", key=f"ozon_delete_yes_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                                ozon_record["deleted"] = True
+                                ozon_record["deleted_at"] = now_str()
+                                st.session_state.pop(ozon_confirm_key, None)
+                                save_data(st.session_state.crm_store)
+                                st.rerun()
+                        with ozon_no:
+                            if st.button("Отмена", key=f"ozon_delete_no_{deal_id}_{calc_id}_{ozon_index}", use_container_width=True):
+                                st.session_state.pop(ozon_confirm_key, None)
+                                st.rerun()
+
     # Документы принадлежат конкретному расчёту: показываем только его счета и ссылки.
     # Вёрстку и отображение документов оставляем без изменений.
     bank_records = [(calc, record) for record in (calc.get("tochka_documents", []) or [])]
@@ -6158,9 +6375,9 @@ def invoice_document_dialog(deal_id, calc_id):
 
 def _calculation_payment_badge(calc):
     """Возвращает отметку об оплате расчёта по статусам его банковских документов."""
-    records = [r for r in (calc.get("tochka_documents", []) or []) if not r.get("deleted")]
+    records = [r for r in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []) if not r.get("deleted")]
     statuses = {str(r.get("status", "")).strip().upper() for r in records}
-    fully_paid = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    fully_paid = {"PAYMENT_PAID", "PAYMENT_CONFIRMED", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
     partially_paid = {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT"}
     if statuses & fully_paid:
         return "Оплачен"
