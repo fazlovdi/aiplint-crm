@@ -4709,9 +4709,17 @@ def render_deal_card_expanded(d, cl):
         inject_payment_container_css(d["id"], ps)
         with st.container(key=f"ps_wrap_{d['id']}"):
             new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=f"ps_{d['id']}")
+        _bank_payment_status = _tochka_bank_payment_status(d)
+        if _bank_payment_status and _bank_payment_status != ps:
+            st.markdown(
+                f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
+                unsafe_allow_html=True,
+            )
         if new_ps != ps:
             d["payment_status"] = new_ps
+            d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
             d["last_modified"] = now_str()
+            _sync_deal_board_stage_from_payment(d)
             commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
         st.markdown("**Ответственный:**")
         mgr_options_cd = get_managers_list()
@@ -4792,10 +4800,24 @@ def render_deal_card_expanded(d, cl):
                 if not d.get("manager"): d["manager"] = cu
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
-        elif current_status == "В работе":
+        elif current_status in ("В работе", "Оплачено"):
             if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
                 st.session_state["dialog_close_deal_id"] = d["id"]
                 st.rerun()
+        if current_status in ("В работе", "Оплачено"):
+            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+            if st.button("Поставить на паузу", key=f"deal_pause_{d['id']}", use_container_width=True):
+                d["paused_from_status"] = current_status
+                d["status"] = "На паузе"
+                d["last_modified"] = now_str()
+                commit_and_rerun(st.session_state.crm_store, "Сделка поставлена на паузу")
+        elif current_status == "На паузе":
+            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+            if st.button("Вернуть в работу", key=f"deal_unpause_{d['id']}", use_container_width=True):
+                d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else "В работе"
+                d.pop("paused_from_status", None)
+                d["last_modified"] = now_str()
+                commit_and_rerun(st.session_state.crm_store, "Сделка возвращена из паузы")
         elif current_status == "Сделка закрыта":
             if st.button("Вернуть в работу", key=f"deal_reopen_{d['id']}", use_container_width=True):
                 d["status"] = "В работе"
@@ -5729,49 +5751,91 @@ def _tochka_refresh_status(record):
     return record
 
 
+def _tochka_bank_payment_status(deal):
+    """Возвращает подтверждённый банком статус сделки, если его можно определить."""
+    statuses = []
+    known_unpaid = {
+        "PAYMENT_PENDING", "PENDING", "NEW", "CREATED", "WAITING_FOR_PAYMENT",
+        "PAYMENT_NOT_PAID", "NOT_PAID", "UNPAID", "INVOICE_CREATED", "WAITING",
+        "PAYMENT_WAITING", "PAYMENT_CREATED", "REGISTERED"
+    }
+    paid = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    partial = {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT", "PARTIALLYPAID", "PARTIAL_PAID"}
+    for calc in deal.get("calculations", []) or []:
+        for record in calc.get("tochka_documents", []) or []:
+            if record.get("deleted"):
+                continue
+            status = str(record.get("status", "")).strip().upper()
+            if not status or not record.get("checked_at"):
+                continue
+            if status in paid:
+                statuses.append("Оплачено")
+            elif status in partial:
+                statuses.append("Оплачен частично")
+            elif status in known_unpaid:
+                statuses.append("Не оплачено")
+    if not statuses:
+        return None
+    if "Оплачено" in statuses:
+        return "Оплачено"
+    if "Оплачен частично" in statuses:
+        return "Оплачен частично"
+    return "Не оплачено"
+
+
+def _sync_deal_board_stage_from_payment(deal):
+    """Синхронизирует колонку активной сделки со статусом оплаты, сохраняя паузу и финальные этапы."""
+    status = deal.get("status", "Новый")
+    if status in ("На паузе", "Сделка закрыта", "Архив"):
+        return
+    payment_status = deal.get("payment_status", "Не оплачено")
+    if payment_status == "Оплачено":
+        if status in ("Новый", "В работе", "Оплачено"):
+            deal["status"] = "Оплачено"
+    elif status == "Оплачено":
+        deal["status"] = "В работе"
+
+
 def _tochka_apply_paid_status(deal, record):
-    """Синхронизирует статус полной/частичной оплаты и уведомляет ответственного."""
+    """Обрабатывает подтверждённую полную оплату; частичная оплата не меняет статус и не уведомляет."""
     status = str(record.get("status", "")).strip().upper()
     paid_statuses = {"PAYMENT_PAID", "APPROVED", "PAID", "SUCCESS", "SUCCEEDED", "COMPLETED"}
-    partial_statuses = {"PAYMENT_PARTIALLY_PAID", "PARTIALLY_PAID", "PARTIAL_PAYMENT", "PARTIALLYPAID", "PARTIAL_PAID"}
     try:
         paid_amount = float(record.get("paid_amount", 0) or 0)
         total_amount = float(record.get("amount", 0) or 0)
     except (TypeError, ValueError):
         paid_amount, total_amount = 0.0, 0.0
-
-    # Явный статус частичной оплаты от банка имеет приоритет. Иначе используем
-    # фактически оплаченную сумму, только если API действительно вернул её.
-    if status in partial_statuses or ("paid_amount" in record and paid_amount > 0 and total_amount > 0 and paid_amount < total_amount - 0.01):
-        new_status = "Оплачен частично"
-    elif status in paid_statuses or ("paid_amount" in record and total_amount > 0 and paid_amount >= total_amount - 0.01):
-        new_status = "Оплачено"
-    else:
+    fully_paid = status in paid_statuses or (
+        "paid_amount" in record and total_amount > 0 and paid_amount >= total_amount - 0.01
+    )
+    if not fully_paid:
         return False
 
-    changed = deal.get("payment_status") != new_status
-    deal["payment_status"] = new_status
-    deal["last_modified"] = now_str()
+    changed = False
+    # Ручной статус менеджера не затираем. Факт банковской оплаты при этом
+    # всё равно учитывается для уведомления и предупреждения о расхождении.
+    if not deal.get("payment_status_manual_override"):
+        if deal.get("payment_status") != "Оплачено":
+            deal["payment_status"] = "Оплачено"
+            deal["last_modified"] = now_str()
+            changed = True
+        old_stage = deal.get("status")
+        _sync_deal_board_stage_from_payment(deal)
+        if deal.get("status") != old_stage:
+            changed = True
 
-    # Уведомляем ответственного о частичной и полной оплате, но не дублируем одно событие.
-    notification_flag = "partial_notification_sent" if new_status == "Оплачен частично" else "paid_notification_sent"
-    if not record.get(notification_flag):
+    if not record.get("paid_notification_sent"):
         manager = deal.get("manager", "")
         if manager:
             deal_label = str(deal.get("deal_number") or deal.get("title") or deal.get("id") or "")
-            amount = record.get("paid_amount") if new_status == "Оплачен частично" else record.get("amount")
+            amount = record.get("amount")
             amount_text = f" на сумму {float(amount):,.2f} ₽".replace(",", " ") if amount not in (None, "") else ""
-            if new_status == "Оплачен частично":
-                message = f"По сделке №{deal_label} поступила частичная оплата{amount_text}."
-                tg_message = f"💳 <b>Частичная оплата</b>\nСделка: {deal_label}{amount_text}"
-            else:
-                message = f"Заказ по сделке №{deal_label} оплачен{amount_text}."
-                tg_message = f"💳 <b>Заказ оплачен</b>\nСделка: {deal_label}{amount_text}"
+            message = f"Заказ по сделке №{deal_label} оплачен полностью{amount_text}."
+            tg_message = f"💳 <b>Заказ оплачен полностью</b>\nСделка: {deal_label}{amount_text}"
             add_notification(manager, message, tg_message)
-            record[notification_flag] = True
+            record["paid_notification_sent"] = True
             changed = True
     return changed
-
 
 def _tochka_auto_refresh_payment_status(deal, calc):
     """Проверяет неоплаченные документы не чаще раза в минуту, пока открыто окно счёта."""
@@ -6456,16 +6520,24 @@ def render_deal_detail(d, cl, cu, key_prefix):
             mgr_options_dd = get_managers_list()
             current_mgr_dd = d.get("manager", "")
             current_idx_dd = mgr_options_dd.index(current_mgr_dd) if current_mgr_dd in mgr_options_dd else 0
+            _bank_payment_status = _tochka_bank_payment_status(d)
             _pay_col, _mgr_col = st.columns(2)
             with _pay_col:
                 inject_payment_container_css(deal_id, ps)
                 with st.container(key=f"ps_wrap_{deal_id}"):
                     new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=f"dls_ps_{deal_id}")
+                if _bank_payment_status and _bank_payment_status != ps:
+                    st.markdown(
+                        f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
+                        unsafe_allow_html=True,
+                    )
             with _mgr_col:
                 new_mgr_dd = st.selectbox("Ответственный:", mgr_options_dd, index=current_idx_dd, key=f"deal_mgr_inline_{deal_id}", placeholder=MGR_PLACEHOLDER)
             if new_ps != ps:
                 d["payment_status"] = new_ps
+                d["payment_status_manual_override"] = True
                 d["last_modified"] = now_str()
+                _sync_deal_board_stage_from_payment(d)
                 commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
             if new_mgr_dd != current_mgr_dd and new_mgr_dd:
                 d["manager"] = new_mgr_dd
@@ -6507,8 +6579,8 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         d["manager"] = cu
                     d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
-            elif current_status == "В работе":
-                st.markdown("<div style='font-size:1rem;font-weight:600;margin:0.4rem 0;'>Статус: В работе</div>", unsafe_allow_html=True)
+            elif current_status in ("В работе", "Оплачено"):
+                st.markdown(f"<div style='font-size:1rem;font-weight:600;margin:0.4rem 0;'>Статус: {html.escape(current_status)}</div>", unsafe_allow_html=True)
             elif current_status in ("Сделка закрыта", "Архив"):
                 if st.button("Вернуть в работу", key=f"dls_reopen_{deal_id}", use_container_width=True):
                     d["status"] = "В работе"
@@ -6525,7 +6597,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
             render_entity_chat(d, "deal", deal_id)
-            if current_status == "В работе":
+            if current_status in ("В работе", "Оплачено"):
                 st.markdown("---")
                 if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
                     _push_dialog_return()
@@ -6632,6 +6704,27 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
             else:
                 st.caption("История изменений появится после редактирования сделки.")
+            # Кнопка паузы/возврата в самом низу правой колонки, по ширине как «Создать напоминание».
+            _stage_now = d.get("status", "Новый")
+            if _stage_now in ("В работе", "Оплачено", "На паузе"):
+                st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+                _pause_spacer1, _pause_btn_col, _pause_spacer2 = st.columns([1, 2, 1])
+                with _pause_btn_col:
+                    if _stage_now == "На паузе":
+                        _pause_action_clicked = st.button("Вернуть в работу", key=f"dls_unpause_{deal_id}", use_container_width=True)
+                    else:
+                        _pause_action_clicked = st.button("Поставить на паузу", key=f"dls_pause_{deal_id}", use_container_width=True)
+                if _pause_action_clicked:
+                    if _stage_now == "На паузе":
+                        d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else "В работе"
+                        d.pop("paused_from_status", None)
+                        _pause_message = "Сделка возвращена из паузы"
+                    else:
+                        d["paused_from_status"] = _stage_now
+                        d["status"] = "На паузе"
+                        _pause_message = "Сделка поставлена на паузу"
+                    d["last_modified"] = now_str()
+                    commit_and_rerun(st.session_state.crm_store, _pause_message)
 
 
 def render_client_card_expanded(cl):
@@ -8572,11 +8665,16 @@ elif st.session_state.active_tab == "Сделки":
   init();
 })();
 </script>''', height=0)
-    # Filter deals for "Новые" and "В работе" columns only
+    # Четыре активные колонки: новые, в работе, оплачено, на паузе.
     fdeals = []
+    _board_stage_changed = False
     for d in all_deals:
+        _old_board_stage = d.get("status", "Новый")
+        _sync_deal_board_stage_from_payment(d)
+        if d.get("status", "Новый") != _old_board_stage:
+            _board_stage_changed = True
         s = d.get("status", "Новый")
-        if s not in ("Новый", "В работе"):
+        if s not in ("Новый", "В работе", "Оплачено", "На паузе"):
             continue
         cl = cid_map.get(d.get("client_id"))
         if mgr_filter != "Все" and d.get("manager", "") != mgr_filter:
@@ -8586,10 +8684,14 @@ elif st.session_state.active_tab == "Сделки":
             if deal_search not in hay:
                 continue
         fdeals.append(d)
+    if _board_stage_changed:
+        save_data(st.session_state.crm_store)
     fdeals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
     new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
     work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
-    col_new, col_work = st.columns(2)
+    paid_deals = [d for d in fdeals if d.get("status", "") == "Оплачено"]
+    paused_deals = [d for d in fdeals if d.get("status", "") == "На паузе"]
+    col_new, col_work, col_paid, col_paused = st.columns(4)
     with col_new:
         with st.container(border=True):
             st.subheader(f"Новые ({len(new_deals)})")
@@ -8606,6 +8708,22 @@ elif st.session_state.active_tab == "Сделки":
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
+    with col_paid:
+        with st.container(border=True):
+            st.subheader(f"Оплачено ({len(paid_deals)})")
+            if paid_deals:
+                for d in paid_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Оплаченных сделок нет.")
+    with col_paused:
+        with st.container(border=True):
+            st.subheader(f"На паузе ({len(paused_deals)})")
+            if paused_deals:
+                for d in paused_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Сделок на паузе нет.")
     # Единая диспетчеризация окон сделок: сначала дочернее окно, затем карточка сделки.
     # Streamlit должен отрисовать только один @st.dialog за один проход.
     _dialog_deal_key = st.session_state.get("dialog_deal_key")
