@@ -4804,17 +4804,24 @@ def render_deal_card_expanded(d, cl):
             if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
                 st.session_state["dialog_close_deal_id"] = d["id"]
                 st.rerun()
-        if current_status in ("В работе", "Оплачено"):
+        if current_status in ("В работе", "Оплачено", "Ожидание оплаты"):
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+            _pause_reason_input = st.text_area("Причина:", value=st.session_state.get(f"deal_pause_reason_input_{d['id']}", ""), key=f"deal_pause_reason_input_{d['id']}", height=90, placeholder="Укажите причину паузы")
             if st.button("Поставить на паузу", key=f"deal_pause_{d['id']}", use_container_width=True):
-                d["paused_from_status"] = current_status
-                d["status"] = "На паузе"
-                d["last_modified"] = now_str()
-                commit_and_rerun(st.session_state.crm_store, "Сделка поставлена на паузу")
+                if not _pause_reason_input.strip():
+                    st.warning("Укажите причину, прежде чем поставить сделку на паузу.")
+                else:
+                    d["paused_from_status"] = current_status
+                    d["pause_reason"] = _pause_reason_input.strip()
+                    d["status"] = "На паузе"
+                    d["last_modified"] = now_str()
+                    commit_and_rerun(st.session_state.crm_store, "Сделка поставлена на паузу")
         elif current_status == "На паузе":
+            if d.get("pause_reason"):
+                st.markdown(f"<div style='font-size:0.9rem;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             if st.button("Вернуть в работу", key=f"deal_unpause_{d['id']}", use_container_width=True):
-                d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else "В работе"
+                d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
                 d.pop("paused_from_status", None)
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Сделка возвращена из паузы")
@@ -5783,15 +5790,27 @@ def _tochka_bank_payment_status(deal):
     return "Не оплачено"
 
 
+def _deal_has_active_payment_document(deal):
+    """True, если в сделке есть хотя бы один активный счёт или платёжная ссылка Точки."""
+    for calc in deal.get("calculations", []) or []:
+        for record in calc.get("tochka_documents", []) or []:
+            if not record.get("deleted") and record.get("kind") in ("invoice", "payment_link"):
+                return True
+    return False
+
+
 def _sync_deal_board_stage_from_payment(deal):
-    """Синхронизирует колонку активной сделки со статусом оплаты, сохраняя паузу и финальные этапы."""
+    """Синхронизирует колонку сделки с оплатой и наличием выставленных документов, сохраняя паузу и финальные этапы."""
     status = deal.get("status", "Новый")
     if status in ("На паузе", "Сделка закрыта", "Архив"):
         return
     payment_status = deal.get("payment_status", "Не оплачено")
+    has_payment_document = _deal_has_active_payment_document(deal)
     if payment_status == "Оплачено":
-        if status in ("Новый", "В работе", "Оплачено"):
+        if status in ("Новый", "В работе", "Ожидание оплаты", "Оплачено"):
             deal["status"] = "Оплачено"
+    elif has_payment_document and status in ("Новый", "В работе", "Ожидание оплаты", "Оплачено"):
+        deal["status"] = "Ожидание оплаты"
     elif status == "Оплачено":
         deal["status"] = "В работе"
 
@@ -5918,6 +5937,9 @@ def _tochka_record_store(deal, calc, record):
     calc.setdefault("tochka_documents", [])
     calc["tochka_documents"].append(record)
     calc["updated_at"] = now_str()
+    # Счёт или платёжная ссылка переводят активную сделку в колонку ожидания оплаты.
+    if deal.get("status", "Новый") not in ("На паузе", "Сделка закрыта", "Архив") and deal.get("payment_status") != "Оплачено":
+        deal["status"] = "Ожидание оплаты"
     deal["last_modified"] = now_str()
     save_data(st.session_state.crm_store)
 
@@ -6706,8 +6728,14 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.caption("История изменений появится после редактирования сделки.")
             # Кнопка паузы/возврата в самом низу правой колонки, по ширине как «Создать напоминание».
             _stage_now = d.get("status", "Новый")
-            if _stage_now in ("В работе", "Оплачено", "На паузе"):
+            if _stage_now in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
+                if _stage_now == "На паузе" and d.get("pause_reason"):
+                    st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
                 st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+                if _stage_now != "На паузе":
+                    _pause_reason = st.text_area("Причина:", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы")
+                else:
+                    _pause_reason = ""
                 _pause_spacer1, _pause_btn_col, _pause_spacer2 = st.columns([1, 2, 1])
                 with _pause_btn_col:
                     if _stage_now == "На паузе":
@@ -6716,11 +6744,15 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         _pause_action_clicked = st.button("Поставить на паузу", key=f"dls_pause_{deal_id}", use_container_width=True)
                 if _pause_action_clicked:
                     if _stage_now == "На паузе":
-                        d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else "В работе"
+                        d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
                         d.pop("paused_from_status", None)
                         _pause_message = "Сделка возвращена из паузы"
+                    elif not _pause_reason.strip():
+                        st.warning("Укажите причину, прежде чем поставить сделку на паузу.")
+                        st.stop()
                     else:
                         d["paused_from_status"] = _stage_now
+                        d["pause_reason"] = _pause_reason.strip()
                         d["status"] = "На паузе"
                         _pause_message = "Сделка поставлена на паузу"
                     d["last_modified"] = now_str()
@@ -8665,7 +8697,7 @@ elif st.session_state.active_tab == "Сделки":
   init();
 })();
 </script>''', height=0)
-    # Четыре активные колонки: новые, в работе, оплачено, на паузе.
+    # Пять активных колонок: новые, в работе, ожидание оплаты, оплачено, на паузе.
     fdeals = []
     _board_stage_changed = False
     for d in all_deals:
@@ -8674,7 +8706,7 @@ elif st.session_state.active_tab == "Сделки":
         if d.get("status", "Новый") != _old_board_stage:
             _board_stage_changed = True
         s = d.get("status", "Новый")
-        if s not in ("Новый", "В работе", "Оплачено", "На паузе"):
+        if s not in ("Новый", "В работе", "Ожидание оплаты", "Оплачено", "На паузе"):
             continue
         cl = cid_map.get(d.get("client_id"))
         if mgr_filter != "Все" and d.get("manager", "") != mgr_filter:
@@ -8689,9 +8721,10 @@ elif st.session_state.active_tab == "Сделки":
     fdeals.sort(key=lambda d: d.get("last_modified", ""), reverse=True)
     new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
     work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
+    waiting_payment_deals = [d for d in fdeals if d.get("status", "") == "Ожидание оплаты"]
     paid_deals = [d for d in fdeals if d.get("status", "") == "Оплачено"]
     paused_deals = [d for d in fdeals if d.get("status", "") == "На паузе"]
-    col_new, col_work, col_paid, col_paused = st.columns(4)
+    col_new, col_work, col_waiting, col_paid, col_paused = st.columns(5)
     with col_new:
         with st.container(border=True):
             st.subheader(f"Новые ({len(new_deals)})")
@@ -8708,6 +8741,14 @@ elif st.session_state.active_tab == "Сделки":
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
+    with col_waiting:
+        with st.container(border=True):
+            st.subheader(f"Ожидание оплаты ({len(waiting_payment_deals)})")
+            if waiting_payment_deals:
+                for d in waiting_payment_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Сделок в ожидании оплаты нет.")
     with col_paid:
         with st.container(border=True):
             st.subheader(f"Оплачено ({len(paid_deals)})")
