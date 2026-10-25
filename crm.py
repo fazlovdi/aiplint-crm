@@ -7235,6 +7235,39 @@ def deal_calculation_dialog(deal_id, calc_id):
     if re.match(r"^Расчёт\s+\d+$", str(st.session_state.get(name_key, "")), re.I):
         st.session_state[name_key] = _calculation_display_name(deal, calc)
 
+    def _save_current_calc_before_document():
+        """Считывает актуальные значения виджетов и сохраняет расчёт перед созданием документа."""
+        calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
+        calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
+        calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
+        calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
+        catalog_now = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+        products_now = {str(x.get("id", x.get("sku", ""))): x for x in catalog_now}
+        for row in calc.get("items", []):
+            rid = row.get("row_id")
+            if not rid:
+                continue
+            old_pid = str(row.get("product_id", ""))
+            pid = str(st.session_state.get(f"{key}_{rid}_product", old_pid))
+            product_now = products_now.get(pid)
+            if product_now:
+                row["product_id"] = pid
+                row["product_name"] = product_now.get("name", row.get("product_name", ""))
+                row["unit"] = product_now.get("unit", row.get("unit", "шт."))
+                row["unit_price"] = float(product_now.get("price", row.get("unit_price", 0)) or 0) if pid != old_pid else float(row.get("unit_price", product_now.get("price", 0)) or 0)
+            row["color_ral"] = st.session_state.get(f"{key}_{rid}_color", row.get("color_ral", ""))
+            row["quantity"] = float(st.session_state.get(f"{key}_{rid}_qty", row.get("quantity", 1)) or 0)
+            row["discount"] = float(st.session_state.get(f"{key}_{rid}_discount", row.get("discount", 0)) or 0)
+        calc["total"] = _deal_calc_total(calc)
+        calc["_draft"] = False
+        calc["updated_at"] = now_str()
+        calc["updated_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+        deal["budget"] = calc["total"]
+        deal["last_modified"] = now_str()
+        save_data(st.session_state.crm_store)
+        st.session_state[dirty_key] = False
+        st.session_state[snapshot_key] = copy.deepcopy(calc)
+
     close_css = f"calc_close_row_{key}"
     st.markdown(f'''<style>
     .st-key-{close_css} .stButton > button {{width:100%!important;min-height:40px!important;padding:0.45rem 0.7rem!important;font-size:0.9rem!important;line-height:1.15!important;white-space:normal!important;}}
@@ -7247,11 +7280,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
                 try:
-                    calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
-                    calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
-                    calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
-                    calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
-                    calc["total"] = _deal_calc_total(calc)
+                    _save_current_calc_before_document()
                     if not calc.get("items"):
                         raise ValueError("Добавь хотя бы одну товарную позицию в расчёт.")
                     calc["_draft"] = False
@@ -7270,16 +7299,7 @@ def deal_calculation_dialog(deal_id, calc_id):
                 _calc_refresh()
         with invoice_col:
             if st.button("Счёт на оплату", key=f"{key}_make_invoice", use_container_width=True):
-                calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
-                calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
-                calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
-                calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
-                calc["total"] = _deal_calc_total(calc)
-                calc["_draft"] = False
-                calc["updated_at"] = now_str()
-                deal["budget"] = calc["total"]
-                deal["last_modified"] = now_str()
-                save_data(st.session_state.crm_store)
+                _save_current_calc_before_document()
                 # Переключаем единое окно с расчёта на счёт: очищаем состояние
                 # расчёта, чтобы диспетчер вкладки «Сделки» не открыл его снова.
                 st.session_state.pop("dialog_calculation_deal_id", None)
@@ -7292,11 +7312,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         with torg_col:
             if st.button("Товарная накладная ТОРГ-12", key=f"{key}_make_torg12", use_container_width=True):
                 try:
-                    calc["name"] = str(st.session_state.get(name_key, calc.get("name") or _calculation_display_name(deal, calc))).strip() or _calculation_display_name(deal, calc)
-                    calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
-                    calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
-                    calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
-                    calc["total"] = _deal_calc_total(calc)
+                    _save_current_calc_before_document()
                     if not calc.get("items"):
                         raise ValueError("Добавь хотя бы одну товарную позицию в расчёт.")
                     calc["_draft"] = False
@@ -7337,14 +7353,16 @@ def deal_calculation_dialog(deal_id, calc_id):
     if _doc_message:
         st.success(_doc_message)
     _offer_pdf_state = st.session_state.get(f"offer_pdf_{deal_id}_{calc_id}")
-    if _offer_pdf_state:
-        st.markdown(f'<a href="data:application/pdf;base64,{_offer_pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:8px 12px;border-radius:8px;font-weight:600;margin:3px 0">Открыть сформированное КП в новой вкладке</a>',unsafe_allow_html=True)
-        st.download_button("Скачать КП PDF",data=base64.b64decode(_offer_pdf_state["data"]),file_name=_offer_pdf_state["filename"],mime="application/pdf",key=f"offer_pdf_dl_{deal_id}_{calc_id}")
-
     _torg12_pdf_state = st.session_state.get(f"torg12_pdf_{deal_id}_{calc_id}")
-    if _torg12_pdf_state:
-        st.markdown(f'<a href="data:application/pdf;base64,{_torg12_pdf_state["data"]}" target="_blank" rel="noopener" style="display:inline-block;background:#bc1661;color:white;text-decoration:none;padding:8px 12px;border-radius:8px;font-weight:600;margin:3px 0">Открыть ТОРГ-12 в новой вкладке</a>',unsafe_allow_html=True)
-        st.download_button("Скачать ТОРГ-12 PDF",data=base64.b64decode(_torg12_pdf_state["data"]),file_name=_torg12_pdf_state["filename"],mime="application/pdf",key=f"torg12_pdf_dl_{deal_id}_{calc_id}")
+    if _offer_pdf_state or _torg12_pdf_state:
+        _doc_cols = st.columns(2, gap="small")
+        if _offer_pdf_state:
+            with _doc_cols[0]:
+                st.download_button("Скачать КП PDF",data=base64.b64decode(_offer_pdf_state["data"]),file_name=_offer_pdf_state["filename"],mime="application/pdf",key=f"offer_pdf_dl_{deal_id}_{calc_id}",use_container_width=True)
+        if _torg12_pdf_state:
+            with _doc_cols[1]:
+                st.download_button("Скачать ТОРГ-12 PDF",data=base64.b64decode(_torg12_pdf_state["data"]),file_name=_torg12_pdf_state["filename"],mime="application/pdf",key=f"torg12_pdf_dl_{deal_id}_{calc_id}",use_container_width=True)
+        st.divider()
 
     if st.session_state.get(warning_key):
         warn_key = f"calc_unsaved_warn_{key}"
@@ -7385,15 +7403,6 @@ def deal_calculation_dialog(deal_id, calc_id):
     div[role="dialog"] [data-testid="stCaptionContainer"] {margin-top: -0.35rem !important;margin-bottom: -0.25rem !important;}
     </style>""", unsafe_allow_html=True)
     st.markdown("### Расчёт сделки")
-    name_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
-    with name_col:
-        st.text_input("Название расчёта:", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-    catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
-    active_products = [p for p in catalog if p.get("active", True)]
-    if not active_products:
-        st.warning("В каталоге нет активных товаров. Добавьте товары в разделе «Товары и прайс».")
-        return
-    items = calc.setdefault("items", [])
     dtype_options = list(DISCOUNT_TYPES.keys())
     if calc.get("discount_type") not in dtype_options:
         calc["discount_type"] = "Без скидки"
@@ -7404,19 +7413,26 @@ def deal_calculation_dialog(deal_id, calc_id):
             _new_discount = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
         else:
             _new_discount = float(DISCOUNT_TYPES.get(_new_type, 0))
-        # Синхронно обновляем значения скидки всех строк, включая уже отрисованные
-        # виджеты: при следующем рендере проценты сразу соответствуют выбранному типу.
         for _row in calc.get("items", []):
             _rid = _row.get("row_id")
             if _rid:
                 st.session_state[f"{key}_{_rid}_discount"] = _new_discount
                 _row["discount"] = _new_discount
         st.session_state[dirty_key] = True
-    dtype_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
+    name_col, dtype_col = st.columns([1.6, 1])
+    with name_col:
+        st.text_input("Название расчёта:", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
     with dtype_col:
         selected_dtype = st.selectbox("Тип скидки:", dtype_options,
             index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
             on_change=_on_discount_type_change)
+    st.divider()
+    catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
+    active_products = [p for p in catalog if p.get("active", True)]
+    if not active_products:
+        st.warning("В каталоге нет активных товаров. Добавьте товары в разделе «Товары и прайс».")
+        return
+    items = calc.setdefault("items", [])
     custom_key = f"{key}_individual_discount"
     def _on_individual_discount_change():
         # Изменение общей индивидуальной скидки немедленно переносим во все строки.
