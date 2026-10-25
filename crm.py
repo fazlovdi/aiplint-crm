@@ -5519,7 +5519,9 @@ def _ozon_create_payment(deal, calc):
     if total <= 0:
         raise ValueError("В расчёте нет положительной суммы для оплаты.")
     ext_id = "iplinth-" + uuid.uuid4().hex
-    amount = {"currencyCode": "643", "value": f"{total:.2f}"}
+    # Ozon Pay protobuf ожидает int64 в value; передаём сумму в копейках,
+    # а не строку с десятичной точкой (например, 12,90 ₽ -> 1290).
+    amount = {"currencyCode": "643", "value": int(round(total * 100))}
     # По таблице подписей Ozon для createPayment: extId + accessKey + secretKey.
     sign = _ozon_signature(ext_id, cfg["access_key"])
     payload = {
@@ -6678,12 +6680,24 @@ def deal_calculation_dialog(deal_id, calc_id):
             index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
             on_change=_on_discount_type_change)
     custom_key = f"{key}_individual_discount"
+    def _on_individual_discount_change():
+        # Изменение общей индивидуальной скидки немедленно переносим во все строки.
+        # Callback выполняется до повторного построения виджетов, поэтому можно
+        # безопасно обновить их session_state, а затем и локальные данные расчёта.
+        _new_discount = min(100.0, max(0.0, float(st.session_state.get(custom_key, 0) or 0)))
+        for _row in calc.get("items", []):
+            _rid = _row.get("row_id")
+            if _rid:
+                st.session_state[f"{key}_{_rid}_discount"] = _new_discount
+            _row["discount"] = _new_discount
+        st.session_state[dirty_key] = True
+
     if selected_dtype == "Индивидуальная":
         custom_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
         with custom_col:
             custom_default = st.number_input("Индивидуальная скидка, %", min_value=0.0, max_value=100.0,
                 value=float(calc.get("individual_discount", 0) or 0), step=1.0, format="%g", key=custom_key,
-                on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+                on_change=_on_individual_discount_change)
     else:
         custom_default = float(calc.get("individual_discount", 0) or 0)
     default_discount = custom_default if selected_dtype == "Индивидуальная" else float(DISCOUNT_TYPES.get(selected_dtype, 0))
@@ -7365,6 +7379,14 @@ def render_client_card_expanded(cl):
                 with _req_cols[1]:
                     if not _req.get("deleted") and st.button("Открыть", key=f"client_req_open_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
                         _push_dialog_return()
+                        # Streamlit сохраняет значения виджетов между открытиями диалога.
+                        # Сбрасываем состояние именно этой записи, чтобы редактор заново
+                        # загрузил актуальные поля из сохранённых реквизитов.
+                        _req_dialog_key = f"req_{cl['id']}_client_{_req.get('id') or 'new'}"
+                        for _field_name, _ in [("legal_name", 0), ("payer_type", 0), ("inn", 0), ("kpp", 0), ("address", 0), ("bank_name", 0), ("bik", 0), ("corr_account", 0), ("settlement_account", 0), ("phone", 0), ("email", 0)]:
+                            st.session_state.pop(f"{_req_dialog_key}_{_field_name}", None)
+                        st.session_state.pop(f"{_req_dialog_key}_dirty", None)
+                        st.session_state.pop(f"{_req_dialog_key}_warning", None)
                         st.session_state["dialog_client_requisites_client_id"] = cl["id"]
                         st.session_state["dialog_client_requisites_return_to_invoice"] = False
                         client_requisites_dialog(cl["id"], False, _req.get("id"))
