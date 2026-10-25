@@ -5242,7 +5242,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
         "|BankName=ООО ОЗОН Банк|BIC=044525068"
         "|CorrespAcc=30101810645374525068"
         "|PayeeINN=731701704975"
-        f"|Purpose=Оплата {invoice_no}|Sum={amount_kopecks}"
+        f"|Purpose={invoice_no}|Sum={amount_kopecks}"
     )
     payment_qr=_PaymentQR(qr_payload, 25*mm)
     header_cells=[[logo or Paragraph("iPlinth",body), payment_qr]]
@@ -6420,7 +6420,7 @@ def invoice_document_dialog(deal_id, calc_id):
         ozon_invoice_col, ozon_payment_col = st.columns(2)
         with ozon_invoice_col:
             if st.button("Сформировать PDF-счёт в CRM", key=f"ozon_legal_invoice_make_{deal_id}_{calc_id}", use_container_width=True,
-                         disabled=not selected_req or selected_req.get("payer_type") not in ("company", "ip") or not bool(calc.get("items"))):
+                         disabled=(not selected_req or not bool(calc.get("items")))):
                 try:
                     pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, selected_req)
                     filename = f"Счёт {str(calc.get('name') or 'Расчёт').replace('Расчёт', '').strip() or 'Айплинт'} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
@@ -6474,7 +6474,7 @@ def invoice_document_dialog(deal_id, calc_id):
                  if str(doc.get("calculation_id", "")) == str(calc_id)
                  and ("счёт" in str(doc.get("kind", "")).lower() or "счет" in str(doc.get("kind", "")).lower())
                  and str(doc.get("kind", "")).lower() != "счёт ozon (pdf из crm)" ]
-    generated.sort(key=lambda doc: str(doc.get("created_at", "")), reverse=True)
+    generated = list(reversed(generated))
     if generated:
         st.markdown("#### PDF-счета, сформированные CRM")
         for gen_index, gen_doc in enumerate(generated):
@@ -6511,7 +6511,7 @@ def invoice_document_dialog(deal_id, calc_id):
     # Документы принадлежат конкретному расчёту: показываем только его счета и ссылки.
     # Вёрстку и отображение документов оставляем без изменений.
     bank_records = [(calc, record) for record in (calc.get("tochka_documents", []) or [])]
-    bank_records.sort(key=lambda pair: str(pair[1].get("created_at", "")), reverse=True)
+    bank_records = list(reversed(bank_records))
     if bank_records:
         st.markdown("#### Документы и оплаты Точки по сделке")
         for index, (record_calc, record) in enumerate(bank_records):
@@ -6587,7 +6587,7 @@ def invoice_document_dialog(deal_id, calc_id):
     ozon_records = calc.get("ozon_documents", []) or []
     if ozon_records:
         st.markdown("#### Документы и оплаты Ozon Pay по этому расчёту")
-        for ozon_index, ozon_record in enumerate(sorted(ozon_records, key=lambda item: str(item.get("created_at", "")), reverse=True)):
+        for ozon_index, ozon_record in enumerate(reversed(ozon_records)):
             ozon_deleted = bool(ozon_record.get("deleted"))
             with st.container(border=True):
                 is_ozon_pdf = ozon_record.get("kind") == "invoice_pdf"
