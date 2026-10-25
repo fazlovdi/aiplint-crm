@@ -4917,8 +4917,46 @@ def render_deal_standalone(d, cl, cu):
     parts.append(f"Ответственный: {d.get('manager', '—')}")
     parts.append(f"Задач: {len(dl_tasks)}")
     label = " | ".join(parts)
-    dl_bg, dl_bc = get_entity_border(dl_tasks)
-    st.markdown(f"<style>.st-key-dls_wrap_{deal_id} button {{ background-color: {dl_bg} !important; color: #2C3E50 !important; border: 2px solid {dl_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
+    # Карточки сделок оформлены в том же компактном стиле, что и карточки задач:
+    # пастельный фон, тонкая рамка и цветная полоса слева.
+    _deal_status = d.get("status", "Новый")
+    _deal_style = {
+        "Новый": ("#E3F2FD", "#2196F3"),
+        "В работе": ("#E8F5E9", "#4CAF50"),
+        "Ожидание оплаты": ("#FFF8E1", "#F9A825"),
+        "Оплачено": ("#E8F5E9", "#2E7D32"),
+        "На паузе": ("#F3E5F5", "#8E24AA"),
+        "Сделка закрыта": ("#ECEFF1", "#78909C"),
+        "Архив": ("#F5F5F5", "#9E9E9E"),
+    }
+    dl_bg, dl_bc = _deal_style.get(_deal_status, ("#FFFFFF", "#CBD5E1"))
+    st.markdown(f"""<style>
+    .st-key-dls_wrap_{deal_id} button {{
+        background-color: {dl_bg} !important;
+        color: #2C3E50 !important;
+        border: 1px solid {dl_bc} !important;
+        border-left: 4px solid {dl_bc} !important;
+        border-radius: 9px !important;
+        padding: 0.55rem 0.7rem !important;
+        min-height: 66px !important;
+        height: auto !important;
+        box-shadow: 0 1px 2px rgba(30,45,65,0.05) !important;
+        transition: box-shadow 0.15s ease, border-color 0.15s ease !important;
+        white-space: normal !important;
+        text-align: left !important;
+    }}
+    .st-key-dls_wrap_{deal_id} button p {{
+        font-size: 0.86rem !important;
+        line-height: 1.42 !important;
+        font-weight: 500 !important;
+        text-align: left !important;
+        white-space: normal !important;
+    }}
+    .st-key-dls_wrap_{deal_id} button:hover {{
+        box-shadow: 0 3px 9px rgba(30,45,65,0.12) !important;
+        border-color: {dl_bc} !important;
+    }}
+    </style>""", unsafe_allow_html=True)
     with st.container(key=f"dls_wrap_{deal_id}"):
         if st.button(label, key=f"dls_btn_{deal_id}", use_container_width=True, type="secondary"):
             st.session_state["dialog_deal_key"] = deal_id
@@ -8724,9 +8762,41 @@ elif st.session_state.active_tab == "Сделки":
     waiting_payment_deals = [d for d in fdeals if d.get("status", "") == "Ожидание оплаты"]
     paid_deals = [d for d in fdeals if d.get("status", "") == "Оплачено"]
     paused_deals = [d for d in fdeals if d.get("status", "") == "На паузе"]
-    col_new, col_work, col_waiting, col_paid, col_paused = st.columns(5)
+    st.markdown("""<style>
+    /* Визуальная система доски сделок повторяет доску задач. */
+    .st-key-deals_col_new, .st-key-deals_col_work, .st-key-deals_col_waiting,
+    .st-key-deals_col_paid, .st-key-deals_col_paused {
+        background: #F8FAFC !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        padding: 0.7rem 0.65rem 0.8rem 0.65rem !important;
+        min-height: 150px !important;
+        box-shadow: 0 1px 2px rgba(30,45,65,0.025) !important;
+    }
+    .st-key-deals_col_new h3, .st-key-deals_col_work h3,
+    .st-key-deals_col_waiting h3, .st-key-deals_col_paid h3,
+    .st-key-deals_col_paused h3 {
+        color: #344256 !important;
+        font-size: 0.98rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.015em !important;
+        line-height: 1.35 !important;
+        padding-bottom: 0.55rem !important;
+        margin-bottom: 0.6rem !important;
+        border-bottom: 1px solid #E5EAF0 !important;
+    }
+    .st-key-deals_col_new [data-testid="stCaptionContainer"],
+    .st-key-deals_col_work [data-testid="stCaptionContainer"],
+    .st-key-deals_col_waiting [data-testid="stCaptionContainer"],
+    .st-key-deals_col_paid [data-testid="stCaptionContainer"],
+    .st-key-deals_col_paused [data-testid="stCaptionContainer"] {
+        color: #8492A6 !important;
+        font-size: 0.82rem !important;
+    }
+    </style>""", unsafe_allow_html=True)
+    col_new, col_work, col_waiting, col_paid, col_paused = st.columns(5, gap="small")
     with col_new:
-        with st.container(border=True):
+        with st.container(key="deals_col_new", border=True):
             st.subheader(f"Новые ({len(new_deals)})")
             if new_deals:
                 for d in new_deals:
@@ -8734,7 +8804,7 @@ elif st.session_state.active_tab == "Сделки":
             else:
                 st.caption("Новых сделок нет.")
     with col_work:
-        with st.container(border=True):
+        with st.container(key="deals_col_work", border=True):
             st.subheader(f"В работе ({len(work_deals)})")
             if work_deals:
                 for d in work_deals:
@@ -8742,7 +8812,7 @@ elif st.session_state.active_tab == "Сделки":
             else:
                 st.caption("Сделок в работе нет.")
     with col_waiting:
-        with st.container(border=True):
+        with st.container(key="deals_col_waiting", border=True):
             st.subheader(f"Ожидание оплаты ({len(waiting_payment_deals)})")
             if waiting_payment_deals:
                 for d in waiting_payment_deals:
@@ -8750,7 +8820,7 @@ elif st.session_state.active_tab == "Сделки":
             else:
                 st.caption("Сделок в ожидании оплаты нет.")
     with col_paid:
-        with st.container(border=True):
+        with st.container(key="deals_col_paid", border=True):
             st.subheader(f"Оплачено ({len(paid_deals)})")
             if paid_deals:
                 for d in paid_deals:
@@ -8758,7 +8828,7 @@ elif st.session_state.active_tab == "Сделки":
             else:
                 st.caption("Оплаченных сделок нет.")
     with col_paused:
-        with st.container(border=True):
+        with st.container(key="deals_col_paused", border=True):
             st.subheader(f"На паузе ({len(paused_deals)})")
             if paused_deals:
                 for d in paused_deals:
