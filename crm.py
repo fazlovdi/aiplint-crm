@@ -5372,16 +5372,27 @@ def _make_torg12_pdf(deal, client, calc):
     # а в строках товаров и итогов присутствуют границы всех 15 колонок.
     xs = [10, 25, 84, 92, 111, 123, 138, 148, 158, 180, 199, 221, 235, 250, 263, 288]
     y_top, y_h1, y_h2, y_h3, y_body = 82, 90, 96, 101, 107
+    # Рисуем сетку сегментами: вертикали в объединённых заголовках не продолжаются
+    # через ячейки, которые по форме ТОРГ-12 должны оставаться объединёнными.
     rect(xs[0], y_top, xs[-1]-xs[0], y_body-y_top)
-    # Верхняя строка: границы между крупными группами колонок.
-    for idx in [1, 2, 4, 5, 7, 8, 9, 10, 11, 13]:
-        line(xs[idx], y_top, xs[idx], y_h1)
-    # Подзаголовки: полная сетка там, где начинаются самостоятельные колонки.
-    for idx in range(1, 15):
-        line(xs[idx], y_h1, xs[idx], y_body)
-    line(xs[0], y_h1, xs[-1], y_h1)
-    line(xs[1], y_h2, xs[-1], y_h2)
-    line(xs[1], y_h3, xs[-1], y_h3)
+    line(xs[1], y_top, xs[1], y_body)   # № по порядку / товар
+    line(xs[2], y_top, xs[2], y_body)   # товар / единица измерения
+    line(xs[3], y_h2, xs[3], y_body)    # код / наименование единицы
+    line(xs[4], y_top, xs[4], y_body)   # единица измерения / упаковка
+    line(xs[5], y_top, xs[5], y_body)   # упаковка / количество
+    line(xs[6], y_h1, xs[6], y_body)    # количество: в одном месте / мест, штук
+    line(xs[7], y_top, xs[7], y_body)   # количество / масса брутто
+    line(xs[8], y_top, xs[8], y_body)   # масса брутто / количество нетто
+    line(xs[9], y_top, xs[9], y_body)   # количество нетто / цена
+    line(xs[10], y_top, xs[10], y_body)
+    line(xs[11], y_top, xs[11], y_body) # сумма без НДС / НДС
+    line(xs[12], y_h1, xs[12], y_body)  # НДС: ставка / сумма
+    line(xs[13], y_top, xs[13], y_body) # НДС / сумма с НДС
+    line(xs[14], y_h1, xs[14], y_body)  # сумма с НДС: отдельные значения в строках данных
+    line(xs[2], y_h1, xs[-1], y_h1)
+    # Горизонтали подстрок — только там, где есть реальные подразделения заголовка.
+    line(xs[2], y_h2, xs[-1], y_h2)
+    line(xs[2], y_h3, xs[-1], y_h3)
 
     # Крупные заголовки расположены внутри своих объединённых ячеек.
     txt((xs[0]+xs[1])/2, 85.2, "Номер по", 4.8, align="center")
@@ -5450,12 +5461,12 @@ def _make_torg12_pdf(deal, client, calc):
         okei = "006" if unit.lower() in ("м", "м.", "метр", "метры") else ("796" if unit.lower() in ("шт", "шт.") else "")
         txt((xs[3]+xs[4])/2, row_y+h/2+1.5, okei, 5.0, align="center")
         txt((xs[4]+xs[5])/2, row_y+h/2+1.5, unit, 5.0, align="center")
-        txt((xs[9]+xs[10])/2-1, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="right")
-        txt((xs[10]+xs[11])/2-1, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="right")
-        txt((xs[11]+xs[12])/2-1, row_y+h/2+1.5, money(net), 4.8, align="right")
+        txt((xs[9]+xs[10])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
+        txt((xs[10]+xs[11])/2, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="center")
+        txt((xs[11]+xs[12])/2, row_y+h/2+1.5, money(net), 4.8, align="center")
         txt((xs[12]+xs[13])/2, row_y+h/2+1.5, "22", 4.8, align="center")
-        txt((xs[13]+xs[14])/2-1, row_y+h/2+1.5, money(vat), 4.8, align="right")
-        txt((xs[14]+xs[15])/2-1, row_y+h/2+1.5, money(total_inc), 4.8, align="right")
+        txt((xs[13]+xs[14])/2, row_y+h/2+1.5, money(vat), 4.8, align="center")
+        txt((xs[14]+xs[15])/2, row_y+h/2+1.5, money(total_inc), 4.8, align="center")
         row_y += h
 
     # Итоговая строка.
@@ -5465,12 +5476,12 @@ def _make_torg12_pdf(deal, client, calc):
     inc_total = round(sum(float(r["amount"]) for r in rows), 2)
     net_total = round(inc_total/1.22, 2)
     vat_total = round(inc_total-net_total, 2)
-    txt((xs[9]+xs[10])/2-1, row_y+3.6, f"{qty_total:g}", 5.0, align="right")
-    txt((xs[10]+xs[11])/2-1, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="right")
-    txt((xs[11]+xs[12])/2-1, row_y+3.6, money(net_total), 4.8, align="right")
+    txt((xs[9]+xs[10])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
+    txt((xs[10]+xs[11])/2, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="center")
+    txt((xs[11]+xs[12])/2, row_y+3.6, money(net_total), 4.8, align="center")
     txt((xs[12]+xs[13])/2, row_y+3.6, "22", 4.8, align="center")
-    txt((xs[13]+xs[14])/2-1, row_y+3.6, money(vat_total), 4.8, align="right")
-    txt((xs[14]+xs[15])/2-1, row_y+3.6, money(inc_total), 4.8, align="right")
+    txt((xs[13]+xs[14])/2, row_y+3.6, money(vat_total), 4.8, align="center")
+    txt((xs[14]+xs[15])/2, row_y+3.6, money(inc_total), 4.8, align="center")
 
     # Нижняя часть формы: строки приложения, суммы прописью и подписи.
     y = row_y+10
