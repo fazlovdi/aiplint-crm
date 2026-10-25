@@ -4783,6 +4783,11 @@ def render_deal_card_expanded(d, cl):
             d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
             d["last_modified"] = now_str()
             _sync_deal_board_stage_from_payment(d)
+            if new_ps == "Оплачено":
+                try:
+                    _ensure_paid_deal_torg12(d)
+                except Exception as exc:
+                    st.session_state["_paid_torg12_error"] = str(exc)[:300]
             commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
         st.markdown("**Ответственный:**")
         mgr_options_cd = get_managers_list()
@@ -5694,25 +5699,55 @@ def _make_invoice_pdf(deal, client, calc, requisites):
 
 
 def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None):
-    """Сохраняет PDF в хранилище CRM и прикрепляет к файлам сделки."""
-    safe_name=re.sub(r"[^\wА-Яа-яЁё№(). —-]+", "_", filename).strip().replace("/", "_")
-    digest=hashlib.sha256(pdf_bytes).hexdigest()
-    path=""
+    """Надёжно сохраняет PDF и прикрепляет его к актуальной записи сделки."""
+    deal_id = deal.get("id")
+    current_deal = get_deal_by_id(deal_id) or deal
+    safe_name = re.sub(r"[^\wА-Яа-яЁё№(). —-]+", "_", filename).strip().replace("/", "_")
+    digest = hashlib.sha256(pdf_bytes).hexdigest()
+    path = ""
     if YANDEX_TOKEN:
-        remote_name=f"deal_{deal.get('id')}_{uuid.uuid4().hex[:8]}_{safe_name}"
+        remote_name = f"deal_{deal_id}_{uuid.uuid4().hex[:8]}_{safe_name}"
         if upload_file_to_yandex(pdf_bytes, remote_name):
-            path=f"CRM_NE_TROGAT/uploads/{remote_name}"
+            path = f"CRM_NE_TROGAT/uploads/{remote_name}"
     if not path:
-        os.makedirs("uploads",exist_ok=True)
-        local_name=f"deal_{deal.get('id')}_{uuid.uuid4().hex[:8]}_{safe_name}"
-        path=os.path.join("uploads",local_name)
-        with open(path,"wb") as f: f.write(pdf_bytes)
-    file_obj={"file_path":path,"file_name":safe_name,"file_hash":digest,"description":f"{kind} · {calc.get('name','Расчёт')}","document_type":kind,"calculation_id":str(calc.get("id")),"created_at":now_str()}
-    deal.setdefault("deal_files",[]).append(file_obj)
-    deal.setdefault("generated_documents",[]).append({"id":uuid.uuid4().hex,"kind":kind,"file_name":safe_name,"file_hash":digest,"calculation_id":str(calc.get("id")),"calculation_name":calc.get("name",""),"created_at":now_str(),"payer":copy.deepcopy(extra or {})})
-    deal["last_modified"]=now_str()
+        os.makedirs("uploads", exist_ok=True)
+        local_name = f"deal_{deal_id}_{uuid.uuid4().hex[:8]}_{safe_name}"
+        path = os.path.join("uploads", local_name)
+        with open(path, "wb") as f:
+            f.write(pdf_bytes)
+    created_at = now_str()
+    file_obj = {"file_path": path, "file_name": safe_name, "file_hash": digest,
+                "description": f"{kind} · {calc.get('name', 'Расчёт')}",
+                "document_type": kind, "calculation_id": str(calc.get("id")), "created_at": created_at}
+    current_deal.setdefault("deal_files", []).append(file_obj)
+    doc_obj = {"id": uuid.uuid4().hex, "kind": kind, "file_name": safe_name,
+               "file_hash": digest, "calculation_id": str(calc.get("id")),
+               "calculation_name": calc.get("name", ""), "created_at": created_at,
+               "payer": copy.deepcopy(extra or {}),
+               "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii")}
+    current_deal.setdefault("generated_documents", []).append(doc_obj)
+    current_deal["last_modified"] = created_at
     save_data(st.session_state.crm_store)
     return file_obj
+
+
+def _ensure_paid_deal_torg12(deal):
+    """Создаёт ТОРГ-12 один раз после полной оплаты на основании последнего расчёта."""
+    current = get_deal_by_id(deal.get("id")) or deal
+    calculations = [c for c in (current.get("calculations", []) or []) if not c.get("deleted") and c.get("items")]
+    if not calculations:
+        return False
+    calc = max(calculations, key=lambda c: str(c.get("updated_at", c.get("created_at", ""))))
+    if any(doc.get("kind") == "Товарная накладная ТОРГ-12" and str(doc.get("calculation_id", "")) == str(calc.get("id"))
+           for doc in (current.get("generated_documents", []) or [])):
+        return False
+    client = get_client_by_id(current.get("client_id")) or {}
+    pdf = _make_torg12_pdf(current, client, calc)
+    if isinstance(pdf, tuple):
+        pdf = pdf[0]
+    filename = f"ТОРГ-12 №{_deal_doc_number(current)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+    _save_generated_document(current, pdf, filename, "Товарная накладная ТОРГ-12", calc)
+    return True
 
 
 def _open_pdf_link(pdf_bytes, filename, key):
@@ -6602,6 +6637,11 @@ def _tochka_apply_paid_status(deal, record):
         if deal.get("status") != old_stage:
             changed = True
 
+    try:
+        _ensure_paid_deal_torg12(deal)
+    except Exception as exc:
+        st.session_state["_paid_torg12_error"] = str(exc)[:300]
+
     if not record.get("paid_notification_sent"):
         manager = deal.get("manager", "")
         if manager:
@@ -7192,7 +7232,7 @@ def render_deal_products_block(d, key_prefix):
         st.rerun()
 
 
-@_crm_dialog("Расчёт сделки", width="large")
+@_crm_dialog(" ", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
     """Отдельное окно редактирования расчёта в стиле окон задач."""
     def _calc_refresh():
@@ -7354,6 +7394,16 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.success(_doc_message)
     _offer_pdf_state = st.session_state.get(f"offer_pdf_{deal_id}_{calc_id}")
     _torg12_pdf_state = st.session_state.get(f"torg12_pdf_{deal_id}_{calc_id}")
+    _persisted_docs = [doc for doc in (deal.get("generated_documents", []) or [])
+                       if str(doc.get("calculation_id", "")) == str(calc_id)]
+    for _doc_kind, _state_key in (("Коммерческое предложение", f"offer_pdf_{deal_id}_{calc_id}"),
+                                  ("Товарная накладная ТОРГ-12", f"torg12_pdf_{deal_id}_{calc_id}")):
+        _matches = [doc for doc in _persisted_docs if doc.get("kind") == _doc_kind and doc.get("pdf_base64")]
+        if _matches and not st.session_state.get(_state_key):
+            _last_doc = max(_matches, key=lambda d: str(d.get("created_at", "")))
+            st.session_state[_state_key] = {"data": _last_doc["pdf_base64"], "filename": _last_doc.get("file_name", "Документ.pdf")}
+    _offer_pdf_state = st.session_state.get(f"offer_pdf_{deal_id}_{calc_id}")
+    _torg12_pdf_state = st.session_state.get(f"torg12_pdf_{deal_id}_{calc_id}")
     if _offer_pdf_state or _torg12_pdf_state:
         _doc_cols = st.columns(2, gap="small")
         if _offer_pdf_state:
@@ -7402,7 +7452,6 @@ def deal_calculation_dialog(deal_id, calc_id):
     div[role="dialog"] .stTextInput, div[role="dialog"] .stNumberInput, div[role="dialog"] .stSelectbox {margin-bottom: -0.25rem !important;}
     div[role="dialog"] [data-testid="stCaptionContainer"] {margin-top: -0.35rem !important;margin-bottom: -0.25rem !important;}
     </style>""", unsafe_allow_html=True)
-    st.markdown("### Расчёт сделки")
     dtype_options = list(DISCOUNT_TYPES.keys())
     if calc.get("discount_type") not in dtype_options:
         calc["discount_type"] = "Без скидки"
@@ -7551,7 +7600,7 @@ def deal_calculation_dialog(deal_id, calc_id):
                 st.session_state[dirty_key] = True
                 _calc_refresh()
     total = _deal_items_total(items) + float(delivery or 0)
-    st.markdown(f"**Итого: {total:,.0f} ₽**".replace(",", " "))
+    st.markdown(f'<div style="text-align:right;color:#bc1661;font-size:1.45rem;font-weight:800;margin:0.35rem 0 0.55rem 0">Итого: {total:,.0f} ₽</div>'.replace(",", " "), unsafe_allow_html=True)
     _save_clicked = st.button("Сохранить расчёт", key=f"{key}_save", type="primary", use_container_width=True)
     _save_from_warning = bool(st.session_state.pop(f"{key}_save_requested", False))
     if _save_clicked or _save_from_warning:
