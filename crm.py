@@ -9597,30 +9597,14 @@ if st.session_state.active_tab == "Клиенты":
     else:
         _visible_clients = []
     if all_clients:
-        # Таблица клиентов: город и телефон сразу после наименования
-        _hc1, _hc2, _hc3, _hc4, _hc5, _hc6, _hc7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
-        with _hc1:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Наименование</div>", unsafe_allow_html=True)
-        with _hc2:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Город</div>", unsafe_allow_html=True)
-        with _hc3:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Телефон</div>", unsafe_allow_html=True)
-        with _hc4:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Категория</div>", unsafe_allow_html=True)
-        with _hc5:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сделки</div>", unsafe_allow_html=True)
-        with _hc6:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Задачи</div>", unsafe_allow_html=True)
-        with _hc7:
-            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сумма сделок</div>", unsafe_allow_html=True)
-        st.markdown('<div style="border-top:1px solid #DCE0E5;margin-bottom:4px;"></div>', unsafe_allow_html=True)
-        # Индексируем сделки один раз: раньше для каждого клиента повторно просматривалась вся база сделок.
+        # Индексируем сделки один раз: не просматриваем всю базу для каждого клиента.
         _clients_deals_by_id = {}
         for _deal_item in st.session_state.crm_store.get("deals", []):
             _clients_deals_by_id.setdefault(_deal_item.get("client_id"), []).append(_deal_item)
 
-        # Объединяем CSS всех кнопок списка в один блок вместо трёх style-блоков на каждого клиента.
-        _client_row_css = []
+        # Карточки клиентов в том же визуальном стиле, что и задачи/сделки:
+        # пастельный фон, тонкая рамка, цветной акцент слева и компактные метаданные.
+        _client_cards_css = []
         for _style_client in _visible_clients:
             _style_id = _style_client["id"]
             _style_deals = _clients_deals_by_id.get(_style_id, [])
@@ -9628,72 +9612,70 @@ if st.session_state.active_tab == "Клиенты":
             _style_tasks = _style_client.get("tasks", [])
             _style_overdue_tasks = any(not _st.get("done") and is_task_overdue(_st) for _st in _style_tasks)
             _style_active_tasks = any(not _st.get("done") for _st in _style_tasks)
-            _style_deals_color = "#2E7D32" if _style_active_deals else "#2C3E50"
-            _style_tasks_color = "#C62828" if _style_overdue_tasks else ("#2E7D32" if _style_active_tasks else "#2C3E50")
-            _client_row_css.append(
-                f".st-key-tbl_name_{_style_id} button{{background:transparent!important;border:none!important;box-shadow:none!important;text-align:left!important;padding:2px 0!important;font-size:.88rem!important;color:#2C3E50!important;font-weight:600!important}}"
-                f".st-key-tbl_name_{_style_id} button:hover{{color:#bc1661!important}}"
-                f".st-key-tbl_deals_btn_{_style_id} button,.st-key-tbl_tasks_{_style_id} button{{background:transparent!important;border:none!important;box-shadow:none!important;text-decoration:none!important;padding:2px 0!important;font-size:.88rem!important}}"
-                f".st-key-tbl_deals_btn_{_style_id} button{{color:{_style_deals_color}!important;font-weight:{800 if _style_deals_color != '#2C3E50' else 600}!important}}"
-                f".st-key-tbl_tasks_{_style_id} button{{color:{_style_tasks_color}!important;font-weight:{800 if _style_tasks_color != '#2C3E50' else 600}!important}}"
-                f".st-key-tbl_deals_btn_{_style_id} button:hover,.st-key-tbl_tasks_{_style_id} button:hover{{color:#bc1661!important}}"
-            )
-        if _client_row_css:
-            st.markdown("<style>" + "".join(_client_row_css) + "</style>", unsafe_allow_html=True)
+            _style_accent = "#C62828" if _style_overdue_tasks else ("#4CAF50" if _style_active_tasks or _style_active_deals else "#BC1661")
+            _style_bg = "#FFF8FB" if _style_accent == "#BC1661" else ("#FFF8F8" if _style_accent == "#C62828" else "#F5FBF6")
+            _client_cards_css.append(f"""
+            .st-key-client_card_{_style_id} {{
+                background:{_style_bg}!important; border:1px solid #E0E6EF!important;
+                border-left:4px solid {_style_accent}!important; border-radius:9px!important;
+                padding:0.45rem 0.7rem 0.25rem 0.7rem!important; margin:0.35rem 0!important;
+                box-shadow:0 1px 2px rgba(30,45,65,0.04)!important;
+            }}
+            .st-key-client_card_{_style_id} .stButton > button {{
+                min-height:35px!important; height:auto!important; padding:0.3rem 0.35rem!important;
+                border-radius:6px!important; white-space:normal!important;
+            }}
+            .st-key-client_name_{_style_id} button {{
+                background:transparent!important; border:0!important; box-shadow:none!important;
+                color:#2C3E50!important; font-weight:700!important; font-size:0.94rem!important;
+                text-align:left!important; justify-content:flex-start!important; padding:0.15rem 0!important;
+            }}
+            .st-key-client_name_{_style_id} button:hover {{ color:#BC1661!important; }}
+            .st-key-client_deals_{_style_id} button,.st-key-client_tasks_{_style_id} button {{
+                background:rgba(255,255,255,0.65)!important; border:1px solid #E0E6EF!important;
+                box-shadow:none!important; font-weight:700!important; font-size:0.82rem!important;
+            }}
+            .st-key-client_deals_{_style_id} button {{ color:{'#2E7D32' if _style_active_deals else '#526174'}!important; }}
+            .st-key-client_tasks_{_style_id} button {{ color:{'#C62828' if _style_overdue_tasks else ('#2E7D32' if _style_active_tasks else '#526174')}!important; }}
+            .st-key-client_deals_{_style_id} button:hover,.st-key-client_tasks_{_style_id} button:hover {{ border-color:#BC1661!important; }}
+            """)
+        if _client_cards_css:
+            st.markdown("<style>" + "".join(_client_cards_css) + "</style>", unsafe_allow_html=True)
 
         for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
             cl_tasks_all = cl.get("tasks", [])
-            all_tasks_count = len(cl_tasks_all)
             deals_sum = sum(d.get("budget", 0) for d in cl_deals)
-            # Проверка актуальных сделок
             has_active_deals = any(d.get("status", "Новый") in ("Новый", "В работе") for d in cl_deals)
-            # Проверка задач
             has_overdue_tasks = any(not t.get("done") and is_task_overdue(t) for t in cl_tasks_all)
             has_active_tasks = any(not t.get("done") for t in cl_tasks_all)
-            # Кнопки-ссылки через st.button
-            _name_key = f"tbl_name_{cl['id']}"
-            _deals_key = f"tbl_deals_{cl['id']}"
-            _tasks_key = f"tbl_tasks_{cl['id']}"
-            _deals_count = len(cl_deals)
-            _tasks_count = all_tasks_count
-            _category = cl.get("category", "Не определён")
-            _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
-            # Рендерим строку таблицы: название, город, телефон, категория, сделки, задачи, сумма
-            _c1, _c2, _c3, _c4, _c5, _c6, _c7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
-            with _c1:
-                # Текст вместо кнопки с рамкой — прозрачный фон, без границ, кликабельный
-                _name_btn_key = f"tbl_name_{cl['id']}"
-                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True):
-                    st.session_state["dialog_client_key"] = cl["id"]
-            with _c2:
-                _city = html.escape(str(cl.get("city", "") or "—"))
-                st.markdown(f"<div title='{_city}' style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.84rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_city}</div>", unsafe_allow_html=True)
-            with _c3:
-                _phone = html.escape(str(cl.get("phone", "") or "—"))
-                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.82rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_phone}</div>", unsafe_allow_html=True)
-            with _c4:
-                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.88rem;color:#3C4A5A;'>{html.escape(str(_category))}</div>", unsafe_allow_html=True)
-            with _c5:
-                _deals_btn_key = f"tbl_deals_btn_{cl['id']}"
-                _deals_color = "#2E7D32" if has_active_deals else "#2C3E50"
-                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True):
-                    st.session_state["dialog_client_deals_key"] = cl["id"]
-            with _c6:
-                _tasks_btn_key = f"tbl_tasks_{cl['id']}"
-                if has_overdue_tasks:
-                    _tasks_color = "#C62828"
-                elif has_active_tasks:
-                    _tasks_color = "#2E7D32"
-                else:
-                    _tasks_color = "#2C3E50"
-                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True):
-                    st.session_state["dialog_client_tasks_key"] = cl["id"]
-            with _c7:
-                st.markdown(f"<div style='display:flex;align-items:center;justify-content:flex-end;min-height:32px;font-weight:600;white-space:nowrap;'>{_sum_str}</div>", unsafe_allow_html=True)
-            # Разделитель между клиентами — минимальный отступ
-            st.markdown('<div class="client-divider"></div>', unsafe_allow_html=True)
-
+            _cid = cl["id"]
+            with st.container(key=f"client_card_{_cid}"):
+                _main_col, _city_col, _phone_col, _category_col, _deals_col, _tasks_col, _sum_col = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
+                with _main_col:
+                    with st.container(key=f"client_name_{_cid}"):
+                        if st.button(cl.get("name", "Без названия"), key=f"tbl_name_{_cid}", use_container_width=True):
+                            st.session_state["dialog_client_key"] = _cid
+                with _city_col:
+                    st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('city', '') or '—'))}</div>", unsafe_allow_html=True)
+                with _phone_col:
+                    st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('phone', '') or '—'))}</div>", unsafe_allow_html=True)
+                with _category_col:
+                    st.markdown(f"<div style='font-size:.78rem;color:#526174;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('category', 'Не определён') or 'Не определён'))}</div>", unsafe_allow_html=True)
+                with _deals_col:
+                    st.caption("Сделки")
+                    with st.container(key=f"client_deals_{_cid}"):
+                        if st.button(str(len(cl_deals)), key=f"tbl_deals_btn_{_cid}", use_container_width=True):
+                            st.session_state["dialog_client_deals_key"] = _cid
+                with _tasks_col:
+                    st.caption("Задачи")
+                    with st.container(key=f"client_tasks_{_cid}"):
+                        if st.button(str(len(cl_tasks_all)), key=f"tbl_tasks_{_cid}", use_container_width=True):
+                            st.session_state["dialog_client_tasks_key"] = _cid
+                with _sum_col:
+                    st.caption("Сумма сделок")
+                    _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
+                    st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:right;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
     # Показ диалогов
