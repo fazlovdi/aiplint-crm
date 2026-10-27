@@ -784,17 +784,40 @@ def _validate_backup_snapshot(snapshot_text):
         raise ValueError("Обнаружены многочисленные признаки повреждения русской кодировки; резервная копия не загружена")
     return data
 
+def _sanitize_backup_data(data):
+    """Убирает из резервной копии активные сессии, remember-токены и устаревший открытый PIN.
+
+    Рабочую базу не меняет: очистка выполняется только для переносимого бэкапа.
+    Хэши паролей и login_pin сохраняются, чтобы после ручного восстановления
+    пользователи могли войти обычным способом.
+    """
+    safe_data = copy.deepcopy(data)
+    for user in safe_data.get("users", []):
+        if not isinstance(user, dict):
+            continue
+        for key in ("auth_sessions", "remember_tokens", "remember_token", "session_token", "session_tokens", "pin"):
+            user.pop(key, None)
+    return safe_data
+
+def _prepare_backup_snapshot(snapshot_text):
+    """Проверяет JSON и готовит безопасный снимок для записи на Яндекс Диск."""
+    data = _validate_backup_snapshot(snapshot_text)
+    safe_data = _sanitize_backup_data(data)
+    safe_text = json.dumps(safe_data, ensure_ascii=False, separators=(",", ":"))
+    _validate_backup_snapshot(safe_text)
+    return safe_text
+
 def _upload_yandex_snapshot(snapshot_text):
-    """Проверяет снимок и загружает его отдельным файлом; ничего с Диска не считывает."""
+    """Загружает безопасный снимок; одинаковые данные не создают повторных файлов."""
     global _cloud_sync_last_backup_name
     if not YANDEX_TOKEN:
         raise RuntimeError("Не задан YANDEX_DISK_TOKEN")
-    _validate_backup_snapshot(snapshot_text)
-    payload = snapshot_text.encode("utf-8")
-    # Уникальное имя исключает перезапись старой резервной копии.
-    stamp = moscow_now().strftime("%Y%m%d_%H%M%S")
-    unique = uuid.uuid4().hex[:8]
-    remote_name = f"CRM_backup_{stamp}_{unique}.json"
+    safe_text = _prepare_backup_snapshot(snapshot_text)
+    payload = safe_text.encode("utf-8")
+    # Имя определяется содержимым. Повторный rerun или другой worker с теми же
+    # данными попадёт в тот же путь, а не создаст ещё один файл.
+    digest = hashlib.sha256(payload).hexdigest()[:24]
+    remote_name = f"CRM_backup_{digest}.json"
     remote_path = f"disk:/CRM_NE_TROGAT/backups/{remote_name}"
     last_error = "Не удалось загрузить резервную копию на Яндекс Диск"
     for attempt in range(3):
@@ -812,6 +835,10 @@ def _upload_yandex_snapshot(snapshot_text):
                         _cloud_sync_last_backup_name = remote_name
                         return True
                     last_error = f"HTTP {resp.status_code} при загрузке резервной копии"
+            elif res.status_code == 409:
+                # Файл с таким хэшем уже существует: эти данные уже сохранены.
+                _cloud_sync_last_backup_name = remote_name
+                return True
             else:
                 last_error = f"HTTP {res.status_code} при создании резервной копии"
         except Exception as exc:
@@ -4501,7 +4528,7 @@ with st.sidebar:
             if st.button("Восстановить базу из файла", key="crm_manual_restore_button", disabled=not (_restore_file and _restore_confirm), use_container_width=True):
                 try:
                     _restore_text = _restore_file.getvalue().decode("utf-8-sig")
-                    _restore_data = _validate_backup_snapshot(_restore_text)
+                    _restore_data = _sanitize_backup_data(_validate_backup_snapshot(_restore_text))
                     _ensure_sqlite_store()
                     _restore_conn = _sqlite_connect()
                     try:
