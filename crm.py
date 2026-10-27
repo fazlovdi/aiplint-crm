@@ -808,46 +808,57 @@ def _prepare_backup_snapshot(snapshot_text):
     return safe_text
 
 def _upload_yandex_snapshot(snapshot_text, daily=False):
-    """Загружает безопасный снимок. Обычные копии именуются по содержимому; контрольная — одна на день."""
+    """Сохраняет одну перезаписываемую актуальную копию и отдельную архивную копию за день."""
     global _cloud_sync_last_backup_name
     if not YANDEX_TOKEN:
         raise RuntimeError("Не задан YANDEX_DISK_TOKEN")
+
     safe_text = _prepare_backup_snapshot(snapshot_text)
     payload = safe_text.encode("utf-8")
-    # Имя определяется содержимым. Повторный rerun или другой worker с теми же
-    # данными попадёт в тот же путь, а не создаст ещё один файл.
-    digest = hashlib.sha256(payload).hexdigest()[:24]
+
     if daily:
+        # Архивная копия: один файл на календарный день, не перезаписывается.
         remote_name = f"CRM_daily_{moscow_now().strftime('%Y-%m-%d')}.json"
+        overwrite = "false"
     else:
-        remote_name = f"CRM_backup_{digest}.json"
+        # Актуальная копия: всегда один и тот же файл, обновляется новыми данными.
+        remote_name = "CRM_latest.json"
+        overwrite = "true"
+
     remote_path = f"disk:/CRM_NE_TROGAT/backups/{remote_name}"
     last_error = "Не удалось загрузить резервную копию на Яндекс Диск"
+
     for attempt in range(3):
         try:
             res = requests.get(
                 f"{YANDEX_API_URL}/upload",
-                params={"path": remote_path, "overwrite": "false"},
+                params={"path": remote_path, "overwrite": overwrite},
                 headers=yandex_headers(), timeout=15)
+
             if res.status_code == 200:
                 href = res.json().get("href")
                 if href:
-                    resp = requests.put(href, data=payload, timeout=30,
-                                        headers={"Content-Type": "application/json; charset=utf-8"})
+                    resp = requests.put(
+                        href, data=payload, timeout=30,
+                        headers={"Content-Type": "application/json; charset=utf-8"})
                     if resp.status_code in (200, 201, 202):
                         _cloud_sync_last_backup_name = remote_name
                         return True
                     last_error = f"HTTP {resp.status_code} при загрузке резервной копии"
-            elif res.status_code == 409:
-                # Файл с таким хэшем уже существует: эти данные уже сохранены.
+                else:
+                    last_error = "Яндекс Диск не вернул ссылку для загрузки"
+            elif res.status_code == 409 and daily:
+                # Дневной архив уже существует; не создаём второй файл за этот день.
                 _cloud_sync_last_backup_name = remote_name
                 return True
             else:
                 last_error = f"HTTP {res.status_code} при создании резервной копии"
         except Exception as exc:
             last_error = str(exc)[:300]
+
         if attempt < 2:
             time.sleep(0.5 * (attempt + 1))
+
     raise RuntimeError(last_error)
 
 def _cloud_sync_worker():
