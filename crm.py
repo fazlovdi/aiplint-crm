@@ -861,6 +861,40 @@ def _upload_yandex_snapshot(snapshot_text, daily=False):
 
     raise RuntimeError(last_error)
 
+def _upload_yandex_pre_restore_snapshot(snapshot_text):
+    """Сохраняет текущую рабочую базу отдельным неизменяемым файлом перед восстановлением."""
+    if not YANDEX_TOKEN:
+        raise RuntimeError("Не задан YANDEX_DISK_TOKEN — безопасное восстановление остановлено")
+    safe_text = _prepare_backup_snapshot(snapshot_text)
+    payload = safe_text.encode("utf-8")
+    remote_name = f"CRM_pre_restore_{moscow_now().strftime('%Y%m%d_%H%M%S_%f')}.json"
+    remote_path = f"disk:/CRM_NE_TROGAT/backups/{remote_name}"
+    last_error = "Не удалось сохранить резервную копию текущей базы перед восстановлением"
+    for attempt in range(3):
+        try:
+            res = requests.get(
+                f"{YANDEX_API_URL}/upload",
+                params={"path": remote_path, "overwrite": "false"},
+                headers=yandex_headers(), timeout=15)
+            if res.status_code == 200:
+                href = res.json().get("href")
+                if not href:
+                    last_error = "Яндекс Диск не вернул ссылку для предохранительной копии"
+                else:
+                    resp = requests.put(
+                        href, data=payload, timeout=30,
+                        headers={"Content-Type": "application/json; charset=utf-8"})
+                    if resp.status_code in (200, 201, 202):
+                        return remote_name
+                    last_error = f"HTTP {resp.status_code} при загрузке предохранительной копии"
+            else:
+                last_error = f"HTTP {res.status_code} при создании предохранительной копии"
+        except Exception as exc:
+            last_error = str(exc)[:300]
+        if attempt < 2:
+            time.sleep(0.5 * (attempt + 1))
+    raise RuntimeError(last_error)
+
 def _cloud_sync_worker():
     """Объединяет серию быстрых сохранений: выгружает последний снимок после паузы."""
     global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
@@ -4555,6 +4589,21 @@ with st.sidebar:
                     _restore_text = _restore_file.getvalue().decode("utf-8-sig")
                     _restore_data = _sanitize_backup_data(_validate_backup_snapshot(_restore_text))
                     _ensure_sqlite_store()
+                    # Сначала снимаем текущее состояние ИЗ ОСНОВНОЙ SQLite-базы,
+                    # а не из JSON-зеркала, которое может отставать. Если копию
+                    # нельзя надёжно сохранить на Яндекс Диск — восстановление не начинаем.
+                    _safety_conn = _sqlite_connect()
+                    try:
+                        _safety_row = _safety_conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
+                        if not _safety_row or not _safety_row[0]:
+                            raise RuntimeError("Текущая база пуста или не читается; восстановление остановлено")
+                        _safety_data = json.loads(_safety_row[0])
+                        _safety_text = json.dumps(_safety_data, ensure_ascii=False, separators=(",", ":"))
+                        _validate_backup_snapshot(_safety_text)
+                    finally:
+                        _safety_conn.close()
+                    _safety_backup_name = _upload_yandex_pre_restore_snapshot(_safety_text)
+
                     _restore_conn = _sqlite_connect()
                     try:
                         _restore_conn.execute("BEGIN IMMEDIATE")
@@ -4576,10 +4625,11 @@ with st.sidebar:
                     os.replace(_restore_tmp, FILE_NAME)
                     st.session_state["crm_store"] = copy.deepcopy(_restore_data)
                     _remember_session_base(_restore_data, _restore_revision)
-                    st.success("База восстановлена из выбранной копии. Страница будет перезагружена.")
+                    st.success(f"База восстановлена из выбранной копии. Перед заменой сохранена текущая база: {_safety_backup_name}. Страница будет перезагружена.")
                     st.rerun()
                 except Exception as _restore_exc:
                     st.error(f"Не удалось восстановить базу: {str(_restore_exc)[:300]}")
+                    st.info("Если не удалось создать предохранительную копию на Яндекс Диске, текущая база не заменялась.")
     with st.expander("Вход по Face ID / Passkey"):
         if not PASSKEY_AVAILABLE:
             st.warning("Для Passkeys добавьте `webauthn>=2.2,<3` в requirements.txt и опубликуйте приложение заново.")
