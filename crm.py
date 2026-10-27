@@ -2494,6 +2494,100 @@ def _ensure_sqlite_store():
         finally:
             conn.close()
 
+def _restore_clean_json_to_sqlite_once():
+    """Однократно восстанавливает SQLite из проверенного JSON на Яндекс Диске."""
+    marker = FILE_NAME + ".restore_clean_json_20261027_done"
+    backup_path = SQLITE_FILE + ".before_clean_json_restore"
+
+    if os.path.exists(marker):
+        return
+
+    try:
+        if not YANDEX_TOKEN:
+            raise RuntimeError("Не настроен токен Яндекс Диска.")
+
+        # Получаем актуальную проверенную копию JSON с Яндекс Диска.
+        response = requests.get(
+            f"{YANDEX_API_URL}/download",
+            params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}"},
+            headers=yandex_headers(),
+            timeout=20,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"Не удалось получить JSON с Яндекс Диска: HTTP {response.status_code}"
+            )
+
+        download = requests.get(response.json()["href"], timeout=60)
+        if download.status_code != 200:
+            raise RuntimeError(
+                f"Не удалось скачать JSON: HTTP {download.status_code}"
+            )
+
+        raw_text = download.content.decode("utf-8-sig")
+        restored_data = json.loads(raw_text)
+
+        if (
+            not isinstance(restored_data, dict)
+            or not isinstance(restored_data.get("clients"), list)
+            or not isinstance(restored_data.get("deals"), list)
+        ):
+            raise RuntimeError(
+                "Структура JSON не прошла проверку. SQLite не изменена."
+            )
+
+        # Создаём резервную копию SQLite штатным механизмом SQLite.
+        _ensure_sqlite_store()
+        if not os.path.exists(backup_path):
+            source_conn = _sqlite_connect()
+            backup_conn = sqlite3.connect(backup_path)
+            try:
+                source_conn.backup(backup_conn)
+            finally:
+                backup_conn.close()
+                source_conn.close()
+
+        # Сохраняем восстановленный JSON локально.
+        with open(FILE_NAME, "w", encoding="utf-8") as f:
+            f.write(raw_text)
+
+        # Однократно заменяем содержимое рабочей таблицы SQLite.
+        restored_json = json.dumps(
+            restored_data, ensure_ascii=False, separators=(",", ":")
+        )
+        conn = _sqlite_connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "UPDATE crm_state SET data = ?, revision = revision + 1, "
+                "updated_at = ? WHERE id = 1",
+                (restored_json, now_str()),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
+
+        # Маркер создаётся только после успешного восстановления.
+        with open(marker, "w", encoding="utf-8") as f:
+            f.write("ok")
+
+        st.sidebar.success(
+            "Восстановленная база загружена в SQLite. "
+            "Резервная копия SQLite сохранена."
+        )
+
+    except Exception as exc:
+        try:
+            st.sidebar.error(
+                f"Автоматическое восстановление не выполнено: {exc}"
+            )
+        except Exception:
+            pass
+
+
 def _remember_session_base(data, revision):
     """Сохраняет неизменяемую базовую копию, относительно которой сравниваются правки сессии."""
     try:
@@ -2504,6 +2598,7 @@ def _remember_session_base(data, revision):
 
 def load_data():
     """Читает данные из SQLite и запоминает ревизию для безопасного слияния правок сессии."""
+    _restore_clean_json_to_sqlite_once()
     try:
         _ensure_sqlite_store()
         conn = _sqlite_connect()
