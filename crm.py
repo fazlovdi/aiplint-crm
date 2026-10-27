@@ -770,7 +770,8 @@ _cloud_sync_last_error = ""
 _cloud_sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-yandex-sync")
 
 def _upload_yandex_snapshot(snapshot_text):
-    """Загружает переданный снимок JSON на Яндекс Диск с ограниченными повторами."""
+    """Временно отключена запись JSON на Яндекс Диск."""
+    return True
     if not YANDEX_TOKEN:
         return True  # Облачная синхронизация не настроена; локальное сохранение работает.
     payload = snapshot_text.encode("utf-8")
