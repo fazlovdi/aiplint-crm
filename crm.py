@@ -696,7 +696,7 @@ def check_cloud_status():
 
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
-    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads"]:
+    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups"]:
         try: requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except: pass
 
@@ -716,49 +716,19 @@ def _collect_all_timestamps(data):
     return [ts for ts in timestamps if ts]
 
 def download_db_from_yandex():
-    if not YANDEX_TOKEN: return
-    try:
-        res = requests.get(f"{YANDEX_API_URL}/download", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}"}, headers=yandex_headers(), timeout=10)
-        if res.status_code == 200:
-            dl = requests.get(res.json().get("href"), timeout=30)
-            if dl.status_code == 200:
-                new_text = dl.text
-                # Проверяем, не старее ли данные на Диске по сравнению с локальным файлом
-                if os.path.exists(FILE_NAME):
-                    try:
-                        old_data = json.loads(open(FILE_NAME, "r", encoding="utf-8").read())
-                        new_data = json.loads(new_text)
-                        # Собираем ВСЕ last_modified, включая задачи
-                        old_ts = _collect_all_timestamps(old_data)
-                        new_ts = _collect_all_timestamps(new_data)
-                        old_max = max(old_ts) if old_ts else ""
-                        new_max = max(new_ts) if new_ts else ""
-                        if new_max < old_max:
-                            # Данные на Диске старее локальных — не перезаписываем
-                            return
-                    except:
-                        # При любой ошибке сравнения — НЕ перезаписываем локальные данные
-                        return
-                with open(FILE_NAME, "w", encoding="utf-8") as f: f.write(new_text)
-                return
-    except: pass
-    if not os.path.exists(FILE_NAME):
-        db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
-        with open(FILE_NAME, "w", encoding="utf-8") as f: json.dump(db, f, ensure_ascii=False, indent=2)
+    """Чтение резервной базы с Яндекс Диска отключено намеренно: Диск — только для резервных копий."""
+    return None
 
 def upload_db_to_yandex_sync():
-    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME): return False
-    for attempt in range(3):
-        try:
-            res = requests.get(f"{YANDEX_API_URL}/upload", params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"}, headers=yandex_headers(), timeout=15)
-            if res.status_code == 200:
-                with open(FILE_NAME, "rb") as f:
-                    resp = requests.put(res.json().get("href"), data=f, timeout=30)
-                if resp.status_code in (200, 201):
-                    return True
-        except Exception as e:
-            pass
-    return False
+    """Создаёт отдельную версию резервной копии; существующие копии не перезаписываются."""
+    if not YANDEX_TOKEN or not os.path.exists(FILE_NAME):
+        return False
+    try:
+        with open(FILE_NAME, "r", encoding="utf-8") as f:
+            _queue_yandex_snapshot(f.read())
+        return True
+    except Exception:
+        return False
 
 def upload_db_to_yandex_async():
     """Совместимый интерфейс: ставит актуальный снимок базы в очередь фоновой синхронизации."""
@@ -776,35 +746,77 @@ _cloud_sync_pending_snapshot = None
 _cloud_sync_worker_running = False
 _cloud_sync_last_ok = None
 _cloud_sync_last_error = ""
+_cloud_sync_last_backup_name = ""
+_startup_backup_queued = False
 _cloud_sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-yandex-sync")
 
+def _validate_backup_snapshot(snapshot_text):
+    """Проверяет JSON-структуру и грубые признаки повреждения русской кодировки до загрузки."""
+    try:
+        data = json.loads(snapshot_text)
+    except Exception as exc:
+        raise ValueError(f"JSON не читается: {exc}")
+    if not isinstance(data, dict):
+        raise ValueError("Корень JSON должен быть объектом")
+    for key in ("clients", "deals", "users"):
+        if key not in data or not isinstance(data.get(key), list):
+            raise ValueError(f"В JSON отсутствует корректный список '{key}'")
+    # Не загружаем заведомо повреждённый текст (replacement character или частая UTF-8 mojibake).
+    text_parts = []
+    def collect_strings(value):
+        if isinstance(value, str):
+            text_parts.append(value)
+        elif isinstance(value, dict):
+            for k, v in value.items():
+                collect_strings(k)
+                collect_strings(v)
+        elif isinstance(value, list):
+            for item in value:
+                collect_strings(item)
+    collect_strings(data)
+    all_text = " ".join(text_parts)
+    if "\ufffd" in all_text:
+        raise ValueError("Найдены символы замены � — возможное повреждение кодировки")
+    markers = ("Р°", "Рµ", "Рё", "Рё", "Р°", "С‚", "СЏ", "СЋ", "СЂ", "Ð", "Ñ")
+    marker_count = sum(all_text.count(marker) for marker in markers)
+    threshold = max(25, int(max(len(all_text), 1) * 0.001))
+    if marker_count > threshold:
+        raise ValueError("Обнаружены многочисленные признаки повреждения русской кодировки; резервная копия не загружена")
+    return data
+
 def _upload_yandex_snapshot(snapshot_text):
-    """Временно отключена запись JSON на Яндекс Диск, чтобы не перезаписать актуальную базу."""
-    return True
+    """Проверяет снимок и загружает его отдельным файлом; ничего с Диска не считывает."""
+    global _cloud_sync_last_backup_name
     if not YANDEX_TOKEN:
-        return True  # Облачная синхронизация не настроена; локальное сохранение работает.
+        raise RuntimeError("Не задан YANDEX_DISK_TOKEN")
+    _validate_backup_snapshot(snapshot_text)
     payload = snapshot_text.encode("utf-8")
-    last_error = "Не удалось загрузить базу на Яндекс Диск"
+    # Уникальное имя исключает перезапись старой резервной копии.
+    stamp = moscow_now().strftime("%Y%m%d_%H%M%S")
+    unique = uuid.uuid4().hex[:8]
+    remote_name = f"CRM_backup_{stamp}_{unique}.json"
+    remote_path = f"disk:/CRM_NE_TROGAT/backups/{remote_name}"
+    last_error = "Не удалось загрузить резервную копию на Яндекс Диск"
     for attempt in range(3):
         try:
             res = requests.get(
                 f"{YANDEX_API_URL}/upload",
-                params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}", "overwrite": "true"},
-                headers=yandex_headers(), timeout=10)
+                params={"path": remote_path, "overwrite": "false"},
+                headers=yandex_headers(), timeout=15)
             if res.status_code == 200:
                 href = res.json().get("href")
                 if href:
-                    resp = requests.put(href, data=payload, timeout=20)
+                    resp = requests.put(href, data=payload, timeout=30,
+                                        headers={"Content-Type": "application/json; charset=utf-8"})
                     if resp.status_code in (200, 201, 202):
+                        _cloud_sync_last_backup_name = remote_name
                         return True
-                    last_error = f"HTTP {resp.status_code} при загрузке файла"
+                    last_error = f"HTTP {resp.status_code} при загрузке резервной копии"
             else:
-                last_error = f"HTTP {res.status_code} при запросе ссылки загрузки"
+                last_error = f"HTTP {res.status_code} при создании резервной копии"
         except Exception as exc:
             last_error = str(exc)[:300]
         if attempt < 2:
-            # Короткая пауза только в фоновом потоке, не в обработчике UI.
-            import time
             time.sleep(0.5 * (attempt + 1))
     raise RuntimeError(last_error)
 
@@ -837,6 +849,29 @@ def _queue_yandex_snapshot(snapshot_text):
         if not _cloud_sync_worker_running:
             _cloud_sync_worker_running = True
             _cloud_sync_executor.submit(_cloud_sync_worker)
+
+def _queue_startup_backup_once():
+    """При старте процесса ставит актуальный снимок SQLite в очередь один раз."""
+    global _startup_backup_queued
+    if not YANDEX_TOKEN or _startup_backup_queued:
+        return
+    with _cloud_sync_lock:
+        if _startup_backup_queued:
+            return
+        try:
+            conn = _sqlite_connect()
+            try:
+                row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
+            finally:
+                conn.close()
+            if row and row[0]:
+                _startup_backup_queued = True
+                _cloud_sync_pending_snapshot_local = row[0]
+            else:
+                return
+        except Exception:
+            return
+    _queue_yandex_snapshot(_cloud_sync_pending_snapshot_local)
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN: return False
@@ -2394,8 +2429,7 @@ def migrate_data(data):
     return data
 
 def _load_data_from_json():
-    """Старый загрузчик JSON/Яндекс Диска; используется только при первичной миграции в SQLite."""
-    download_db_from_yandex()
+    """Локальный JSON-загрузчик для первичной миграции/аварийного fallback. Яндекс Диск не читается."""
     db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
     if os.path.exists(FILE_NAME):
         try:
@@ -2658,19 +2692,7 @@ def _three_way_merge(base, ours, latest, path="", conflicts=None):
 _save_lock = threading.Lock()
 
 def _download_disk_data():
-    """Скачивает JSON-базу с Диска и возвращает dict, или None при ошибке."""
-    if not YANDEX_TOKEN:
-        return None
-    try:
-        res = requests.get(f"{YANDEX_API_URL}/download",
-            params={"path": f"disk:/CRM_NE_TROGAT/{FILE_NAME}"},
-            headers=yandex_headers(), timeout=10)
-        if res.status_code == 200:
-            dl = requests.get(res.json().get("href"), timeout=30)
-            if dl.status_code == 200:
-                return json.loads(dl.text)
-    except:
-        pass
+    """Чтение JSON-базы с Яндекс Диска отключено: резервные копии только записываются."""
     return None
 
 def _merge_data(local_data, disk_data):
@@ -3147,6 +3169,8 @@ def close_deal_dialog(deal_id):
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
+# При запуске приложения создаём резервную копию текущей SQLite, не читая данные с Яндекс Диска.
+_queue_startup_backup_once()
 # Каталог товаров добавляется совместимо с уже работающей базой.
 if "products" not in st.session_state.crm_store:
     st.session_state.crm_store["products"] = copy.deepcopy(DEFAULT_PRODUCT_CATALOG)
@@ -4461,6 +4485,49 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"**{st.session_state.user_name}**")
     st.markdown(f"Роль: `{st.session_state.user_role}`")
+    if not YANDEX_TOKEN:
+        st.error("Резервное копирование отключено: не задан YANDEX_DISK_TOKEN в Secrets")
+    elif _cloud_sync_last_ok is True:
+        st.success(f"Резервная копия загружена: {_cloud_sync_last_backup_name or 'последняя загрузка подтверждена'}")
+    elif _cloud_sync_last_ok is False:
+        st.error(f"Резервная копия НЕ загружена: {_cloud_sync_last_error or 'ошибка загрузки'}")
+    else:
+        st.caption("Резервное копирование: ожидается подтверждение первой загрузки")
+    if st.session_state.get("user_role") == "admin":
+        with st.expander("Ручное восстановление из резервной копии"):
+            st.warning("Используйте только после сбоя основной базы. Восстановление заменит текущие данные CRM.")
+            _restore_file = st.file_uploader("Загрузите скачанный с Яндекс Диска JSON-файл", type=["json"], key="crm_manual_restore_json")
+            _restore_confirm = st.checkbox("Подтверждаю замену текущей базы данными из выбранной копии", key="crm_manual_restore_confirm")
+            if st.button("Восстановить базу из файла", key="crm_manual_restore_button", disabled=not (_restore_file and _restore_confirm), use_container_width=True):
+                try:
+                    _restore_text = _restore_file.getvalue().decode("utf-8-sig")
+                    _restore_data = _validate_backup_snapshot(_restore_text)
+                    _ensure_sqlite_store()
+                    _restore_conn = _sqlite_connect()
+                    try:
+                        _restore_conn.execute("BEGIN IMMEDIATE")
+                        _restore_row = _restore_conn.execute("SELECT revision FROM crm_state WHERE id = 1").fetchone()
+                        _restore_revision = int(_restore_row[0] if _restore_row else 0) + 1
+                        _restore_compact = json.dumps(_restore_data, ensure_ascii=False, separators=(",", ":"))
+                        _restore_conn.execute("INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at", (_restore_compact, _restore_revision, now_str()))
+                        _restore_conn.execute("COMMIT")
+                    except Exception:
+                        _restore_conn.execute("ROLLBACK")
+                        raise
+                    finally:
+                        _restore_conn.close()
+                    _restore_tmp = FILE_NAME + ".tmp"
+                    with open(_restore_tmp, "w", encoding="utf-8") as _restore_f:
+                        _restore_f.write(_restore_compact)
+                        _restore_f.flush()
+                        os.fsync(_restore_f.fileno())
+                    os.replace(_restore_tmp, FILE_NAME)
+                    st.session_state["crm_store"] = copy.deepcopy(_restore_data)
+                    _remember_session_base(_restore_data, _restore_revision)
+                    st.success("База восстановлена из выбранной копии. Страница будет перезагружена.")
+                    st.rerun()
+                except Exception as _restore_exc:
+                    st.error(f"Не удалось восстановить базу: {str(_restore_exc)[:300]}")
     with st.expander("Вход по Face ID / Passkey"):
         if not PASSKEY_AVAILABLE:
             st.warning("Для Passkeys добавьте `webauthn>=2.2,<3` в requirements.txt и опубликуйте приложение заново.")
