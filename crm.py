@@ -807,8 +807,8 @@ def _prepare_backup_snapshot(snapshot_text):
     _validate_backup_snapshot(safe_text)
     return safe_text
 
-def _upload_yandex_snapshot(snapshot_text):
-    """Загружает безопасный снимок; одинаковые данные не создают повторных файлов."""
+def _upload_yandex_snapshot(snapshot_text, daily=False):
+    """Загружает безопасный снимок. Обычные копии именуются по содержимому; контрольная — одна на день."""
     global _cloud_sync_last_backup_name
     if not YANDEX_TOKEN:
         raise RuntimeError("Не задан YANDEX_DISK_TOKEN")
@@ -817,7 +817,10 @@ def _upload_yandex_snapshot(snapshot_text):
     # Имя определяется содержимым. Повторный rerun или другой worker с теми же
     # данными попадёт в тот же путь, а не создаст ещё один файл.
     digest = hashlib.sha256(payload).hexdigest()[:24]
-    remote_name = f"CRM_backup_{digest}.json"
+    if daily:
+        remote_name = f"CRM_daily_{moscow_now().strftime('%Y-%m-%d')}.json"
+    else:
+        remote_name = f"CRM_backup_{digest}.json"
     remote_path = f"disk:/CRM_NE_TROGAT/backups/{remote_name}"
     last_error = "Не удалось загрузить резервную копию на Яндекс Диск"
     for attempt in range(3):
@@ -848,9 +851,13 @@ def _upload_yandex_snapshot(snapshot_text):
     raise RuntimeError(last_error)
 
 def _cloud_sync_worker():
+    """Объединяет серию быстрых сохранений: выгружает последний снимок после паузы."""
     global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
     global _cloud_sync_last_ok, _cloud_sync_last_error
+    debounce_seconds = 45
     while True:
+        # Ждём окончания серии быстрых сохранений. Новые снимки заменяют ожидающий.
+        time.sleep(debounce_seconds)
         with _cloud_sync_lock:
             snapshot = _cloud_sync_pending_snapshot
             _cloud_sync_pending_snapshot = None
@@ -861,11 +868,18 @@ def _cloud_sync_worker():
             ok = _upload_yandex_snapshot(snapshot)
             _cloud_sync_last_ok = bool(ok)
             _cloud_sync_last_error = "" if ok else "Не удалось загрузить базу на Яндекс Диск"
+            # Отдельная контрольная копия — не чаще одной на календарный день.
+            # Файл дня не перезаписывается; существующий файл считается уже сохранённым.
+            try:
+                _upload_yandex_snapshot(snapshot, daily=True)
+            except Exception:
+                # Ошибка контрольной копии не отменяет обычную резервную копию.
+                pass
         except Exception as exc:
             _cloud_sync_last_ok = False
             _cloud_sync_last_error = str(exc)[:300]
-        # Если во время загрузки пришёл новый снимок, цикл отправит только
-        # последний из ожидающих снимков.
+        # Если во время загрузки пришёл новый снимок, следующая итерация
+        # снова объединит быстрые изменения в один актуальный снимок.
 
 def _queue_yandex_snapshot(snapshot_text):
     global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
