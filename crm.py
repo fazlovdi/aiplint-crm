@@ -141,15 +141,6 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { font-size: 0.9rem; }
     .stButton > button { font-size: 0.85rem !important; }
     .stHorizontalBlock .stButton button { font-size: 0.85rem !important; }
-    /* Верхние кнопки переключения разделов: исходный размер шрифта, габариты кнопок уменьшены на 10% */
-    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button {
-        font-size: 0.85rem !important;
-        padding: 0.585rem 0.9rem !important;
-        border-radius: 10.8px !important;
-        min-height: 0 !important;
-    }
-    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button p,
-    .stHorizontalBlock:has(> div:nth-child(6) [data-testid="stButton"]) > div:nth-child(-n+6) [data-testid="stButton"] > button span { font-size: 0.85rem !important; }
     h3 { font-size: 1rem !important; }
     .arch-search-input > div > input { background-color: #FFFFFF !important; border: 1.5px solid #DCE0E5 !important; border-radius: 10px !important; }
 
@@ -4381,7 +4372,7 @@ with _header_center:
         background: transparent !important;
         color: var(--text-color) !important;
         font-family: inherit !important;
-        font-size: 2.8rem !important;
+        font-size: 3.5rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
         text-align: center !important;
@@ -4405,7 +4396,7 @@ with _header_center:
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button span,
     .st-key-crm_refresh_db_title [data-testid="stButton"] > button div {
         font-family: inherit !important;
-        font-size: 2.8rem !important;
+        font-size: 3.5rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
         margin: 0 !important;
@@ -4419,7 +4410,7 @@ with _header_center:
     [class*="crm_refresh_db_title"] p,
     [class*="crm_refresh_db_title"] span,
     [class*="crm_refresh_db_title"] div {
-        font-size: 2.8rem !important;
+        font-size: 3.5rem !important;
         font-weight: 700 !important;
         line-height: 1.2 !important;
     }
@@ -4519,6 +4510,87 @@ with st.sidebar:
                 st.rerun()
             else: st.error("Пароли не совпадают")
     if st.session_state.user_role == "admin":
+        # Диагностика Яндекс Диска: только GET-запросы, ничего не загружает и не изменяет.
+        with st.expander("Диагностика Яндекс Диска (только чтение)"):
+            st.caption(
+                "Проверяет метаданные текущей JSON-копии и список файлов в папках. "
+                "Не скачивает и не перезаписывает базу."
+            )
+            if st.button("Проверить базу и резервные файлы", key="btn_yandex_readonly_diagnostics", use_container_width=True):
+                if not YANDEX_TOKEN:
+                    st.error("Токен Яндекс Диска не настроен в Secrets.")
+                else:
+                    _diag_headers = yandex_headers()
+                    _diag_db_path = f"disk:/CRM_NE_TROGAT/{FILE_NAME}"
+                    _diag_fields = "name,path,type,size,created,modified,revision,md5,mime_type"
+                    try:
+                        _diag_meta_res = requests.get(
+                            YANDEX_API_URL,
+                            params={"path": _diag_db_path, "fields": _diag_fields},
+                            headers=_diag_headers,
+                            timeout=15,
+                        )
+                        if _diag_meta_res.status_code == 200:
+                            _diag_meta = _diag_meta_res.json()
+                            st.success("Текущий файл базы найден на Яндекс Диске.")
+                            st.write("Метаданные текущего файла:")
+                            st.json({
+                                k: _diag_meta.get(k)
+                                for k in ("name", "path", "type", "size", "created", "modified", "revision", "md5", "mime_type")
+                                if k in _diag_meta
+                            })
+                        elif _diag_meta_res.status_code == 404:
+                            st.warning("Файл базы по ожидаемому пути не найден.")
+                        else:
+                            st.warning(f"Не удалось получить метаданные файла: HTTP {_diag_meta_res.status_code}.")
+                            st.caption(_diag_meta_res.text[:500])
+                    except Exception as _diag_exc:
+                        st.error(f"Ошибка проверки метаданных: {str(_diag_exc)[:300]}")
+
+                    for _diag_folder in ("disk:/CRM_NE_TROGAT", "disk:/CRM_NE_TROGAT/uploads"):
+                        try:
+                            _diag_list_res = requests.get(
+                                YANDEX_API_URL,
+                                params={
+                                    "path": _diag_folder,
+                                    "limit": 100,
+                                    "fields": "_embedded.items.name,_embedded.items.path,_embedded.items.type,_embedded.items.size,_embedded.items.created,_embedded.items.modified,_embedded.items.revision,_embedded.items.md5,_embedded.total",
+                                },
+                                headers=_diag_headers,
+                                timeout=15,
+                            )
+                            st.markdown(f"**Содержимое `{_diag_folder}`**")
+                            if _diag_list_res.status_code == 200:
+                                _diag_payload = _diag_list_res.json()
+                                _diag_items = _diag_payload.get("_embedded", {}).get("items", [])
+                                _diag_rows = [
+                                    {
+                                        k: item.get(k)
+                                        for k in ("name", "path", "type", "size", "created", "modified", "revision", "md5")
+                                        if k in item
+                                    }
+                                    for item in _diag_items
+                                ]
+                                if _diag_rows:
+                                    st.dataframe(_diag_rows, use_container_width=True, hide_index=True)
+                                else:
+                                    st.info("Папка доступна, но файлов в ней не найдено.")
+                                _diag_total = _diag_payload.get("_embedded", {}).get("total")
+                                if _diag_total is not None and _diag_total > len(_diag_items):
+                                    st.caption(f"Показаны первые {len(_diag_items)} из {_diag_total} элементов.")
+                            elif _diag_list_res.status_code == 404:
+                                st.info("Папка не найдена.")
+                            else:
+                                st.warning(f"Не удалось прочитать папку: HTTP {_diag_list_res.status_code}.")
+                        except Exception as _diag_exc:
+                            st.warning(f"Ошибка чтения папки: {str(_diag_exc)[:250]}")
+
+                    st.info(
+                        "Проверка выше не изменяет данные. Она показывает текущую версию и возможные отдельные копии. "
+                        "Если в списке нет старых резервных файлов, история версий может быть доступна только через "
+                        "интерфейс Яндекс Диска; стандартный запрос метаданных не возвращает содержимое прошлых версий."
+                    )
+
         with st.expander("Экспорт базы"):
             st.download_button("Скачать CSV", data=export_clients_csv(), file_name="clients_export.csv", mime="text/csv", use_container_width=True)
         with st.expander("Управление сотрудниками"):
@@ -7850,16 +7922,16 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
             render_entity_chat(d, "deal", deal_id)
-            # Кнопки завершения и архивации доступны в любой колонке/статусе сделки.
-            st.markdown("---")
-            if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
-                st.rerun()
-            if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
-                _push_dialog_return()
-                st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
-                st.rerun()
+            if current_status in ("В работе", "Оплачено"):
+                st.markdown("---")
+                if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
+                    _push_dialog_return()
+                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
+                    st.rerun()
+                if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
+                    _push_dialog_return()
+                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
+                    st.rerun()
             if st.session_state.user_role == "admin":
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
@@ -9606,14 +9678,30 @@ if st.session_state.active_tab == "Клиенты":
     else:
         _visible_clients = []
     if all_clients:
-        # Индексируем сделки один раз: не просматриваем всю базу для каждого клиента.
+        # Таблица клиентов: город и телефон сразу после наименования
+        _hc1, _hc2, _hc3, _hc4, _hc5, _hc6, _hc7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
+        with _hc1:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Наименование</div>", unsafe_allow_html=True)
+        with _hc2:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Город</div>", unsafe_allow_html=True)
+        with _hc3:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Телефон</div>", unsafe_allow_html=True)
+        with _hc4:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Категория</div>", unsafe_allow_html=True)
+        with _hc5:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сделки</div>", unsafe_allow_html=True)
+        with _hc6:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Задачи</div>", unsafe_allow_html=True)
+        with _hc7:
+            st.markdown("<div style='font-weight:700;color:#2C3E50;padding:4px 0;text-align:center;border-bottom:2px solid #DCE0E5;font-size:0.9rem;'>Сумма сделок</div>", unsafe_allow_html=True)
+        st.markdown('<div style="border-top:1px solid #DCE0E5;margin-bottom:4px;"></div>', unsafe_allow_html=True)
+        # Индексируем сделки один раз: раньше для каждого клиента повторно просматривалась вся база сделок.
         _clients_deals_by_id = {}
         for _deal_item in st.session_state.crm_store.get("deals", []):
             _clients_deals_by_id.setdefault(_deal_item.get("client_id"), []).append(_deal_item)
 
-        # Карточки клиентов в том же визуальном стиле, что и задачи/сделки:
-        # пастельный фон, тонкая рамка, цветной акцент слева и компактные метаданные.
-        _client_cards_css = []
+        # Объединяем CSS всех кнопок списка в один блок вместо трёх style-блоков на каждого клиента.
+        _client_row_css = []
         for _style_client in _visible_clients:
             _style_id = _style_client["id"]
             _style_deals = _clients_deals_by_id.get(_style_id, [])
@@ -9621,117 +9709,72 @@ if st.session_state.active_tab == "Клиенты":
             _style_tasks = _style_client.get("tasks", [])
             _style_overdue_tasks = any(not _st.get("done") and is_task_overdue(_st) for _st in _style_tasks)
             _style_active_tasks = any(not _st.get("done") for _st in _style_tasks)
-            _style_accent = "#C62828" if _style_overdue_tasks else ("#4CAF50" if _style_active_tasks or _style_active_deals else "#AAB4C0")
-            _style_bg = "#F8FAFC" if _style_accent == "#AAB4C0" else ("#FFF8F8" if _style_accent == "#C62828" else "#F5FBF6")
-            _client_cards_css.append(f"""
-            .st-key-client_card_{_style_id} {{
-                background:{_style_bg}!important; border:1px solid #E0E6EF!important;
-                border-left:4px solid {_style_accent}!important; border-radius:9px!important;
-                padding:0.45rem 0.7rem 0.25rem 0.7rem!important; margin:0.35rem 0!important;
-                box-shadow:0 1px 2px rgba(30,45,65,0.04)!important;
-            }}
-            .st-key-client_card_{_style_id} .stButton > button {{
-                min-height:35px!important; height:auto!important; padding:0.3rem 0.35rem!important;
-                border-radius:6px!important; white-space:normal!important;
-            }}
-            .st-key-client_name_{_style_id} button {{
-                background:transparent!important; border:0!important; box-shadow:none!important;
-                color:#2C3E50!important; font-weight:700!important; font-size:0.94rem!important;
-                text-align:left!important; justify-content:flex-start!important; padding:0.15rem 0!important;
-            }}
-            .st-key-client_name_{_style_id} button:hover {{ color:#BC1661!important; }}
-            .st-key-client_deals_{_style_id}, .st-key-client_tasks_{_style_id} {{
-                display:flex!important; justify-content:center!important; align-items:center!important;
-            }}
-            .st-key-client_deals_{_style_id} [data-testid='stButton'], .st-key-client_tasks_{_style_id} [data-testid='stButton'] {{
-                width:100%!important; display:flex!important; justify-content:center!important;
-            }}
-            .st-key-client_deals_{_style_id} button,.st-key-client_tasks_{_style_id} button {{
-                width:100%!important; margin:0 auto!important; background:rgba(255,255,255,0.65)!important; border:1px solid #E0E6EF!important;
-                box-shadow:none!important; font-weight:700!important; font-size:0.82rem!important;
-            }}
-            .st-key-client_deals_{_style_id} button {{ color:{'#2E7D32' if _style_active_deals else '#526174'}!important; }}
-            .st-key-client_tasks_{_style_id} button {{ color:{'#C62828' if _style_overdue_tasks else ('#2E7D32' if _style_active_tasks else '#526174')}!important; }}
-            .st-key-client_deals_{_style_id} button:hover,.st-key-client_tasks_{_style_id} button:hover {{ border-color:#BC1661!important; }}
-            """)
-        if _client_cards_css:
-            st.markdown("<style>" + "".join(_client_cards_css) + "</style>", unsafe_allow_html=True)
-
-        # Единая шапка колонок для всего списка клиентов.
-        # Используем CSS sticky непосредственно на контейнере Streamlit:
-        # JS внутри st.components.v1.html работает в sandboxed iframe и не может
-        # надёжно управлять DOM родительской страницы.
-        st.markdown("""<style>
-        .st-key-clients_columns_header {
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 99999 !important;
-            background: #FFFFFF !important;
-            border-bottom: 1px solid #DCE2EA !important;
-            padding: 0.28rem 0 !important;
-            margin-top: 0.15rem !important;
-            box-shadow: 0 4px 7px rgba(30,45,65,0.12) !important;
-            box-sizing: border-box !important;
-        }
-        .st-key-clients_columns_header p { margin: 0 !important; }
-        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] { height:100% !important; }
-        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div {
-            min-height: 30px !important; height:100% !important;
-            display:flex !important; align-items:center !important; justify-content:center !important;
-        }
-        .st-key-clients_columns_header [data-testid='stHorizontalBlock'] {
-            align-items: stretch !important;
-        }
-        .st-key-clients_columns_header [data-testid='stColumn'] {
-            display:flex !important; align-items:center !important; justify-content:center !important;
-        }
-        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div > div {
-            width:100% !important; text-align:center !important;
-        }
-        /* Кнопки счётчиков строго по центру тех же колонок, что и заголовки. */
-        .st-key-client_deals_ [data-testid='stButton'] { width:100%; }
-        </style>""", unsafe_allow_html=True)
-        with st.container(key="clients_columns_header"):
-            _h_main, _h_city, _h_phone, _h_category, _h_deals, _h_tasks, _h_sum = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
-            with _h_main: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:left;padding:.2rem 0'>Клиент</div>", unsafe_allow_html=True)
-            with _h_city: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
-            with _h_phone: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
-            with _h_category: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
-            with _h_deals: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-4px)'>Сделки</div>", unsafe_allow_html=True)
-            with _h_tasks: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Задачи</div>", unsafe_allow_html=True)
-            with _h_sum: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Сумма сделок</div>", unsafe_allow_html=True)
+            _style_deals_color = "#2E7D32" if _style_active_deals else "#2C3E50"
+            _style_tasks_color = "#C62828" if _style_overdue_tasks else ("#2E7D32" if _style_active_tasks else "#2C3E50")
+            _client_row_css.append(
+                f".st-key-tbl_name_{_style_id} button{{background:transparent!important;border:none!important;box-shadow:none!important;text-align:left!important;padding:2px 0!important;font-size:.88rem!important;color:#2C3E50!important;font-weight:600!important}}"
+                f".st-key-tbl_name_{_style_id} button:hover{{color:#bc1661!important}}"
+                f".st-key-tbl_deals_btn_{_style_id} button,.st-key-tbl_tasks_{_style_id} button{{background:transparent!important;border:none!important;box-shadow:none!important;text-decoration:none!important;padding:2px 0!important;font-size:.88rem!important}}"
+                f".st-key-tbl_deals_btn_{_style_id} button{{color:{_style_deals_color}!important;font-weight:{800 if _style_deals_color != '#2C3E50' else 600}!important}}"
+                f".st-key-tbl_tasks_{_style_id} button{{color:{_style_tasks_color}!important;font-weight:{800 if _style_tasks_color != '#2C3E50' else 600}!important}}"
+                f".st-key-tbl_deals_btn_{_style_id} button:hover,.st-key-tbl_tasks_{_style_id} button:hover{{color:#bc1661!important}}"
+            )
+        if _client_row_css:
+            st.markdown("<style>" + "".join(_client_row_css) + "</style>", unsafe_allow_html=True)
 
         for cl in _visible_clients:
             cl_deals = _clients_deals_by_id.get(cl["id"], [])
             cl_tasks_all = cl.get("tasks", [])
+            all_tasks_count = len(cl_tasks_all)
             deals_sum = sum(d.get("budget", 0) for d in cl_deals)
+            # Проверка актуальных сделок
             has_active_deals = any(d.get("status", "Новый") in ("Новый", "В работе") for d in cl_deals)
+            # Проверка задач
             has_overdue_tasks = any(not t.get("done") and is_task_overdue(t) for t in cl_tasks_all)
             has_active_tasks = any(not t.get("done") for t in cl_tasks_all)
-            _cid = cl["id"]
-            with st.container(key=f"client_card_{_cid}"):
-                _main_col, _city_col, _phone_col, _category_col, _deals_col, _tasks_col, _sum_col = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
-                with _main_col:
-                    with st.container(key=f"client_name_{_cid}"):
-                        if st.button(cl.get("name", "Без названия"), key=f"tbl_name_{_cid}", use_container_width=True):
-                            st.session_state["dialog_client_key"] = _cid
-                with _city_col:
-                    st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('city', '') or '—'))}</div>", unsafe_allow_html=True)
-                with _phone_col:
-                    st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('phone', '') or '—'))}</div>", unsafe_allow_html=True)
-                with _category_col:
-                    st.markdown(f"<div style='font-size:.78rem;color:#526174;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('category', 'Не определён') or 'Не определён'))}</div>", unsafe_allow_html=True)
-                with _deals_col:
-                    with st.container(key=f"client_deals_{_cid}"):
-                        if st.button(str(len(cl_deals)), key=f"tbl_deals_btn_{_cid}", use_container_width=True):
-                            st.session_state["dialog_client_deals_key"] = _cid
-                with _tasks_col:
-                    with st.container(key=f"client_tasks_{_cid}"):
-                        if st.button(str(len(cl_tasks_all)), key=f"tbl_tasks_{_cid}", use_container_width=True):
-                            st.session_state["dialog_client_tasks_key"] = _cid
-                with _sum_col:
-                    _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
-                    st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:center;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
+            # Кнопки-ссылки через st.button
+            _name_key = f"tbl_name_{cl['id']}"
+            _deals_key = f"tbl_deals_{cl['id']}"
+            _tasks_key = f"tbl_tasks_{cl['id']}"
+            _deals_count = len(cl_deals)
+            _tasks_count = all_tasks_count
+            _category = cl.get("category", "Не определён")
+            _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
+            # Рендерим строку таблицы: название, город, телефон, категория, сделки, задачи, сумма
+            _c1, _c2, _c3, _c4, _c5, _c6, _c7 = st.columns([3.5, 1.5, 1.7, 1.2, 1.0, 1.0, 1.5])
+            with _c1:
+                # Текст вместо кнопки с рамкой — прозрачный фон, без границ, кликабельный
+                _name_btn_key = f"tbl_name_{cl['id']}"
+                if st.button(cl.get("name", ""), key=_name_btn_key, use_container_width=True):
+                    st.session_state["dialog_client_key"] = cl["id"]
+            with _c2:
+                _city = html.escape(str(cl.get("city", "") or "—"))
+                st.markdown(f"<div title='{_city}' style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.84rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_city}</div>", unsafe_allow_html=True)
+            with _c3:
+                _phone = html.escape(str(cl.get("phone", "") or "—"))
+                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.82rem;color:#3C4A5A;overflow-wrap:anywhere;'>{_phone}</div>", unsafe_allow_html=True)
+            with _c4:
+                st.markdown(f"<div style='display:flex;align-items:center;justify-content:center;min-height:32px;font-size:0.88rem;color:#3C4A5A;'>{html.escape(str(_category))}</div>", unsafe_allow_html=True)
+            with _c5:
+                _deals_btn_key = f"tbl_deals_btn_{cl['id']}"
+                _deals_color = "#2E7D32" if has_active_deals else "#2C3E50"
+                if st.button(str(_deals_count), key=_deals_btn_key, use_container_width=True):
+                    st.session_state["dialog_client_deals_key"] = cl["id"]
+            with _c6:
+                _tasks_btn_key = f"tbl_tasks_{cl['id']}"
+                if has_overdue_tasks:
+                    _tasks_color = "#C62828"
+                elif has_active_tasks:
+                    _tasks_color = "#2E7D32"
+                else:
+                    _tasks_color = "#2C3E50"
+                if st.button(str(_tasks_count), key=_tasks_btn_key, use_container_width=True):
+                    st.session_state["dialog_client_tasks_key"] = cl["id"]
+            with _c7:
+                st.markdown(f"<div style='display:flex;align-items:center;justify-content:flex-end;min-height:32px;font-weight:600;white-space:nowrap;'>{_sum_str}</div>", unsafe_allow_html=True)
+            # Разделитель между клиентами — минимальный отступ
+            st.markdown('<div class="client-divider"></div>', unsafe_allow_html=True)
+
     else:
         st.info("База клиентов пуста. Создайте первого клиента.")
     # Показ диалогов
