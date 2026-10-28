@@ -2614,17 +2614,87 @@ def _sqlite_connect():
     conn.execute("PRAGMA synchronous = FULL")
     return conn
 
+def _load_valid_yandex_backup_for_initialization():
+    """Ищет валидную резервную копию на Диске только для первичной инициализации пустой SQLite.
+
+    Ничего не скачивает поверх существующей базы: функция вызывается только когда
+    таблица crm_state ещё не содержит данных. Подозрительные/повреждённые копии
+    пропускаются, а не используются для восстановления.
+    """
+    if not YANDEX_TOKEN:
+        return None
+    try:
+        listing = requests.get(
+            YANDEX_API_URL,
+            params={"path": "disk:/CRM_NE_TROGAT/backups", "limit": 100},
+            headers=yandex_headers(), timeout=15)
+        if listing.status_code != 200:
+            return None
+        items = listing.json().get("_embedded", {}).get("items", [])
+        candidates = [x for x in items if isinstance(x, dict)
+                      and str(x.get("name", "")).lower().endswith(".json")
+                      and x.get("path")]
+        # Сначала проверяем CRM_latest, затем остальные по дате изменения.
+        candidates.sort(key=lambda x: (x.get("name") != "CRM_latest.json", x.get("modified", "")), reverse=False)
+        if candidates and candidates[0].get("name") == "CRM_latest.json":
+            latest = candidates.pop(0)
+            candidates.sort(key=lambda x: x.get("modified", ""), reverse=True)
+            candidates.insert(0, latest)
+        else:
+            candidates.sort(key=lambda x: x.get("modified", ""), reverse=True)
+        for item in candidates:
+            try:
+                response = requests.get(
+                    f"{YANDEX_API_URL}/download",
+                    params={"path": item["path"]},
+                    headers=yandex_headers(), timeout=15)
+                if response.status_code != 200:
+                    continue
+                href = response.json().get("href")
+                if not href:
+                    continue
+                downloaded = requests.get(href, timeout=30)
+                if downloaded.status_code != 200:
+                    continue
+                raw = downloaded.content.decode("utf-8-sig")
+                data = _validate_backup_snapshot(raw)
+                # Приводим к текущей схеме в памяти; оригинал на Диске не меняется.
+                if data.get("_migrated") != "v2":
+                    data = migrate_data(data)
+                else:
+                    data.setdefault("internal_tasks", [])
+                    data.setdefault("chat_messages", [])
+                    data.setdefault("qa_entries", [])
+                    data.setdefault("suppliers", [])
+                    data.setdefault("notifications", [])
+                    data.setdefault("products", copy.deepcopy(DEFAULT_PRODUCT_CATALOG))
+                return data
+            except Exception:
+                # Проверяем следующую копию; никогда не принимаем сомнительный файл.
+                continue
+    except Exception:
+        return None
+    return None
+
+
 def _ensure_sqlite_store():
-    """Создаёт SQLite и переносит существующую JSON-базу только один раз."""
+    """Создаёт SQLite из локального JSON или валидной резервной копии при первой инициализации."""
     with _sqlite_init_lock:
         conn = _sqlite_connect()
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None:
-                # При первой инициализации берём текущую рабочую базу, включая
-                # существующую загрузку с Яндекс Диска и миграции старого формата.
-                initial_data = _load_data_from_json()
+                # Сначала используем локальный JSON, если он есть. Если его нет,
+                # пытаемся восстановиться только из проверенной резервной копии.
+                # Существующая запись SQLite выше имеет приоритет и не затрагивается.
+                if os.path.exists(FILE_NAME):
+                    initial_data = _load_data_from_json()
+                else:
+                    initial_data = _load_valid_yandex_backup_for_initialization()
+                    if initial_data is None:
+                        # Сохраняем понятную ошибку и не создаём пустую базу.
+                        _load_data_from_json()
                 initial_json = json.dumps(initial_data, ensure_ascii=False, separators=(",", ":"))
                 conn.execute("BEGIN IMMEDIATE")
                 try:
