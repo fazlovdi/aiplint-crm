@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import json, os, re, html, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time, certifi
+import json, os, re, html, urllib.parse, requests, hashlib, base64, csv, io, secrets, threading, uuid, sqlite3, copy, time, certifi, traceback
 from pathlib import Path
 
 # WebAuthn / Passkeys. Если зависимость ещё не установлена, парольный вход продолжает работать.
@@ -696,7 +696,7 @@ def check_cloud_status():
 
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
-    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups"]:
+    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups", "CRM_NE_TROGAT/logs"]:
         try: requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except: pass
 
@@ -921,6 +921,7 @@ def _cloud_sync_worker():
             ok = _upload_yandex_snapshot(snapshot)
             _cloud_sync_last_ok = bool(ok)
             _cloud_sync_last_error = "" if ok else "Не удалось загрузить базу на Яндекс Диск"
+            _crm_log("BACKUP_UPLOAD_OK" if ok else "BACKUP_UPLOAD_ERROR", {"target": "CRM_latest.json"}, remote=True)
             # Отдельная контрольная копия — не чаще одной на календарный день.
             # Файл дня не перезаписывается; существующий файл считается уже сохранённым.
             try:
@@ -931,6 +932,7 @@ def _cloud_sync_worker():
         except Exception as exc:
             _cloud_sync_last_ok = False
             _cloud_sync_last_error = str(exc)[:300]
+            _crm_log("BACKUP_UPLOAD_ERROR", {"target": "CRM_latest.json"}, exc=exc, remote=True)
         # Если во время загрузки пришёл новый снимок, следующая итерация
         # снова объединит быстрые изменения в один актуальный снимок.
 
@@ -985,6 +987,140 @@ def download_file_from_yandex(remote_path):
             if fr.status_code == 200: return fr.content
     except: pass
     return None
+
+# Журнал событий CRM. Копия на Яндекс Диске переживает перезапуск Streamlit Cloud.
+_CRM_LOG_LOCK = threading.Lock()
+_CRM_LOG_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+_CRM_LOG_DIR = "CRM_NE_TROGAT/logs"
+_CRM_LOG_LOCAL_DIR = Path("/tmp/crm_system_logs")
+_CRM_LOG_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _crm_log(event, details=None, exc=None, remote=True):
+    """Записывает безопасное событие локально и, для важных событий, в журнал на Яндекс Диске."""
+    try:
+        record = {
+            "time_moscow": now_str(),
+            "event": str(event)[:100],
+            "user": str(st.session_state.get("user_login", "system") or "system")[:80],
+        }
+        if isinstance(details, dict):
+            # Не сохраняем значения ключей, которые могут содержать секреты/персональные данные.
+            safe_details = {}
+            for key, value in list(details.items())[:20]:
+                key_text = str(key)[:80]
+                if any(word in key_text.lower() for word in ("password", "token", "pin", "secret", "cookie", "authorization")):
+                    continue
+                safe_details[key_text] = str(value)[:300]
+            if safe_details:
+                record["details"] = safe_details
+        if exc is not None:
+            record["error_type"] = type(exc).__name__[:100]
+            err_text = str(exc)[:800]
+            if YANDEX_TOKEN:
+                err_text = err_text.replace(YANDEX_TOKEN, "[REDACTED]")
+            record["error"] = err_text
+            try:
+                trace_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[-3500:]
+                if YANDEX_TOKEN:
+                    trace_text = trace_text.replace(YANDEX_TOKEN, "[REDACTED]")
+                record["traceback"] = trace_text
+            except Exception:
+                pass
+        line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+        day = moscow_now().strftime("%Y-%m-%d")
+        local_path = _CRM_LOG_LOCAL_DIR / f"CRM_log_{day}.jsonl"
+        with _CRM_LOG_LOCK:
+            with open(local_path, "a", encoding="utf-8") as f:
+                f.write(line)
+                f.flush()
+                os.fsync(f.fileno())
+        # Синхронизация в фоне, чтобы запись в CRM не ждала сетевые запросы к Яндекс Диску.
+        if remote and YANDEX_TOKEN:
+            _CRM_LOG_EXECUTOR.submit(_append_crm_log_to_yandex, day, line)
+    except Exception:
+        # Ошибка журналирования не должна ломать работу CRM.
+        pass
+
+
+def _append_crm_log_to_yandex(day, new_line):
+    """Добавляет строку в дневной JSONL-файл на Яндекс Диске через безопасный read/modify/write."""
+    if not YANDEX_TOKEN:
+        return False
+    remote_path = f"disk:/{_CRM_LOG_DIR}/CRM_log_{day}.jsonl"
+    # Создать каталог, если это первый запуск журнала.
+    try:
+        folder_res = requests.put(YANDEX_API_URL, params={"path": f"disk:/{_CRM_LOG_DIR}"}, headers=yandex_headers(), timeout=8)
+        if folder_res.status_code not in (201, 202, 409):
+            # Каталог мог уже существовать; окончательный результат проверит upload ниже.
+            pass
+    except Exception:
+        pass
+
+    existing = b""
+    try:
+        dres = requests.get(f"{YANDEX_API_URL}/download", params={"path": remote_path}, headers=yandex_headers(), timeout=8)
+        if dres.status_code == 200:
+            href = dres.json().get("href")
+            if href:
+                fres = requests.get(href, timeout=12)
+                if fres.status_code == 200:
+                    existing = fres.content
+    except Exception:
+        existing = b""
+
+    # Защита от бесконечного роста одного дневного файла: оставляем последние 5000 строк.
+    try:
+        old_lines = existing.decode("utf-8", errors="replace").splitlines()
+    except Exception:
+        old_lines = []
+    all_lines = (old_lines + [new_line.rstrip("\n")])[-5000:]
+    payload = ("\n".join(all_lines) + "\n").encode("utf-8")
+    try:
+        ures = requests.get(f"{YANDEX_API_URL}/upload", params={"path": remote_path, "overwrite": "true"}, headers=yandex_headers(), timeout=10)
+        if ures.status_code != 200:
+            return False
+        href = ures.json().get("href")
+        if not href:
+            return False
+        put_res = requests.put(href, data=payload, timeout=20, headers={"Content-Type": "application/x-ndjson; charset=utf-8"})
+        return put_res.status_code in (200, 201, 202)
+    except Exception:
+        return False
+
+
+def _get_yandex_crm_logs():
+    """Возвращает доступные дневные журналы с Яндекс Диска, от новых к старым."""
+    if not YANDEX_TOKEN:
+        raise RuntimeError("Не задан YANDEX_DISK_TOKEN в Streamlit Secrets")
+    res = requests.get(
+        YANDEX_API_URL,
+        params={"path": f"disk:/{_CRM_LOG_DIR}", "limit": 100, "sort": "-modified"},
+        headers=yandex_headers(), timeout=15,
+    )
+    if res.status_code == 404:
+        return []
+    res.raise_for_status()
+    items = res.json().get("_embedded", {}).get("items", [])
+    files = [x for x in items if x.get("type") == "file" and str(x.get("name", "")).startswith("CRM_log_") and str(x.get("name", "")).endswith(".jsonl")]
+    return sorted(files, key=lambda x: str(x.get("modified", "")), reverse=True)
+
+
+def _read_yandex_crm_log(remote_name):
+    if not YANDEX_TOKEN:
+        raise RuntimeError("Не задан YANDEX_DISK_TOKEN в Streamlit Secrets")
+    if not re.fullmatch(r"CRM_log_\d{4}-\d{2}-\d{2}\.jsonl", str(remote_name)):
+        raise ValueError("Недопустимое имя файла журнала")
+    remote_path = f"disk:/{_CRM_LOG_DIR}/{remote_name}"
+    res = requests.get(f"{YANDEX_API_URL}/download", params={"path": remote_path}, headers=yandex_headers(), timeout=15)
+    res.raise_for_status()
+    href = res.json().get("href")
+    if not href:
+        raise RuntimeError("Яндекс Диск не вернул ссылку на журнал")
+    file_res = requests.get(href, timeout=20)
+    file_res.raise_for_status()
+    return file_res.content.decode("utf-8", errors="replace")
+
 
 def format_phone(p_str):
     if not p_str: return ""
@@ -2733,10 +2869,14 @@ def load_data():
                 # Не выдаём повреждённое/аварийно пустое содержимое SQLite за рабочую базу.
                 _validate_backup_snapshot(row[0])
                 _remember_session_base(data, row[1])
+                if not st.session_state.get("_crm_load_logged_this_session"):
+                    _crm_log("DATABASE_LOAD_OK", {"source": "SQLite", "revision": row[1], "clients": len(data.get("clients", [])), "deals": len(data.get("deals", []))})
+                    st.session_state["_crm_load_logged_this_session"] = True
                 return data
         finally:
             conn.close()
     except Exception as exc:
+        _crm_log("DATABASE_LOAD_ERROR", {"stage": "SQLite/JSON fallback"}, exc=exc)
         # JSON fallback нужен только для аварийного восстановления; при его использовании
         # базовая ревизия неизвестна, поэтому следующий save применит консервативную политику.
         try:
@@ -3075,6 +3215,7 @@ def save_data(data):
                 except Exception:
                     pass
         except Exception as e:
+            _crm_log("DATABASE_SAVE_ERROR", {"stage": "SQLite transaction"}, exc=e)
             if conn is not None:
                 try:
                     conn.execute("ROLLBACK")
@@ -3347,6 +3488,10 @@ def close_deal_dialog(deal_id):
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
+# Журналируем запуск и текущую доступность базы, затем ставим резервное копирование в очередь.
+if not globals().get("_crm_process_start_logged", False):
+    _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": True})
+    _crm_process_start_logged = True
 # При запуске приложения создаём резервную копию текущей SQLite, не читая данные с Яндекс Диска.
 _queue_startup_backup_once()
 # Каталог товаров добавляется совместимо с уже работающей базой.
@@ -4805,6 +4950,12 @@ with st.sidebar:
                         if st.button("X", key=f"del_u_{u['login']}"):
                             st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
                             commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
+    if st.session_state.get("user_role") == "admin":
+        with st.expander("Журнал системы"):
+            st.caption("История событий и ошибок хранится на Яндекс Диске и сохраняется после Reboot.")
+            if st.button("Открыть журнал в CRM", key="crm_open_system_logs", use_container_width=True):
+                st.session_state["show_system_logs"] = True
+                st.rerun()
     with st.expander("Telegram уведомления"):
         st.markdown("Введите Chat ID для push-уведомлений в Telegram")
         st.caption("Узнать Chat ID: @userinfobot в Telegram")
@@ -4860,6 +5011,36 @@ with st.sidebar:
         st.session_state.pop("_auth_last_activity", None)
         st.session_state.pop("_auth_token_current", None)
         st.rerun()
+
+# Просмотр журнала в рабочей области доступен только администратору.
+if st.session_state.get("show_system_logs") and st.session_state.get("user_role") == "admin":
+    st.markdown("## Журнал системы CRM")
+    st.caption("Журнал хранится на Яндекс Диске отдельно от базы CRM. Секреты и пароли не записываются.")
+    _log_top_left, _log_top_right = st.columns([1, 5])
+    with _log_top_left:
+        if st.button("Закрыть журнал", key="crm_close_system_logs"):
+            st.session_state["show_system_logs"] = False
+            st.rerun()
+    with _log_top_right:
+        if st.button("Обновить список журналов", key="crm_refresh_system_logs"):
+            st.rerun()
+    try:
+        _crm_log_files = _get_yandex_crm_logs()
+        if not _crm_log_files:
+            st.info("На Яндекс Диске пока нет файлов журнала. Новые события будут записываться после запуска этой версии CRM.")
+        else:
+            _crm_log_options = [x.get("name", "") for x in _crm_log_files]
+            _crm_log_selected = st.selectbox("Файл журнала (дата)", _crm_log_options, key="crm_system_log_file")
+            if _crm_log_selected:
+                _crm_log_text = _read_yandex_crm_log(_crm_log_selected)
+                _crm_log_lines = _crm_log_text.splitlines()
+                _crm_log_tail = "\n".join(_crm_log_lines[-500:])
+                st.caption(f"Всего строк в выбранном файле: {len(_crm_log_lines)}. Показаны последние 500.")
+                st.text_area("События", value=_crm_log_tail, height=420, key="crm_system_log_text")
+                st.download_button("Скачать выбранный журнал", data=_crm_log_text.encode("utf-8"), file_name=_crm_log_selected, mime="application/x-ndjson", key="crm_download_system_log")
+    except Exception as _crm_log_view_exc:
+        st.error(f"Не удалось прочитать журнал: {str(_crm_log_view_exc)[:300]}")
+    st.markdown("---")
 
 # Compute counters for tabs — only by authorized user
 _cu_login_count = st.session_state.get("user_login", "")
