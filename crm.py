@@ -761,6 +761,14 @@ def _validate_backup_snapshot(snapshot_text):
     for key in ("clients", "deals", "users"):
         if key not in data or not isinstance(data.get(key), list):
             raise ValueError(f"В JSON отсутствует корректный список '{key}'")
+    if not data["users"]:
+        raise ValueError("В резервной копии нет пользователей; загрузка запрещена")
+    # Не допускаем перезапись рабочей копии заведомо пустым результатом
+    # аварийного fallback (один admin и без клиентов/сделок).
+    if (not data["clients"] and not data["deals"] and len(data["users"]) == 1
+            and isinstance(data["users"][0], dict)
+            and data["users"][0].get("login") == "admin"):
+        raise ValueError("Подозрительная пустая база (только admin, без клиентов и сделок); резервная копия не загружена")
     # Не загружаем заведомо повреждённый текст (replacement character или частая UTF-8 mojibake).
     text_parts = []
     def collect_strings(value):
@@ -2516,72 +2524,84 @@ def migrate_data(data):
 
 def _load_data_from_json():
     """Локальный JSON-загрузчик для первичной миграции/аварийного fallback. Яндекс Диск не читается."""
-    db = {"clients": [], "deals": [], "users": [{"login": "admin", "password": hash_password("admin"), "role": "admin", "name": "Администратор"}], "_migrated": "v2", "internal_tasks": [], "chat_messages": [], "qa_entries": [], "suppliers": [], "notifications": []}
-    if os.path.exists(FILE_NAME):
-        try:
-            with open(FILE_NAME, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("_migrated") != "v2":
-                data = migrate_data(data)
-                with open(FILE_NAME, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
-                upload_db_to_yandex_sync()
-            else:
-                for c in data.get("clients", []):
-                    client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
-                    first_deal_id = client_deals[0]["id"] if client_deals else None
-                    if "last_modified" not in c: c["last_modified"] = "1970-01-01 00:00:00"
-                    if "client_chat" not in c: c["client_chat"] = []
-                    if "created_at" not in c: c["created_at"] = c.get("last_modified", "")
-                    for t in c.get("tasks", []):
-                        if "completion_report" not in t: t["completion_report"] = ""
-                        if "deal_id" not in t: t["deal_id"] = first_deal_id
-                        if "last_modified" not in t: t["last_modified"] = "1970-01-01 00:00:00"
-                        if "task_number" not in t: t["task_number"] = ""
-                        if "created_at" not in t: t["created_at"] = t.get("last_modified", "")
-                        if "in_work" not in t: t["in_work"] = False
-                        if "needs_rework" not in t: t["needs_rework"] = False
-                        if "reviewed" not in t: t["reviewed"] = False
-                        if "created_by" not in t: t["created_by"] = ""
-                        if "ready_to_ship" not in t: t["ready_to_ship"] = False
-                        if "delegated_to" not in t: t["delegated_to"] = None
-                        if "task_comments" not in t: t["task_comments"] = []
-                        if "flagged" not in t: t["flagged"] = False
-                        if "type" not in t: t["type"] = "Связаться"
-                        if "products" not in t: t["products"] = ""
-                        if "ship_city" not in t: t["ship_city"] = ""
-                        if "ship_addr" not in t: t["ship_addr"] = ""
-                        if "receiver" not in t: t["receiver"] = ""
-                        if "receiver_phone" not in t: t["receiver_phone"] = ""
-                        if "ship_pay" not in t: t["ship_pay"] = ""
-                        if "tk_num" not in t: t["tk_num"] = ""
-                        if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
-                        migrate_task_files(t)
-                for d in data.get("deals", []):
-                    if "deal_title" not in d: d["deal_title"] = ""
-                    if "deal_files" not in d: d["deal_files"] = []
-                    if "payment_status" not in d: d["payment_status"] = "Не оплачено"
-                    if "manager" not in d: d["manager"] = ""
-                    if "close_files" not in d:
-                        d["close_files"] = []
-                        if d.get("close_file_path"): d["close_files"].append({"file_path": d["close_file_path"], "file_name": d.get("close_file_name", "файл"), "file_hash": ""})
-                    if "last_modified" not in d: d["last_modified"] = "1970-01-01 00:00:00"
-                    if "deal_chat" not in d: d["deal_chat"] = []
-                    if "deal_number" not in d: d["deal_number"] = ""
-                    if "created_at" not in d: d["created_at"] = d.get("last_modified", "")
-                    if d.get("status") == "На согласовании": d["status"] = "В работе"
-                    if d.get("title", "").startswith("Заказ"): d["title"] = d.get("deal_number", d["title"])
-                assign_task_numbers(data)
-                assign_deal_numbers(data)
-                if "internal_tasks" not in data: data["internal_tasks"] = []
-                if "chat_messages" not in data: data["chat_messages"] = []
-                if "qa_entries" not in data: data["qa_entries"] = []
-                if "suppliers" not in data: data["suppliers"] = []
-            return data
-        except Exception:
-            return db
-    return db
-
+    # Никогда не подменяем ошибку чтения пустой базой с одним admin.
+    # При отсутствии/повреждении JSON останавливаем инициализацию, чтобы не
+    # записать этот fallback в SQLite и не отправить его в резервные копии.
+    if not os.path.exists(FILE_NAME):
+        raise FileNotFoundError(f"Файл базы данных {FILE_NAME!r} не найден; пустая база автоматически не создаётся")
+    try:
+        with open(FILE_NAME, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError("Корень JSON должен быть объектом")
+        for required_key in ("clients", "deals", "users"):
+            if required_key not in data or not isinstance(data.get(required_key), list):
+                raise ValueError(f"В JSON отсутствует корректный список '{required_key}'")
+        if not data["users"]:
+            raise ValueError("В JSON нет пользователей")
+        if (not data["clients"] and not data["deals"] and len(data["users"]) == 1
+                and isinstance(data["users"][0], dict)
+                and data["users"][0].get("login") == "admin"):
+            raise ValueError("Обнаружена подозрительная пустая база: только admin, без клиентов и сделок")
+        if data.get("_migrated") != "v2":
+            data = migrate_data(data)
+            with open(FILE_NAME, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            upload_db_to_yandex_sync()
+        else:
+            for c in data.get("clients", []):
+                client_deals = [d for d in data.get("deals", []) if d.get("client_id") == c["id"]]
+                first_deal_id = client_deals[0]["id"] if client_deals else None
+                if "last_modified" not in c: c["last_modified"] = "1970-01-01 00:00:00"
+                if "client_chat" not in c: c["client_chat"] = []
+                if "created_at" not in c: c["created_at"] = c.get("last_modified", "")
+                for t in c.get("tasks", []):
+                    if "completion_report" not in t: t["completion_report"] = ""
+                    if "deal_id" not in t: t["deal_id"] = first_deal_id
+                    if "last_modified" not in t: t["last_modified"] = "1970-01-01 00:00:00"
+                    if "task_number" not in t: t["task_number"] = ""
+                    if "created_at" not in t: t["created_at"] = t.get("last_modified", "")
+                    if "in_work" not in t: t["in_work"] = False
+                    if "needs_rework" not in t: t["needs_rework"] = False
+                    if "reviewed" not in t: t["reviewed"] = False
+                    if "created_by" not in t: t["created_by"] = ""
+                    if "ready_to_ship" not in t: t["ready_to_ship"] = False
+                    if "delegated_to" not in t: t["delegated_to"] = None
+                    if "task_comments" not in t: t["task_comments"] = []
+                    if "flagged" not in t: t["flagged"] = False
+                    if "type" not in t: t["type"] = "Связаться"
+                    if "products" not in t: t["products"] = ""
+                    if "ship_city" not in t: t["ship_city"] = ""
+                    if "ship_addr" not in t: t["ship_addr"] = ""
+                    if "receiver" not in t: t["receiver"] = ""
+                    if "receiver_phone" not in t: t["receiver_phone"] = ""
+                    if "ship_pay" not in t: t["ship_pay"] = ""
+                    if "tk_num" not in t: t["tk_num"] = ""
+                    if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
+                    migrate_task_files(t)
+            for d in data.get("deals", []):
+                if "deal_title" not in d: d["deal_title"] = ""
+                if "deal_files" not in d: d["deal_files"] = []
+                if "payment_status" not in d: d["payment_status"] = "Не оплачено"
+                if "manager" not in d: d["manager"] = ""
+                if "close_files" not in d:
+                    d["close_files"] = []
+                    if d.get("close_file_path"): d["close_files"].append({"file_path": d["close_file_path"], "file_name": d.get("close_file_name", "файл"), "file_hash": ""})
+                if "last_modified" not in d: d["last_modified"] = "1970-01-01 00:00:00"
+                if "deal_chat" not in d: d["deal_chat"] = []
+                if "deal_number" not in d: d["deal_number"] = ""
+                if "created_at" not in d: d["created_at"] = d.get("last_modified", "")
+                if d.get("status") == "На согласовании": d["status"] = "В работе"
+                if d.get("title", "").startswith("Заказ"): d["title"] = d.get("deal_number", d["title"])
+            assign_task_numbers(data)
+            assign_deal_numbers(data)
+            if "internal_tasks" not in data: data["internal_tasks"] = []
+            if "chat_messages" not in data: data["chat_messages"] = []
+            if "qa_entries" not in data: data["qa_entries"] = []
+            if "suppliers" not in data: data["suppliers"] = []
+        return data
+    except Exception as exc:
+        raise RuntimeError(f"Не удалось безопасно прочитать/подготовить JSON-базу {FILE_NAME!r}: {exc}") from exc
 # SQLite — локальное основное хранилище с транзакциями. JSON сохраняется как
 # совместимая копия/экспорт, а Яндекс Диск используется как резервная копия.
 SQLITE_FILE = FILE_NAME + ".sqlite3"
@@ -2640,6 +2660,8 @@ def load_data():
             row = conn.execute("SELECT data, revision FROM crm_state WHERE id = 1").fetchone()
             if row and row[0]:
                 data = json.loads(row[0])
+                # Не выдаём повреждённое/аварийно пустое содержимое SQLite за рабочую базу.
+                _validate_backup_snapshot(row[0])
                 _remember_session_base(data, row[1])
                 return data
         finally:
