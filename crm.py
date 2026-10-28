@@ -94,6 +94,11 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
     .stMarkdown strong { color: #2C3E50; font-weight: 600; }
     .stMarkdown { margin-top: 0.15rem !important; margin-bottom: 0.15rem !important; }
+    /* Размытый фон диалогов и приглушённые родительские окна. */
+    dialog[open]::backdrop { background: rgba(24, 32, 44, 0.22) !important; backdrop-filter: blur(4px) !important; }
+    [data-testid="stDialog"] { backdrop-filter: blur(3px); }
+    .st-key-crm_modal_layer_active { position: relative !important; z-index: 100005 !important; background: #FFFFFF !important; border-radius: 14px !important; }
+    [class*="st-key-crm_modal_layer_parent_"] { position: fixed !important; top: 12vh !important; left: 50% !important; transform: translateX(-50%) scale(0.97) !important; width: min(86vw, 940px) !important; max-height: 70vh !important; overflow: auto !important; padding: 1rem !important; border: 1px solid rgba(150,160,175,.55) !important; border-radius: 16px !important; background: rgba(242,245,249,.78) !important; backdrop-filter: blur(2px) !important; box-shadow: 0 18px 50px rgba(20,30,45,.22) !important; opacity: .72 !important; z-index: 100000 !important; pointer-events: none !important; }
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
     .stHorizontalBlock .stButton button { border-radius: 12px; font-size: 0.95rem; font-weight: 600; padding: 0.65rem 1rem; }
     .stHorizontalBlock { gap: 0.4rem !important; }
@@ -1673,21 +1678,27 @@ def _crm_dialog(title, width="large"):
     def _decorate(func):
         _CRM_DIALOG_REGISTRY[func.__name__] = {"func": func, "title": title, "width": width}
         def _request_dialog(*args, **kwargs):
+            # Не позволяем скрытому родительскому окну перехватывать активное окно
+            # при повторной отрисовке его содержимого позади дочернего.
+            if st.session_state.get("_crm_rendering_background_dialog", False):
+                return None
             st.session_state["_crm_dialog_requested_this_run"] = True
             signature = (_crm_dialog_signature_value(args), _crm_dialog_signature_value(kwargs))
             current = st.session_state.get("_crm_active_dialog") or {}
-            # Сохраняем новые аргументы даже для уже открытого диалога, чтобы использовать
-            # актуальные записи из crm_store после сохранения/обновления.
-            st.session_state["_crm_active_dialog"] = {
+            new_entry = {
                 "name": func.__name__, "title": title, "width": width,
                 "args": args, "kwargs": kwargs, "signature": signature,
             }
-            # При переключении из одного диалога в другой мы уже находимся
-            # внутри dialog-fragment Streamlit. Перерисовываем только его,
-            # не перезапуская всю страницу CRM и списки активной вкладки.
+            # Универсально сохраняем родительское окно при открытии дочернего.
+            if (st.session_state.get("_crm_inside_dialog_host", False)
+                    and not st.session_state.get("_crm_rendering_background_dialog", False)
+                    and current
+                    and (current.get("name") != func.__name__ or current.get("signature") != signature)):
+                stack = st.session_state.setdefault("_crm_modal_stack", [])
+                if not stack or stack[-1].get("signature") != current.get("signature") or stack[-1].get("name") != current.get("name"):
+                    stack.append(current.copy())
+            st.session_state["_crm_active_dialog"] = new_entry
             if st.session_state.get("_crm_inside_dialog_host", False):
-                # st.dialog не во всех версиях Streamlit поддерживает scope="fragment".
-                # Полный rerun безопасен: активное окно хранится в _crm_active_dialog.
                 st.rerun()
             return None
         _request_dialog.__name__ = func.__name__
@@ -5064,6 +5075,7 @@ with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5075,6 +5087,7 @@ with nc2:
     if st.button(_deals_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5086,6 +5099,7 @@ with nc3:
     if st.button(_tasks_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5097,6 +5111,7 @@ with nc4:
     if st.button(_it_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
         st.session_state.active_tab = "Внутренние задачи"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5107,6 +5122,7 @@ with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5117,6 +5133,7 @@ with nc6:
     if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
         st.session_state.active_tab = "Товары и прайс"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
@@ -11230,10 +11247,16 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
             if _active.get("name") == "deal_calculation_dialog":
                 st.session_state.pop("_crm_active_dialog", None)
 
-# Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
-# Внутри отображается исходное содержимое соответствующего диалога.
+# Единое окно-оболочка. Все окна CRM используют общий стек:
+# дочернее окно рисуется поверх родительского, а закрытие возвращает к родителю.
 if not st.session_state.get("_crm_dialog_requested_this_run", False):
-    st.session_state.pop("_crm_active_dialog", None)
+    _crm_stack_on_close = st.session_state.get("_crm_modal_stack", [])
+    if _crm_stack_on_close:
+        st.session_state["_crm_active_dialog"] = _crm_stack_on_close.pop()
+        st.session_state["_crm_modal_stack"] = _crm_stack_on_close
+        st.session_state["_crm_dialog_requested_this_run"] = True
+    else:
+        st.session_state.pop("_crm_active_dialog", None)
 
 _active_crm_dialog = st.session_state.get("_crm_active_dialog")
 if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm_dialog:
@@ -11243,14 +11266,52 @@ if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm
             _target = st.session_state.get("_crm_active_dialog")
             if not _target:
                 return
-            _spec = _CRM_DIALOG_REGISTRY.get(_target.get("name"))
-            if not _spec:
-                return
             st.session_state["_crm_inside_dialog_host"] = True
             try:
-                _spec["func"](*_target.get("args", ()), **_target.get("kwargs", {}))
+                _parents = list(st.session_state.get("_crm_modal_stack", []))
+                for _layer_index, _parent in enumerate(_parents):
+                    _parent_spec = _CRM_DIALOG_REGISTRY.get(_parent.get("name"))
+                    if not _parent_spec:
+                        continue
+                    with st.container(key=f"crm_modal_layer_parent_{_layer_index}"):
+                        st.caption(f"Окно позади: {_parent.get('title', 'CRM')}")
+                        st.session_state["_crm_rendering_background_dialog"] = True
+                        try:
+                            _parent_spec["func"](*_parent.get("args", ()), **_parent.get("kwargs", {}))
+                        finally:
+                            st.session_state["_crm_rendering_background_dialog"] = False
+                _spec = _CRM_DIALOG_REGISTRY.get(_target.get("name"))
+                if _spec:
+                    with st.container(key="crm_modal_layer_active"):
+                        if _parents:
+                            _back_col, _title_col = st.columns([1, 5])
+                            with _back_col:
+                                if st.button("← Назад", key="crm_modal_back_to_parent", use_container_width=True):
+                                    _stack = st.session_state.get("_crm_modal_stack", [])
+                                    if _stack:
+                                        st.session_state["_crm_active_dialog"] = _stack.pop()
+                                        st.session_state["_crm_modal_stack"] = _stack
+                                        # Убираем маркеры открытия дочернего окна, чтобы
+                                        # диспетчер страницы не открыл его снова на rerun.
+                                        for _route_key in (
+                                            "dialog_client_key", "dialog_deal_key", "dialog_task_key",
+                                            "dialog_client_deals_key", "dialog_client_tasks_key", "dialog_deal_task_key",
+                                            "_open_created_task", "_open_created_deal", "dialog_invoice_request",
+                                            "dialog_client_requisites_view", "dialog_client_requisites_client_id",
+                                            "dialog_calculation_deal_id", "dialog_calculation_calc_id",
+                                            "dialog_task_completion", "dialog_deal_report", "dialog_create_deal_task_deal_id",
+                                            "dialog_task_number", "dialog_task_client_id", "dialog_task_deal_id",
+                                            "dialog_create_client_task_client_id", "dialog_create_client_task_deal_select_cl_id",
+                                            "dialog_create_deal_from_client", "dialog_close_deal_id", "_pending_reminder_dialog",
+                                        ):
+                                            st.session_state.pop(_route_key, None)
+                                        st.rerun()
+                            with _title_col:
+                                st.markdown(f"**{_target.get('title', 'CRM')}**")
+                        _spec["func"](*_target.get("args", ()), **_target.get("kwargs", {}))
             finally:
                 st.session_state["_crm_inside_dialog_host"] = False
+                st.session_state["_crm_rendering_background_dialog"] = False
 
         _crm_dialog_host = st.dialog(_active_crm_dialog.get("title", "CRM"), width=_active_crm_dialog.get("width", "large"))(_crm_render_active_dialog)
         _crm_dialog_host()
