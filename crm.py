@@ -94,6 +94,11 @@ st.markdown("""
     .stMarkdown p, .stMarkdown li { color: #3C4A5A; line-height: 1.6; }
     .stMarkdown strong { color: #2C3E50; font-weight: 600; }
     .stMarkdown { margin-top: 0.15rem !important; margin-bottom: 0.15rem !important; }
+    /* Размытый фон диалогов и приглушённые родительские окна. */
+    dialog[open]::backdrop { background: rgba(24, 32, 44, 0.22) !important; backdrop-filter: blur(4px) !important; }
+    [data-testid="stDialog"] { backdrop-filter: blur(3px); }
+    .st-key-crm_modal_layer_active { position: relative !important; z-index: 100005 !important; background: #FFFFFF !important; border-radius: 14px !important; }
+    [class*="st-key-crm_modal_layer_parent_"] { position: fixed !important; top: 12vh !important; left: 50% !important; transform: translateX(-50%) scale(0.97) !important; width: min(86vw, 940px) !important; max-height: 70vh !important; overflow: auto !important; padding: 1rem !important; border: 1px solid rgba(150,160,175,.55) !important; border-radius: 16px !important; background: rgba(242,245,249,.78) !important; backdrop-filter: blur(2px) !important; box-shadow: 0 18px 50px rgba(20,30,45,.22) !important; opacity: .72 !important; z-index: 100000 !important; pointer-events: none !important; }
     code { background-color: #EEF0F3; color: #5A6B7D; border-radius: 6px; padding: 0.1rem 0.35rem; font-size: 0.9em; }
     .stHorizontalBlock .stButton button { border-radius: 12px; font-size: 0.95rem; font-weight: 600; padding: 0.65rem 1rem; }
     .stHorizontalBlock { gap: 0.4rem !important; }
@@ -1669,26 +1674,212 @@ def _crm_dialog_signature_value(value):
         return (type(value).__name__, tuple(_crm_dialog_signature_value(x) for x in value))
     return (type(value).__name__, repr(value)[:100])
 
+def _crm_workspace_client_id(name, args=(), kwargs=None):
+    """Best-effort resolve the client associated with a dialog."""
+    kwargs = kwargs or {}
+    store = st.session_state.get("crm_store", {})
+    clients = store.get("clients", []) if isinstance(store, dict) else []
+    deals = store.get("deals", []) if isinstance(store, dict) else []
+    def find_client(value):
+        if isinstance(value, dict):
+            cid = value.get("client_id") or value.get("cl_id") or value.get("id")
+            if cid is not None and any(str(c.get("id")) == str(cid) for c in clients):
+                return str(cid)
+        if value is not None and any(str(c.get("id")) == str(value) for c in clients):
+            return str(value)
+        return None
+    # Named client parameters are safest and work across most dialogs.
+    for key in ("cl_id", "client_id", "client", "cl"):
+        if key in kwargs:
+            found = find_client(kwargs[key])
+            if found: return found
+    # Function-specific argument positions.
+    if name in ("client_detail_dialog", "client_deals_dialog", "create_deal_dialog", "client_create_task_dialog", "client_create_deal_task_dialog", "client_tasks_dialog") and args:
+        found = find_client(args[0])
+        if found: return found
+    if name in ("deal_detail_dialog", "task_detail_dialog"):
+        for value in args:
+            found = find_client(value)
+            if found: return found
+    if name in ("client_requisites_dialog", "client_requisites_view_dialog") and args:
+        found = find_client(args[0])
+        if found: return found
+    deal_id = kwargs.get("deal_id")
+    if deal_id is None and name in ("deal_calculation_dialog", "invoice_document_dialog", "deal_report_dialog", "close_deal_dialog", "deal_create_task_dialog") and args:
+        deal_id = args[0]
+    if deal_id is not None:
+        deal = next((d for d in deals if str(d.get("id")) == str(deal_id)), None)
+        if deal:
+            found = find_client(deal.get("client_id"))
+            if found: return found
+    # Some dialog calls pass a deal object or a client object positionally.
+    for value in args:
+        found = find_client(value)
+        if found: return found
+        if isinstance(value, dict) and value.get("client_id") is not None:
+            deal = next((d for d in deals if str(d.get("id")) == str(value.get("id"))), None)
+            if deal:
+                found = find_client(deal.get("client_id"))
+                if found: return found
+    return None
+
+def _crm_workspace_client_name(client_id):
+    store = st.session_state.get("crm_store", {})
+    client = next((c for c in store.get("clients", []) if str(c.get("id")) == str(client_id)), None)
+    return str((client or {}).get("name") or "Клиент")
+
+def _crm_workspace_tab_key(entry):
+    return str(entry.get("name", "")) + "|" + repr(entry.get("signature", ""))
+
+def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
+    """Add a dialog as a tab in the current client workspace, or create one."""
+    windows = st.session_state.setdefault("_crm_windows", [])
+    active_id = st.session_state.get("_crm_active_window_id")
+    window = next((w for w in windows if w.get("id") == active_id), None)
+    if client_id:
+        # Prefer an existing window for this client, including a minimized one.
+        window = next((w for w in windows if str(w.get("client_id")) == str(client_id)), window if window and str(window.get("client_id")) == str(client_id) else None)
+    if not window:
+        client_id = client_id or None
+        window_id = "cw_" + hashlib.sha1((str(client_id or "general") + "|" + str(moscow_now().timestamp()) + "|" + str(len(windows))).encode("utf-8")).hexdigest()[:12]
+        window = {"id": window_id, "client_id": str(client_id) if client_id else None,
+                  "title": _crm_workspace_client_name(client_id) if client_id else str(entry.get("title") or "CRM"),
+                  "tabs": [], "active_tab": 0, "minimized": False}
+        windows.append(window)
+    # If a deal was opened directly, add the client as a permanent first tab.
+    if client_id and entry.get("name") != "client_detail_dialog":
+        client_entry = {"name": "client_detail_dialog", "title": "Карточка клиента", "width": "large",
+                        "args": (client_id,), "kwargs": {},
+                        "signature": (_crm_dialog_signature_value((client_id,)), _crm_dialog_signature_value({}))}
+        if not any(t.get("name") == "client_detail_dialog" and t.get("signature") == client_entry["signature"] for t in window["tabs"]):
+            window["tabs"].insert(0, client_entry)
+            if window.get("active_tab", 0) >= 0: window["active_tab"] += 1
+    key = _crm_workspace_tab_key(entry)
+    existing = next((i for i, t in enumerate(window["tabs"]) if _crm_workspace_tab_key(t) == key), None)
+    if existing is None:
+        window["tabs"].append(entry.copy())
+        existing = len(window["tabs"]) - 1
+    window["active_tab"] = existing
+    window["minimized"] = False
+    st.session_state["_crm_active_window_id"] = window["id"]
+    st.session_state["_crm_active_dialog"] = window["tabs"][existing]
+    st.session_state["_crm_dialog_requested_this_run"] = True
+    _crm_workspace_queue_save()
+
+# Workspace state is stored separately from the CRM database, per login.
+def _crm_workspace_remote_path(login):
+    safe = hashlib.sha256(str(login or "anonymous").encode("utf-8")).hexdigest()[:24]
+    return f"disk:/CRM_NE_TROGAT/workspaces/workspace_{safe}.json"
+
+def _crm_workspace_save_remote(login, payload):
+    try:
+        folder = "disk:/CRM_NE_TROGAT/workspaces"
+        requests.put(YANDEX_API_URL, params={"path": folder}, headers=yandex_headers(), timeout=5)
+        path = _crm_workspace_remote_path(login)
+        r = requests.get(f"{YANDEX_API_URL}/upload", params={"path": path, "overwrite": "true"}, headers=yandex_headers(), timeout=8)
+        if r.status_code not in (200, 201): return False
+        href = r.json().get("href")
+        if not href: return False
+        up = requests.put(href, data=payload.encode("utf-8"), timeout=10)
+        return up.status_code in (200, 201, 202)
+    except Exception:
+        return False
+
+def _crm_workspace_load_remote(login):
+    try:
+        path = _crm_workspace_remote_path(login)
+        r = requests.get(f"{YANDEX_API_URL}/download", params={"path": path}, headers=yandex_headers(), timeout=5)
+        if r.status_code != 200: return None
+        href = r.json().get("href")
+        if not href: return None
+        data = requests.get(href, timeout=8)
+        if data.status_code != 200: return None
+        obj = data.json()
+        return obj if isinstance(obj, dict) and obj.get("version") == 1 else None
+    except Exception:
+        return None
+
+_WORKSPACE_SAVE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-workspace-save")
+def _crm_workspace_queue_save():
+    try:
+        login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+        if not login: return
+        windows = st.session_state.get("_crm_windows", [])
+        safe_windows = []
+        for w in windows:
+            safe_tabs = []
+            for tab in w.get("tabs", []):
+                safe_tabs.append({k: tab.get(k) for k in ("name", "title", "width", "args", "kwargs", "signature")})
+            safe_windows.append({"id": w.get("id"), "client_id": w.get("client_id"), "title": w.get("title"),
+                                "tabs": safe_tabs, "active_tab": w.get("active_tab", 0), "minimized": bool(w.get("minimized"))})
+        payload = json.dumps({"version": 1, "windows": safe_windows, "active_window_id": st.session_state.get("_crm_active_window_id")}, ensure_ascii=False, default=str)
+        _WORKSPACE_SAVE_EXECUTOR.submit(_crm_workspace_save_remote, login, payload)
+    except Exception:
+        pass
+
+def _crm_workspace_init():
+    if st.session_state.get("_crm_workspace_initialized"):
+        return
+    st.session_state["_crm_workspace_initialized"] = True
+    login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+    if not login:
+        return
+    saved = _crm_workspace_load_remote(login)
+    if not saved: return
+    store = st.session_state.get("crm_store", {})
+    clients = {str(c.get("id")) for c in store.get("clients", [])}
+    deals = {str(d.get("id")) for d in store.get("deals", [])}
+    restored = []
+    for w in saved.get("windows", [])[:20]:
+        cid = str(w.get("client_id")) if w.get("client_id") is not None else None
+        if cid and cid not in clients: continue
+        tabs = []
+        for t in w.get("tabs", [])[:30]:
+            if t.get("name") not in _CRM_DIALOG_REGISTRY: continue
+            args = t.get("args", [])
+            if not isinstance(args, (list, tuple)): args = []
+            # Reconnect serialized entity dictionaries to the latest objects in crm_store.
+            def _rehydrate_workspace_arg(value):
+                if isinstance(value, dict):
+                    obj_id = value.get("id")
+                    if obj_id is not None:
+                        for _collection in ("clients", "deals", "users", "internal_tasks"):
+                            _match = next((x for x in store.get(_collection, []) if str(x.get("id")) == str(obj_id)), None)
+                            if _match is not None: return _match
+                        for _client in store.get("clients", []):
+                            for _task in _client.get("tasks", []) if isinstance(_client.get("tasks"), list) else []:
+                                if str(_task.get("id")) == str(obj_id): return _task
+                        for _deal in store.get("deals", []):
+                            for _task in _deal.get("tasks", []) if isinstance(_deal.get("tasks"), list) else []:
+                                if str(_task.get("id")) == str(obj_id): return _task
+                    return {k: _rehydrate_workspace_arg(v) for k, v in value.items()}
+                if isinstance(value, list): return [_rehydrate_workspace_arg(v) for v in value]
+                return value
+            args = [_rehydrate_workspace_arg(a) for a in args]
+            # Validate references that can be stale after records are removed.
+            if t.get("name") in ("client_detail_dialog", "client_deals_dialog", "create_deal_dialog", "client_tasks_dialog", "client_create_task_dialog", "client_create_deal_task_dialog") and args and str(args[0]) not in clients: continue
+            if t.get("name") in ("deal_calculation_dialog", "invoice_document_dialog", "deal_report_dialog", "close_deal_dialog") and args and str(args[0]) not in deals: continue
+            _restored_kwargs = _rehydrate_workspace_arg(t.get("kwargs", {}))
+            _restored_signature = (_crm_dialog_signature_value(tuple(args)), _crm_dialog_signature_value(_restored_kwargs))
+            tabs.append({"name": t["name"], "title": t.get("title", "CRM"), "width": t.get("width", "large"),
+                         "args": tuple(args), "kwargs": _restored_kwargs, "signature": _restored_signature})
+        if tabs:
+            restored.append({"id": w.get("id") or "cw_restored", "client_id": cid, "title": w.get("title") or (_crm_workspace_client_name(cid) if cid else "CRM"),
+                            "tabs": tabs, "active_tab": max(0, min(int(w.get("active_tab", 0) or 0), len(tabs)-1)), "minimized": bool(w.get("minimized"))})
+    st.session_state["_crm_windows"] = restored
+    active_id = saved.get("active_window_id")
+    st.session_state["_crm_active_window_id"] = active_id if any(w.get("id") == active_id and not w.get("minimized") for w in restored) else next((w.get("id") for w in restored if not w.get("minimized")), None)
+
 def _crm_dialog(title, width="large"):
     def _decorate(func):
         _CRM_DIALOG_REGISTRY[func.__name__] = {"func": func, "title": title, "width": width}
         def _request_dialog(*args, **kwargs):
-            st.session_state["_crm_dialog_requested_this_run"] = True
+            if st.session_state.get("_crm_rendering_background_dialog", False): return None
             signature = (_crm_dialog_signature_value(args), _crm_dialog_signature_value(kwargs))
-            current = st.session_state.get("_crm_active_dialog") or {}
-            # Сохраняем новые аргументы даже для уже открытого диалога, чтобы использовать
-            # актуальные записи из crm_store после сохранения/обновления.
-            st.session_state["_crm_active_dialog"] = {
-                "name": func.__name__, "title": title, "width": width,
-                "args": args, "kwargs": kwargs, "signature": signature,
-            }
-            # При переключении из одного диалога в другой мы уже находимся
-            # внутри dialog-fragment Streamlit. Перерисовываем только его,
-            # не перезапуская всю страницу CRM и списки активной вкладки.
-            if st.session_state.get("_crm_inside_dialog_host", False):
-                # st.dialog не во всех версиях Streamlit поддерживает scope="fragment".
-                # Полный rerun безопасен: активное окно хранится в _crm_active_dialog.
-                st.rerun()
+            entry = {"name": func.__name__, "title": title, "width": width, "args": args, "kwargs": kwargs, "signature": signature}
+            client_id = _crm_workspace_client_id(func.__name__, args, kwargs)
+            _crm_workspace_open_dialog(entry, client_id=client_id, from_host=bool(st.session_state.get("_crm_inside_dialog_host")))
+            if st.session_state.get("_crm_inside_dialog_host", False): st.rerun()
             return None
         _request_dialog.__name__ = func.__name__
         _request_dialog.__doc__ = func.__doc__
@@ -5064,6 +5255,7 @@ with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5075,6 +5267,7 @@ with nc2:
     if st.button(_deals_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5086,6 +5279,7 @@ with nc3:
     if st.button(_tasks_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5097,6 +5291,7 @@ with nc4:
     if st.button(_it_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
         st.session_state.active_tab = "Внутренние задачи"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5107,6 +5302,7 @@ with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5117,6 +5313,7 @@ with nc6:
     if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
         st.session_state.active_tab = "Товары и прайс"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
@@ -11197,9 +11394,11 @@ if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("ac
     _pending_reminder = st.session_state["_pending_reminder_dialog"]
     create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
 
-# Глобальная диспетчеризация дочерних окон: нужна не только на вкладке «Сделки»,
-# поскольку карточка сделки может быть открыта из другого раздела CRM.
-# Приоритет сохраняем такой же, как в диспетчере вкладки «Сделки».
+# Восстанавливаем персональное рабочее пространство после входа/перезапуска.
+_crm_workspace_init()
+
+# Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
+# действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
 if not st.session_state.get("_crm_dialog_requested_this_run", False):
     _global_req_view_state = st.session_state.get("dialog_client_requisites_view")
     _global_req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
@@ -11209,15 +11408,9 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
     if _global_req_view_state:
         client_requisites_view_dialog(_global_req_view_state.get("client_id"), bool(_global_req_view_state.get("return_to_invoice")), _global_req_view_state.get("requisite_id"))
     elif _global_req_dialog_client_id:
-        client_requisites_dialog(
-            _global_req_dialog_client_id,
-            bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)),
-        )
+        client_requisites_dialog(_global_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
     elif _global_invoice_dialog_state:
-        invoice_document_dialog(
-            _global_invoice_dialog_state.get("deal_id"),
-            _global_invoice_dialog_state.get("calc_id"),
-        )
+        invoice_document_dialog(_global_invoice_dialog_state.get("deal_id"), _global_invoice_dialog_state.get("calc_id"))
     elif _global_calc_deal_id and _global_calc_id:
         _global_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_global_calc_deal_id)), None)
         _global_calc = next((c for c in (_global_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_global_calc_id) and not c.get("deleted")), None)
@@ -11226,31 +11419,90 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
         else:
             st.session_state.pop("dialog_calculation_deal_id", None)
             st.session_state.pop("dialog_calculation_calc_id", None)
-            _active = st.session_state.get("_crm_active_dialog") or {}
-            if _active.get("name") == "deal_calculation_dialog":
+
+# Рабочая панель: один активный контент вместо множества вложенных st.dialog.
+_crm_windows = st.session_state.get("_crm_windows", [])
+_crm_active_window_id = st.session_state.get("_crm_active_window_id")
+_crm_active_window = next((w for w in _crm_windows if w.get("id") == _crm_active_window_id), None)
+if _crm_active_window and not _crm_active_window.get("minimized"):
+    st.markdown("""<style>
+    .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; top: 5vh !important; left: 50% !important; transform: translateX(-50%) !important; width: min(1180px, 94vw) !important; max-height: 88vh !important; overflow: auto !important; background: var(--background-color, white) !important; border: 1px solid rgba(120,120,120,.35) !important; border-radius: 14px !important; box-shadow: 0 18px 70px rgba(0,0,0,.30) !important; padding: 14px 18px !important; }
+    .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.28) !important; backdrop-filter: blur(2px) !important; pointer-events: none !important; }
+    .st-key-crm_workspace_window button { min-height: 2.15rem; }
+    .st-key-crm_workspace_bottom { position: fixed !important; z-index: 100010 !important; bottom: 0 !important; left: 0 !important; right: 0 !important; width: 100% !important; background: var(--secondary-background-color, #f4f4f4) !important; border-top: 1px solid rgba(120,120,120,.35) !important; padding: 5px 12px !important; }
+    </style>""", unsafe_allow_html=True)
+    with st.container(key="crm_workspace_backdrop"):
+        st.write("")
+    with st.container(key="crm_workspace_window"):
+        _head_title, _head_min, _head_close = st.columns([8, 1, 1])
+        with _head_title:
+            st.markdown(f"### { _crm_active_window.get('title', 'CRM') }")
+        with _head_min:
+            if st.button("−", key="crm_workspace_minimize", help="Свернуть окно"):
+                _crm_active_window["minimized"] = True
+                st.session_state["_crm_active_window_id"] = None
+                _crm_workspace_queue_save()
+                st.rerun()
+        with _head_close:
+            if st.button("×", key="crm_workspace_close", help="Закрыть окно и все его вкладки"):
+                st.session_state["_crm_windows"] = [w for w in _crm_windows if w.get("id") != _crm_active_window.get("id")]
                 st.session_state.pop("_crm_active_dialog", None)
-
-# Единое окно-оболочка: заголовок и ширина берутся из активного диалога.
-# Внутри отображается исходное содержимое соответствующего диалога.
-if not st.session_state.get("_crm_dialog_requested_this_run", False):
-    st.session_state.pop("_crm_active_dialog", None)
-
-_active_crm_dialog = st.session_state.get("_crm_active_dialog")
-if st.session_state.get("_crm_dialog_requested_this_run", False) and _active_crm_dialog:
-    _dialog_spec = _CRM_DIALOG_REGISTRY.get(_active_crm_dialog.get("name"))
-    if _dialog_spec:
-        def _crm_render_active_dialog():
-            _target = st.session_state.get("_crm_active_dialog")
-            if not _target:
-                return
-            _spec = _CRM_DIALOG_REGISTRY.get(_target.get("name"))
-            if not _spec:
-                return
-            st.session_state["_crm_inside_dialog_host"] = True
-            try:
-                _spec["func"](*_target.get("args", ()), **_target.get("kwargs", {}))
-            finally:
-                st.session_state["_crm_inside_dialog_host"] = False
-
-        _crm_dialog_host = st.dialog(_active_crm_dialog.get("title", "CRM"), width=_active_crm_dialog.get("width", "large"))(_crm_render_active_dialog)
-        _crm_dialog_host()
+                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                _crm_workspace_queue_save()
+                st.rerun()
+        st.divider()
+        _tabs = _crm_active_window.get("tabs", [])
+        _tab_row = st.columns(max(1, min(6, len(_tabs) + 1)))
+        for _i, _tab in enumerate(_tabs):
+            _col = _tab_row[_i % len(_tab_row)]
+            with _col:
+                _tab_title = "Карточка клиента" if _tab.get("name") == "client_detail_dialog" else _tab.get("title", _tab.get("name", "Окно"))
+                _tab_title = str(_tab_title)
+                _is_primary = _tab.get("name") == "client_detail_dialog" and _i == 0
+                _button_label = ("● " if _i == int(_crm_active_window.get("active_tab", 0)) else "") + _tab_title[:24]
+                _tab_cols = st.columns([5, 1]) if not _is_primary else [st.container()]
+                with _tab_cols[0]:
+                    if st.button(_button_label, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", use_container_width=True):
+                        _crm_active_window["active_tab"] = _i
+                        st.session_state["_crm_active_dialog"] = _tab
+                        _crm_workspace_queue_save()
+                        st.rerun()
+                if not _is_primary:
+                    with _tab_cols[1]:
+                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку"):
+                            _tabs.pop(_i)
+                            if _tabs:
+                                _crm_active_window["active_tab"] = max(0, min(int(_crm_active_window.get("active_tab", 0)), len(_tabs)-1))
+                                st.session_state["_crm_active_dialog"] = _tabs[_crm_active_window["active_tab"]]
+                            else:
+                                st.session_state["_crm_windows"] = [w for w in _crm_windows if w.get("id") != _crm_active_window.get("id")]
+                                st.session_state.pop("_crm_active_dialog", None)
+                                st.session_state["_crm_active_window_id"] = None
+                            _crm_workspace_queue_save()
+                            st.rerun()
+        st.divider()
+        _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
+        if _active_index >= 0:
+            _active_entry = _tabs[_active_index]
+            _active_spec = _CRM_DIALOG_REGISTRY.get(_active_entry.get("name"))
+            if _active_spec:
+                st.session_state["_crm_active_dialog"] = _active_entry
+                st.session_state["_crm_inside_dialog_host"] = True
+                try:
+                    _active_spec["func"](*_active_entry.get("args", ()), **_active_entry.get("kwargs", {}))
+                finally:
+                    st.session_state["_crm_inside_dialog_host"] = False
+# Нижняя панель окон доступна и при свёрнутых окнах, и при активном окне.
+if st.session_state.get("_crm_windows"):
+    with st.container(key="crm_workspace_bottom"):
+        _bottom_windows = st.session_state.get("_crm_windows", [])
+        _bottom_cols = st.columns(max(1, min(6, len(_bottom_windows))))
+        for _wi, _w in enumerate(_bottom_windows):
+            with _bottom_cols[_wi % len(_bottom_cols)]:
+                _label = str(_w.get("title") or "CRM")[:28] + (f" · {len(_w.get('tabs', []))}" if _w.get("tabs") else "")
+                _label = ("▣ " if _w.get("minimized") else "▰ ") + _label
+                if st.button(_label, key=f"crm_workspace_restore_{_w.get('id')}", use_container_width=True):
+                    _w["minimized"] = False
+                    st.session_state["_crm_active_window_id"] = _w.get("id")
+                    _crm_workspace_queue_save()
+                    st.rerun()
