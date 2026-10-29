@@ -11535,23 +11535,89 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     st.markdown("""<style>
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
-    /* Tabs: compact, left-aligned labels like Tasks; close control is visually inside each tab. */
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] { gap:0 !important; align-items:stretch !important; justify-content:flex-start !important; border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0 !important; }
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="column"] { flex:0 0 auto !important; width:auto !important; min-width:0 !important; }
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="column"] > div { width:auto !important; }
-    .st-key-crm_workspace_tabbar .stButton > button { box-sizing:border-box !important; width:auto !important; min-width:0 !important; min-height:39px !important; border:0 !important; border-bottom:2px solid transparent !important; border-radius:0 !important; padding:0.55rem 1.05rem !important; color:#65758B !important; font-weight:500 !important; background:transparent !important; box-shadow:none !important; white-space:nowrap !important; }
-    .st-key-crm_workspace_tabbar [data-testid="stBaseButton-primary"] button { color:#BC1661 !important; border-bottom:2px solid #BC1661 !important; background:transparent !important; }
-    .st-key-crm_workspace_tabbar button:hover { color:#BC1661 !important; background:rgba(188,22,97,0.035) !important; }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] { position:relative !important; display:inline-block !important; width:max-content !important; min-width:0 !important; padding-right:22px !important; }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child { position:absolute !important; right:0 !important; top:0 !important; width:26px !important; z-index:3 !important; }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button { width:26px !important; min-width:26px !important; padding:0.55rem 0.2rem !important; color:#8A94A3 !important; border-bottom:2px solid transparent !important; }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button { padding-right:1.8rem !important; }
+    /* Tabs: size to their text instead of sharing the screen width. */
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
+        display:flex !important; flex-wrap:nowrap !important; gap:0 !important;
+        align-items:stretch !important; justify-content:flex-start !important;
+        border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0 !important;
+        width:100% !important;
+    }
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="column"],
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex:0 0 auto !important; width:fit-content !important;
+        min-width:fit-content !important; max-width:none !important;
+    }
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child,
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+        margin-left:auto !important; min-width:42px !important; width:42px !important;
+        flex:0 0 42px !important;
+    }
+    .st-key-crm_workspace_tabbar [data-testid="column"] > div,
+    .st-key-crm_workspace_tabbar [data-testid="stColumn"] > div,
+    .st-key-crm_workspace_tabbar [data-testid="column"] [data-testid="stVerticalBlock"],
+    .st-key-crm_workspace_tabbar [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
+        width:fit-content !important; min-width:fit-content !important;
+    }
+    .st-key-crm_workspace_tabbar .stButton { width:fit-content !important; min-width:fit-content !important; }
+    .st-key-crm_workspace_tabbar .stButton > button {
+        box-sizing:border-box !important; display:inline-flex !important;
+        width:fit-content !important; min-width:fit-content !important; max-width:none !important;
+        min-height:40px !important; align-items:center !important; justify-content:center !important;
+        border:0 !important; border-bottom:2px solid transparent !important;
+        border-radius:0 !important; padding:0.55rem 1rem !important;
+        color:#65758B !important; font-weight:500 !important;
+        background:transparent !important; box-shadow:none !important;
+        white-space:nowrap !important; writing-mode:horizontal-tb !important;
+        word-break:keep-all !important; overflow-wrap:normal !important;
+    }
+    .st-key-crm_workspace_tabbar .stButton > button p,
+    .st-key-crm_workspace_tabbar .stButton > button span {
+        white-space:nowrap !important; word-break:keep-all !important;
+        overflow-wrap:normal !important; writing-mode:horizontal-tb !important;
+    }
+    .st-key-crm_workspace_tabbar [data-testid="stBaseButton-primary"] button {
+        color:#BC1661 !important; border-bottom:2px solid #BC1661 !important;
+        background:transparent !important;
+    }
+    .st-key-crm_workspace_tabbar button:hover {
+        color:#BC1661 !important; background:rgba(188,22,97,0.035) !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] {
+        position:relative !important; display:inline-block !important;
+        width:fit-content !important; min-width:fit-content !important;
+        padding-right:27px !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child {
+        position:absolute !important; right:0 !important; top:0 !important;
+        width:27px !important; min-width:27px !important; z-index:3 !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button {
+        width:27px !important; min-width:27px !important; max-width:27px !important;
+        padding:0.55rem 0.2rem !important; color:#8A94A3 !important;
+        border-bottom:2px solid transparent !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button {
+        padding-right:2rem !important;
+    }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_content [class*="st-key-close_row_"] { display:none !important; }
-    /* Exactly one vertical divider at the screen center; never border every nested column. */
+    /* One center divider and a clear 16px gutter on each side. */
     .st-key-crm_workspace_content { position:relative !important; }
-    .st-key-crm_workspace_content:before { content:"" !important; position:absolute !important; z-index:2 !important; pointer-events:none !important; top:0 !important; bottom:0 !important; left:50% !important; width:0 !important; border-left:1px solid #D5DCE5 !important; }
+    .st-key-crm_workspace_content:before {
+        content:"" !important; position:absolute !important; z-index:5 !important;
+        pointer-events:none !important; top:0 !important; bottom:0 !important;
+        left:50% !important; width:0 !important;
+        border-left:1px solid #D5DCE5 !important;
+    }
+    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child,
+    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
+        padding-right:16px !important; box-sizing:border-box !important;
+    }
+    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child,
+    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+        padding-left:16px !important; box-sizing:border-box !important;
+    }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_workspace_backdrop"):
         st.write("")
