@@ -1004,10 +1004,21 @@ _CRM_LOG_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
 def _crm_log(event, details=None, exc=None, remote=True):
     """Записывает безопасное событие локально и, для важных событий, в журнал на Яндекс Диске."""
     try:
+        # Фоновый поток синхронизации не имеет ScriptRunContext.
+        # Не обращаемся к st.session_state из фонового потока: это вызывает
+        # предупреждения missing ScriptRunContext и может приводить к гонкам.
+        log_user = "system"
+        try:
+            from streamlit.runtime.scriptrunner import get_script_run_ctx
+            _log_ctx = get_script_run_ctx(suppress_warning=True)
+            if _log_ctx is not None:
+                log_user = str(st.session_state.get("user_login", "system") or "system")[:80]
+        except Exception:
+            log_user = "system"
         record = {
             "time_moscow": now_str(),
             "event": str(event)[:100],
-            "user": str(st.session_state.get("user_login", "system") or "system")[:80],
+            "user": log_user,
         }
         if isinstance(details, dict):
             # Не сохраняем значения ключей, которые могут содержать секреты/персональные данные.
