@@ -3236,6 +3236,46 @@ def _three_way_merge(base, ours, latest, path="", conflicts=None):
 
 _save_lock = threading.Lock()
 
+# JSON-файл — переносимое зеркало SQLite, а не основная база. Его запись и fsync
+# не должны блокировать обработку нажатия кнопки в основном потоке Streamlit.
+# Очередь хранит только последний снимок, чтобы быстрые последовательные сохранения
+# не создавали длинную очередь файловых операций.
+_json_mirror_lock = threading.Lock()
+_json_mirror_pending_snapshot = None
+_json_mirror_worker_running = False
+_JSON_MIRROR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-json-mirror")
+
+def _write_json_mirror(snapshot):
+    tmp_name = FILE_NAME + ".tmp"
+    with open(tmp_name, "w", encoding="utf-8") as f:
+        f.write(snapshot)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_name, FILE_NAME)
+
+def _json_mirror_worker():
+    global _json_mirror_pending_snapshot, _json_mirror_worker_running
+    while True:
+        with _json_mirror_lock:
+            snapshot = _json_mirror_pending_snapshot
+            _json_mirror_pending_snapshot = None
+            if snapshot is None:
+                _json_mirror_worker_running = False
+                return
+        try:
+            _write_json_mirror(snapshot)
+        except Exception as exc:
+            # Ошибка зеркала не отменяет подтверждённую транзакцию SQLite.
+            print(f"CRM JSON mirror write failed: {type(exc).__name__}: {str(exc)[:300]}")
+
+def _queue_json_mirror(snapshot):
+    global _json_mirror_pending_snapshot, _json_mirror_worker_running
+    with _json_mirror_lock:
+        _json_mirror_pending_snapshot = snapshot
+        if not _json_mirror_worker_running:
+            _json_mirror_worker_running = True
+            _JSON_MIRROR_EXECUTOR.submit(_json_mirror_worker)
+
 def _download_disk_data():
     """Чтение JSON-базы с Яндекс Диска отключено: резервные копии только записываются."""
     return None
@@ -3422,19 +3462,9 @@ def save_data(data):
 
             _queue_yandex_snapshot(snapshot)
 
-            # JSON — только переносимое зеркало. Основная подтверждённая запись уже в SQLite.
-            try:
-                tmp_name = FILE_NAME + ".tmp"
-                with open(tmp_name, "w", encoding="utf-8") as f:
-                    f.write(snapshot)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_name, FILE_NAME)
-            except Exception as mirror_exc:
-                try:
-                    st.sidebar.warning(f"Основная база сохранена, но JSON-копия не обновлена: {mirror_exc}")
-                except Exception:
-                    pass
+            # JSON — только переносимое зеркало; запись большого файла и fsync
+            # выполняются в фоне. SQLite уже содержит подтверждённую транзакцию.
+            _queue_json_mirror(snapshot)
 
             if conflicts:
                 try:
