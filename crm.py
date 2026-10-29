@@ -11435,8 +11435,7 @@ _crm_workspace_init()
 
 # Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
 # действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
-_crm_workspace_control_action = bool(st.session_state.pop("_crm_workspace_control_action", False))
-if not st.session_state.get("_crm_dialog_requested_this_run", False) and not _crm_workspace_control_action:
+if not st.session_state.get("_crm_dialog_requested_this_run", False):
     _global_req_view_state = st.session_state.get("dialog_client_requisites_view")
     _global_req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
     _global_invoice_dialog_state = st.session_state.get("dialog_invoice_request")
@@ -11461,46 +11460,6 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False) and not _cr
 _crm_windows = st.session_state.get("_crm_windows", [])
 _crm_active_window_id = st.session_state.get("_crm_active_window_id")
 _crm_active_window = next((w for w in _crm_windows if w.get("id") == _crm_active_window_id), None)
-
-# Запросы закрытия подтверждаются отдельно, чтобы не терять потенциально несохранённые правки.
-_pending_close = st.session_state.get("_crm_pending_close")
-if _pending_close:
-    _pending_window = next((w for w in _crm_windows if w.get("id") == _pending_close.get("window_id")), None)
-    if _pending_window:
-        st.markdown("""<style>
-        div[data-testid="stAlert"], .st-key-crm_confirm_close_yes, .st-key-crm_confirm_close_no { position: relative; z-index: 100020 !important; }
-        </style>""", unsafe_allow_html=True)
-        st.warning("Закрыть? Если в форме есть несохранённые изменения, они могут быть потеряны.")
-        _confirm_col, _cancel_col = st.columns([1, 1])
-        with _confirm_col:
-            if st.button("Закрыть без сохранения", key="crm_confirm_close_yes", type="primary", use_container_width=True):
-                if _pending_close.get("kind") == "window":
-                    st.session_state["_crm_windows"] = [w for w in _crm_windows if w.get("id") != _pending_window.get("id")]
-                    st.session_state.pop("_crm_active_dialog", None)
-                    st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
-                else:
-                    _idx = int(_pending_close.get("tab_index", -1))
-                    _ptabs = _pending_window.get("tabs", [])
-                    if 0 <= _idx < len(_ptabs):
-                        # The first client-card tab is permanent and cannot be closed individually.
-                        if not (_idx == 0 and _ptabs[_idx].get("name") == "client_detail_dialog"):
-                            _ptabs.pop(_idx)
-                    if not _ptabs:
-                        st.session_state["_crm_windows"] = [w for w in _crm_windows if w.get("id") != _pending_window.get("id")]
-                        st.session_state["_crm_active_window_id"] = None
-                        st.session_state.pop("_crm_active_dialog", None)
-                    else:
-                        _pending_window["active_tab"] = max(0, min(int(_pending_window.get("active_tab", 0) or 0), len(_ptabs)-1))
-                        st.session_state["_crm_active_dialog"] = _ptabs[_pending_window["active_tab"]]
-                st.session_state.pop("_crm_pending_close", None)
-                st.session_state["_crm_workspace_control_action"] = True
-                _crm_workspace_queue_save()
-                st.rerun()
-        with _cancel_col:
-            if st.button("Отмена", key="crm_confirm_close_no", use_container_width=True):
-                st.session_state.pop("_crm_pending_close", None)
-                st.session_state["_crm_workspace_control_action"] = True
-                st.rerun()
 
 _crm_windows = st.session_state.get("_crm_windows", [])
 _crm_active_window_id = st.session_state.get("_crm_active_window_id")
@@ -11551,13 +11510,22 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                 if _is_primary:
                     st.markdown('<div style="height:34px"></div>', unsafe_allow_html=True)
                 elif st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку", use_container_width=True):
-                    st.session_state["_crm_workspace_control_action"] = True
-                    st.session_state["_crm_pending_close"] = {"kind": "tab", "window_id": _crm_active_window["id"], "tab_index": _i}
+                    _tabs_now = _crm_active_window.get("tabs", [])
+                    if 0 <= _i < len(_tabs_now) and not (_i == 0 and _tabs_now[_i].get("name") == "client_detail_dialog"):
+                        _tabs_now.pop(_i)
+                    if not _tabs_now:
+                        st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
+                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                        st.session_state.pop("_crm_active_dialog", None)
+                    else:
+                        _new_active = min(_active_index, len(_tabs_now) - 1)
+                        _crm_active_window["active_tab"] = _new_active
+                        st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
+                    _crm_workspace_queue_save()
                     st.rerun()
             _col_idx += 1
         with _tab_cols[_col_idx]:
             if st.button("−", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно", use_container_width=True):
-                st.session_state["_crm_workspace_control_action"] = True
                 _crm_active_window["minimized"] = True
                 st.session_state["_crm_active_window_id"] = None
                 _crm_workspace_queue_save()
@@ -11565,8 +11533,10 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         _col_idx += 1
         with _tab_cols[_col_idx]:
             if st.button("×", key=f"crm_workspace_close_{_crm_active_window['id']}", help="Закрыть окно и все вкладки", use_container_width=True):
-                st.session_state["_crm_workspace_control_action"] = True
-                st.session_state["_crm_pending_close"] = {"kind": "window", "window_id": _crm_active_window["id"]}
+                st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
+                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                st.session_state.pop("_crm_active_dialog", None)
+                _crm_workspace_queue_save()
                 st.rerun()
 
         # Render only the selected tab's content. This is important for memory and rerun speed.
@@ -11601,7 +11571,10 @@ if st.session_state.get("_crm_windows"):
             _bc += 1
             with _bottom_cols[_bc]:
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_w.get('id')}", help="Закрыть окно", use_container_width=True):
-                    st.session_state["_crm_workspace_control_action"] = True
-                    st.session_state["_crm_pending_close"] = {"kind": "window", "window_id": _w.get("id")}
+                    st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
+                    if st.session_state.get("_crm_active_window_id") == _w.get("id"):
+                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                        st.session_state.pop("_crm_active_dialog", None)
+                    _crm_workspace_queue_save()
                     st.rerun()
             _bc += 1
