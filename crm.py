@@ -1689,9 +1689,11 @@ def _crm_dialog(title, width="large"):
                 "name": func.__name__, "title": title, "width": width,
                 "args": args, "kwargs": kwargs, "signature": signature,
             }
-            # Универсально сохраняем родительское окно при открытии дочернего.
-            if (st.session_state.get("_crm_inside_dialog_host", False)
-                    and not st.session_state.get("_crm_rendering_background_dialog", False)
+            # Сохраняем родительское окно при любом переходе на другое окно.
+            # Диспетчер Streamlit часто вызывает дочерний диалог уже после rerun,
+            # то есть вне тела st.dialog; прежняя проверка _crm_inside_dialog_host
+            # приводила к пустому стеку и отсутствию кнопки «Назад».
+            if (not st.session_state.get("_crm_rendering_background_dialog", False)
                     and current
                     and (current.get("name") != func.__name__ or current.get("signature") != signature)):
                 stack = st.session_state.setdefault("_crm_modal_stack", [])
