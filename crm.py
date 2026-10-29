@@ -5342,6 +5342,49 @@ _new_it_count = sum(1 for it in st.session_state.crm_store.get("internal_tasks",
 # Reset modal request tracking before any shared UI can request a dialog.
 st.session_state["_crm_dialog_requested_this_run"] = False
 
+def _crm_workspace_clear_legacy_dialog_markers():
+    # Closing a workspace item must not let legacy dialog flags recreate it on rerun.
+    for _key in list(st.session_state.keys()):
+        if str(_key).startswith("dialog_") or str(_key).startswith("_open_created_"):
+            st.session_state.pop(_key, None)
+    st.session_state["_crm_dialog_requested_this_run"] = True
+
+def _crm_workspace_render_bottom_panel():
+    _bottom_windows = st.session_state.get("_crm_windows", [])
+    if not _bottom_windows:
+        return
+    st.markdown("""<style>
+    .st-key-crm_workspace_bottom { background:#202124 !important; border:1px solid #3c4043 !important; border-radius:10px !important; padding:7px 9px !important; margin:8px 0 12px 0 !important; box-sizing:border-box !important; }
+    .st-key-crm_workspace_bottom [data-testid="stHorizontalBlock"] { gap:5px !important; }
+    .st-key-crm_workspace_bottom .stButton > button { min-height:32px !important; border-radius:7px !important; background:#303134 !important; color:#f1f3f4 !important; border:1px solid #5f6368 !important; padding:4px 10px !important; font-size:12px !important; }
+    .st-key-crm_workspace_bottom .stButton > button:hover { background:#45464a !important; }
+    </style>""", unsafe_allow_html=True)
+    with st.container(key="crm_workspace_bottom"):
+        _bottom_cols_spec = []
+        for _ in _bottom_windows:
+            _bottom_cols_spec.extend([5, 0.7])
+        _bottom_cols = st.columns(_bottom_cols_spec, gap="small") if _bottom_cols_spec else []
+        _bc = 0
+        for _w in list(_bottom_windows):
+            _label = str(_w.get("title") or "CRM")[:24] + (f" · {len(_w.get('tabs', []))}" if _w.get("tabs") else "")
+            _label = ("▣ " if _w.get("minimized") else "● ") + _label
+            with _bottom_cols[_bc]:
+                if st.button(_label, key=f"crm_workspace_restore_{_w.get('id')}", type="primary" if not _w.get("minimized") else "secondary", use_container_width=True, help="Переключиться в окно"):
+                    _w["minimized"] = False
+                    st.session_state["_crm_active_window_id"] = _w.get("id")
+                    st.rerun()
+            _bc += 1
+            with _bottom_cols[_bc]:
+                if st.button("×", key=f"crm_workspace_taskbar_close_{_w.get('id')}", help="Закрыть окно", use_container_width=True):
+                    st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
+                    if st.session_state.get("_crm_active_window_id") == _w.get("id"):
+                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                        st.session_state.pop("_crm_active_dialog", None)
+                    _crm_workspace_clear_legacy_dialog_markers()
+                    _crm_workspace_queue_save()
+                    st.rerun()
+            _bc += 1
+
 nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
@@ -5411,6 +5454,12 @@ with nc6:
         st.session_state.pop("_open_created_deal", None)
         st.rerun()
 st.markdown("---")
+
+# На главном экране панель окон расположена сразу под навигацией CRM.
+_crm_nav_active_id = st.session_state.get("_crm_active_window_id")
+_crm_nav_active_window = next((w for w in st.session_state.get("_crm_windows", []) if w.get("id") == _crm_nav_active_id), None)
+if not _crm_nav_active_window or _crm_nav_active_window.get("minimized"):
+    _crm_workspace_render_bottom_panel()
 
 # Toast при загрузке если есть непрочитанные
 _unread_count = get_unread_count()
@@ -11534,40 +11583,32 @@ _crm_active_window_id = st.session_state.get("_crm_active_window_id")
 _crm_active_window = next((w for w in _crm_windows if w.get("id") == _crm_active_window_id), None)
 if _crm_active_window and not _crm_active_window.get("minimized"):
     st.markdown("""<style>
-    /* Full-screen app workspace; no title bar and no separators. */
-    .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 0 52px 0 !important; }
+    .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
     .st-key-crm_workspace_window > div { gap: 0 !important; }
-    .crm-workspace-tabs { display:flex; align-items:stretch; width:100%; min-height:46px; background:#e9edf2; border-bottom:0; padding:5px 8px 0 8px; gap:4px; box-sizing:border-box; }
-    .st-key-crm_workspace_window [data-testid="stHorizontalBlock"] { gap: 3px !important; }
-    .st-key-crm_workspace_window .stButton > button { min-height:34px !important; border-radius:8px 8px 0 0 !important; border:1px solid transparent !important; box-shadow:none !important; font-size:13px !important; font-weight:500 !important; padding:4px 9px !important; white-space:nowrap !important; }
-    .st-key-crm_workspace_window .stButton > button[kind="secondary"] { background:#e9edf2 !important; color:#3c4043 !important; }
-    .st-key-crm_workspace_window .stButton > button[kind="secondary"]:hover { background:#dfe4ea !important; }
-    .st-key-crm_workspace_window .stButton > button[kind="primary"] { background:#fff !important; color:#202124 !important; border-color:#d8dde5 !important; border-bottom-color:#fff !important; }
-    .st-key-crm_workspace_bottom { position: fixed !important; z-index: 100010 !important; bottom: 0 !important; left: 0 !important; right: 0 !important; width: 100vw !important; max-width:100vw !important; background: #202124 !important; border-top: 1px solid #3c4043 !important; padding: 5px 10px !important; box-sizing:border-box !important; }
-    .st-key-crm_workspace_bottom [data-testid="stHorizontalBlock"] { gap:5px !important; }
-    .st-key-crm_workspace_bottom .stButton > button { min-height:32px !important; border-radius:7px !important; background:#303134 !important; color:#f1f3f4 !important; border:1px solid #5f6368 !important; padding:4px 10px !important; font-size:12px !important; }
-    .st-key-crm_workspace_bottom .stButton > button:hover { background:#45464a !important; }
-    /* Remove old dialog title/divider remnants inside the new workspace. */
+    .st-key-crm_workspace_window [data-testid="stHorizontalBlock"] { gap: 0.35rem !important; align-items: end !important; }
+    .st-key-crm_workspace_window .stButton > button { min-height:39px !important; border-radius:9px 9px 0 0 !important; border:1px solid #E0E6EF !important; box-shadow:none !important; font-size:13px !important; font-weight:600 !important; padding:6px 10px !important; white-space:nowrap !important; }
+    .st-key-crm_workspace_window .stButton > button[kind="secondary"] { background:rgba(255,255,255,0.55) !important; color:#65758B !important; }
+    .st-key-crm_workspace_window .stButton > button[kind="secondary"]:hover { background:#f4f6fa !important; }
+    .st-key-crm_workspace_window .stButton > button[kind="primary"] { background:rgba(188,22,97,0.055) !important; color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
+    .st-key-crm_workspace_window .crm-workspace-tab-close .stButton > button { min-width:30px !important; padding:6px 5px !important; color:#BC1661 !important; border-left:0 !important; }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_workspace_backdrop"):
         st.write("")
     with st.container(key="crm_workspace_window"):
         _tabs = _crm_active_window.get("tabs", [])
         _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
-        # Browser-like tabs: label and close control are adjacent; window controls sit at the right.
         _tab_count = len(_tabs)
         _tab_cols_spec = []
         for _ in range(_tab_count):
-            _tab_cols_spec.extend([5, 0.65])
-        _tab_cols_spec.extend([0.75, 0.75])
+            _tab_cols_spec.extend([5, 0.48])
+        _tab_cols_spec.extend([0.55, 0.55])
         _tab_cols = st.columns(_tab_cols_spec, gap="small") if _tab_cols_spec else []
         _col_idx = 0
         for _i, _tab in enumerate(_tabs):
             _tab_title = "Клиент" if _tab.get("name") == "client_detail_dialog" else str(_tab.get("title", _tab.get("name", "Окно")))
             _tab_title = _tab_title.replace("###", "")[:34]
-            _is_primary = _tab.get("name") == "client_detail_dialog" and _i == 0
             with _tab_cols[_col_idx]:
                 if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", use_container_width=True, help=_tab_title):
                     _crm_active_window["active_tab"] = _i
@@ -11575,26 +11616,22 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                     st.rerun()
             _col_idx += 1
             with _tab_cols[_col_idx]:
-                if _is_primary:
-                    st.markdown('<div style="height:34px"></div>', unsafe_allow_html=True)
-                elif st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку", use_container_width=True):
+                if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку", use_container_width=True):
                     _tabs_now = _crm_active_window.get("tabs", [])
-                    if 0 <= _i < len(_tabs_now) and not (_i == 0 and _tabs_now[_i].get("name") == "client_detail_dialog"):
+                    if 0 <= _i < len(_tabs_now):
                         _tabs_now.pop(_i)
                     if not _tabs_now:
                         st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
                         st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
                         st.session_state.pop("_crm_active_dialog", None)
                     else:
-                        if _i < _active_index:
-                            _new_active = _active_index - 1
-                        elif _i == _active_index:
-                            _new_active = min(_i, len(_tabs_now) - 1)
-                        else:
-                            _new_active = _active_index
+                        if _i < _active_index: _new_active = _active_index - 1
+                        elif _i == _active_index: _new_active = min(_i, len(_tabs_now) - 1)
+                        else: _new_active = _active_index
                         _new_active = max(0, min(_new_active, len(_tabs_now) - 1))
                         _crm_active_window["active_tab"] = _new_active
                         st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
+                    _crm_workspace_clear_legacy_dialog_markers()
                     _crm_workspace_queue_save()
                     st.rerun()
             _col_idx += 1
@@ -11610,10 +11647,11 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                 st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
                 st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
                 st.session_state.pop("_crm_active_dialog", None)
+                _crm_workspace_clear_legacy_dialog_markers()
                 _crm_workspace_queue_save()
                 st.rerun()
 
-        # Render only the selected tab's content. This is important for memory and rerun speed.
+        # Render selected tab content, then the workspace switcher naturally at the bottom.
         if _active_index >= 0:
             _active_entry = _tabs[_active_index]
             _active_spec = _CRM_DIALOG_REGISTRY.get(_active_entry.get("name"))
@@ -11624,31 +11662,8 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                     _active_spec["func"](*_active_entry.get("args", ()), **_active_entry.get("kwargs", {}))
                 finally:
                     st.session_state["_crm_inside_dialog_host"] = False
+        _crm_workspace_render_bottom_panel()
 
-# Fixed taskbar: rendered even when no window is active, at the bottom of the viewport.
-if st.session_state.get("_crm_windows"):
-    with st.container(key="crm_workspace_bottom"):
-        _bottom_windows = st.session_state.get("_crm_windows", [])
-        _bottom_cols_spec = []
-        for _ in _bottom_windows:
-            _bottom_cols_spec.extend([5, 0.7])
-        _bottom_cols = st.columns(_bottom_cols_spec, gap="small") if _bottom_cols_spec else []
-        _bc = 0
-        for _wi, _w in enumerate(_bottom_windows):
-            _label = str(_w.get("title") or "CRM")[:24] + (f" · {len(_w.get('tabs', []))}" if _w.get("tabs") else "")
-            _label = ("▣ " if _w.get("minimized") else "● ") + _label
-            with _bottom_cols[_bc]:
-                if st.button(_label, key=f"crm_workspace_restore_{_w.get('id')}", type="primary" if not _w.get("minimized") else "secondary", use_container_width=True, help="Переключиться в окно"):
-                    _w["minimized"] = False
-                    st.session_state["_crm_active_window_id"] = _w.get("id")
-                    st.rerun()
-            _bc += 1
-            with _bottom_cols[_bc]:
-                if st.button("×", key=f"crm_workspace_taskbar_close_{_w.get('id')}", help="Закрыть окно", use_container_width=True):
-                    st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
-                    if st.session_state.get("_crm_active_window_id") == _w.get("id"):
-                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
-                        st.session_state.pop("_crm_active_dialog", None)
-                    _crm_workspace_queue_save()
-                    st.rerun()
-            _bc += 1
+# When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
+
+# Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
