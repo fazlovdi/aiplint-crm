@@ -1893,12 +1893,29 @@ def _crm_dialog(title, width="large"):
     def _decorate(func):
         _CRM_DIALOG_REGISTRY[func.__name__] = {"func": func, "title": title, "width": width}
         def _request_dialog(*args, **kwargs):
-            if st.session_state.get("_crm_rendering_background_dialog", False): return None
+            if st.session_state.get("_crm_rendering_background_dialog", False):
+                return None
+
             signature = (_crm_dialog_signature_value(args), _crm_dialog_signature_value(kwargs))
-            entry = {"name": func.__name__, "title": title, "width": width, "args": args, "kwargs": kwargs, "signature": signature}
+            entry = {"name": func.__name__, "title": title, "width": width,
+                     "args": args, "kwargs": kwargs, "signature": signature}
+            inside_host = bool(st.session_state.get("_crm_inside_dialog_host", False))
+
+            # A legacy dispatcher may request the same dialog again on every rerun.
+            # If this exact dialog is already the active tab, do not rewrite workspace
+            # state, queue another remote save, or trigger another rerun.
+            active = st.session_state.get("_crm_active_dialog") or {}
+            same_dialog = (
+                active.get("name") == entry["name"]
+                and active.get("signature") == entry["signature"]
+            )
+            if inside_host and same_dialog:
+                return None
+
             client_id = _crm_workspace_client_id(func.__name__, args, kwargs)
-            _crm_workspace_open_dialog(entry, client_id=client_id, from_host=bool(st.session_state.get("_crm_inside_dialog_host")))
-            if st.session_state.get("_crm_inside_dialog_host", False): st.rerun()
+            _crm_workspace_open_dialog(entry, client_id=client_id, from_host=inside_host)
+            if inside_host:
+                st.rerun()
             return None
         _request_dialog.__name__ = func.__name__
         _request_dialog.__doc__ = func.__doc__
@@ -5274,6 +5291,7 @@ with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5285,6 +5303,7 @@ with nc2:
     if st.button(_deals_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5296,6 +5315,7 @@ with nc3:
     if st.button(_tasks_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5307,6 +5327,7 @@ with nc4:
     if st.button(_it_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
         st.session_state.active_tab = "Внутренние задачи"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5317,6 +5338,7 @@ with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5327,6 +5349,7 @@ with nc6:
     if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
         st.session_state.active_tab = "Товары и прайс"
         st.session_state["_dialog_return_stack"] = []
+        st.session_state["_crm_modal_stack"] = []
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
@@ -5774,6 +5797,14 @@ def render_deal_standalone(d, cl, cu):
             st.rerun()
 
 
+def _deal_items_total(items):
+    total = 0.0
+    for item in items or []:
+        qty = max(0.0, float(item.get("quantity", 0) or 0))
+        price = max(0.0, float(item.get("unit_price", 0) or 0))
+        discount = min(100.0, max(0.0, float(item.get("discount", 0) or 0)))
+        total += qty * price * (1 - discount / 100.0)
+    return round(total, 2)
 
 
 def _deal_calc_total(calc):
