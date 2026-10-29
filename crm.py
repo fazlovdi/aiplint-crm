@@ -1004,21 +1004,10 @@ _CRM_LOG_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
 def _crm_log(event, details=None, exc=None, remote=True):
     """Записывает безопасное событие локально и, для важных событий, в журнал на Яндекс Диске."""
     try:
-        # Фоновый поток синхронизации не имеет ScriptRunContext.
-        # Не обращаемся к st.session_state из фонового потока: это вызывает
-        # предупреждения missing ScriptRunContext и может приводить к гонкам.
-        log_user = "system"
-        try:
-            from streamlit.runtime.scriptrunner import get_script_run_ctx
-            _log_ctx = get_script_run_ctx(suppress_warning=True)
-            if _log_ctx is not None:
-                log_user = str(st.session_state.get("user_login", "system") or "system")[:80]
-        except Exception:
-            log_user = "system"
         record = {
             "time_moscow": now_str(),
             "event": str(event)[:100],
-            "user": log_user,
+            "user": str(st.session_state.get("user_login", "system") or "system")[:80],
         }
         if isinstance(details, dict):
             # Не сохраняем значения ключей, которые могут содержать секреты/персональные данные.
@@ -5285,7 +5274,6 @@ with nc1:
     if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
         st.session_state.active_tab = "Клиенты"
         st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5297,7 +5285,6 @@ with nc2:
     if st.button(_deals_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
         st.session_state.active_tab = "Сделки"
         st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5309,7 +5296,6 @@ with nc3:
     if st.button(_tasks_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
         st.session_state.active_tab = "Задачи"
         st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5321,7 +5307,6 @@ with nc4:
     if st.button(_it_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
         st.session_state.active_tab = "Внутренние задачи"
         st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5332,7 +5317,6 @@ with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
         st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
         st.session_state.expanded_task_key = None
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("_open_created_task", None)
@@ -5343,7 +5327,6 @@ with nc6:
     if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
         st.session_state.active_tab = "Товары и прайс"
         st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
         st.session_state.pop("dialog_task_key", None)
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
@@ -5791,14 +5774,6 @@ def render_deal_standalone(d, cl, cu):
             st.rerun()
 
 
-def _deal_items_total(items):
-    total = 0.0
-    for item in items or []:
-        qty = max(0.0, float(item.get("quantity", 0) or 0))
-        price = max(0.0, float(item.get("unit_price", 0) or 0))
-        discount = min(100.0, max(0.0, float(item.get("discount", 0) or 0)))
-        total += qty * price * (1 - discount / 100.0)
-    return round(total, 2)
 
 
 def _deal_calc_total(calc):
