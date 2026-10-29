@@ -2358,18 +2358,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
                         st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
-                    # Для задачи, созданной непосредственно по клиенту, ссылка на карточку
-                    # клиента расположена и оформлена так же, как ссылка на сделку выше.
-                    if cl:
-                        _client_link_key = f"task_client_link_{key_prefix}"
-                        if st.button(f"{cl.get('name', 'Клиент')}", key=_client_link_key, type="secondary"):
-                            _push_dialog_return()
-                            st.session_state.active_tab = "Клиенты"
-                            st.session_state["dialog_client_key"] = cl.get("id")
-                            st.session_state.pop("dialog_task_key", None)
-                            st.session_state.pop("_open_created_task", None)
-                            st.session_state["_in_dialog"] = False
-                            st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
                         if _tp not in ("Отправить заказ", "Отправить образцы"):
@@ -8537,18 +8525,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             if d.get("deal_title"):
                 st.markdown(f"**Тема:** {d['deal_title']}")
             st.markdown(format_created_date(d), unsafe_allow_html=True)
-            if cl:
-                _client_link_col, _client_link_spacer = st.columns([3, 5])
-                with _client_link_col:
-                    if st.button(f"Клиент: {cl.get('name', '—')}", key=f"deal_client_link_{deal_id}", type="secondary"):
-                        # Открываем карточку клиента поверх логики навигации:
-                        # сделка сохраняется в стеке и будет восстановлена при закрытии клиента.
-                        _push_dialog_return()
-                        st.session_state["active_tab"] = "Клиенты"
-                        st.session_state["dialog_client_key"] = cl.get("id")
-                        st.rerun()
-            else:
-                st.markdown("**Клиент:** —")
+            st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
             st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
             ps = d.get("payment_status", "Не оплачено")
             mgr_options_dd = get_managers_list()
@@ -9381,32 +9358,6 @@ def task_detail_dialog(task, cl, d, key_prefix):
     _is_editing = st.session_state.get(f"show_edit_task_{key_prefix}", False) or st.session_state.get(f"show_edit_dl_{key_prefix}", False)
 
     # Close button — right-aligned row under the header
-    _close_btn_key = f"close_btn_{key_prefix}"
-    _close_css_key = f"close_row_{key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_close_css_key):
-        _print_col, _spacer_col, _close_col = st.columns([1, 20, 1])
-        with _print_col:
-            render_print_button(task, cl, task.get("type", "Связаться"), format_date(task.get("deadline", "")), f"td_{key_prefix}_top")
-        with _close_col:
-            if st.button("\u2715", key=_close_btn_key, use_container_width=True):
-                if _is_editing and not _show_close_warning:
-                    st.session_state[f"_show_close_warning_{key_prefix}"] = True
-                    st.rerun()
-                else:
-                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state[f"show_edit_task_{key_prefix}"] = False
-                    st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_task_key", None)
-                    st.session_state.pop("dialog_task_number", None)
-                    st.session_state.pop("dialog_task_client_id", None)
-                    st.session_state.pop("dialog_task_deal_id", None)
-                    st.session_state.pop("_open_created_task", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
-
-    # Unsaved changes warning
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{key_prefix}"
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
@@ -9810,24 +9761,6 @@ def client_detail_dialog(cl_id):
     _key_prefix = f"client_{cl_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
     _is_editing = st.session_state.get(f"show_edit_{cl_id}", False)
-    # Close button
-    _close_btn_key = f"close_btn_{_key_prefix}"
-    _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_close_css_key):
-        _spacer_col, _close_col = st.columns([20, 1])
-        with _close_col:
-            if st.button("\u2715", key=_close_btn_key, use_container_width=True):
-                if _is_editing and not _show_close_warning:
-                    st.session_state[f"_show_close_warning_{_key_prefix}"] = True
-                    st.rerun()
-                else:
-                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.session_state[f"show_edit_{cl_id}"] = False
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_client_key", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:2px solid #FF9800!important;border-radius:10px!important;background-color:#FFF8E1!important;padding:0.5rem 0.8rem!important;margin:0.3rem 0!important; }}</style>', unsafe_allow_html=True)
@@ -9913,17 +9846,6 @@ def client_deals_dialog(cl_id):
         st.error("Клиент не найден")
         return
     _key_prefix = f"cli_deals_{cl_id}"
-    # Close button
-    _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_close_css_key):
-        _spacer_col, _close_col = st.columns([20, 1])
-        with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                _pop_dialog_return()
-                st.session_state.pop("dialog_client_deals_key", None)
-                st.session_state["_in_dialog"] = False
-                st.rerun()
     st.subheader(cl.get('name', ''))
     cl_deals = [d for d in st.session_state.crm_store["deals"] if d["client_id"] == cl_id]
     if cl_deals:
@@ -10214,17 +10136,6 @@ def client_tasks_dialog(cl_id):
         st.error("Клиент не найден")
         return
     _key_prefix = f"cli_tasks_{cl_id}"
-    # Close button
-    _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
-    with st.container(key=_close_css_key):
-        _spacer_col, _close_col = st.columns([20, 1])
-        with _close_col:
-            if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                _pop_dialog_return()
-                st.session_state.pop("dialog_client_tasks_key", None)
-                st.session_state["_in_dialog"] = False
-                st.rerun()
     st.subheader(cl.get('name', ''))
     # Задачи по клиенту
     client_tasks = [t for t in cl.get("tasks", []) if not t.get("deal_id")]
@@ -10253,13 +10164,7 @@ def client_tasks_dialog(cl_id):
             st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=_tk_key):
                 if st.button(_label, key=f"ct_go_cl_{cl_id}_{ti}", use_container_width=True, type="secondary"):
-                    _push_dialog_return()
-                    st.session_state.pop("dialog_client_tasks_key", None)
-                    st.session_state["dialog_task_number"] = str(t.get("task_number", ""))
-                    st.session_state["dialog_task_client_id"] = cl_id
-                    st.session_state["dialog_task_deal_id"] = str(t.get("deal_id", "") or "")
-                    st.session_state["dialog_task_key"] = f"clienttask_{cl_id}_{t.get('task_number', '')}_client"
-                    st.rerun()
+                    task_detail_dialog(t, cl, None, f"clienttask_{cl_id}_{t.get('task_number', '')}_client")
     else:
         st.caption("Задач по клиенту нет")
 
@@ -10292,13 +10197,7 @@ def client_tasks_dialog(cl_id):
             st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
             with st.container(key=_tk_key):
                 if st.button(_label, key=f"ct_go_dl_{cl_id}_{ti}", use_container_width=True, type="secondary"):
-                    _push_dialog_return()
-                    st.session_state.pop("dialog_client_tasks_key", None)
-                    st.session_state["dialog_task_number"] = str(t.get("task_number", ""))
-                    st.session_state["dialog_task_client_id"] = cl_id
-                    st.session_state["dialog_task_deal_id"] = str(t.get("deal_id", "") or "")
-                    st.session_state["dialog_task_key"] = f"clienttask_{cl_id}_{t.get('task_number', '')}_{d.get('id', '')}"
-                    st.rerun()
+                    task_detail_dialog(t, cl, d, f"clienttask_{cl_id}_{t.get('task_number', '')}_{d.get('id', '')}")
     else:
         st.caption("Задач по сделкам нет")
 
@@ -11585,14 +11484,15 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     st.markdown("""<style>
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
-    .st-key-crm_workspace_window > div { gap: 0 !important; }
-    .st-key-crm_workspace_window [data-testid="stHorizontalBlock"] { gap: 0.35rem !important; align-items: end !important; }
-    .st-key-crm_workspace_window .stButton > button { min-height:39px !important; border-radius:9px 9px 0 0 !important; border:1px solid #E0E6EF !important; box-shadow:none !important; font-size:13px !important; font-weight:600 !important; padding:6px 10px !important; white-space:nowrap !important; }
-    .st-key-crm_workspace_window .stButton > button[kind="secondary"] { background:rgba(255,255,255,0.55) !important; color:#65758B !important; }
-    .st-key-crm_workspace_window .stButton > button[kind="secondary"]:hover { background:#f4f6fa !important; }
-    .st-key-crm_workspace_window .stButton > button[kind="primary"] { background:rgba(188,22,97,0.055) !important; color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; }
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] { gap:0.35rem !important; align-items:end !important; }
+    .st-key-crm_workspace_tabbar .stButton > button { min-height:39px !important; border:1px solid #E0E6EF !important; border-radius:9px 9px 0 0 !important; padding:0.55rem 1.15rem !important; color:#65758B !important; font-weight:600 !important; background:rgba(255,255,255,0.55) !important; box-shadow:none !important; white-space:nowrap !important; }
+    .st-key-crm_workspace_tabbar .stButton > button[kind="primary"] { color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.055) !important; }
+    .st-key-crm_workspace_tabbar .stButton > button[kind="secondary"]:hover { background:#f4f6fa !important; }
+    .st-key-crm_workspace_tabbar .stButton > button { min-width:0 !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
-    .st-key-crm_workspace_window .crm-workspace-tab-close .stButton > button { min-width:30px !important; padding:6px 5px !important; color:#BC1661 !important; border-left:0 !important; }
+    .st-key-crm_workspace_content [class*="st-key-close_row_"] { display:none !important; }
+    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] { gap:0.25rem !important; }
+    .st-key-crm_workspace_content [data-testid="column"] + [data-testid="column"] { border-left:1px solid #DCE0E5 !important; padding-left:0.35rem !important; }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_workspace_backdrop"):
         st.write("")
@@ -11603,66 +11503,60 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         _tab_cols_spec = []
         for _ in range(_tab_count):
             _tab_cols_spec.extend([5, 0.48])
-        _tab_cols_spec.extend([0.55, 0.55])
-        _tab_cols = st.columns(_tab_cols_spec, gap="small") if _tab_cols_spec else []
-        _col_idx = 0
-        for _i, _tab in enumerate(_tabs):
-            _tab_title = "Клиент" if _tab.get("name") == "client_detail_dialog" else str(_tab.get("title", _tab.get("name", "Окно")))
-            _tab_title = _tab_title.replace("###", "")[:34]
+        _tab_cols_spec.append(0.55)  # minimize only; close window is in the bottom panel
+        with st.container(key="crm_workspace_tabbar"):
+            _tab_cols = st.columns(_tab_cols_spec, gap="small") if _tab_cols_spec else []
+            _col_idx = 0
+            for _i, _tab in enumerate(_tabs):
+                _tab_title = "Клиент" if _tab.get("name") == "client_detail_dialog" else str(_tab.get("title", _tab.get("name", "Окно")))
+                _tab_title = _tab_title.replace("###", "")[:34]
+                with _tab_cols[_col_idx]:
+                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", use_container_width=True, help=_tab_title):
+                        _crm_active_window["active_tab"] = _i
+                        st.session_state["_crm_active_dialog"] = _tab
+                        st.rerun()
+                _col_idx += 1
+                # No close button on the permanent client-card tab.
+                if _tab.get("name") != "client_detail_dialog":
+                    with _tab_cols[_col_idx]:
+                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку", use_container_width=True):
+                            _tabs_now = _crm_active_window.get("tabs", [])
+                            if 0 <= _i < len(_tabs_now): _tabs_now.pop(_i)
+                            if not _tabs_now:
+                                st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
+                                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                                st.session_state.pop("_crm_active_dialog", None)
+                            else:
+                                _new_active = _active_index - 1 if _i < _active_index else min(_i, len(_tabs_now)-1) if _i == _active_index else _active_index
+                                _new_active = max(0, min(_new_active, len(_tabs_now)-1))
+                                _crm_active_window["active_tab"] = _new_active
+                                st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
+                            _crm_workspace_clear_legacy_dialog_markers()
+                            _crm_workspace_queue_save()
+                            st.rerun()
+                _col_idx += 1
             with _tab_cols[_col_idx]:
-                if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", use_container_width=True, help=_tab_title):
-                    _crm_active_window["active_tab"] = _i
-                    st.session_state["_crm_active_dialog"] = _tab
-                    st.rerun()
-            _col_idx += 1
-            with _tab_cols[_col_idx]:
-                if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку", use_container_width=True):
-                    _tabs_now = _crm_active_window.get("tabs", [])
-                    if 0 <= _i < len(_tabs_now):
-                        _tabs_now.pop(_i)
-                    if not _tabs_now:
-                        st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
-                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
-                        st.session_state.pop("_crm_active_dialog", None)
-                    else:
-                        if _i < _active_index: _new_active = _active_index - 1
-                        elif _i == _active_index: _new_active = min(_i, len(_tabs_now) - 1)
-                        else: _new_active = _active_index
-                        _new_active = max(0, min(_new_active, len(_tabs_now) - 1))
-                        _crm_active_window["active_tab"] = _new_active
-                        st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
-                    _crm_workspace_clear_legacy_dialog_markers()
+                if st.button("−", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно", use_container_width=True):
+                    _crm_active_window["minimized"] = True
+                    st.session_state["_crm_active_window_id"] = None
                     _crm_workspace_queue_save()
                     st.rerun()
-            _col_idx += 1
-        with _tab_cols[_col_idx]:
-            if st.button("−", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно", use_container_width=True):
-                _crm_active_window["minimized"] = True
-                st.session_state["_crm_active_window_id"] = None
-                _crm_workspace_queue_save()
-                st.rerun()
-        _col_idx += 1
-        with _tab_cols[_col_idx]:
-            if st.button("×", key=f"crm_workspace_close_{_crm_active_window['id']}", help="Закрыть окно и все вкладки", use_container_width=True):
-                st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
-                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
-                st.session_state.pop("_crm_active_dialog", None)
-                _crm_workspace_clear_legacy_dialog_markers()
-                _crm_workspace_queue_save()
-                st.rerun()
 
-        # Render selected tab content, then the workspace switcher naturally at the bottom.
-        if _active_index >= 0:
-            _active_entry = _tabs[_active_index]
-            _active_spec = _CRM_DIALOG_REGISTRY.get(_active_entry.get("name"))
-            if _active_spec:
-                st.session_state["_crm_active_dialog"] = _active_entry
-                st.session_state["_crm_inside_dialog_host"] = True
-                try:
-                    _active_spec["func"](*_active_entry.get("args", ()), **_active_entry.get("kwargs", {}))
-                finally:
-                    st.session_state["_crm_inside_dialog_host"] = False
+        with st.container(key="crm_workspace_content"):
+            # Preserve original CRM button sizes, spacing and layout in window contents.
+            _crm_dialog_columns = st.columns
+            if _active_index >= 0:
+                _active_entry = _tabs[_active_index]
+                _active_spec = _CRM_DIALOG_REGISTRY.get(_active_entry.get("name"))
+                if _active_spec:
+                    st.session_state["_crm_active_dialog"] = _active_entry
+                    st.session_state["_crm_inside_dialog_host"] = True
+                    try:
+                        _active_spec["func"](*_active_entry.get("args", ()), **_active_entry.get("kwargs", {}))
+                    finally:
+                        st.session_state["_crm_inside_dialog_host"] = False
         _crm_workspace_render_bottom_panel()
+
 
 # When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
 
