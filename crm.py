@@ -1686,11 +1686,19 @@ def _crm_workspace_client_id(name, args=(), kwargs=None):
     deals = store.get("deals", []) if isinstance(store, dict) else []
     def find_client(value):
         if isinstance(value, dict):
-            cid = value.get("client_id") or value.get("cl_id") or value.get("id")
-            if cid is not None and any(str(c.get("id")) == str(cid) for c in clients):
-                return str(cid)
-        if value is not None and any(str(c.get("id")) == str(value) for c in clients):
-            return str(value)
+            cid = value.get("client_id")
+            if cid is None:
+                cid = value.get("cl_id")
+            if cid is None:
+                cid = value.get("id")
+            if cid is not None:
+                matched = next((c for c in clients if str(c.get("id")) == str(cid)), None)
+                if matched is not None:
+                    return matched.get("id")
+        if value is not None:
+            matched = next((c for c in clients if str(c.get("id")) == str(value)), None)
+            if matched is not None:
+                return matched.get("id")
         return None
     # Named client parameters are safest and work across most dialogs.
     for key in ("cl_id", "client_id", "client", "cl"):
@@ -1767,9 +1775,12 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
         client_entry = {"name": "client_detail_dialog", "title": "Карточка клиента", "width": "large",
                         "args": (client_id,), "kwargs": {},
                         "signature": (_crm_dialog_signature_value((client_id,)), _crm_dialog_signature_value({}))}
-        if not any(t.get("name") == "client_detail_dialog" and t.get("signature") == client_entry["signature"] for t in window["tabs"]):
+        _client_tab_key = _crm_workspace_tab_key(client_entry)
+        _existing_client_tab = next((i for i, t in enumerate(window["tabs"]) if _crm_workspace_tab_key(t) == _client_tab_key), None)
+        if _existing_client_tab is None:
             window["tabs"].insert(0, client_entry)
-            if window.get("active_tab", 0) >= 0: window["active_tab"] += 1
+            if window.get("active_tab", 0) >= 0:
+                window["active_tab"] += 1
     key = _crm_workspace_tab_key(entry)
     existing = next((i for i, t in enumerate(window["tabs"]) if _crm_workspace_tab_key(t) == key), None)
     if existing is None:
@@ -1913,10 +1924,24 @@ def _crm_dialog(title, width="large"):
                 active.get("name") == entry["name"]
                 and active.get("signature") == entry["signature"]
             )
-            if inside_host and same_dialog:
+            if same_dialog:
+                # The active workspace already renders this exact dialog.
+                # Legacy dispatchers can call wrappers again on every rerun;
+                # never let that replay steal focus from another tab.
                 return None
 
             client_id = _crm_workspace_client_id(func.__name__, args, kwargs)
+            # If a legacy dispatcher repeats a dialog that is already open in any
+            # workspace, do not let it steal focus from the tab the user selected.
+            _entry_key = _crm_workspace_tab_key(entry)
+            _already_open = any(
+                _crm_workspace_tab_key(_tab) == _entry_key
+                for _window in st.session_state.get("_crm_windows", [])
+                for _tab in _window.get("tabs", [])
+            )
+            if _already_open and not inside_host:
+                st.session_state["_crm_dialog_requested_this_run"] = True
+                return None
             _crm_workspace_open_dialog(entry, client_id=client_id, from_host=inside_host)
             if inside_host:
                 st.rerun()
@@ -11474,7 +11499,7 @@ _crm_workspace_init()
 
 # Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
 # действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
-if not st.session_state.get("_crm_dialog_requested_this_run", False):
+if not st.session_state.get("_crm_dialog_requested_this_run", False) and not st.session_state.get("_crm_windows"):
     _global_req_view_state = st.session_state.get("dialog_client_requisites_view")
     _global_req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
     _global_invoice_dialog_state = st.session_state.get("dialog_invoice_request")
@@ -11561,7 +11586,13 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                         st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
                         st.session_state.pop("_crm_active_dialog", None)
                     else:
-                        _new_active = min(_active_index, len(_tabs_now) - 1)
+                        if _i < _active_index:
+                            _new_active = _active_index - 1
+                        elif _i == _active_index:
+                            _new_active = min(_i, len(_tabs_now) - 1)
+                        else:
+                            _new_active = _active_index
+                        _new_active = max(0, min(_new_active, len(_tabs_now) - 1))
                         _crm_active_window["active_tab"] = _new_active
                         st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
                     _crm_workspace_queue_save()
