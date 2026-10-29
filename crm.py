@@ -743,17 +743,31 @@ def upload_db_to_yandex_async():
     except Exception:
         pass
 
-# Облачная синхронизация не должна блокировать обработчик нажатия кнопки.
-# Очередь хранит только самый свежий снимок: если пользователь быстро сделал
-# несколько изменений, промежуточные полные копии не отправляются на Диск.
-_cloud_sync_lock = threading.Lock()
-_cloud_sync_pending_snapshot = None
-_cloud_sync_worker_running = False
-_cloud_sync_last_ok = None
-_cloud_sync_last_error = ""
-_cloud_sync_last_backup_name = ""
-_startup_backup_queued = False
-_cloud_sync_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-yandex-sync")
+# Состояние фоновых задач должно переживать каждый rerun Streamlit.
+# Обычные глобальные переменные пересоздаются при повторном выполнении скрипта,
+# из-за чего могли плодиться очереди и повторные резервные копии.
+@st.cache_resource(show_spinner=False)
+def _get_crm_background_state():
+    return {
+        "save_lock": threading.Lock(),
+        "cloud_lock": threading.Lock(),
+        "cloud_pending_snapshot": None,
+        "cloud_worker_running": False,
+        "cloud_last_ok": None,
+        "cloud_last_error": "",
+        "cloud_last_backup_name": "",
+        "startup_backup_queued": False,
+        "process_start_logged": False,
+        "cloud_executor": ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-yandex-sync"),
+        "json_lock": threading.Lock(),
+        "json_pending_snapshot": None,
+        "json_worker_running": False,
+        "json_executor": ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-json-mirror"),
+        "log_lock": threading.Lock(),
+        "log_executor": ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-log-sync"),
+    }
+
+_CRM_BG_STATE = _get_crm_background_state()
 
 def _validate_backup_snapshot(snapshot_text):
     """Проверяет JSON-структуру и грубые признаки повреждения русской кодировки до загрузки."""
@@ -822,7 +836,7 @@ def _prepare_backup_snapshot(snapshot_text):
 
 def _upload_yandex_snapshot(snapshot_text, daily=False):
     """Сохраняет одну перезаписываемую актуальную копию и отдельную архивную копию за день."""
-    global _cloud_sync_last_backup_name
+
     if not YANDEX_TOKEN:
         raise RuntimeError("Не задан YANDEX_DISK_TOKEN")
 
@@ -855,14 +869,14 @@ def _upload_yandex_snapshot(snapshot_text, daily=False):
                         href, data=payload, timeout=30,
                         headers={"Content-Type": "application/json; charset=utf-8"})
                     if resp.status_code in (200, 201, 202):
-                        _cloud_sync_last_backup_name = remote_name
+                        _CRM_BG_STATE["cloud_last_backup_name"] = remote_name
                         return True
                     last_error = f"HTTP {resp.status_code} при загрузке резервной копии"
                 else:
                     last_error = "Яндекс Диск не вернул ссылку для загрузки"
             elif res.status_code == 409 and daily:
                 # Дневной архив уже существует; не создаём второй файл за этот день.
-                _cloud_sync_last_backup_name = remote_name
+                _CRM_BG_STATE["cloud_last_backup_name"] = remote_name
                 return True
             else:
                 last_error = f"HTTP {res.status_code} при создании резервной копии"
@@ -909,55 +923,48 @@ def _upload_yandex_pre_restore_snapshot(snapshot_text):
     raise RuntimeError(last_error)
 
 def _cloud_sync_worker():
-    """Объединяет серию быстрых сохранений: выгружает последний снимок после паузы."""
-    global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
-    global _cloud_sync_last_ok, _cloud_sync_last_error
+    """Объединяет серию быстрых сохранений в один фоновый upload."""
+    state = _CRM_BG_STATE
     debounce_seconds = 45
     while True:
-        # Ждём окончания серии быстрых сохранений. Новые снимки заменяют ожидающий.
         time.sleep(debounce_seconds)
-        with _cloud_sync_lock:
-            snapshot = _cloud_sync_pending_snapshot
-            _cloud_sync_pending_snapshot = None
+        with state["cloud_lock"]:
+            snapshot = state["cloud_pending_snapshot"]
+            state["cloud_pending_snapshot"] = None
             if snapshot is None:
-                _cloud_sync_worker_running = False
+                state["cloud_worker_running"] = False
                 return
         try:
             ok = _upload_yandex_snapshot(snapshot)
-            _cloud_sync_last_ok = bool(ok)
-            _cloud_sync_last_error = "" if ok else "Не удалось загрузить базу на Яндекс Диск"
+            state["cloud_last_ok"] = bool(ok)
+            state["cloud_last_error"] = "" if ok else "Не удалось загрузить базу на Яндекс Диск"
             _crm_log("BACKUP_UPLOAD_OK" if ok else "BACKUP_UPLOAD_ERROR", {"target": "CRM_latest.json"}, remote=True)
-            # Отдельная контрольная копия — не чаще одной на календарный день.
-            # Файл дня не перезаписывается; существующий файл считается уже сохранённым.
             try:
                 _upload_yandex_snapshot(snapshot, daily=True)
             except Exception:
-                # Ошибка контрольной копии не отменяет обычную резервную копию.
                 pass
         except Exception as exc:
-            _cloud_sync_last_ok = False
-            _cloud_sync_last_error = str(exc)[:300]
+            state["cloud_last_ok"] = False
+            state["cloud_last_error"] = str(exc)[:300]
             _crm_log("BACKUP_UPLOAD_ERROR", {"target": "CRM_latest.json"}, exc=exc, remote=True)
-        # Если во время загрузки пришёл новый снимок, следующая итерация
-        # снова объединит быстрые изменения в один актуальный снимок.
 
 def _queue_yandex_snapshot(snapshot_text):
-    global _cloud_sync_pending_snapshot, _cloud_sync_worker_running
+    state = _CRM_BG_STATE
     if not YANDEX_TOKEN:
         return
-    with _cloud_sync_lock:
-        _cloud_sync_pending_snapshot = snapshot_text
-        if not _cloud_sync_worker_running:
-            _cloud_sync_worker_running = True
-            _cloud_sync_executor.submit(_cloud_sync_worker)
+    with state["cloud_lock"]:
+        state["cloud_pending_snapshot"] = snapshot_text
+        if not state["cloud_worker_running"]:
+            state["cloud_worker_running"] = True
+            state["cloud_executor"].submit(_cloud_sync_worker)
 
 def _queue_startup_backup_once():
-    """При старте процесса ставит актуальный снимок SQLite в очередь один раз."""
-    global _startup_backup_queued
-    if not YANDEX_TOKEN or _startup_backup_queued:
+    """Ставит начальную копию в очередь только один раз на процесс приложения."""
+    state = _CRM_BG_STATE
+    if not YANDEX_TOKEN:
         return
-    with _cloud_sync_lock:
-        if _startup_backup_queued:
+    with state["cloud_lock"]:
+        if state["startup_backup_queued"]:
             return
         try:
             conn = _sqlite_connect()
@@ -965,14 +972,13 @@ def _queue_startup_backup_once():
                 row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             finally:
                 conn.close()
-            if row and row[0]:
-                _startup_backup_queued = True
-                _cloud_sync_pending_snapshot_local = row[0]
-            else:
+            if not row or not row[0]:
                 return
+            state["startup_backup_queued"] = True
+            snapshot = row[0]
         except Exception:
             return
-    _queue_yandex_snapshot(_cloud_sync_pending_snapshot_local)
+    _queue_yandex_snapshot(snapshot)
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN: return False
@@ -994,8 +1000,6 @@ def download_file_from_yandex(remote_path):
     return None
 
 # Журнал событий CRM. Копия на Яндекс Диске переживает перезапуск Streamlit Cloud.
-_CRM_LOG_LOCK = threading.Lock()
-_CRM_LOG_EXECUTOR = ThreadPoolExecutor(max_workers=1)
 _CRM_LOG_DIR = "CRM_NE_TROGAT/logs"
 _CRM_LOG_LOCAL_DIR = Path("/tmp/crm_system_logs")
 _CRM_LOG_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
@@ -1035,14 +1039,14 @@ def _crm_log(event, details=None, exc=None, remote=True):
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
         day = moscow_now().strftime("%Y-%m-%d")
         local_path = _CRM_LOG_LOCAL_DIR / f"CRM_log_{day}.jsonl"
-        with _CRM_LOG_LOCK:
+        with _CRM_BG_STATE["log_lock"]:
             with open(local_path, "a", encoding="utf-8") as f:
                 f.write(line)
                 f.flush()
                 os.fsync(f.fileno())
         # Синхронизация в фоне, чтобы запись в CRM не ждала сетевые запросы к Яндекс Диску.
         if remote and YANDEX_TOKEN:
-            _CRM_LOG_EXECUTOR.submit(_append_crm_log_to_yandex, day, line)
+            _CRM_BG_STATE["log_executor"].submit(_append_crm_log_to_yandex, day, line)
     except Exception:
         # Ошибка журналирования не должна ломать работу CRM.
         pass
@@ -3234,16 +3238,13 @@ def _three_way_merge(base, ours, latest, path="", conflicts=None):
     conflicts.append(path or "корневое значение")
     return copy.deepcopy(latest), conflicts
 
-_save_lock = threading.Lock()
+_save_lock = _CRM_BG_STATE["save_lock"]
 
 # JSON-файл — переносимое зеркало SQLite, а не основная база. Его запись и fsync
 # не должны блокировать обработку нажатия кнопки в основном потоке Streamlit.
 # Очередь хранит только последний снимок, чтобы быстрые последовательные сохранения
 # не создавали длинную очередь файловых операций.
-_json_mirror_lock = threading.Lock()
-_json_mirror_pending_snapshot = None
-_json_mirror_worker_running = False
-_JSON_MIRROR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-json-mirror")
+# Состояние очереди JSON-зеркала находится в общем ресурсе Streamlit.
 
 def _write_json_mirror(snapshot):
     tmp_name = FILE_NAME + ".tmp"
@@ -3254,13 +3255,13 @@ def _write_json_mirror(snapshot):
     os.replace(tmp_name, FILE_NAME)
 
 def _json_mirror_worker():
-    global _json_mirror_pending_snapshot, _json_mirror_worker_running
+    state = _CRM_BG_STATE
     while True:
-        with _json_mirror_lock:
-            snapshot = _json_mirror_pending_snapshot
-            _json_mirror_pending_snapshot = None
+        with state["json_lock"]:
+            snapshot = state["json_pending_snapshot"]
+            state["json_pending_snapshot"] = None
             if snapshot is None:
-                _json_mirror_worker_running = False
+                state["json_worker_running"] = False
                 return
         try:
             _write_json_mirror(snapshot)
@@ -3269,12 +3270,12 @@ def _json_mirror_worker():
             print(f"CRM JSON mirror write failed: {type(exc).__name__}: {str(exc)[:300]}")
 
 def _queue_json_mirror(snapshot):
-    global _json_mirror_pending_snapshot, _json_mirror_worker_running
-    with _json_mirror_lock:
-        _json_mirror_pending_snapshot = snapshot
-        if not _json_mirror_worker_running:
-            _json_mirror_worker_running = True
-            _JSON_MIRROR_EXECUTOR.submit(_json_mirror_worker)
+    state = _CRM_BG_STATE
+    with state["json_lock"]:
+        state["json_pending_snapshot"] = snapshot
+        if not state["json_worker_running"]:
+            state["json_worker_running"] = True
+            state["json_executor"].submit(_json_mirror_worker)
 
 def _download_disk_data():
     """Чтение JSON-базы с Яндекс Диска отключено: резервные копии только записываются."""
@@ -3746,9 +3747,9 @@ if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
 # Журналируем запуск и текущую доступность базы, затем ставим резервное копирование в очередь.
-if not globals().get("_crm_process_start_logged", False):
+if not _CRM_BG_STATE["process_start_logged"]:
     _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": True})
-    _crm_process_start_logged = True
+    _CRM_BG_STATE["process_start_logged"] = True
 # При запуске приложения создаём резервную копию текущей SQLite, не читая данные с Яндекс Диска.
 _queue_startup_backup_once()
 # Каталог товаров добавляется совместимо с уже работающей базой.
@@ -5067,10 +5068,10 @@ with st.sidebar:
     st.markdown(f"Роль: `{st.session_state.user_role}`")
     if not YANDEX_TOKEN:
         st.error("Резервное копирование отключено: не задан YANDEX_DISK_TOKEN в Secrets")
-    elif _cloud_sync_last_ok is True:
-        st.success(f"Резервная копия загружена: {_cloud_sync_last_backup_name or 'последняя загрузка подтверждена'}")
-    elif _cloud_sync_last_ok is False:
-        st.error(f"Резервная копия НЕ загружена: {_cloud_sync_last_error or 'ошибка загрузки'}")
+    elif _CRM_BG_STATE["cloud_last_ok"] is True:
+        st.success(f"Резервная копия загружена: {_CRM_BG_STATE['cloud_last_backup_name'] or 'последняя загрузка подтверждена'}")
+    elif _CRM_BG_STATE["cloud_last_ok"] is False:
+        st.error(f"Резервная копия НЕ загружена: {_CRM_BG_STATE['cloud_last_error'] or 'ошибка загрузки'}")
     else:
         st.caption("Резервное копирование: ожидается подтверждение первой загрузки")
     if st.session_state.get("user_role") == "admin":
