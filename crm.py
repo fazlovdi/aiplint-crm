@@ -10473,6 +10473,11 @@ if st.session_state.active_tab == "Клиенты":
         _client_tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_client_tab_calc_deal_id)), None)
         _client_tab_calc = next((c for c in (_client_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_client_tab_calc_id) and not c.get("deleted")), None)
         if _client_tab_calc_deal and _client_tab_calc:
+            # Consume the one-shot legacy request before opening the workspace tab.
+            # Leaving these IDs in session_state causes every later button click to
+            # dispatch the calculation dialog again and steal the interaction.
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
             deal_calculation_dialog(_client_tab_calc_deal_id, _client_tab_calc_id)
         else:
             st.session_state.pop("dialog_calculation_deal_id", None)
@@ -10823,6 +10828,9 @@ elif st.session_state.active_tab == "Сделки":
         _tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_dialog_calculation_deal_id)), None)
         _tab_calc = next((c for c in (_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_dialog_calculation_calc_id) and not c.get("deleted")), None)
         if _tab_calc_deal and _tab_calc:
+            # Consume this one-shot request; otherwise it is replayed on every rerun.
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
             deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
         else:
             st.session_state.pop("dialog_calculation_deal_id", None)
@@ -11482,6 +11490,10 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
         _global_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_global_calc_deal_id)), None)
         _global_calc = next((c for c in (_global_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_global_calc_id) and not c.get("deleted")), None)
         if _global_calc_deal and _global_calc:
+            # Consume the legacy marker before dispatching the dialog.
+            # Persistent markers were reopening the calculation on unrelated clicks.
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
             deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
         else:
             st.session_state.pop("dialog_calculation_deal_id", None)
