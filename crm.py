@@ -11484,19 +11484,20 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     st.markdown("""<style>
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
-    /* Workspace tabs: mirror the native Active/Archive tabs from the Tasks page. */
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] { gap:0.35rem !important; align-items:end !important; border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0.45rem 0 !important; }
-    .st-key-crm_workspace_tabbar [data-testid="stButton"] > button,
-    .st-key-crm_workspace_tabbar button[data-testid^="stBaseButton-"] { min-height:39px !important; border:1px solid #E0E6EF !important; border-radius:9px 9px 0 0 !important; padding:0.55rem 1.15rem !important; color:#65758B !important; font-weight:600 !important; background:rgba(255,255,255,0.55) !important; box-shadow:none !important; white-space:nowrap !important; }
-    .st-key-crm_workspace_tabbar button[data-testid="stBaseButton-primary"] { color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.055) !important; }
-    .st-key-crm_workspace_tabbar button[data-testid="stBaseButton-secondary"]:hover { background:#f4f6fa !important; }
-    .st-key-crm_workspace_tabbar button { min-width:0 !important; }
+    /* Match the real Streamlit tabs used by Tasks: same geometry, colors and active underline. */
+    [class*="crm_workspace_tabbar"] [data-testid="stHorizontalBlock"] { gap:0.35rem !important; align-items:end !important; border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0.45rem 0 !important; }
+    [class*="crm_workspace_tabbar"] [data-testid="stButton"] button,
+    [class*="crm_workspace_tabbar"] button[data-testid*="stBaseButton"] { box-sizing:border-box !important; min-height:39px !important; border:1px solid #E0E6EF !important; border-radius:9px 9px 0 0 !important; padding:0.55rem 1.15rem !important; color:#65758B !important; font-weight:600 !important; background:rgba(255,255,255,0.55) !important; box-shadow:none !important; white-space:nowrap !important; }
+    [class*="crm_workspace_tabbar"] button[data-testid*="stBaseButton-primary"] { color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.055) !important; }
+    [class*="crm_workspace_tabbar"] button[data-testid*="stBaseButton-secondary"]:hover { background:#f4f6fa !important; }
+    [class*="crm_workspace_tabbar"] button { min-width:0 !important; }
+    [class*="crm_workspace_tabbar"] [data-testid="column"]:has(button[key*="tab_close"]) button { min-width:30px !important; padding:0.35rem 0.25rem !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_content [class*="st-key-close_row_"] { display:none !important; }
-    /* Divider only between sibling columns; pseudo-element survives Streamlit column wrappers. */
-    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] { gap:0.12rem !important; align-items:stretch !important; }
-    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="column"] { position:relative !important; padding-left:0.18rem !important; padding-right:0.18rem !important; }
-    .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="column"]:not(:first-child)::before { content:"" !important; position:absolute !important; left:0 !important; top:2px !important; bottom:2px !important; width:1px !important; background:#DCE0E5 !important; display:block !important; }
+    /* Real divider on every second and subsequent Streamlit column, independent of wrapper depth. */
+    [class*="crm_workspace_content"] [data-testid="stHorizontalBlock"] { gap:0.08rem !important; align-items:stretch !important; }
+    [class*="crm_workspace_content"] [data-testid="stHorizontalBlock"] [data-testid="column"] { position:relative !important; box-sizing:border-box !important; padding-left:0.12rem !important; padding-right:0.12rem !important; }
+    [class*="crm_workspace_content"] [data-testid="stHorizontalBlock"] [data-testid="column"]:not(:first-child) { border-left:1px solid #D5DCE5 !important; }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_workspace_backdrop"):
         st.write("")
