@@ -9727,18 +9727,20 @@ def render_client_in_tree(cl):
 
 def render_client_form(fv):
     if st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False):
-        # Каждый клик создаёт отдельный экземпляр формы и отдельную вкладку.
+        # Каждое нажатие явно создаёт отдельную вкладку в рабочем окне.
+        # Не вызываем add_client_dialog повторно при каждом общем rerun:
+        # иначе legacy-вызов перехватывает фокус и не даёт переключать вкладки.
         _open_form_ids = []
-        for _state_key in st.session_state.keys():
+        for _state_key in list(st.session_state.keys()):
             _match = re.fullmatch(r"show_add_client_dialog_(\d+)", str(_state_key))
             if _match and st.session_state.get(_state_key):
                 _open_form_ids.append(int(_match.group(1)))
         _new_fv = max([int(fv)] + _open_form_ids) + 1
         st.session_state.client_form_version = _new_fv
         st.session_state[f"show_add_client_dialog_{_new_fv}"] = True
-        st.rerun()
-    if st.session_state.get(f"show_add_client_dialog_{fv}", False):
-        add_client_dialog(fv)
+        add_client_dialog(_new_fv)
+    # Формы создания клиента отображаются только рабочим пространством.
+    # Не диспетчеризуем их здесь: это вызывало перехват активной вкладки на rerun.
 
 @_crm_dialog("Добавить клиента", width="large")
 def add_client_dialog(fv):
