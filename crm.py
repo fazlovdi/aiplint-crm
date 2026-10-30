@@ -5420,10 +5420,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-wrap:nowrap !important; gap:0 !important;
-        width:100% !important; min-width:0 !important; align-items:center !important;
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
+        align-items:center !important; overflow:visible !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"] {
-        min-width:0 !important; padding:0 !important;
+        min-width:0 !important; padding:0 !important; flex-shrink:0 !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child {
+        flex:0 0 auto !important; width:max-content !important; min-width:max-content !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child {
+        flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stButton"] {
@@ -5441,6 +5448,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         white-space:nowrap !important; writing-mode:horizontal-tb !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child button {
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
         padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child .stButton,
