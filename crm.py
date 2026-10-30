@@ -11622,11 +11622,16 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] {
         position:absolute !important; top:0 !important; right:0 !important;
-        width:42px !important; min-width:42px !important; z-index:10 !important;
+        width:90px !important; min-width:90px !important; z-index:10 !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] .stButton,
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] button {
-        width:42px !important; min-width:42px !important;
+        width:90px !important; min-width:90px !important;
+    }
+    /* Hide Streamlit hover-help popovers for controls inside this workspace window. */
+    .st-key-crm_workspace_window [data-testid="stTooltipContent"],
+    .st-key-crm_workspace_window [role="tooltip"] {
+        display:none !important; visibility:hidden !important; opacity:0 !important;
     }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
@@ -11658,13 +11663,13 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
             for _i, _tab in enumerate(_tabs):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                 with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
-                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=_tab_title):
+                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=None):
                         _crm_active_window["active_tab"] = _i
                         st.session_state["_crm_active_dialog"] = _tab
                         st.rerun()
                     # The permanent client-card tab is intentionally not closable.
                     if _tab.get("name") != "client_detail_dialog":
-                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку"):
+                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help=None):
                             _tabs_now = _crm_active_window.get("tabs", [])
                             if 0 <= _i < len(_tabs_now): _tabs_now.pop(_i)
                             if not _tabs_now:
@@ -11680,7 +11685,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                             _crm_workspace_queue_save()
                             st.rerun()
             with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
-                if st.button("−", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
+                if st.button("Свернуть", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help=None):
                     _crm_active_window["minimized"] = True
                     st.session_state["_crm_active_window_id"] = None
                     _crm_workspace_queue_save()
