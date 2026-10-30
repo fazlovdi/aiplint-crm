@@ -5398,8 +5398,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     _bottom_windows = st.session_state.get("_crm_windows", [])
     if not _bottom_windows:
         return
-    # Window buttons reuse the tab frame styling, while the original 5:0.7
-    # column ratio is retained so the label button receives the full width it needs.
     _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     [class*="st-key-crm_workspace_bottom_"] {
@@ -5411,50 +5409,62 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] {
-        display:flex !important; flex:0 0 auto !important; flex-grow:0 !important;
-        flex-direction:row !important; flex-wrap:nowrap !important;
-        align-items:center !important; justify-content:flex-start !important;
-        gap:0 !important; column-gap:0 !important; width:max-content !important;
-        min-width:max-content !important; max-width:none !important;
+        display:flex !important; flex:0 0 auto !important; flex-direction:row !important;
+        flex-wrap:nowrap !important; align-items:center !important; justify-content:flex-start !important;
+        gap:0 !important; column-gap:0 !important; row-gap:0 !important;
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
         margin:0 !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
         background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
     }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
+        display:flex !important; flex-wrap:nowrap !important; gap:0 !important;
+        width:100% !important; min-width:0 !important; align-items:center !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"] {
+        min-width:0 !important; padding:0 !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stButton"] {
-        border:0 !important; background:transparent !important;
-        box-shadow:none !important; outline:0 !important;
+        width:100% !important; min-width:0 !important; border:0 !important;
+        background:transparent !important; box-shadow:none !important; outline:0 !important;
+        padding:0 !important; margin:0 !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button:hover,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button:focus,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button:active {
-        border:0 !important; border-style:none !important; border-bottom:0 !important;
-        border-radius:0 !important; outline:0 !important; box-shadow:none !important;
-        background:transparent !important; min-height:38px !important;
-        color:#65758B !important; font-weight:500 !important;
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button {
+        box-sizing:border-box !important; display:inline-flex !important;
+        width:100% !important; min-width:0 !important; max-width:none !important;
+        min-height:38px !important; align-items:center !important; justify-content:center !important;
+        border:0 !important; border-radius:0 !important; outline:0 !important;
+        box-shadow:none !important; padding:0.5rem 0.55rem !important;
+        color:#65758B !important; font-weight:500 !important; background:transparent !important;
         white-space:nowrap !important; writing-mode:horizontal-tb !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton:first-child > button {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child button {
         padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton:last-child > button {
-        min-width:27px !important; width:27px !important; max-width:27px !important;
-        min-height:30px !important; height:30px !important; padding:0 !important;
-        margin:0 !important; display:inline-flex !important;
-        align-items:center !important; justify-content:center !important;
-        text-align:center !important; color:#8A94A3 !important;
-        font-size:18px !important; line-height:1 !important;
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child .stButton,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stButton"] {
+        width:27px !important; min-width:27px !important; max-width:27px !important;
+        padding:0 !important; margin:0 !important; flex:0 0 27px !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton:last-child > button p,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton:last-child > button span {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button {
+        box-sizing:border-box !important; display:inline-flex !important;
+        align-items:center !important; justify-content:center !important;
+        min-width:27px !important; width:27px !important; max-width:27px !important;
+        min-height:30px !important; height:30px !important; max-height:30px !important;
+        padding:0 !important; margin:0 !important; text-align:center !important;
+        color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button p,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button span {
         width:100% !important; margin:0 !important; padding:0 !important;
         text-align:center !important; line-height:1 !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton:last-child > button:hover { color:#BC1661 !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button:hover { color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button p,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button span { white-space:nowrap !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
@@ -5464,19 +5474,22 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             if not in_workspace:
                 _label = ("▣ " if _w.get("minimized") else "● ") + _label
             with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
-                _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
-                if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
-                    _w["minimized"] = False
-                    st.session_state["_crm_active_window_id"] = _w.get("id")
-                    st.rerun()
-                if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}", help="Закрыть окно"):
-                    st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
-                    if st.session_state.get("_crm_active_window_id") == _w.get("id"):
-                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
-                        st.session_state.pop("_crm_active_dialog", None)
-                    _crm_workspace_clear_legacy_dialog_markers()
-                    _crm_workspace_queue_save()
-                    st.rerun()
+                _window_label_col, _window_close_col = st.columns([5, 0.7], gap=None)
+                with _window_label_col:
+                    _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
+                    if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary", use_container_width=True):
+                        _w["minimized"] = False
+                        st.session_state["_crm_active_window_id"] = _w.get("id")
+                        st.rerun()
+                with _window_close_col:
+                    if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}", use_container_width=True):
+                        st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
+                        if st.session_state.get("_crm_active_window_id") == _w.get("id"):
+                            st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                            st.session_state.pop("_crm_active_dialog", None)
+                        _crm_workspace_clear_legacy_dialog_markers()
+                        _crm_workspace_queue_save()
+                        st.rerun()
 
 nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
