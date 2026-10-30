@@ -1976,6 +1976,34 @@ def _crm_workspace_load_remote(login):
     except Exception:
         return None
 
+def _crm_workspace_activate_tab(window_id, tab_index):
+    """Activate a workspace tab before the main script reruns.
+
+    Streamlit button callbacks run before the normal top-to-bottom render, so
+    this avoids forcing a second st.rerun() after a tab click.
+    """
+    windows = st.session_state.get("_crm_windows", [])
+    window = next((w for w in windows if str(w.get("id")) == str(window_id)), None)
+    if not window:
+        return
+    tabs = window.get("tabs", [])
+    if not tabs:
+        return
+    try:
+        index = max(0, min(int(tab_index), len(tabs) - 1))
+    except (TypeError, ValueError):
+        index = 0
+    window["active_tab"] = index
+    window["minimized"] = False
+    st.session_state["_crm_active_window_id"] = window.get("id")
+    st.session_state["_crm_active_dialog"] = tabs[index]
+    # A tab selection is session state, not a structural workspace change.
+    # Defer its disk persistence until the next open/close/minimize operation;
+    # do not synchronously rewrite SQLite and enqueue cloud backups per click.
+    st.session_state["_crm_workspace_active_tab_dirty"] = True
+    _crm_workspace_clear_legacy_dialog_markers()
+
+
 def _crm_workspace_queue_save():
     """Сохраняет рабочее пространство пользователя в основную SQLite-базу.
 
@@ -2052,6 +2080,7 @@ def _crm_workspace_queue_save():
             workspaces = {}
             store["_workspaces"] = workspaces
         workspaces[login] = workspace
+        st.session_state["_crm_workspace_active_tab_dirty"] = False
 
         # Для рабочего пространства используем отдельную атомарную запись только
         # его раздела. Общий save_data() выполняет трёхстороннее слияние всего
@@ -12350,16 +12379,14 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
             for _i, _tab in enumerate(_tabs):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                 with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
-                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=_tab_title):
-                        # Tab navigation must win over any stale legacy dialog
-                        # marker left by a task/deal/calculation opened earlier.
-                        _crm_active_window["active_tab"] = _i
-                        _crm_active_window["minimized"] = False
-                        st.session_state["_crm_active_window_id"] = _crm_active_window.get("id")
-                        st.session_state["_crm_active_dialog"] = _tab
-                        _crm_workspace_clear_legacy_dialog_markers()
-                        _crm_workspace_queue_save()
-                        st.rerun()
+                    st.button(
+                        _tab_title,
+                        key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}",
+                        type="primary" if _i == _active_index else "secondary",
+                        help=_tab_title,
+                        on_click=_crm_workspace_activate_tab,
+                        args=(_crm_active_window.get("id"), _i),
+                    )
                     # The client-card tab is closed through the window switcher above;
                     # do not render a second close control beside this tab.
                     if str(_tab.get("name", "")) != "client_detail_dialog":
