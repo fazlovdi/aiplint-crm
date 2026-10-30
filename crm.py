@@ -11754,37 +11754,24 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                         _crm_active_window["active_tab"] = _i
                         st.session_state["_crm_active_dialog"] = _tab
                         st.rerun()
-                    # All workspace tabs, including the client card, can be closed.
-                    if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку"):
-                        _tabs_now = _crm_active_window.get("tabs", [])
-                        _closing_client_card = str(_tab.get("name", "")) == "client_detail_dialog"
-                        if _closing_client_card:
-                            # Closing the client card closes this entire workspace window,
-                            # including every other tab that belongs to the same window.
-                            _closed_window_id = _crm_active_window.get("id")
-                            st.session_state["_crm_windows"] = [
-                                w for w in st.session_state.get("_crm_windows", [])
-                                if w.get("id") != _closed_window_id
-                            ]
-                            st.session_state["_crm_active_window_id"] = next(
-                                (w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")),
-                                None,
-                            )
-                            st.session_state.pop("_crm_active_dialog", None)
-                        else:
+                    # The client-card tab is closed through the window switcher above;
+                    # do not render a second close control beside this tab.
+                    if str(_tab.get("name", "")) != "client_detail_dialog":
+                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку"):
+                            _tabs_now = _crm_active_window.get("tabs", [])
                             if 0 <= _i < len(_tabs_now): _tabs_now.pop(_i)
                             if not _tabs_now:
                                 st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
-                                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
+                                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state.get("_crm_windows", []) if not w.get("minimized")), None)
                                 st.session_state.pop("_crm_active_dialog", None)
                             else:
                                 _new_active = _active_index - 1 if _i < _active_index else min(_i, len(_tabs_now)-1) if _i == _active_index else _active_index
                                 _new_active = max(0, min(_new_active, len(_tabs_now)-1))
                                 _crm_active_window["active_tab"] = _new_active
                                 st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
-                        _crm_workspace_clear_legacy_dialog_markers()
-                        _crm_workspace_queue_save()
-                        st.rerun()
+                            _crm_workspace_clear_legacy_dialog_markers()
+                            _crm_workspace_queue_save()
+                            st.rerun()
             with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                 if st.button("Свернуть", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
                     _crm_active_window["minimized"] = True
