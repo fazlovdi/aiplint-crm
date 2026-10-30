@@ -1689,6 +1689,9 @@ def _crm_dialog_signature_value(value):
 
 def _crm_workspace_client_id(name, args=(), kwargs=None):
     """Best-effort resolve the client associated with a dialog."""
+    # The integer argument of add_client_dialog is a form instance ID, not a client ID.
+    if name == "add_client_dialog":
+        return None
     kwargs = kwargs or {}
     store = st.session_state.get("crm_store", {})
     clients = store.get("clients", []) if isinstance(store, dict) else []
@@ -1925,7 +1928,7 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
                   "tabs": [], "active_tab": 0, "minimized": False}
         windows.append(window)
     # If a deal was opened directly, add the client as a permanent first tab.
-    if client_id and entry.get("name") != "client_detail_dialog":
+    if client_id and entry.get("name") not in ("client_detail_dialog", "add_client_dialog"):
         client_entry = {"name": "client_detail_dialog", "title": "Карточка клиента", "width": "large",
                         "args": (client_id,), "kwargs": {},
                         "signature": (_crm_dialog_signature_value((client_id,)), _crm_dialog_signature_value({}))}
@@ -5792,6 +5795,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     _crm_workspace_queue_save()
                     st.rerun()
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
+                    # При закрытии окна отключаем все формы создания клиента в нём,
+                    # иначе legacy-рендерер откроет их снова на следующем rerun.
+                    for _closing_tab in _w.get("tabs", []):
+                        if _closing_tab.get("name") == "add_client_dialog":
+                            _closing_args = _closing_tab.get("args", ()) or ()
+                            if _closing_args:
+                                st.session_state[f"show_add_client_dialog_{_closing_args[0]}"] = False
                     # Закрываем только выбранное окно клиента.
                     st.session_state["_crm_windows"] = [
                         w for w in st.session_state.get("_crm_windows", [])
@@ -5846,6 +5856,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 # Восстанавливаем персональное рабочее пространство до первого рендеринга
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
 _crm_workspace_init()
+
+# Миграция уже сохранённых окон создания клиента: в них не должно быть
+# автоматической вкладки «Карточка клиента», добавленной прежней версией.
+for _client_window in st.session_state.get("_crm_windows", []):
+    if any(_t.get("name") == "add_client_dialog" for _t in _client_window.get("tabs", [])):
+        _old_tabs = _client_window.get("tabs", [])
+        _old_active = int(_client_window.get("active_tab", 0) or 0)
+        _client_window["tabs"] = [t for t in _old_tabs if t.get("name") != "client_detail_dialog"]
+        _removed_before_active = sum(1 for i, t in enumerate(_old_tabs) if i < _old_active and t.get("name") == "client_detail_dialog")
+        _client_window["active_tab"] = max(0, min(_old_active - _removed_before_active, len(_client_window["tabs"]) - 1)) if _client_window["tabs"] else 0
+        _client_window["title"] = "Новый клиент"
 
 nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
@@ -12285,7 +12306,13 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                     if str(_tab.get("name", "")) != "client_detail_dialog":
                         if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку"):
                             _tabs_now = _crm_active_window.get("tabs", [])
-                            if 0 <= _i < len(_tabs_now): _tabs_now.pop(_i)
+                            if 0 <= _i < len(_tabs_now):
+                                _closing_tab = _tabs_now[_i]
+                                if _closing_tab.get("name") == "add_client_dialog":
+                                    _closing_args = _closing_tab.get("args", ()) or ()
+                                    if _closing_args:
+                                        st.session_state[f"show_add_client_dialog_{_closing_args[0]}"] = False
+                                _tabs_now.pop(_i)
                             if not _tabs_now:
                                 st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _crm_active_window.get("id")]
                                 st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state.get("_crm_windows", []) if not w.get("minimized")), None)
