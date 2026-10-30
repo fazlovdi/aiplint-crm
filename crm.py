@@ -1206,8 +1206,11 @@ def export_clients_csv():
     return ("﻿" + o.getvalue()).encode("utf-8")
 
 def get_client_by_id(c_id):
-    for c in st.session_state.crm_store["clients"]:
-        if c["id"] == c_id: return c
+    # Workspace/dialog arguments may be restored from JSON as strings while
+    # the live CRM record keeps an integer (or vice versa).
+    for c in st.session_state.crm_store.get("clients", []):
+        if str(c.get("id")) == str(c_id):
+            return c
     return None
 
 def get_deal_by_id(d_id):
@@ -2041,7 +2044,7 @@ def _crm_workspace_init():
                          "args": tuple(args), "kwargs": _restored_kwargs, "signature": _restored_signature})
         if tabs:
             restored.append({"id": w.get("id") or "cw_restored", "client_id": cid, "title": w.get("title") or (_crm_workspace_client_name(cid) if cid else "CRM"),
-                            "tabs": tabs, "active_tab": max(0, min(int(w.get("active_tab", 0) or 0), len(tabs)-1)), "minimized": bool(w.get("minimized"))})
+                            "tabs": tabs, "active_tab": max(0, min(int(w.get("active_tab", 0) or 0), len(tabs)-1)), "minimized": True})
     st.session_state["_crm_windows"] = restored
     active_id = saved.get("active_window_id")
     st.session_state["_crm_active_window_id"] = active_id if any(w.get("id") == active_id and not w.get("minimized") for w in restored) else next((w.get("id") for w in restored if not w.get("minimized")), None)
@@ -5642,6 +5645,21 @@ _crm_nav_active_id = st.session_state.get("_crm_active_window_id")
 _crm_nav_active_window = next((w for w in st.session_state.get("_crm_windows", []) if w.get("id") == _crm_nav_active_id), None)
 if not _crm_nav_active_window or _crm_nav_active_window.get("minimized"):
     _crm_workspace_render_bottom_panel()
+    _main_minimized_windows = [w for w in st.session_state.get("_crm_windows", []) if w.get("minimized")]
+    if _main_minimized_windows:
+        _expand_col, _expand_spacer = st.columns([1, 8])
+        with _expand_col:
+            if st.button("Развернуть", key="crm_workspace_main_expand", use_container_width=True, help="Вернуть окна клиентов в прежнее состояние"):
+                _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized")), None)
+                if _restore_window:
+                    _restore_window["minimized"] = False
+                    st.session_state["_crm_active_window_id"] = _restore_window.get("id")
+                    _restore_tabs = _restore_window.get("tabs", [])
+                    _restore_index = max(0, min(int(_restore_window.get("active_tab", 0) or 0), len(_restore_tabs)-1)) if _restore_tabs else -1
+                    if _restore_index >= 0:
+                        st.session_state["_crm_active_dialog"] = _restore_tabs[_restore_index]
+                _crm_workspace_queue_save()
+                st.rerun()
 
 # Toast при загрузке если есть непрочитанные
 _unread_count = get_unread_count()
@@ -10161,6 +10179,8 @@ def create_deal_dialog(cl_id):
     if not _cl:
         st.error("Клиент не найден")
         return
+    # Use the canonical ID stored in crm_store for all new deal relations.
+    cl_id = _cl.get("id")
     st.markdown(f"**Клиент:** {_cl.get('name', '')}")
     st.markdown("---")
     _deal_create_left, _deal_create_right = st.columns(2)
@@ -11295,6 +11315,19 @@ elif st.session_state.active_tab == "Задачи":
                     # is activated instead of being sent to the legacy dialog dispatcher.
                     _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
                                            if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
+                    if _task_deal_obj is not None:
+                        _deal_entry = {
+                            "name": "deal_detail_dialog",
+                            "title": f"Сделка {_task_deal_obj.get('deal_number', _task_deal_obj.get('title', ''))}",
+                            "width": "large",
+                            "args": (_task_deal_obj, cl, st.session_state.get("user_name", ""), f"task_parent_{_task_deal_obj.get('id')}"),
+                            "kwargs": {},
+                        }
+                        _deal_entry["signature"] = (
+                            _crm_dialog_signature_value(_deal_entry["args"]),
+                            _crm_dialog_signature_value(_deal_entry["kwargs"]),
+                        )
+                        _task_window = _crm_workspace_open_dialog(_deal_entry, client_id=cl.get("id"))
                     _task_entry = {
                         "name": "task_detail_dialog",
                         "title": f"Задача №{task.get('task_number', '')}",
