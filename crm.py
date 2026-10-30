@@ -1997,6 +1997,21 @@ def _crm_dialog(title, width="large"):
                 for _tab in _window.get("tabs", [])
             )
             if _already_open and not inside_host:
+                # The requested entity already exists in a workspace: activate its
+                # existing tab instead of silently ignoring the click.
+                for _existing_window in st.session_state.get("_crm_windows", []):
+                    _existing_tabs = _existing_window.get("tabs", [])
+                    _existing_index = next((i for i, _tab in enumerate(_existing_tabs)
+                                            if _crm_workspace_tab_key(_tab) == _entry_key), None)
+                    if _existing_index is not None:
+                        _existing_window["minimized"] = False
+                        _existing_window["active_tab"] = _existing_index
+                        st.session_state["_crm_active_window_id"] = _existing_window.get("id")
+                        st.session_state["_crm_active_dialog"] = _existing_tabs[_existing_index]
+                        st.session_state["_crm_dialog_requested_this_run"] = True
+                        _crm_workspace_queue_save()
+                        st.rerun()
+                        return None
                 st.session_state["_crm_dialog_requested_this_run"] = True
                 return None
             _crm_workspace_open_dialog(entry, client_id=client_id, from_host=inside_host)
@@ -5409,6 +5424,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] {
+        position:relative !important;
         display:flex !important; flex:0 0 auto !important; flex-direction:row !important;
         flex-wrap:nowrap !important; align-items:center !important; justify-content:flex-start !important;
         gap:0 !important; column-gap:0 !important; row-gap:0 !important;
@@ -5430,7 +5446,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         flex:0 0 auto !important; width:max-content !important; min-width:max-content !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child {
+        position:absolute !important; right:0 !important; top:50% !important;
+        transform:translateY(-50%) !important; z-index:5 !important;
         flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
+        background:inherit !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stButton"] {
@@ -5449,7 +5468,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child button {
         width:max-content !important; min-width:max-content !important; max-width:none !important;
-        padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
+        padding:0.5rem 32px 0.5rem 0.7rem !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child .stButton,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stButton"] {
