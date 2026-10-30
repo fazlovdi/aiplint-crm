@@ -2306,8 +2306,9 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
     _send_spacer, _send_col, _send_spacer2 = st.columns([1, 2, 1])
     with _send_col:
         if st.button("Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
-            st.session_state["_pending_reminder_dialog"] = {"entity_type": str(entity_type), "entity_id": str(entity_id), "entity_label": str(entity_label)}
-            st.rerun()
+            # The decorated dialog routes into the current workspace when invoked
+            # from a client/deal/task tab; it becomes a regular tab, not a separate modal.
+            create_reminder_dialog(str(entity_type), str(entity_id), str(entity_label))
 
 def process_due_reminders():
     """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
@@ -8278,10 +8279,9 @@ def render_deal_products_block(d, key_prefix):
                 "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
         calculations.append(calc)
         save_data(st.session_state.crm_store)
-        _push_dialog_return()
-        st.session_state["dialog_calculation_deal_id"] = str(d["id"])
-        st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
-        st.rerun()
+        # Open the new calculation through the workspace dialog registry.
+        # This keeps it as a tab in the deal's current client window.
+        deal_calculation_dialog(str(d["id"]), str(calc["id"]))
 
 
 @_crm_dialog("Расчёт сделки", width="large")
@@ -8886,20 +8886,18 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"deal_task_open_{deal_id}_{_ti}", use_container_width=True):
-                            _push_dialog_return()
-                            st.session_state["dialog_task_number"] = str(_task.get("task_number", ""))
-                            st.session_state["dialog_task_client_id"] = cl.get("id") if cl else d.get("client_id")
-                            st.session_state["dialog_task_deal_id"] = str(deal_id)
-                            st.session_state["dialog_task_key"] = f"deal_task_{deal_id}_{_task.get('task_number', '')}"
-                            st.rerun()
+                            # Open the exact task as a workspace tab in this deal's client window.
+                            _task_client = cl or get_client_by_id(d.get("client_id"))
+                            task_detail_dialog(
+                                _task, _task_client, d,
+                                f"deal_task_{deal_id}_{_task.get('task_number', '')}"
+                            )
             else:
                 st.caption("Задач по сделке пока нет.")
             _dls_ct_key = f"dls_show_ct_{deal_id}"
             if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_create_deal_task_deal_id"] = deal_id
-                st.session_state["dialog_create_deal_task_client_id"] = d["client_id"]
-                st.rerun()
+                # Use the workspace registry instead of legacy one-shot dialog flags.
+                deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             st.markdown("**Внесённые изменения**")
             _deal_changes = d.get("change_log", [])
@@ -9187,10 +9185,8 @@ def render_client_card_expanded(cl):
             else:
                 st.caption("Задач по клиенту пока нет.")
             if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_create_client_task_client_id"] = cl["id"]
-                st.session_state.pop("dialog_client_key", None)
-                st.rerun()
+                # Create the client task in the current workspace as a normal tab.
+                client_create_task_dialog(str(cl["id"]))
 
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
 
@@ -9247,10 +9243,8 @@ def render_client_card_expanded(cl):
             else:
                 st.caption("Сделок пока нет.")
             if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_create_deal_from_client"] = cl["id"]
-                st.session_state.pop("dialog_client_key", None)
-                st.rerun()
+                # Create the deal in the current client workspace as a normal tab.
+                create_deal_dialog(str(cl["id"]))
 
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
             # Реквизиты для документов — между действиями и историей изменений.
