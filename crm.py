@@ -5433,6 +5433,26 @@ def _crm_workspace_render_bottom_panel():
         padding:0 3px !important; box-shadow:none !important; outline:0 !important;
         box-sizing:content-box !important;
     }
+    /* Force the actual frame and every layout layer inside it to shrink-wrap
+       the combined label + close button. Streamlit may otherwise leave the
+       keyed container at the flex track's narrow width while its text overflows. */
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"],
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > div,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > div > div,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"],
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stElementContainer"] {
+        display:inline-flex !important;
+        flex:0 0 auto !important; flex-grow:0 !important; flex-shrink:0 !important;
+        width:fit-content !important; min-width:fit-content !important;
+        max-width:none !important; inline-size:fit-content !important;
+    }
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > div,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > div > div,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"],
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stElementContainer"] {
+        align-self:flex-start !important; justify-content:flex-start !important;
+        padding:0 !important; margin:0 !important; box-sizing:content-box !important;
+    }
     /* The keyed Streamlit container contains another layout wrapper. Make the
        wrapper and its horizontal row shrink-wrap the two buttons as well, so
        the single outer border grows with the label instead of staying narrow. */
