@@ -11536,16 +11536,18 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
     /* Tabs use Streamlit horizontal flex containers: buttons size to their labels, never to equal columns. */
-    .st-key-crm_workspace_tabbar { width:100% !important; min-width:0 !important; }
+    .st-key-crm_workspace_tabbar { width:100% !important; min-width:0 !important; position:relative !important; padding-right:52px !important; box-sizing:border-box !important; }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"],
     .st-key-crm_workspace_tabbar [data-testid="stFlexContainer"] { align-items:center !important; }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] { position:relative !important; flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stButton"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
     .st-key-crm_workspace_tabbar .stButton > button { box-sizing:border-box !important; width:max-content !important; min-width:max-content !important; max-width:none !important; min-height:39px !important; border:0 !important; border-bottom:2px solid transparent !important; border-radius:0 !important; padding:0.55rem 1.05rem !important; color:#65758B !important; font-weight:500 !important; background:transparent !important; box-shadow:none !important; white-space:nowrap !important; word-break:keep-all !important; overflow-wrap:normal !important; writing-mode:horizontal-tb !important; }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"]:has(.stButton:nth-of-type(2)) .stButton:first-child > button { padding-right:2.35rem !important; }
     .st-key-crm_workspace_tabbar [data-testid="stBaseButton-primary"] button { color:#BC1661 !important; border-bottom:2px solid #BC1661 !important; background:transparent !important; }
     .st-key-crm_workspace_tabbar button:hover { color:#BC1661 !important; background:rgba(188,22,97,0.035) !important; }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button { width:26px !important; min-width:26px !important; max-width:26px !important; padding:0.55rem 0.2rem !important; color:#8A94A3 !important; border-bottom:2px solid transparent !important; }
-    .st-key-crm_workspace_minimize_wrap { margin-left:auto !important; flex:0 0 auto !important; width:max-content !important; }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child { position:absolute !important; right:0 !important; top:0 !important; z-index:3 !important; width:26px !important; min-width:26px !important; height:100% !important; display:flex !important; align-items:center !important; justify-content:center !important; }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button { width:26px !important; min-width:26px !important; max-width:26px !important; min-height:30px !important; padding:0.2rem !important; color:#8A94A3 !important; border:0 !important; border-bottom:0 !important; }
+    .st-key-crm_workspace_minimize_wrap { position:absolute !important; right:0 !important; top:0 !important; margin:0 !important; flex:0 0 auto !important; width:max-content !important; z-index:5 !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_content [class*="st-key-close_row_"] { display:none !important; }
