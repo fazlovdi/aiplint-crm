@@ -2192,9 +2192,9 @@ def _crm_workspace_init():
                 "title": w.get("title") or (_crm_workspace_client_name(cid) if cid else "CRM"),
                 "tabs": tabs,
                 "active_tab": active_tab,
-                # Сохраняем исходное состояние окна: развёрнутое окно восстановится,
-                # свёрнутое останется в панели окон.
-                "minimized": bool(w.get("minimized", False)),
+                # После входа все восстановленные окна должны быть свёрнуты.
+                # Это меняет только начальное отображение, но не сохранённые вкладки.
+                "minimized": True,
             })
 
     st.session_state["_crm_windows"] = restored
@@ -2202,16 +2202,10 @@ def _crm_workspace_init():
     if main_tab in ("Клиенты", "Сделки", "Задачи", "Внутренние задачи", "Поставщики", "Товары и прайс"):
         st.session_state["active_tab"] = main_tab
 
-    active_id = saved.get("active_window_id")
-    st.session_state["_crm_active_window_id"] = (
-        active_id
-        if any(w.get("id") == active_id and not w.get("minimized") for w in restored)
-        else next((w.get("id") for w in reversed(restored) if not w.get("minimized")), None)
-    )
-    active_window = next((w for w in restored if w.get("id") == st.session_state.get("_crm_active_window_id")), None)
-    if active_window and active_window.get("tabs"):
-        idx = max(0, min(int(active_window.get("active_tab", 0) or 0), len(active_window["tabs"]) - 1))
-        st.session_state["_crm_active_dialog"] = active_window["tabs"][idx]
+    # Не назначаем активное раскрытое окно при входе.
+    # Все окна доступны в панели свёрнутых окон и открываются по выбору пользователя.
+    st.session_state["_crm_active_window_id"] = None
+    st.session_state.pop("_crm_active_dialog", None)
 
     # Не переносим старый dedupe-маркер из предыдущего входа пользователя.
     st.session_state.pop("_crm_last_queued_workspace_payload", None)
