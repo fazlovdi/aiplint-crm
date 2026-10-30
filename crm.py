@@ -5431,6 +5431,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child {
         flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
+        overflow:visible !important; display:flex !important; align-items:center !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child > div,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stElementContainer"],
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stButton"] {
+        flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
+        overflow:visible !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stButton"] {
@@ -5490,7 +5497,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         st.session_state["_crm_active_window_id"] = _w.get("id")
                         st.rerun()
                 with _window_close_col:
-                    if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}", use_container_width=True):
+                    if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}", use_container_width=False):
                         st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
                         if st.session_state.get("_crm_active_window_id") == _w.get("id"):
                             st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
