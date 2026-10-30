@@ -11536,7 +11536,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
     /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
-    .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 52px 0 0 !important; box-sizing:border-box !important; }
+    .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         gap:0 !important; column-gap:0 !important; row-gap:0 !important;
@@ -11622,11 +11622,12 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] {
         position:absolute !important; top:0 !important; right:0 !important;
-        width:42px !important; min-width:42px !important; z-index:10 !important;
+        width:96px !important; min-width:96px !important; z-index:10 !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] .stButton,
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] button {
-        width:42px !important; min-width:42px !important;
+        width:96px !important; min-width:96px !important; max-width:96px !important;
+        white-space:nowrap !important;
     }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
@@ -11680,7 +11681,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                             _crm_workspace_queue_save()
                             st.rerun()
             with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
-                if st.button("−", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
+                if st.button("Свернуть", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
                     _crm_active_window["minimized"] = True
                     st.session_state["_crm_active_window_id"] = None
                     _crm_workspace_queue_save()
