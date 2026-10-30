@@ -2029,9 +2029,62 @@ def _crm_workspace_queue_save():
             store["_workspaces"] = workspaces
         workspaces[login] = workspace
 
-        # Единый путь сохранения: SQLite commit -> Yandex backup queue -> JSON mirror.
-        save_data(store)
-        st.session_state["_crm_last_queued_workspace_payload"] = payload
+        # Для рабочего пространства используем отдельную атомарную запись только
+        # его раздела. Общий save_data() выполняет трёхстороннее слияние всего
+        # crm_store; при параллельных сессиях оно могло принять актуальный снимок
+        # базы вместо нового _workspaces. Здесь обновляем только _workspaces в
+        # последней версии SQLite, не затрагивая остальные разделы CRM.
+        with _save_lock:
+            _workspace_conn = None
+            try:
+                _ensure_sqlite_store()
+                _workspace_conn = _sqlite_connect()
+                _workspace_conn.execute("BEGIN IMMEDIATE")
+                _workspace_row = _workspace_conn.execute(
+                    "SELECT data, revision FROM crm_state WHERE id = 1"
+                ).fetchone()
+                _latest_workspace_data = json.loads(_workspace_row[0]) if _workspace_row and _workspace_row[0] else {}
+                if not isinstance(_latest_workspace_data, dict):
+                    raise ValueError("Основная база SQLite имеет неверную структуру")
+                _workspace_revision = int(_workspace_row[1]) if _workspace_row else 0
+                _latest_workspaces = _latest_workspace_data.get("_workspaces", {})
+                if not isinstance(_latest_workspaces, dict):
+                    _latest_workspaces = {}
+                _latest_workspaces[login] = workspace
+                _latest_workspace_data["_workspaces"] = _latest_workspaces
+                _workspace_snapshot = json.dumps(
+                    _latest_workspace_data, ensure_ascii=False, separators=(",", ":")
+                )
+                _workspace_new_revision = _workspace_revision + 1
+                _workspace_conn.execute(
+                    "INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, ?, ?) "
+                    "ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at",
+                    (_workspace_snapshot, _workspace_new_revision, now_str()),
+                )
+                _workspace_conn.execute("COMMIT")
+                _workspace_conn.close()
+                _workspace_conn = None
+
+                # Синхронизируем только раздел рабочего пространства в памяти.
+                store["_workspaces"] = copy.deepcopy(_latest_workspaces)
+                _remember_session_base(_latest_workspace_data, _workspace_new_revision)
+
+                # Тот же подтверждённый SQLite-снимок уходит в штатные очереди
+                # резервной копии Яндекс Диска и JSON-зеркала.
+                _queue_yandex_snapshot(_workspace_snapshot)
+                _queue_json_mirror(_workspace_snapshot)
+                st.session_state["_crm_last_queued_workspace_payload"] = payload
+            except Exception:
+                if _workspace_conn is not None:
+                    try:
+                        _workspace_conn.execute("ROLLBACK")
+                    except Exception:
+                        pass
+                    try:
+                        _workspace_conn.close()
+                    except Exception:
+                        pass
+                raise
     except Exception as exc:
         _crm_log("WORKSPACE_SAVE_ERROR", {"stage": "SQLite workspace save"}, exc=exc)
 
