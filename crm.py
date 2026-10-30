@@ -9742,6 +9742,21 @@ def render_client_form(fv):
     # Формы создания клиента отображаются только рабочим пространством.
     # Не диспетчеризуем их здесь: это вызывало перехват активной вкладки на rerun.
 
+def _add_client_save_draft(fv, field_name, widget_key):
+    """Сохраняет значение поля вне состояния виджета, которое Streamlit очищает при переключении вкладок."""
+    draft_key = f"_add_client_draft_{fv}"
+    draft = st.session_state.setdefault(draft_key, {})
+    if widget_key in st.session_state:
+        draft[field_name] = st.session_state[widget_key]
+
+
+def _add_client_restore_draft_field(fv, field_name, widget_key):
+    """Восстанавливает значение поля после возвращения на вкладку формы."""
+    draft = st.session_state.get(f"_add_client_draft_{fv}", {})
+    if widget_key not in st.session_state and field_name in draft:
+        st.session_state[widget_key] = draft[field_name]
+
+
 @_crm_dialog("Добавить клиента", width="large")
 def add_client_dialog(fv):
     # Данные повторяющихся полей и комментариев изолированы для каждой вкладки.
@@ -9753,6 +9768,18 @@ def add_client_dialog(fv):
     st.session_state.setdefault(_em_key, [])
     st.session_state.setdefault(_ad_key, [])
     st.session_state.setdefault(_comments_key, [])
+    _draft_key = f"_add_client_draft_{fv}"
+    st.session_state.setdefault(_draft_key, {})
+    # Widget state Streamlit очищает, когда вкладка не отображается. Перед созданием
+    # виджетов возвращаем сохранённые значения из независимого черновика.
+    _draft_fields = {
+        "name": f"cn_{fv}", "phone": f"cp_{fv}", "email": f"ce_{fv}",
+        "discount": f"cd_{fv}", "category": f"cc_{fv}", "promo": f"cpromo_{fv}",
+        "manager": f"cm_{fv}", "contact_method": f"new_contact_method_{fv}",
+        "city": f"city_new_{fv}", "address": f"ca_{fv}", "comment_input": f"new_cc_form_{fv}",
+    }
+    for _draft_field, _widget_key in _draft_fields.items():
+        _add_client_restore_draft_field(fv, _draft_field, _widget_key)
     _add_close_warning_key = f"_show_close_warning_add_client_{fv}"
     _show_add_warning = st.session_state.get(_add_close_warning_key, False)
     _dc_col1, _dc_col2 = st.columns([20, 1])
@@ -9780,6 +9807,10 @@ def add_client_dialog(fv):
                 st.session_state[f"show_add_client_dialog_{fv}"] = False
                 st.session_state[_ph_key], st.session_state[_em_key], st.session_state[_ad_key] = [], [], []
                 st.session_state.pop(_comments_key, None)
+                st.session_state.pop(_draft_key, None)
+                for _widget_key in _draft_fields.values():
+                    st.session_state.pop(_widget_key, None)
+                st.session_state.pop(f"cf_{fv}", None)
                 st.rerun()
     if _show_add_warning:
         _warn_key = f"unsaved_warn_add_{fv}"
@@ -9794,6 +9825,10 @@ def add_client_dialog(fv):
                     st.session_state[f"show_add_client_dialog_{fv}"] = False
                     st.session_state[_ph_key], st.session_state[_em_key], st.session_state[_ad_key] = [], [], []
                     st.session_state.pop(_comments_key, None)
+                    st.session_state.pop(_draft_key, None)
+                    for _widget_key in _draft_fields.values():
+                        st.session_state.pop(_widget_key, None)
+                    st.session_state.pop(f"cf_{fv}", None)
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"add_warn_cancel_{fv}", use_container_width=True):
@@ -9801,20 +9836,20 @@ def add_client_dialog(fv):
                     st.rerun()
     acl, acr = st.columns(2)
     with acl:
-        cn = st.text_input("ФИО / Компания", key=f"cn_{fv}")
-        cp = st.text_input("Основной телефон", key=f"cp_{fv}")
-        ce = st.text_input("Основной Email", key=f"ce_{fv}")
+        cn = st.text_input("ФИО / Компания", key=f"cn_{fv}", on_change=_add_client_save_draft, args=(fv, "name", f"cn_{fv}"))
+        cp = st.text_input("Основной телефон", key=f"cp_{fv}", on_change=_add_client_save_draft, args=(fv, "phone", f"cp_{fv}"))
+        ce = st.text_input("Основной Email", key=f"ce_{fv}", on_change=_add_client_save_draft, args=(fv, "email", f"ce_{fv}"))
         cd_cc1, cd_cc2, cd_cc3 = st.columns([1, 1.2, 1])
         with cd_cc1:
-            cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}", label_visibility="visible")
+            cd = st.number_input("Скидка (%)", min_value=0, max_value=100, step=1, value=None, key=f"cd_{fv}", on_change=_add_client_save_draft, args=(fv, "discount", f"cd_{fv}"), label_visibility="visible")
         with cd_cc2:
-            cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", placeholder="Выбери категорию")
+            cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", on_change=_add_client_save_draft, args=(fv, "category", f"cc_{fv}"), placeholder="Выбери категорию")
         with cd_cc3:
-            cpromo = st.text_input("Промокод", key=f"cpromo_{fv}", placeholder="Введите промокод")
-        cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", placeholder=MGR_PLACEHOLDER)
-        contact_method_new = st.selectbox("Предпочтительный способ связи:", [""] + CONTACT_METHODS, index=0, key=f"new_contact_method_{fv}", placeholder="Выберите способ связи")
-        city_new = st.text_input("Город", key=f"city_new_{fv}", placeholder="Введите город")
-        ca = st.text_area("Основной адрес", key=f"ca_{fv}", height=68)
+            cpromo = st.text_input("Промокод", key=f"cpromo_{fv}", on_change=_add_client_save_draft, args=(fv, "promo", f"cpromo_{fv}"), placeholder="Введите промокод")
+        cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", on_change=_add_client_save_draft, args=(fv, "manager", f"cm_{fv}"), placeholder=MGR_PLACEHOLDER)
+        contact_method_new = st.selectbox("Предпочтительный способ связи:", [""] + CONTACT_METHODS, index=0, key=f"new_contact_method_{fv}", on_change=_add_client_save_draft, args=(fv, "contact_method", f"new_contact_method_{fv}"), placeholder="Выберите способ связи")
+        city_new = st.text_input("Город", key=f"city_new_{fv}", on_change=_add_client_save_draft, args=(fv, "city", f"city_new_{fv}"), placeholder="Введите город")
+        ca = st.text_area("Основной адрес", key=f"ca_{fv}", on_change=_add_client_save_draft, args=(fv, "address", f"ca_{fv}"), height=68)
     with acr:
         with st.container(border=True):
             st.markdown("**Комментарии:**")
@@ -9822,11 +9857,12 @@ def add_client_dialog(fv):
             if st.session_state.get(cc_form_clr):
                 st.session_state[f"new_cc_form_{fv}"] = ""
                 st.session_state[cc_form_clr] = False
-            ncc = st.text_area("Комментарий:", key=f"new_cc_form_{fv}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+            ncc = st.text_area("Комментарий:", key=f"new_cc_form_{fv}", on_change=_add_client_save_draft, args=(fv, "comment_input", f"new_cc_form_{fv}"), placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
             _fcc_clicked = st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True)
             if _fcc_clicked:
                 if ncc.strip():
                     st.session_state.setdefault(_comments_key, []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
+                    st.session_state.setdefault(_draft_key, {})["comment_input"] = ""
                     st.session_state[cc_form_clr] = True
                     st.rerun()
                 else: st.warning("Введите текст")
@@ -9887,7 +9923,12 @@ def add_client_dialog(fv):
     with _files_right:
         with st.container(border=True):
             st.markdown("**Файлы**")
-            cf = st.file_uploader("Прикрепить файлы:", key=f"cf_{fv}", accept_multiple_files=True)
+            cf = st.file_uploader("Прикрепить файлы:", key=f"cf_{fv}", accept_multiple_files=True,
+                                  on_change=_add_client_save_draft, args=(fv, "files", f"cf_{fv}"))
+            if not cf:
+                cf = st.session_state.get(_draft_key, {}).get("files", [])
+            if cf and not st.session_state.get(f"cf_{fv}"):
+                st.caption(f"Ранее прикреплено файлов: {len(cf)}. Они сохранятся при создании клиента.")
     if st.button("Внести клиента в базу", use_container_width=True, type="primary", key=f"add_client_btn_{fv}"):
         if cn and cp:
             _new_name_norm = re.sub(r"\s+", " ", cn.strip()).casefold()
@@ -9932,6 +9973,10 @@ def add_client_dialog(fv):
                 # создал клиента с тем же номером. Используем фактически сохранённый ID.
                 nid = nc.get("id", nid)
                 st.session_state[_ph_key], st.session_state[_em_key], st.session_state[_ad_key] = [], [], []
+                st.session_state.pop(_draft_key, None)
+                for _widget_key in _draft_fields.values():
+                    st.session_state.pop(_widget_key, None)
+                st.session_state.pop(f"cf_{fv}", None)
                 st.session_state.last_id = nid
                 st.session_state.client_form_version += 1
                 st.session_state.expanded_client_id = nid
