@@ -1872,6 +1872,16 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     active_id = st.session_state.get("_crm_active_window_id")
     window = next((w for w in windows if w.get("id") == active_id), None)
     requested_tab_key = _crm_workspace_tab_key(entry)
+    # Capture the tab that was active BEFORE changing the tab list.  Inserting
+    # the permanent client-card tab or appending a new dialog changes indices;
+    # recording history afterwards could point at the newly opened tab instead
+    # of the tab from which the user launched the action.
+    _history_previous_key = None
+    if window is not None:
+        _old_tabs_for_history = window.get("tabs", [])
+        _old_active_for_history = int(window.get("active_tab", 0) or 0)
+        if 0 <= _old_active_for_history < len(_old_tabs_for_history):
+            _history_previous_key = _crm_workspace_tab_key(_old_tabs_for_history[_old_active_for_history])
     # A dialog launched by a control inside the currently rendered workspace
     # must stay in that exact workspace. The dialog's inferred client_id can be
     # absent or stale (for example, a calculation dialog may receive only a
@@ -1933,13 +1943,10 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     # Remember the previously active tab so closing the current tab returns
     # to the most recently viewed tab, not simply the tab to its left.
     _history = window.setdefault("tab_history", [])
-    _previous_index = int(window.get("active_tab", 0) or 0)
-    _window_tabs_before_switch = window.get("tabs", [])
-    if 0 <= _previous_index < len(_window_tabs_before_switch) and _previous_index != existing:
-        _previous_key = _crm_workspace_tab_key(_window_tabs_before_switch[_previous_index])
-        if _previous_key in _history:
-            _history.remove(_previous_key)
-        _history.append(_previous_key)
+    if _history_previous_key and _history_previous_key != key:
+        if _history_previous_key in _history:
+            _history.remove(_history_previous_key)
+        _history.append(_history_previous_key)
     window["active_tab"] = existing
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window["id"]
