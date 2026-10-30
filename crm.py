@@ -1852,6 +1852,7 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     st.session_state["_crm_active_dialog"] = window["tabs"][existing]
     st.session_state["_crm_dialog_requested_this_run"] = True
     _crm_workspace_queue_save()
+    return window
 
 # Workspace state is stored separately from the CRM database, per login.
 def _crm_workspace_remote_path(login):
@@ -5499,6 +5500,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button:hover { color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button p,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] button span { white-space:nowrap !important; }
+    [class*="st-key-crm_workspace_taskbar_close_"] { display:flex !important; flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
+    [class*="st-key-crm_workspace_taskbar_close_"] [data-testid="stButton"],
+    [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; visibility:visible !important; opacity:1 !important; color:#8A94A3 !important; font-size:18px !important; line-height:1 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
@@ -11225,12 +11229,13 @@ elif st.session_state.active_tab == "Задачи":
                         _crm_dialog_signature_value(_task_entry["args"]),
                         _crm_dialog_signature_value(_task_entry["kwargs"]),
                     )
-                    _crm_workspace_open_dialog(_task_entry, client_id=cl.get("id"))
-                    # Explicitly activate the requested task tab after resolving/creating
-                    # its client workspace. This prevents a restored window from keeping
-                    # the tab that was active before it was minimized.
-                    _task_window = next((w for w in st.session_state.get("_crm_windows", [])
-                                         if str(w.get("client_id")) == str(cl.get("id"))), None)
+                    # Use the exact window selected by the dispatcher. Looking it up
+                    # again by client_id can select a different window for the same client.
+                    _task_window = _crm_workspace_open_dialog(_task_entry, client_id=cl.get("id"))
+                    # Activate the requested task tab in that exact window.
+                    if _task_window is not None:
+                        _task_window["minimized"] = False
+                        st.session_state["_crm_active_window_id"] = _task_window.get("id")
                     if _task_window is not None:
                         _task_tab_key = _crm_workspace_tab_key(_task_entry)
                         _task_tab_index = next((i for i, tab in enumerate(_task_window.get("tabs", []))
