@@ -11549,48 +11549,65 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         min-width:max-content !important; max-width:none !important;
     }
     .st-key-crm_workspace_tabbar .stButton { width:max-content !important; min-width:max-content !important; }
-    .st-key-crm_workspace_tabbar .stButton > button {
+    .st-key-crm_workspace_tabbar .stButton,
+    .st-key-crm_workspace_tabbar [data-testid="stButton"] {
+        width:max-content !important; min-width:max-content !important;
+        border:0 !important; outline:0 !important; box-shadow:none !important;
+        background:transparent !important; padding:0 !important; margin:0 !important;
+    }
+    .st-key-crm_workspace_tabbar .stButton > button,
+    .st-key-crm_workspace_tabbar [data-testid="stButton"] > button,
+    .st-key-crm_workspace_tabbar button[data-testid^="stBaseButton-"] {
         box-sizing:border-box !important; display:inline-flex !important;
         width:max-content !important; min-width:max-content !important; max-width:none !important;
-        min-height:40px !important; align-items:center !important; justify-content:center !important;
-        border:0 !important; border-bottom:2px solid transparent !important;
-        border-radius:0 !important; padding:0.55rem 1rem !important;
+        min-height:38px !important; align-items:center !important; justify-content:center !important;
+        border:0 !important; border-style:none !important; outline:0 !important;
+        border-radius:0 !important; padding:0.5rem 0.55rem !important;
         color:#65758B !important; font-weight:500 !important;
         background:transparent !important; box-shadow:none !important;
         white-space:nowrap !important; writing-mode:horizontal-tb !important;
     }
     .st-key-crm_workspace_tabbar .stButton > button p,
     .st-key-crm_workspace_tabbar .stButton > button span { white-space:nowrap !important; }
-    .st-key-crm_workspace_tabbar [data-testid="stBaseButton-primary"] button {
-        color:#BC1661 !important; border-bottom:2px solid #BC1661 !important;
-        background:transparent !important;
-    }
-    .st-key-crm_workspace_tabbar button:hover { color:#BC1661 !important; background:rgba(188,22,97,0.035) !important; }
+    /* Each tab has exactly one frame: the keyed tab container. Its two
+       Streamlit buttons are deliberately borderless and visually transparent. */
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         align-items:center !important; gap:0 !important; width:max-content !important;
         min-width:max-content !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
-        background:#F3F5F8 !important; padding:0 3px 0 0 !important;
+        background:#F3F5F8 !important; padding:0 3px !important;
+        box-shadow:none !important; outline:0 !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton,
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stButton"] {
+        border:0 !important; background:transparent !important;
+        box-shadow:none !important; outline:0 !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] button,
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] button:hover,
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] button:focus,
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] button:active {
+        border:0 !important; border-style:none !important; border-bottom:0 !important;
+        border-radius:0 !important; outline:0 !important; box-shadow:none !important;
+        background:transparent !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button {
-        border:0 !important; border-bottom:2px solid transparent !important;
-        border-radius:6px 0 0 6px !important; background:transparent !important;
-        padding-right:0.55rem !important;
+        padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button {
-        min-width:25px !important; width:25px !important; min-height:30px !important;
+        min-width:27px !important; width:27px !important; min-height:30px !important;
         height:30px !important; padding:0 !important; margin:0 !important;
-        border:0 !important; border-radius:0 !important;
-        border-bottom:2px solid transparent !important;
-        outline:0 !important; box-shadow:none !important;
-        background:transparent !important; color:#8A94A3 !important;
+        color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button:hover {
-        color:#BC1661 !important; background:transparent !important;
+        color:#BC1661 !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"]:has([data-testid="stBaseButton-primary"]) {
         border-color:#BC1661 !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"]:has([data-testid="stBaseButton-primary"]) button {
+        color:#BC1661 !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] {
         position:absolute !important; top:0 !important; right:0 !important;
