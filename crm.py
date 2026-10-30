@@ -1856,10 +1856,14 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     active_id = st.session_state.get("_crm_active_window_id")
     window = next((w for w in windows if w.get("id") == active_id), None)
     requested_tab_key = _crm_workspace_tab_key(entry)
-    # A dialog launched from inside an open client workspace belongs to that
-    # workspace. Do not let an identical/stale tab in another window steal focus.
+    # A dialog launched by a control inside the currently rendered workspace
+    # must stay in that exact workspace. The dialog's inferred client_id can be
+    # absent or stale (for example, a calculation dialog may receive only a
+    # deal id); using it to reject the active window sent actions to another
+    # client's window. Context from the host is authoritative.
     active_matches_client = bool(window and (client_id is None or str(window.get("client_id")) == str(client_id)))
-    if from_host and active_matches_client:
+    if from_host and window is not None:
+        active_matches_client = True
         exact_in_active = next((i for i, tab in enumerate(window.get("tabs", []))
                                 if _crm_workspace_tab_key(tab) == requested_tab_key), None)
         if exact_in_active is not None:
