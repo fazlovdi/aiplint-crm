@@ -49,6 +49,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Диагностика производительности включается только при добавлении ?perf=1 к URL.
+# По умолчанию не создаёт дополнительных записей и не меняет поведение CRM.
+try:
+    _CRM_PERF_ENABLED = str(st.query_params.get("perf", "")) == "1"
+except Exception:
+    _CRM_PERF_ENABLED = False
+_CRM_PERF_RUN_STARTED = time.perf_counter()
+
+
 # При первом входе боковая панель по умолчанию свернута.
 if "_crm_sidebar_visible" not in st.session_state:
     st.session_state["_crm_sidebar_visible"] = False
@@ -12239,6 +12248,7 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
 @st.fragment
 def _crm_render_workspace_fragment():
     """Render active workspace in isolation to reduce full-app reruns."""
+    _crm_perf_fragment_started = time.perf_counter()
     _crm_windows = st.session_state.get("_crm_windows", [])
     _crm_active_window_id = st.session_state.get("_crm_active_window_id")
     _crm_active_window = next((w for w in _crm_windows if w.get("id") == _crm_active_window_id), None)
@@ -12441,5 +12451,24 @@ def _crm_render_workspace_fragment():
 
     # Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
 
+    if _CRM_PERF_ENABLED:
+        _crm_perf_elapsed_ms = (time.perf_counter() - _crm_perf_fragment_started) * 1000
+        _crm_perf_window_id = st.session_state.get("_crm_active_window_id")
+        _crm_perf_tab = "-"
+        for _crm_perf_window in st.session_state.get("_crm_windows", []):
+            if _crm_perf_window.get("id") == _crm_perf_window_id:
+                _crm_perf_tabs = _crm_perf_window.get("tabs", [])
+                _crm_perf_index = int(_crm_perf_window.get("active_tab", 0) or 0)
+                if 0 <= _crm_perf_index < len(_crm_perf_tabs):
+                    _crm_perf_tab = _crm_workspace_tab_label(_crm_perf_tabs[_crm_perf_index])
+                break
+        print(f"CRM_PERF workspace_fragment_ms={_crm_perf_elapsed_ms:.1f} active_tab={_crm_perf_tab!r}")
 
+
+if _CRM_PERF_ENABLED:
+    print(
+        f"CRM_PERF full_script_before_workspace_ms="
+        f"{(time.perf_counter() - _CRM_PERF_RUN_STARTED) * 1000:.1f} "
+        f"section={st.session_state.get('active_tab', '-')!r}"
+    )
 _crm_render_workspace_fragment()
