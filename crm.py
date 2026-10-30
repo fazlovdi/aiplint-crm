@@ -11594,8 +11594,11 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
     }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stElementContainer"],
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton,
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stButton"] {
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
+        flex:0 0 auto !important; flex-shrink:0 !important;
         border:0 !important; background:transparent !important;
         box-shadow:none !important; outline:0 !important;
     }
@@ -11608,7 +11611,13 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         background:transparent !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button {
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
+        flex:0 0 auto !important; overflow:visible !important;
         padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
+    }
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button p,
+    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button span {
+        overflow:visible !important; text-overflow:clip !important; white-space:nowrap !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button {
         min-width:27px !important; width:27px !important; min-height:30px !important;
@@ -11667,7 +11676,10 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
             for _i, _tab in enumerate(_tabs):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                 with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
-                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=None):
+                    # Give the title button an explicit content-based pixel width so
+                    # Streamlit cannot shrink it inside the horizontal flex container.
+                    _tab_title_width = max(88, min(360, int(len(_tab_title) * 9 + 34)))
+                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=None, width=_tab_title_width, wrap=False):
                         _crm_active_window["active_tab"] = _i
                         st.session_state["_crm_active_dialog"] = _tab
                         st.rerun()
