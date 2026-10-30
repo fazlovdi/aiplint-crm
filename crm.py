@@ -5399,10 +5399,10 @@ def _crm_workspace_render_bottom_panel():
     if not _bottom_windows:
         return
     st.markdown("""<style>
-    .st-key-crm_workspace_bottom { background:#202124 !important; border:1px solid #3c4043 !important; border-radius:10px !important; padding:7px 9px !important; margin:8px 0 12px 0 !important; box-sizing:border-box !important; }
-    .st-key-crm_workspace_bottom [data-testid="stHorizontalBlock"] { gap:5px !important; }
-    .st-key-crm_workspace_bottom .stButton > button { min-height:32px !important; border-radius:7px !important; background:#303134 !important; color:#f1f3f4 !important; border:1px solid #5f6368 !important; padding:4px 10px !important; font-size:12px !important; }
-    .st-key-crm_workspace_bottom .stButton > button:hover { background:#45464a !important; }
+    .st-key-crm_workspace_bottom { background:#F3F5F8 !important; border:1px solid #D9DEE7 !important; border-radius:7px !important; padding:3px 5px !important; margin:0 !important; box-sizing:border-box !important; }
+    .st-key-crm_workspace_bottom [data-testid="stHorizontalBlock"] { gap:4px !important; }
+    .st-key-crm_workspace_bottom .stButton > button { min-height:30px !important; border-radius:6px !important; background:#F3F5F8 !important; color:#65758B !important; border:1px solid #D9DEE7 !important; padding:3px 9px !important; font-size:12px !important; }
+    .st-key-crm_workspace_bottom .stButton > button:hover { background:#E9EDF3 !important; color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
     with st.container(key="crm_workspace_bottom"):
         _bottom_cols_spec = []
@@ -11658,6 +11658,15 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     with st.container(key="crm_workspace_backdrop"):
         st.write("")
     with st.container(key="crm_workspace_window"):
+        # Window switcher is placed at the top of the workspace, above its tabs.
+        # The same panel is available on the Clients, Deals and Tasks main sections.
+        _crm_workspace_render_bottom_panel()
+        st.markdown(
+            "<div class='crm-workspace-window-switcher-divider'></div>"
+            "<style>.crm-workspace-window-switcher-divider { border-top:1px solid #D9DEE7; "
+            "margin:2px 0 3px 0; padding:0; height:0; }</style>",
+            unsafe_allow_html=True,
+        )
         _tabs = _crm_active_window.get("tabs", [])
         _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
         _tab_count = len(_tabs)
@@ -11720,7 +11729,6 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                         _active_spec["func"](*_active_entry.get("args", ()), **_active_entry.get("kwargs", {}))
                     finally:
                         st.session_state["_crm_inside_dialog_host"] = False
-        _crm_workspace_render_bottom_panel()
 
 
 # When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
