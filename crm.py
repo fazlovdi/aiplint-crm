@@ -1872,16 +1872,6 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     active_id = st.session_state.get("_crm_active_window_id")
     window = next((w for w in windows if w.get("id") == active_id), None)
     requested_tab_key = _crm_workspace_tab_key(entry)
-    # Capture the tab that was active BEFORE changing the tab list.  Inserting
-    # the permanent client-card tab or appending a new dialog changes indices;
-    # recording history afterwards could point at the newly opened tab instead
-    # of the tab from which the user launched the action.
-    _history_previous_key = None
-    if window is not None:
-        _old_tabs_for_history = window.get("tabs", [])
-        _old_active_for_history = int(window.get("active_tab", 0) or 0)
-        if 0 <= _old_active_for_history < len(_old_tabs_for_history):
-            _history_previous_key = _crm_workspace_tab_key(_old_tabs_for_history[_old_active_for_history])
     # A dialog launched by a control inside the currently rendered workspace
     # must stay in that exact workspace. The dialog's inferred client_id can be
     # absent or stale (for example, a calculation dialog may receive only a
@@ -1940,13 +1930,6 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     else:
         # Refresh object references and arguments for an already-open tab.
         window["tabs"][existing].update(entry)
-    # Remember the previously active tab so closing the current tab returns
-    # to the most recently viewed tab, not simply the tab to its left.
-    _history = window.setdefault("tab_history", [])
-    if _history_previous_key and _history_previous_key != key:
-        if _history_previous_key in _history:
-            _history.remove(_history_previous_key)
-        _history.append(_history_previous_key)
     window["active_tab"] = existing
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window["id"]
@@ -2000,8 +1983,7 @@ def _crm_workspace_queue_save():
             for tab in w.get("tabs", []):
                 safe_tabs.append({k: tab.get(k) for k in ("name", "title", "width", "args", "kwargs", "signature")})
             safe_windows.append({"id": w.get("id"), "client_id": w.get("client_id"), "title": w.get("title"),
-                                "tabs": safe_tabs, "active_tab": w.get("active_tab", 0),
-                                "tab_history": list(w.get("tab_history", [])), "minimized": bool(w.get("minimized"))})
+                                "tabs": safe_tabs, "active_tab": w.get("active_tab", 0), "minimized": bool(w.get("minimized"))})
         payload = json.dumps({"version": 1, "windows": safe_windows, "active_window_id": st.session_state.get("_crm_active_window_id")}, ensure_ascii=False, default=str)
         # Avoid repeated network writes for identical state during Streamlit reruns.
         if st.session_state.get("_crm_last_queued_workspace_payload") == payload:
@@ -2059,8 +2041,7 @@ def _crm_workspace_init():
                          "args": tuple(args), "kwargs": _restored_kwargs, "signature": _restored_signature})
         if tabs:
             restored.append({"id": w.get("id") or "cw_restored", "client_id": cid, "title": w.get("title") or (_crm_workspace_client_name(cid) if cid else "CRM"),
-                            "tabs": tabs, "active_tab": max(0, min(int(w.get("active_tab", 0) or 0), len(tabs)-1)),
-                            "tab_history": list(w.get("tab_history", [])), "minimized": bool(w.get("minimized"))})
+                            "tabs": tabs, "active_tab": max(0, min(int(w.get("active_tab", 0) or 0), len(tabs)-1)), "minimized": bool(w.get("minimized"))})
     st.session_state["_crm_windows"] = restored
     active_id = saved.get("active_window_id")
     st.session_state["_crm_active_window_id"] = active_id if any(w.get("id") == active_id and not w.get("minimized") for w in restored) else next((w.get("id") for w in restored if not w.get("minimized")), None)
@@ -11862,13 +11843,6 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                     if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=_tab_title):
                         # Tab navigation must win over any stale legacy dialog
                         # marker left by a task/deal/calculation opened earlier.
-                        _tab_history = _crm_active_window.setdefault("tab_history", [])
-                        _old_active_index = int(_crm_active_window.get("active_tab", 0) or 0)
-                        if 0 <= _old_active_index < len(_tabs) and _old_active_index != _i:
-                            _old_tab_key = _crm_workspace_tab_key(_tabs[_old_active_index])
-                            if _old_tab_key in _tab_history:
-                                _tab_history.remove(_old_tab_key)
-                            _tab_history.append(_old_tab_key)
                         _crm_active_window["active_tab"] = _i
                         _crm_active_window["minimized"] = False
                         st.session_state["_crm_active_window_id"] = _crm_active_window.get("id")
@@ -11887,19 +11861,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                                 st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state.get("_crm_windows", []) if not w.get("minimized")), None)
                                 st.session_state.pop("_crm_active_dialog", None)
                             else:
-                                _new_active = None
-                                if _i == _active_index:
-                                    _remaining_keys = {_crm_workspace_tab_key(_tab) for _tab in _tabs_now}
-                                    _history = _crm_active_window.setdefault("tab_history", [])
-                                    while _history and _new_active is None:
-                                        _candidate_key = _history.pop()
-                                        if _candidate_key in _remaining_keys:
-                                            _new_active = next((j for j, _tab in enumerate(_tabs_now)
-                                                                if _crm_workspace_tab_key(_tab) == _candidate_key), None)
-                                if _new_active is None:
-                                    # Fallback only when the previously viewed tab
-                                    # has also been closed or no history exists.
-                                    _new_active = min(_i, len(_tabs_now)-1) if _i <= _active_index else _active_index
+                                _new_active = _active_index - 1 if _i < _active_index else min(_i, len(_tabs_now)-1) if _i == _active_index else _active_index
                                 _new_active = max(0, min(_new_active, len(_tabs_now)-1))
                                 _crm_active_window["active_tab"] = _new_active
                                 st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
