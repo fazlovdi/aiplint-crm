@@ -8499,14 +8499,25 @@ def render_deal_products_block(d, key_prefix):
                             st.rerun()
 
     if st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True):
-        calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(d, {"id": "__new__"}, len(calculations)), "items": [],
-                "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
-                "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
-        calculations.append(calc)
-        save_data(st.session_state.crm_store)
-        # Open the new calculation through the workspace dialog registry.
-        # This keeps it as a tab in the deal's current client window.
-        deal_calculation_dialog(str(d["id"]), str(calc["id"]))
+        # В окне сделки объект d может быть устаревшей копией из вкладки рабочего
+        # пространства. Добавляем расчёт в актуальную сделку из crm_store, иначе
+        # вкладка откроется, но диспетчер не найдёт расчёт в сохранённой базе.
+        _current_deal = next(
+            (item for item in st.session_state.crm_store.get("deals", [])
+             if str(item.get("id")) == str(d.get("id"))),
+            None,
+        )
+        if _current_deal is None:
+            st.error("Сделка не найдена. Обновите страницу и попробуйте ещё раз.")
+        else:
+            _current_calculations = _current_deal.setdefault("calculations", [])
+            calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(_current_deal, {"id": "__new__"}, len(_current_calculations)), "items": [],
+                    "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
+                    "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
+            _current_calculations.append(calc)
+            save_data(st.session_state.crm_store)
+            # Открываем расчёт через реестр вкладок рабочего пространства.
+            deal_calculation_dialog(str(_current_deal["id"]), str(calc["id"]))
 
 
 @_crm_dialog("Расчёт сделки", width="large")
@@ -9786,10 +9797,10 @@ def add_client_dialog(fv):
                 if _phone_match or (_new_name_norm and _new_name_norm == _old_name_norm):
                     _dupes.append(_existing)
             if _dupes:
-                st.warning("Возможный дубль клиента уже существует:")
+                st.warning("Возможный дубль клиента уже существует. При необходимости можно сохранить клиента повторно:")
                 for _dup in _dupes[:5]:
                     st.markdown(f"- **{html.escape(str(_dup.get('name', '')))}** · {html.escape(str(_dup.get('phone', '')))}")
-            elif not cm: st.error("Выберите ответственного")
+            if not cm: st.error("Выберите ответственного")
             elif not cc: st.error("Выберите категорию")
             else:
                 clients = st.session_state.crm_store["clients"]
