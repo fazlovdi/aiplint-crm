@@ -5569,10 +5569,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
                     st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
                     # Closing a taskbar client button closes only that client window.
-                    # Keep the shared taskbar on the main screen even when one client remains;
-                    # do not auto-expand the remaining window as a side effect of closing.
-                    for _remaining_window in st.session_state.get("_crm_windows", []):
-                        _remaining_window["minimized"] = True
+                    # Do not change the minimized/expanded state of any remaining window.
+                    # In particular, the last remaining client button must stay visible
+                    # on the main screen without collapsing the shared taskbar.
                     st.session_state["_crm_active_window_id"] = None
                     st.session_state.pop("_crm_active_dialog", None)
                     _crm_workspace_clear_legacy_dialog_markers()
@@ -5661,6 +5660,10 @@ with nc6:
         st.session_state.pop("_open_created_deal", None)
         st.rerun()
 st.markdown("---")
+
+# Восстанавливаем персональное рабочее пространство до первого рендеринга
+# панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
+_crm_workspace_init()
 
 # На главном экране панель окон расположена сразу под навигацией CRM.
 _crm_nav_active_id = st.session_state.get("_crm_active_window_id")
@@ -11748,8 +11751,7 @@ if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("ac
     _pending_reminder = st.session_state["_pending_reminder_dialog"]
     create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
 
-# Восстанавливаем персональное рабочее пространство после входа/перезапуска.
-_crm_workspace_init()
+# Рабочее пространство уже восстановлено до первого рендеринга панели окон.
 
 # Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
 # действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
