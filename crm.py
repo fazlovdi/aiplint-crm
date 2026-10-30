@@ -5531,6 +5531,11 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] > div { flex:0 0 auto !important; min-width:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] { margin-left:auto !important; flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button { width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; color:#31333F !important; font:inherit !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:hover,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#8A94A3 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
@@ -5563,10 +5568,27 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     st.rerun()
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
                     st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
-                    if st.session_state.get("_crm_active_window_id") == _w.get("id"):
-                        st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state["_crm_windows"] if not w.get("minimized")), None)
-                        st.session_state.pop("_crm_active_dialog", None)
+                    # Closing a taskbar client button closes only that client window.
+                    # Keep the shared taskbar on the main screen even when one client remains;
+                    # do not auto-expand the remaining window as a side effect of closing.
+                    for _remaining_window in st.session_state.get("_crm_windows", []):
+                        _remaining_window["minimized"] = True
+                    st.session_state["_crm_active_window_id"] = None
+                    st.session_state.pop("_crm_active_dialog", None)
                     _crm_workspace_clear_legacy_dialog_markers()
+                    _crm_workspace_queue_save()
+                    st.rerun()
+        if not in_workspace and any(w.get("minimized") for w in st.session_state.get("_crm_windows", [])):
+            with st.container(key="crm_workspace_main_expand_wrap"):
+                if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
+                    _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized")), None)
+                    if _restore_window:
+                        _restore_window["minimized"] = False
+                        st.session_state["_crm_active_window_id"] = _restore_window.get("id")
+                        _restore_tabs = _restore_window.get("tabs", [])
+                        _restore_index = max(0, min(int(_restore_window.get("active_tab", 0) or 0), len(_restore_tabs)-1)) if _restore_tabs else -1
+                        if _restore_index >= 0:
+                            st.session_state["_crm_active_dialog"] = _restore_tabs[_restore_index]
                     _crm_workspace_queue_save()
                     st.rerun()
 
@@ -5643,23 +5665,10 @@ st.markdown("---")
 # На главном экране панель окон расположена сразу под навигацией CRM.
 _crm_nav_active_id = st.session_state.get("_crm_active_window_id")
 _crm_nav_active_window = next((w for w in st.session_state.get("_crm_windows", []) if w.get("id") == _crm_nav_active_id), None)
-if not _crm_nav_active_window or _crm_nav_active_window.get("minimized"):
-    _crm_workspace_render_bottom_panel()
-    _main_minimized_windows = [w for w in st.session_state.get("_crm_windows", []) if w.get("minimized")]
-    if _main_minimized_windows:
-        _expand_col, _expand_spacer = st.columns([1, 8])
-        with _expand_col:
-            if st.button("Развернуть", key="crm_workspace_main_expand", use_container_width=True, help="Вернуть окна клиентов в прежнее состояние"):
-                _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized")), None)
-                if _restore_window:
-                    _restore_window["minimized"] = False
-                    st.session_state["_crm_active_window_id"] = _restore_window.get("id")
-                    _restore_tabs = _restore_window.get("tabs", [])
-                    _restore_index = max(0, min(int(_restore_window.get("active_tab", 0) or 0), len(_restore_tabs)-1)) if _restore_tabs else -1
-                    if _restore_index >= 0:
-                        st.session_state["_crm_active_dialog"] = _restore_tabs[_restore_index]
-                _crm_workspace_queue_save()
-                st.rerun()
+# Render the taskbar on the main screen on the first run after restoring saved windows.
+# The expanded workspace overlays this area while active; when minimized, the same
+# taskbar is immediately visible without requiring another window interaction.
+_crm_workspace_render_bottom_panel()
 
 # Toast при загрузке если есть непрочитанные
 _unread_count = get_unread_count()
