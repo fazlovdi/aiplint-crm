@@ -1898,6 +1898,16 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
             window = exact_tab_window
     # Otherwise use the active window only when it belongs to this client;
     # then an existing non-minimized window for the same client.
+    # Новые формы клиента открываются отдельными вкладками в одном общем окне
+    # «Новый клиент», а не создают по новому окну на каждый клик.
+    if window is None and entry.get("name") == "add_client_dialog":
+        window = next(
+            (w for w in reversed(windows)
+             if any(tab.get("name") == "add_client_dialog" for tab in w.get("tabs", []))),
+            None,
+        )
+        if window is not None:
+            window["title"] = "Новый клиент"
     if window is None and client_id:
         if active_matches_client:
             window = next((w for w in windows if w.get("id") == active_id), None)
@@ -1925,6 +1935,9 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
             window["tabs"].insert(0, client_entry)
             if window.get("active_tab", 0) >= 0:
                 window["active_tab"] += 1
+    # Название окна создания клиента отдельно от названия вкладки.
+    if entry.get("name") == "add_client_dialog":
+        window["title"] = "Новый клиент"
     key = _crm_workspace_tab_key(entry)
     existing = next((i for i, t in enumerate(window["tabs"]) if _crm_workspace_tab_key(t) == key), None)
     if existing is None:
@@ -9693,13 +9706,30 @@ def render_client_in_tree(cl):
 
 def render_client_form(fv):
     if st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False):
-        st.session_state[f"show_add_client_dialog_{fv}"] = True
+        # Каждый клик создаёт отдельный экземпляр формы и отдельную вкладку.
+        _open_form_ids = []
+        for _state_key in st.session_state.keys():
+            _match = re.fullmatch(r"show_add_client_dialog_(\d+)", str(_state_key))
+            if _match and st.session_state.get(_state_key):
+                _open_form_ids.append(int(_match.group(1)))
+        _new_fv = max([int(fv)] + _open_form_ids) + 1
+        st.session_state.client_form_version = _new_fv
+        st.session_state[f"show_add_client_dialog_{_new_fv}"] = True
         st.rerun()
     if st.session_state.get(f"show_add_client_dialog_{fv}", False):
         add_client_dialog(fv)
 
 @_crm_dialog("Добавить клиента", width="large")
 def add_client_dialog(fv):
+    # Данные повторяющихся полей и комментариев изолированы для каждой вкладки.
+    _ph_key = f"_add_client_extra_phones_{fv}"
+    _em_key = f"_add_client_extra_emails_{fv}"
+    _ad_key = f"_add_client_extra_addresses_{fv}"
+    _comments_key = f"_add_client_pending_comments_{fv}"
+    st.session_state.setdefault(_ph_key, [])
+    st.session_state.setdefault(_em_key, [])
+    st.session_state.setdefault(_ad_key, [])
+    st.session_state.setdefault(_comments_key, [])
     _add_close_warning_key = f"_show_close_warning_add_client_{fv}"
     _show_add_warning = st.session_state.get(_add_close_warning_key, False)
     _dc_col1, _dc_col2 = st.columns([20, 1])
@@ -9714,10 +9744,10 @@ def add_client_dialog(fv):
                 st.session_state.get(f"city_new_{fv}", "").strip() or
                 st.session_state.get(f"ca_{fv}", "").strip() or
                 st.session_state.get(f"new_cc_form_{fv}", "").strip() or
-                st.session_state.get("pending_client_comments") or
-                any(p.get("phone", "").strip() for p in st.session_state.get("f_ph", [])) or
-                any(e.strip() for e in st.session_state.get("f_em", [])) or
-                any(a.get("address", "").strip() for a in st.session_state.get("f_ad", []))
+                st.session_state.get(_comments_key) or
+                any(p.get("phone", "").strip() for p in st.session_state.get(_ph_key, [])) or
+                any(e.strip() for e in st.session_state.get(_em_key, [])) or
+                any(a.get("address", "").strip() for a in st.session_state.get(_ad_key, []))
             )
             if _has_unsaved and not _show_add_warning:
                 st.session_state[_add_close_warning_key] = True
@@ -9725,8 +9755,8 @@ def add_client_dialog(fv):
             else:
                 st.session_state[_add_close_warning_key] = False
                 st.session_state[f"show_add_client_dialog_{fv}"] = False
-                st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
-                st.session_state.pop("pending_client_comments", None)
+                st.session_state[_ph_key], st.session_state[_em_key], st.session_state[_ad_key] = [], [], []
+                st.session_state.pop(_comments_key, None)
                 st.rerun()
     if _show_add_warning:
         _warn_key = f"unsaved_warn_add_{fv}"
@@ -9739,8 +9769,8 @@ def add_client_dialog(fv):
                 if st.button("Без сохранения", key=f"add_warn_nosave_{fv}", use_container_width=True):
                     st.session_state[_add_close_warning_key] = False
                     st.session_state[f"show_add_client_dialog_{fv}"] = False
-                    st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
-                    st.session_state.pop("pending_client_comments", None)
+                    st.session_state[_ph_key], st.session_state[_em_key], st.session_state[_ad_key] = [], [], []
+                    st.session_state.pop(_comments_key, None)
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"add_warn_cancel_{fv}", use_container_width=True):
@@ -9773,12 +9803,12 @@ def add_client_dialog(fv):
             _fcc_clicked = st.button("Добавить комментарий", key=f"cc_form_btn_{fv}", use_container_width=True)
             if _fcc_clicked:
                 if ncc.strip():
-                    st.session_state.setdefault("pending_client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
+                    st.session_state.setdefault(_comments_key, []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ncc.strip()})
                     st.session_state[cc_form_clr] = True
                     st.rerun()
                 else: st.warning("Введите текст")
-            if st.session_state.get("pending_client_comments"):
-                for _pci, pc in enumerate(st.session_state["pending_client_comments"]):
+            if st.session_state.get(_comments_key):
+                for _pci, pc in enumerate(st.session_state[_comments_key]):
                     _pc_row, _pc_del = st.columns([10, 1])
                     with _pc_row:
                         _pc_text = html.escape(str(pc.get("text", "")))
@@ -9804,30 +9834,30 @@ def add_client_dialog(fv):
     ac_ph, ac_em, ac_ad = st.columns(3)
     with ac_ph:
         st.markdown("**Доп. телефоны**")
-        for i, ph in enumerate(st.session_state.f_ph):
-            st.session_state.f_ph[i]["phone"] = st.text_input(f"Телефон #{i+1}", value=ph["phone"], key=f"f_ph_{fv}_{i}")
-            st.session_state.f_ph[i]["name"] = st.text_input(f"ФИО #{i+1}", value=ph["name"], key=f"f_nm_{fv}_{i}")
-            st.session_state.f_ph[i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{fv}_{i}")
+        for i, ph in enumerate(st.session_state[_ph_key]):
+            st.session_state[_ph_key][i]["phone"] = st.text_input(f"Телефон #{i+1}", value=ph["phone"], key=f"f_ph_{fv}_{i}")
+            st.session_state[_ph_key][i]["name"] = st.text_input(f"ФИО #{i+1}", value=ph["name"], key=f"f_nm_{fv}_{i}")
+            st.session_state[_ph_key][i]["role"] = st.text_input(f"Должность #{i+1}", value=ph["role"], key=f"f_rl_{fv}_{i}")
         if st.button("Добавить телефон", key=f"add_ph_btn_{fv}"):
-            st.session_state.f_ph.append({"phone": "", "name": "", "role": ""})
+            st.session_state[_ph_key].append({"phone": "", "name": "", "role": ""})
             st.rerun()
     with ac_em:
         st.markdown("**Доп. Email**")
-        for i, em in enumerate(st.session_state.f_em):
-            st.session_state.f_em[i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{fv}_{i}")
+        for i, em in enumerate(st.session_state[_em_key]):
+            st.session_state[_em_key][i] = st.text_input(f"Email #{i+1}", value=em, key=f"f_em_{fv}_{i}")
         if st.button("Добавить Email", key=f"add_em_btn_{fv}"):
-            st.session_state.f_em.append("")
+            st.session_state[_em_key].append("")
             st.rerun()
     with ac_ad:
         st.markdown("**Доп. адреса**")
-        for i, ad in enumerate(st.session_state.f_ad):
-            st.session_state.f_ad[i]["address"] = st.text_input(f"Адрес #{i+1}", value=ad.get("address", ""), key=f"f_ad_addr_{fv}_{i}")
-            st.session_state.f_ad[i]["resp_name"] = st.text_input(f"Ответственный #{i+1}", value=ad.get("resp_name", ""), key=f"f_ad_rn_{fv}_{i}")
-            st.session_state.f_ad[i]["resp_role"] = st.text_input(f"Должность #{i+1}", value=ad.get("resp_role", ""), key=f"f_ad_rr_{fv}_{i}")
-            st.session_state.f_ad[i]["resp_phone"] = st.text_input(f"Телефон #{i+1}", value=ad.get("resp_phone", ""), key=f"f_ad_rp_{fv}_{i}")
-            st.session_state.f_ad[i]["resp_email"] = st.text_input(f"Email #{i+1}", value=ad.get("resp_email", ""), key=f"f_ad_re_{fv}_{i}")
+        for i, ad in enumerate(st.session_state[_ad_key]):
+            st.session_state[_ad_key][i]["address"] = st.text_input(f"Адрес #{i+1}", value=ad.get("address", ""), key=f"f_ad_addr_{fv}_{i}")
+            st.session_state[_ad_key][i]["resp_name"] = st.text_input(f"Ответственный #{i+1}", value=ad.get("resp_name", ""), key=f"f_ad_rn_{fv}_{i}")
+            st.session_state[_ad_key][i]["resp_role"] = st.text_input(f"Должность #{i+1}", value=ad.get("resp_role", ""), key=f"f_ad_rr_{fv}_{i}")
+            st.session_state[_ad_key][i]["resp_phone"] = st.text_input(f"Телефон #{i+1}", value=ad.get("resp_phone", ""), key=f"f_ad_rp_{fv}_{i}")
+            st.session_state[_ad_key][i]["resp_email"] = st.text_input(f"Email #{i+1}", value=ad.get("resp_email", ""), key=f"f_ad_re_{fv}_{i}")
         if st.button("Добавить адрес", key=f"add_ad_btn_{fv}"):
-            st.session_state.f_ad.append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
+            st.session_state[_ad_key].append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
             st.rerun()
     st.markdown("---")
     _files_left, _files_right = st.columns(2)
@@ -9855,13 +9885,13 @@ def add_client_dialog(fv):
             else:
                 clients = st.session_state.crm_store["clients"]
                 nid = (max([c['id'] for c in clients]) if clients else 0) + 1
-                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "city": city_new.strip(), "address": ca, "category": cc, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state.f_ph if p["phone"].strip()], "extra_emails": [e for e in st.session_state.f_em if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state.f_ad if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
+                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "city": city_new.strip(), "address": ca, "category": cc, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state[_ph_key] if p["phone"].strip()], "extra_emails": [e for e in st.session_state[_em_key] if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state[_ad_key] if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
                 if cf:
                     fi_list = save_uploaded_files(cf, nid, "profile")
                     if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
-                if st.session_state.get("pending_client_comments"):
-                    nc["client_comments"] = list(st.session_state["pending_client_comments"])
-                    st.session_state["pending_client_comments"] = []
+                if st.session_state.get(_comments_key):
+                    nc["client_comments"] = list(st.session_state[_comments_key])
+                    st.session_state[_comments_key] = []
                 st.session_state.crm_store["clients"].append(nc)
                 _client_saved = save_data(st.session_state.crm_store)
                 if not _client_saved:
@@ -9878,7 +9908,7 @@ def add_client_dialog(fv):
                 # save_data может переназначить ID, если другой сотрудник одновременно
                 # создал клиента с тем же номером. Используем фактически сохранённый ID.
                 nid = nc.get("id", nid)
-                st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
+                st.session_state[_ph_key], st.session_state[_em_key], st.session_state[_ad_key] = [], [], []
                 st.session_state.last_id = nid
                 st.session_state.client_form_version += 1
                 st.session_state.expanded_client_id = nid
