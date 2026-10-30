@@ -11538,8 +11538,9 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
     .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 52px 0 0 !important; box-sizing:border-box !important; }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
-        display:flex !important; flex-wrap:nowrap !important; gap:0.35rem !important;
+        display:flex !important; flex-wrap:nowrap !important; gap:0 !important; column-gap:0 !important;
         align-items:center !important; justify-content:flex-start !important;
+        column-gap:0 !important; row-gap:0 !important;
         border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0 !important;
         width:100% !important; overflow-x:auto !important;
     }
@@ -11573,7 +11574,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
        Streamlit buttons are deliberately borderless and visually transparent. */
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
-        align-items:center !important; gap:0 !important; width:max-content !important;
+        align-items:center !important; gap:0 !important; column-gap:0 !important; width:max-content !important;
         min-width:max-content !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
         background:#F3F5F8 !important; padding:0 3px !important;
@@ -11643,10 +11644,10 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         _tabs = _crm_active_window.get("tabs", [])
         _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
         _tab_count = len(_tabs)
-        with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False):
+        with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False, gap=None):
             for _i, _tab in enumerate(_tabs):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
-                with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False):
+                with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None):
                     if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=_tab_title):
                         _crm_active_window["active_tab"] = _i
                         st.session_state["_crm_active_dialog"] = _tab
