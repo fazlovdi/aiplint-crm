@@ -5729,13 +5729,40 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     _crm_workspace_queue_save()
                     st.rerun()
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
-                    st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
-                    # Closing a taskbar client button closes only that client window.
-                    # Do not change the minimized/expanded state of any remaining window.
-                    # In particular, the last remaining client button must stay visible
-                    # on the main screen without collapsing the shared taskbar.
-                    st.session_state["_crm_active_window_id"] = None
-                    st.session_state.pop("_crm_active_dialog", None)
+                    # Закрываем только выбранное окно клиента.
+                    st.session_state["_crm_windows"] = [
+                        w for w in st.session_state.get("_crm_windows", [])
+                        if w.get("id") != _w.get("id")
+                    ]
+                    _remaining_windows = st.session_state.get("_crm_windows", [])
+
+                    # Пока остаётся хотя бы одно окно клиента, рабочее пространство
+                    # не закрываем: переключаемся на другое доступное окно.
+                    _next_window = next(
+                        (w for w in reversed(_remaining_windows) if not w.get("minimized")),
+                        None
+                    )
+                    if _next_window is None and _remaining_windows:
+                        # Если все оставшиеся окна свёрнуты, разворачиваем последнее.
+                        _next_window = _remaining_windows[-1]
+                        _next_window["minimized"] = False
+
+                    if _next_window:
+                        st.session_state["_crm_active_window_id"] = _next_window.get("id")
+                        _next_tabs = _next_window.get("tabs", [])
+                        _next_index = max(
+                            0, min(int(_next_window.get("active_tab", 0) or 0), len(_next_tabs) - 1)
+                        ) if _next_tabs else -1
+                        if _next_index >= 0:
+                            _next_window["active_tab"] = _next_index
+                            st.session_state["_crm_active_dialog"] = _next_tabs[_next_index]
+                        else:
+                            st.session_state.pop("_crm_active_dialog", None)
+                    else:
+                        # На главную возвращаемся только после закрытия последнего окна.
+                        st.session_state["_crm_active_window_id"] = None
+                        st.session_state.pop("_crm_active_dialog", None)
+
                     _crm_workspace_clear_legacy_dialog_markers()
                     _crm_workspace_queue_save()
                     st.rerun()
