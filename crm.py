@@ -11163,6 +11163,13 @@ elif st.session_state.active_tab == "Задачи":
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
+                    # Перед открытием задачи передаём диспетчеру её однозначные
+                    # идентификаторы. Одного dialog_task_key недостаточно:
+                    # основной диспетчер ожидает также номер и ID клиента/сделки.
+                    _push_dialog_return()
+                    st.session_state["dialog_task_number"] = str(task.get("task_number", ""))
+                    st.session_state["dialog_task_client_id"] = str(cl.get("id", t.get("client_id", "")))
+                    st.session_state["dialog_task_deal_id"] = str(task.get("deal_id", "") or "")
                     st.session_state["dialog_task_key"] = task_key
                     st.rerun()
                 render_scroll_restore(f"tb_{task_key}")
