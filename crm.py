@@ -11536,52 +11536,39 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
     /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
-    .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 100px 0 0 !important; box-sizing:border-box !important; overflow:visible !important; }
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > div { min-width:max-content !important; width:max-content !important; flex:0 0 auto !important; flex-shrink:0 !important; }
-    /* Streamlit inserts element-container wrappers between the horizontal row and
-       each keyed tab. Give those wrappers their content width too; otherwise the
-       title button is constrained to a narrow flex slot and gets ellipsized. */
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stElementContainer"],
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stVerticalBlockBorderWrapper"],
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stVerticalBlock"] {
-        width:max-content !important; min-width:max-content !important; max-width:none !important;
-        flex:0 0 auto !important; flex-grow:0 !important; flex-shrink:0 !important;
-    }
+    .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 52px 0 0 !important; box-sizing:border-box !important; }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         gap:0 !important; column-gap:0 !important; row-gap:0 !important;
         align-items:center !important; justify-content:flex-start !important;
         border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0 !important;
-        width:100% !important; overflow:visible !important;
-        scrollbar-width:none !important; -ms-overflow-style:none !important;
+        width:100% !important; overflow-x:auto !important;
     }
-    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"]::-webkit-scrollbar {
-        display:none !important; width:0 !important; height:0 !important;
-    }
-    /* Keep every tab at its natural content width; never squeeze labels. */
+    /* Each tab container must occupy only its own content width, not share
+       the available row width with neighboring tabs. */
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > * {
         flex:0 0 auto !important; flex-grow:0 !important; flex-shrink:0 !important;
-        width:fit-content !important; min-width:max-content !important;
+        width:max-content !important; min-width:max-content !important;
         max-width:none !important; margin:0 !important;
     }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="column"],
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        flex:0 0 auto !important; width:fit-content !important;
+        flex:0 0 auto !important; width:max-content !important;
         min-width:max-content !important; max-width:none !important;
     }
-    .st-key-crm_workspace_tabbar .stButton { width:fit-content !important; min-width:max-content !important; flex:0 0 auto !important; }
+    .st-key-crm_workspace_tabbar .stButton { width:max-content !important; min-width:max-content !important; }
     .st-key-crm_workspace_tabbar .stButton,
     .st-key-crm_workspace_tabbar [data-testid="stButton"] {
-        width:fit-content !important; min-width:max-content !important;
-        flex:0 0 auto !important; border:0 !important; outline:0 !important; box-shadow:none !important;
+        width:max-content !important; min-width:max-content !important;
+        border:0 !important; outline:0 !important; box-shadow:none !important;
         background:transparent !important; padding:0 !important; margin:0 !important;
     }
     .st-key-crm_workspace_tabbar .stButton > button,
     .st-key-crm_workspace_tabbar [data-testid="stButton"] > button,
     .st-key-crm_workspace_tabbar button[data-testid^="stBaseButton-"] {
         box-sizing:border-box !important; display:inline-flex !important;
-        width:fit-content !important; min-width:max-content !important; max-width:none !important;
-        flex:0 0 auto !important; min-height:38px !important; align-items:center !important; justify-content:center !important;
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
+        min-height:38px !important; align-items:center !important; justify-content:center !important;
         border:0 !important; border-style:none !important; outline:0 !important;
         border-radius:0 !important; padding:0.5rem 0.55rem !important;
         color:#65758B !important; font-weight:500 !important;
@@ -11603,12 +11590,8 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
     }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stElementContainer"],
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stVerticalBlock"],
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton,
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] [data-testid="stButton"] {
-        width:max-content !important; min-width:max-content !important; max-width:none !important;
-        flex:0 0 auto !important; flex-shrink:0 !important;
         border:0 !important; background:transparent !important;
         box-shadow:none !important; outline:0 !important;
     }
@@ -11621,13 +11604,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         background:transparent !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button {
-        width:max-content !important; min-width:max-content !important; max-width:none !important;
-        flex:0 0 auto !important; overflow:visible !important;
         padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
-    }
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button p,
-    .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button span {
-        overflow:visible !important; text-overflow:clip !important; white-space:nowrap !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button {
         min-width:27px !important; width:27px !important; min-height:30px !important;
@@ -11650,11 +11627,6 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] .stButton,
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] button {
         width:90px !important; min-width:90px !important;
-    }
-    /* Hide Streamlit hover-help popovers for controls inside this workspace window. */
-    .st-key-crm_workspace_window [data-testid="stTooltipContent"],
-    .st-key-crm_workspace_window [role="tooltip"] {
-        display:none !important; visibility:hidden !important; opacity:0 !important;
     }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
@@ -11686,9 +11658,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
             for _i, _tab in enumerate(_tabs):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                 with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
-                    # Let the title button take its natural text width. The CSS above
-                    # keeps every intermediate flex wrapper from squeezing it.
-                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=None, width="content", wrap=False):
+                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=None):
                         _crm_active_window["active_tab"] = _i
                         st.session_state["_crm_active_dialog"] = _tab
                         st.rerun()
