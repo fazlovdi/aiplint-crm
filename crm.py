@@ -5439,13 +5439,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         align-items:center !important; overflow:visible !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"] {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"],
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"] {
         min-width:0 !important; padding:0 !important; flex-shrink:0 !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:first-child {
         flex:0 0 auto !important; width:max-content !important; min-width:max-content !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:last-child {
         position:relative !important; inset:auto !important; transform:none !important;
         z-index:6 !important; flex:0 0 27px !important;
         width:27px !important; min-width:27px !important; max-width:27px !important;
@@ -5471,11 +5474,14 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         padding:0.5rem 32px 0.5rem 0.7rem !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child .stButton,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stButton"] {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stButton"],
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:last-child .stButton,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:last-child [data-testid="stButton"] {
         width:27px !important; min-width:27px !important; max-width:27px !important;
         padding:0 !important; margin:0 !important; flex:0 0 27px !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:last-child button {
         box-sizing:border-box !important; display:inline-flex !important;
         align-items:center !important; justify-content:center !important;
         min-width:27px !important; width:27px !important; max-width:27px !important;
@@ -5484,7 +5490,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button p,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button span {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button span,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:last-child button p,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stColumn"]:last-child button span {
         width:100% !important; margin:0 !important; padding:0 !important;
         text-align:center !important; line-height:1 !important;
     }
@@ -11218,6 +11226,20 @@ elif st.session_state.active_tab == "Задачи":
                         _crm_dialog_signature_value(_task_entry["kwargs"]),
                     )
                     _crm_workspace_open_dialog(_task_entry, client_id=cl.get("id"))
+                    # Explicitly activate the requested task tab after resolving/creating
+                    # its client workspace. This prevents a restored window from keeping
+                    # the tab that was active before it was minimized.
+                    _task_window = next((w for w in st.session_state.get("_crm_windows", [])
+                                         if str(w.get("client_id")) == str(cl.get("id"))), None)
+                    if _task_window is not None:
+                        _task_tab_key = _crm_workspace_tab_key(_task_entry)
+                        _task_tab_index = next((i for i, tab in enumerate(_task_window.get("tabs", []))
+                                                if _crm_workspace_tab_key(tab) == _task_tab_key), None)
+                        if _task_tab_index is not None:
+                            _task_window["active_tab"] = _task_tab_index
+                            _task_window["minimized"] = False
+                            st.session_state["_crm_active_window_id"] = _task_window.get("id")
+                            st.session_state["_crm_active_dialog"] = _task_window["tabs"][_task_tab_index]
                     st.rerun()
                 render_scroll_restore(f"tb_{task_key}")
         col_new, col_today, col_future, col_review = st.columns(4)
