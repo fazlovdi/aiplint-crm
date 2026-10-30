@@ -5446,10 +5446,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         flex:0 0 auto !important; width:max-content !important; min-width:max-content !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child {
-        position:absolute !important; right:0 !important; top:50% !important;
-        transform:translateY(-50%) !important; z-index:5 !important;
-        flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
-        background:inherit !important;
+        position:relative !important; inset:auto !important; transform:none !important;
+        z-index:6 !important; flex:0 0 27px !important;
+        width:27px !important; min-width:27px !important; max-width:27px !important;
+        background:inherit !important; overflow:visible !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] .stButton,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stButton"] {
@@ -11202,14 +11202,22 @@ elif st.session_state.active_tab == "Задачи":
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
-                    # Перед открытием задачи передаём диспетчеру её однозначные
-                    # идентификаторы. Одного dialog_task_key недостаточно:
-                    # основной диспетчер ожидает также номер и ID клиента/сделки.
-                    _push_dialog_return()
-                    st.session_state["dialog_task_number"] = str(task.get("task_number", ""))
-                    st.session_state["dialog_task_client_id"] = str(cl.get("id", t.get("client_id", "")))
-                    st.session_state["dialog_task_deal_id"] = str(task.get("deal_id", "") or "")
-                    st.session_state["dialog_task_key"] = task_key
+                    # Open through the workspace host so an already-open task tab
+                    # is activated instead of being sent to the legacy dialog dispatcher.
+                    _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
+                                           if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
+                    _task_entry = {
+                        "name": "task_detail_dialog",
+                        "title": f"Задача №{task.get('task_number', '')}",
+                        "width": "large",
+                        "args": (task, cl, _task_deal_obj, task_key),
+                        "kwargs": {},
+                    }
+                    _task_entry["signature"] = (
+                        _crm_dialog_signature_value(_task_entry["args"]),
+                        _crm_dialog_signature_value(_task_entry["kwargs"]),
+                    )
+                    _crm_workspace_open_dialog(_task_entry, client_id=cl.get("id"))
                     st.rerun()
                 render_scroll_restore(f"tb_{task_key}")
         col_new, col_today, col_future, col_review = st.columns(4)
