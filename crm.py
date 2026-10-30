@@ -11717,30 +11717,27 @@ _crm_workspace_init()
 
 # Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
 # действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
-if not st.session_state.get("_crm_dialog_requested_this_run", False) and not st.session_state.get("_crm_windows"):
-    _global_req_view_state = st.session_state.get("dialog_client_requisites_view")
-    _global_req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
-    _global_invoice_dialog_state = st.session_state.get("dialog_invoice_request")
-    _global_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
-    _global_calc_id = st.session_state.get("dialog_calculation_calc_id")
+if not st.session_state.get("_crm_dialog_requested_this_run", False):
+    # Legacy actions must still be dispatched when a workspace is already open.
+    # The previous `and not _crm_windows` guard silently disabled requisites,
+    # invoice and calculation buttons as soon as the first workspace existed.
+    _global_req_view_state = st.session_state.pop("dialog_client_requisites_view", None)
+    _global_req_dialog_client_id = st.session_state.pop("dialog_client_requisites_client_id", None)
+    _global_req_return_to_invoice = bool(st.session_state.pop("dialog_client_requisites_return_to_invoice", False))
+    _global_invoice_dialog_state = st.session_state.pop("dialog_invoice_request", None)
+    _global_calc_deal_id = st.session_state.pop("dialog_calculation_deal_id", None)
+    _global_calc_id = st.session_state.pop("dialog_calculation_calc_id", None)
     if _global_req_view_state:
         client_requisites_view_dialog(_global_req_view_state.get("client_id"), bool(_global_req_view_state.get("return_to_invoice")), _global_req_view_state.get("requisite_id"))
     elif _global_req_dialog_client_id:
-        client_requisites_dialog(_global_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
+        client_requisites_dialog(_global_req_dialog_client_id, _global_req_return_to_invoice)
     elif _global_invoice_dialog_state:
         invoice_document_dialog(_global_invoice_dialog_state.get("deal_id"), _global_invoice_dialog_state.get("calc_id"))
     elif _global_calc_deal_id and _global_calc_id:
         _global_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_global_calc_deal_id)), None)
         _global_calc = next((c for c in (_global_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_global_calc_id) and not c.get("deleted")), None)
         if _global_calc_deal and _global_calc:
-            # Consume the legacy marker before dispatching the dialog.
-            # Persistent markers were reopening the calculation on unrelated clicks.
-            st.session_state.pop("dialog_calculation_deal_id", None)
-            st.session_state.pop("dialog_calculation_calc_id", None)
             deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
-        else:
-            st.session_state.pop("dialog_calculation_deal_id", None)
-            st.session_state.pop("dialog_calculation_calc_id", None)
 
 # Рабочая панель: полноэкранное рабочее пространство с вкладками в стиле Chrome.
 _crm_windows = st.session_state.get("_crm_windows", [])
