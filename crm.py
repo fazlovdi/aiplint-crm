@@ -5545,8 +5545,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
                 if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
+                    # A window switch is an explicit navigation action. Clear any
+                    # legacy one-shot dialog request left by the previously rendered
+                    # tab so it cannot steal focus again during this rerun.
                     _w["minimized"] = False
                     st.session_state["_crm_active_window_id"] = _w.get("id")
+                    _w_tabs = _w.get("tabs", [])
+                    _w_index = max(0, min(int(_w.get("active_tab", 0) or 0), len(_w_tabs) - 1)) if _w_tabs else -1
+                    if _w_index >= 0:
+                        st.session_state["_crm_active_dialog"] = _w_tabs[_w_index]
+                    _crm_workspace_clear_legacy_dialog_markers()
+                    _crm_workspace_queue_save()
                     st.rerun()
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
                     st.session_state["_crm_windows"] = [w for w in st.session_state.get("_crm_windows", []) if w.get("id") != _w.get("id")]
@@ -11832,8 +11841,14 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                 with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                     if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=_tab_title):
+                        # Tab navigation must win over any stale legacy dialog
+                        # marker left by a task/deal/calculation opened earlier.
                         _crm_active_window["active_tab"] = _i
+                        _crm_active_window["minimized"] = False
+                        st.session_state["_crm_active_window_id"] = _crm_active_window.get("id")
                         st.session_state["_crm_active_dialog"] = _tab
+                        _crm_workspace_clear_legacy_dialog_markers()
+                        _crm_workspace_queue_save()
                         st.rerun()
                     # The client-card tab is closed through the window switcher above;
                     # do not render a second close control beside this tab.
