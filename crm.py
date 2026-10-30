@@ -9152,15 +9152,38 @@ def render_client_card_expanded(cl):
                         st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
-                            # Dispatch the actual task object through the workspace
-                            # dialog router. This keeps the task in the current
-                            # client's window and avoids the legacy global task
-                            # markers, which can resolve an identically numbered
-                            # task belonging to another client.
-                            task_detail_dialog(
-                                _task, cl, None,
-                                f"client_task_{cl['id']}_{_task.get('task_number', '')}"
+                            # Явно активируем вкладку задачи в том же окне клиента.
+                            # Не используем временный вызов decorated-функции: он
+                            # мог быть пропущен общим диспетчером при совпадении
+                            # активной сигнатуры/устаревших маркеров.
+                            _task_deal = next((x for x in st.session_state.crm_store.get("deals", [])
+                                               if str(x.get("id", "")) == str(_task.get("deal_id", ""))), None)
+                            _task_entry = {
+                                "name": "task_detail_dialog",
+                                "title": f"Задача №{_task.get('task_number', '')}",
+                                "width": "large",
+                                "args": (_task, cl, _task_deal, f"client_task_{cl['id']}_{_task.get('task_number', '')}"),
+                                "kwargs": {},
+                            }
+                            _task_entry["signature"] = (
+                                _crm_dialog_signature_value(_task_entry["args"]),
+                                _crm_dialog_signature_value(_task_entry["kwargs"]),
                             )
+                            _target_window = _crm_workspace_open_dialog(
+                                _task_entry, client_id=cl.get("id"), from_host=True
+                            )
+                            if _target_window is not None:
+                                _target_window["minimized"] = False
+                                _target_key = _crm_workspace_tab_key(_task_entry)
+                                _target_index = next((i for i, tab in enumerate(_target_window.get("tabs", []))
+                                                      if _crm_workspace_tab_key(tab) == _target_key), None)
+                                if _target_index is not None:
+                                    _target_window["active_tab"] = _target_index
+                                    st.session_state["_crm_active_window_id"] = _target_window.get("id")
+                                    st.session_state["_crm_active_dialog"] = _target_window["tabs"][_target_index]
+                            _crm_workspace_clear_legacy_dialog_markers()
+                            _crm_workspace_queue_save()
+                            st.rerun()
             else:
                 st.caption("Задач по клиенту пока нет.")
             if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
@@ -9193,9 +9216,33 @@ def render_client_card_expanded(cl):
                         st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"client_deal_open_{cl['id']}_{_di}", use_container_width=True):
-                            _push_dialog_return()
-                            st.session_state.pop("dialog_client_key", None)
-                            st.session_state["dialog_deal_key"] = _deal["id"]
+                            # Открываем сделку непосредственно в текущем окне клиента,
+                            # минуя legacy dialog_deal_key и общий диспетчер.
+                            _deal_entry = {
+                                "name": "deal_detail_dialog",
+                                "title": f"Сделка {_deal.get('deal_number', _deal.get('title', ''))}",
+                                "width": "large",
+                                "args": (_deal, cl, st.session_state.get("current_user"), f"deal_{_deal.get('id')}"),
+                                "kwargs": {},
+                            }
+                            _deal_entry["signature"] = (
+                                _crm_dialog_signature_value(_deal_entry["args"]),
+                                _crm_dialog_signature_value(_deal_entry["kwargs"]),
+                            )
+                            _target_window = _crm_workspace_open_dialog(
+                                _deal_entry, client_id=cl.get("id"), from_host=True
+                            )
+                            if _target_window is not None:
+                                _target_window["minimized"] = False
+                                _target_key = _crm_workspace_tab_key(_deal_entry)
+                                _target_index = next((i for i, tab in enumerate(_target_window.get("tabs", []))
+                                                      if _crm_workspace_tab_key(tab) == _target_key), None)
+                                if _target_index is not None:
+                                    _target_window["active_tab"] = _target_index
+                                    st.session_state["_crm_active_window_id"] = _target_window.get("id")
+                                    st.session_state["_crm_active_dialog"] = _target_window["tabs"][_target_index]
+                            _crm_workspace_clear_legacy_dialog_markers()
+                            _crm_workspace_queue_save()
                             st.rerun()
             else:
                 st.caption("Сделок пока нет.")
