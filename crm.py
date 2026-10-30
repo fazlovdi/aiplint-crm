@@ -5428,11 +5428,26 @@ def _crm_workspace_render_bottom_panel():
         border-radius:7px !important; background:#F3F5F8 !important;
         padding:0 3px !important; box-shadow:none !important; outline:0 !important;
     }
+    /* Prevent Streamlit's nested horizontal layout from assigning equal, narrow
+       flex columns to the window-name and close buttons. Every wrapper follows
+       its intrinsic content width, just like the working workspace tabs. */
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > *,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] > *,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] .stElementContainer,
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] .stButton,
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stButton"] {
-        width:max-content !important; min-width:max-content !important; max-width:none !important;
+        display:flex !important; flex:0 0 auto !important; flex-grow:0 !important;
+        flex-shrink:0 !important; flex-basis:auto !important;
+        width:max-content !important; min-width:max-content !important;
+        max-width:none !important; box-sizing:border-box !important;
         border:0 !important; background:transparent !important; box-shadow:none !important;
         outline:0 !important; padding:0 !important; margin:0 !important;
+    }
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] button p,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] button span {
+        display:inline-block !important; width:max-content !important;
+        min-width:max-content !important; max-width:none !important;
+        white-space:nowrap !important; flex:0 0 auto !important;
     }
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] button,
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] button:hover,
@@ -5450,6 +5465,8 @@ def _crm_workspace_render_bottom_panel():
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] button p,
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] button span { white-space:nowrap !important; }
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] .stButton:first-child > button {
+        display:inline-flex !important; flex:0 0 auto !important;
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
         padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
     }
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] .stButton:last-child > button {
