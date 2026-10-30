@@ -2023,18 +2023,26 @@ def _crm_workspace_queue_save():
                 "minimized": bool(w.get("minimized")),
             })
 
-        workspace = {
+        # Сначала сравниваем только содержимое рабочего пространства. Время
+        # обновления не должно участвовать в сравнении: иначе каждый вызов
+        # получал новый payload и повторно записывал всю базу даже без изменений.
+        workspace_state = {
             "version": 1,
             "windows": safe_windows,
             "active_window_id": st.session_state.get("_crm_active_window_id"),
             "main_active_tab": st.session_state.get("active_tab", "Клиенты"),
-            "updated_at": now_str(),
         }
-        payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":"))
+        state_payload = json.dumps(
+            workspace_state, ensure_ascii=False, default=str, separators=(",", ":")
+        )
 
-        # Не запускаем транзакцию повторно на каждом обычном rerun.
-        if st.session_state.get("_crm_last_queued_workspace_payload") == payload:
+        # Не запускаем повторную транзакцию и не ставим повторные фоновые
+        # копирования, если состав/активность окон фактически не изменились.
+        if st.session_state.get("_crm_last_queued_workspace_state") == state_payload:
             return
+
+        workspace = {**workspace_state, "updated_at": now_str()}
+        payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":"))
 
         store = st.session_state.get("crm_store")
         if not isinstance(store, dict):
@@ -2089,6 +2097,9 @@ def _crm_workspace_queue_save():
                 # резервной копии Яндекс Диска и JSON-зеркала.
                 _queue_yandex_snapshot(_workspace_snapshot)
                 _queue_json_mirror(_workspace_snapshot)
+                st.session_state["_crm_last_queued_workspace_state"] = state_payload
+                # Оставляем старый ключ для совместимости с кодом, который мог
+                # читать его в текущем сеансе; дедупликация выполняется по state_payload.
                 st.session_state["_crm_last_queued_workspace_payload"] = payload
             except Exception:
                 if _workspace_conn is not None:
@@ -2225,6 +2236,7 @@ def _crm_workspace_init():
 
     # Не переносим старый dedupe-маркер из предыдущего входа пользователя.
     st.session_state.pop("_crm_last_queued_workspace_payload", None)
+    st.session_state.pop("_crm_last_queued_workspace_state", None)
 
 
 def _crm_dialog(title, width="large"):
