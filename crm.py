@@ -9818,6 +9818,54 @@ def add_client_dialog(fv):
                 st.session_state.last_id = nid
                 st.session_state.client_form_version += 1
                 st.session_state.expanded_client_id = nid
+                # После успешного создания клиента закрываем только вкладку
+                # «Добавить клиента», чтобы она не оставалась зависшей в окне.
+                st.session_state[f"show_add_client_dialog_{fv}"] = False
+                _add_client_window_id = st.session_state.get("_crm_active_window_id")
+                _add_client_window = next(
+                    (w for w in st.session_state.get("_crm_windows", [])
+                     if w.get("id") == _add_client_window_id),
+                    None,
+                )
+                if _add_client_window is not None:
+                    _add_client_tabs = _add_client_window.get("tabs", [])
+                    _add_client_index = next(
+                        (i for i, tab in enumerate(_add_client_tabs)
+                         if tab.get("name") == "add_client_dialog"
+                         and tab.get("args")
+                         and str(tab.get("args", (None,))[0]) == str(fv)),
+                        None,
+                    )
+                    if _add_client_index is not None:
+                        _add_client_tabs.pop(_add_client_index)
+                        if _add_client_tabs:
+                            _new_add_client_active = min(_add_client_index, len(_add_client_tabs) - 1)
+                            _add_client_window["active_tab"] = _new_add_client_active
+                            st.session_state["_crm_active_dialog"] = _add_client_tabs[_new_add_client_active]
+                        else:
+                            st.session_state["_crm_windows"] = [
+                                w for w in st.session_state.get("_crm_windows", [])
+                                if w.get("id") != _add_client_window_id
+                            ]
+                            st.session_state["_crm_active_window_id"] = next(
+                                (w.get("id") for w in reversed(st.session_state.get("_crm_windows", []))
+                                 if not w.get("minimized")),
+                                None,
+                            )
+                            _next_add_client_window = next(
+                                (w for w in st.session_state.get("_crm_windows", [])
+                                 if w.get("id") == st.session_state.get("_crm_active_window_id")),
+                                None,
+                            )
+                            if _next_add_client_window and _next_add_client_window.get("tabs"):
+                                _next_add_client_index = max(
+                                    0, min(int(_next_add_client_window.get("active_tab", 0) or 0),
+                                           len(_next_add_client_window["tabs"]) - 1)
+                                )
+                                st.session_state["_crm_active_dialog"] = _next_add_client_window["tabs"][_next_add_client_index]
+                            else:
+                                st.session_state.pop("_crm_active_dialog", None)
+                    _crm_workspace_queue_save()
                 st.toast(f"Клиент {cn} добавлен", icon="✅")
                 st.rerun()
         else: st.error("Заполните ФИО и телефон")
