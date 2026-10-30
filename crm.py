@@ -5394,12 +5394,13 @@ def _crm_workspace_clear_legacy_dialog_markers():
             st.session_state.pop(_key, None)
     st.session_state["_crm_dialog_requested_this_run"] = True
 
-def _crm_workspace_render_bottom_panel():
+def _crm_workspace_render_bottom_panel(in_workspace=False):
     _bottom_windows = st.session_state.get("_crm_windows", [])
     if not _bottom_windows:
         return
     # Window buttons reuse the tab frame styling, while the original 5:0.7
     # column ratio is retained so the label button receives the full width it needs.
+    _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     .st-key-crm_workspace_bottom {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
@@ -5412,7 +5413,8 @@ def _crm_workspace_render_bottom_panel():
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] {
         display:flex !important; flex:0 0 auto !important; flex-direction:row !important;
         flex-wrap:nowrap !important; align-items:center !important; justify-content:flex-start !important;
-        gap:0 !important; width:max-content !important; min-width:max-content !important;
+        gap:0 !important; column-gap:0 !important; row-gap:0 !important;
+        width:max-content !important; min-width:max-content !important;
         max-width:none !important; margin:0 !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
         background:#F3F5F8 !important; padding:0 3px !important;
@@ -5457,11 +5459,13 @@ def _crm_workspace_render_bottom_panel():
     with st.container(key="crm_workspace_bottom", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
         for _w in list(_bottom_windows):
             _label = str(_w.get("title") or "CRM")[:24] + (f" · {len(_w.get('tabs', []))}" if _w.get("tabs") else "")
-            _label = ("▣ " if _w.get("minimized") else "● ") + _label
+            if not in_workspace:
+                _label = ("▣ " if _w.get("minimized") else "● ") + _label
             with st.container(key=f"crm_workspace_window_item_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                 _window_label_col, _window_close_col = st.columns([5, 0.7], gap=None)
                 with _window_label_col:
-                    if st.button(_label, key=f"crm_workspace_restore_{_w.get('id')}", type="primary" if not _w.get("minimized") else "secondary", use_container_width=True):
+                    _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
+                    if st.button(_label, key=f"crm_workspace_restore_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary", use_container_width=True):
                         _w["minimized"] = False
                         st.session_state["_crm_active_window_id"] = _w.get("id")
                         st.rerun()
@@ -11705,7 +11709,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     with st.container(key="crm_workspace_window"):
         # Window switcher is placed at the top of the workspace, above its tabs.
         # The same panel is available on the Clients, Deals and Tasks main sections.
-        _crm_workspace_render_bottom_panel()
+        _crm_workspace_render_bottom_panel(in_workspace=True)
         st.markdown(
             "<div class='crm-workspace-window-switcher-divider'></div>"
             "<style>.crm-workspace-window-switcher-divider { border-top:1px solid #D9DEE7; "
