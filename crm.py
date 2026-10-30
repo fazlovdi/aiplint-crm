@@ -1746,6 +1746,13 @@ def _crm_workspace_client_id(name, args=(), kwargs=None):
                     found = find_client(matched_deal.get("client_id") or matched_deal.get("cl_id"))
                     if found is not None:
                         return found
+        # Task detail is commonly called as (task, client, deal, key_prefix).
+        # The task record itself may not store client_id, so use its explicit
+        # parent client argument before attempting any generic ID matching.
+        if len(args) > 1:
+            found = find_client(args[1])
+            if found is not None:
+                return found
     if name in ("client_detail_dialog", "client_deals_dialog", "create_deal_dialog", "client_create_task_dialog", "client_create_deal_task_dialog", "client_tasks_dialog") and args:
         found = find_client(args[0])
         if found: return found
@@ -1836,9 +1843,18 @@ def _crm_workspace_tab_key(entry):
         task = args[0] if isinstance(args[0], dict) else {}
         task_id = task.get("id") or task.get("task_id") or task.get("task_number")
         client_id = task.get("client_id") or task.get("cl_id")
+        # Most task records are nested under a client and omit client_id.
+        # Include the explicit parent client passed by task_detail_dialog so
+        # equal task numbers in different clients never collide.
+        if client_id is None and len(args) > 1:
+            parent_client = args[1]
+            if isinstance(parent_client, dict):
+                client_id = parent_client.get("id") or parent_client.get("client_id")
+            elif parent_client is not None:
+                client_id = parent_client
         deal_id = task.get("deal_id")
-        # A task is identified by its own ID/number and its parent entities,
-        # never by a generic dialog signature that can collide across clients.
+        if deal_id is None and len(args) > 2 and isinstance(args[2], dict):
+            deal_id = args[2].get("id")
         return f"{name}|task:{task_id}|client:{client_id}|deal:{deal_id}"
     if name == "deal_detail_dialog" and args:
         deal = args[0]
@@ -9127,15 +9143,15 @@ def render_client_card_expanded(cl):
                         st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
-                            _push_dialog_return()
-                            for _stale_key in ("dialog_client_requisites_client_id", "dialog_invoice_request", "_pending_reminder_dialog", "dialog_task_completion", "dialog_deal_report", "dialog_create_deal_task_deal_id", "dialog_create_client_task_client_id", "dialog_create_client_task_deal_select_cl_id"):
-                                st.session_state.pop(_stale_key, None)
-                            st.session_state["dialog_task_number"] = str(_task.get("task_number", ""))
-                            st.session_state["dialog_task_client_id"] = str(cl.get("id", ""))
-                            st.session_state["dialog_task_deal_id"] = ""
-                            st.session_state["dialog_task_key"] = f"client_task_{cl['id']}_{_task.get('task_number', '')}"
-                            st.session_state["active_tab"] = "Клиенты"
-                            st.rerun()
+                            # Dispatch the actual task object through the workspace
+                            # dialog router. This keeps the task in the current
+                            # client's window and avoids the legacy global task
+                            # markers, which can resolve an identically numbered
+                            # task belonging to another client.
+                            task_detail_dialog(
+                                _task, cl, None,
+                                f"client_task_{cl['id']}_{_task.get('task_number', '')}"
+                            )
             else:
                 st.caption("Задач по клиенту пока нет.")
             if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
