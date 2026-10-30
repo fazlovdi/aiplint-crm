@@ -356,9 +356,15 @@ st.markdown("""
         box-shadow: none !important;
     }
 
-    /* === FIX: Tooltip z-index to prevent overlapping dialogs === */
-    [data-testid="stTooltip"] { z-index: 1 !important; pointer-events: none !important; }
-    [data-testid="stTooltipContent"] { z-index: 1 !important; pointer-events: none !important; }
+    /* Отключить всплывающие подсказки Streamlit при наведении на элементы */
+    [data-testid="stTooltip"],
+    [data-testid="stTooltipContent"],
+    [role="tooltip"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
 
     /* === Increase font size for deal/task counts in clients table === */
     .clients-table .green-link { font-size: 1.05rem !important; }
