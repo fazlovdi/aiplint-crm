@@ -3755,6 +3755,7 @@ def _merge_data(local_data, disk_data):
 
 def save_data(data):
     """Транзакционно сохраняет изменения, сливая их с актуальной ревизией без воскрешения удалений."""
+    _save_succeeded = False
     with _save_lock:
         conn = None
         try:
@@ -3773,6 +3774,53 @@ def save_data(data):
                 merged_data = latest_data if latest_data else copy.deepcopy(data)
                 conflicts.append("базовая версия сессии неизвестна; сохранена актуальная база")
             elif base_revision < revision:
+                # Два сотрудника могли одновременно создать клиента с одним и тем же
+                # следующим числовым ID из устаревших копий базы. Разводим ID ДО merge,
+                # иначе алгоритм трёхстороннего слияния примет двух разных клиентов за одного.
+                _base_client_ids = {
+                    str(c.get("id")) for c in base_data.get("clients", [])
+                    if isinstance(c, dict) and c.get("id") is not None
+                }
+                _latest_clients = {
+                    str(c.get("id")): c for c in latest_data.get("clients", [])
+                    if isinstance(c, dict) and c.get("id") is not None
+                }
+                _numeric_client_ids = []
+                for _client in list(data.get("clients", [])):
+                    try:
+                        _numeric_client_ids.append(int(_client.get("id")))
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                _next_client_id = max(
+                    _numeric_client_ids + [
+                        int(c.get("id")) for c in latest_data.get("clients", [])
+                        if isinstance(c, dict) and str(c.get("id", "")).isdigit()
+                    ] + [0]
+                ) + 1
+                for _client in data.get("clients", []):
+                    if not isinstance(_client, dict) or _client.get("id") is None:
+                        continue
+                    _cid_key = str(_client.get("id"))
+                    _latest_same_id = _latest_clients.get(_cid_key)
+                    if _cid_key in _base_client_ids or _latest_same_id is None:
+                        continue
+                    _same_record = (
+                        str(_latest_same_id.get("created_at", "")) == str(_client.get("created_at", ""))
+                        and str(_latest_same_id.get("created_by", "")) == str(_client.get("created_by", ""))
+                        and str(_latest_same_id.get("name", "")).strip().casefold() == str(_client.get("name", "")).strip().casefold()
+                        and str(_latest_same_id.get("phone", "")) == str(_client.get("phone", ""))
+                    )
+                    if _same_record:
+                        continue
+                    _old_id = _client.get("id")
+                    while str(_next_client_id) in _latest_clients or any(
+                        str(other.get("id")) == str(_next_client_id)
+                        for other in data.get("clients", []) if isinstance(other, dict) and other is not _client
+                    ):
+                        _next_client_id += 1
+                    _client["id"] = _next_client_id
+                    conflicts.append(f"новому клиенту назначен свободный ID {_next_client_id} вместо {_old_id} из-за одновременного создания")
+                    _next_client_id += 1
                 merged_data, conflicts = _three_way_merge(base_data, data, latest_data, conflicts=conflicts)
             else:
                 merged_data = copy.deepcopy(data)
@@ -3786,6 +3834,7 @@ def save_data(data):
             conn.execute("COMMIT")
             conn.close()
             conn = None
+            _save_succeeded = True
 
             # После commit обновляем рабочую сессию и её базу сравнения.
             try:
@@ -3820,6 +3869,7 @@ def save_data(data):
                 st.sidebar.error(f"Ошибка сохранения: {e}")
             except Exception:
                 pass
+    return _save_succeeded
 
 def commit_and_rerun(data=None, toast_msg=None):
     if data is not None:
@@ -9813,7 +9863,21 @@ def add_client_dialog(fv):
                     nc["client_comments"] = list(st.session_state["pending_client_comments"])
                     st.session_state["pending_client_comments"] = []
                 st.session_state.crm_store["clients"].append(nc)
-                save_data(st.session_state.crm_store)
+                _client_saved = save_data(st.session_state.crm_store)
+                if not _client_saved:
+                    # Не оставляем в интерфейсе фиктивную запись, если транзакция БД
+                    # не подтвердилась. Форма остаётся открытой, введённые поля доступны.
+                    st.session_state.crm_store["clients"] = [
+                        c for c in st.session_state.crm_store.get("clients", [])
+                        if not (str(c.get("id")) == str(nc.get("id"))
+                                and str(c.get("created_at", "")) == str(nc.get("created_at", ""))
+                                and str(c.get("created_by", "")) == str(nc.get("created_by", "")))
+                    ]
+                    st.error("Клиент не сохранён: база не подтвердила запись. Проверьте соединение и нажмите «Внести клиента в базу» ещё раз. Форма оставлена открытой.")
+                    st.stop()
+                # save_data может переназначить ID, если другой сотрудник одновременно
+                # создал клиента с тем же номером. Используем фактически сохранённый ID.
+                nid = nc.get("id", nid)
                 st.session_state.f_ph, st.session_state.f_em, st.session_state.f_ad = [], [], []
                 st.session_state.last_id = nid
                 st.session_state.client_form_version += 1
