@@ -5420,13 +5420,31 @@ def _crm_workspace_render_bottom_panel():
         max-width:none !important; margin:0 !important;
     }
     .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] {
-        display:flex !important; flex:0 0 auto !important; flex-direction:row !important;
-        flex-wrap:nowrap !important; align-items:center !important; justify-content:flex-start !important;
-        gap:0 !important; column-gap:0 !important; width:max-content !important;
-        min-width:max-content !important; max-width:none !important; margin:0 !important;
+        display:inline-flex !important; flex:0 0 max-content !important;
+        flex-grow:0 !important; flex-shrink:0 !important; flex-basis:max-content !important;
+        flex-direction:row !important; flex-wrap:nowrap !important;
+        align-items:center !important; justify-content:flex-start !important;
+        gap:0 !important; column-gap:0 !important;
+        width:max-content !important; min-width:max-content !important;
+        max-width:max-content !important; inline-size:max-content !important;
+        align-self:flex-start !important; margin:0 !important;
         overflow:visible !important; border:1px solid #D9DEE7 !important;
         border-radius:7px !important; background:#F3F5F8 !important;
         padding:0 3px !important; box-shadow:none !important; outline:0 !important;
+        box-sizing:content-box !important;
+    }
+    /* The keyed Streamlit container contains another layout wrapper. Make the
+       wrapper and its horizontal row shrink-wrap the two buttons as well, so
+       the single outer border grows with the label instead of staying narrow. */
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > div,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] > div > div,
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"],
+    .st-key-crm_workspace_bottom [class*="st-key-crm_workspace_window_item_"] [data-testid="stElementContainer"] {
+        display:flex !important; flex:0 0 max-content !important;
+        flex-grow:0 !important; flex-shrink:0 !important; flex-basis:max-content !important;
+        width:max-content !important; min-width:max-content !important;
+        max-width:max-content !important; inline-size:max-content !important;
+        box-sizing:border-box !important; margin:0 !important; padding:0 !important;
     }
     /* Prevent Streamlit's nested horizontal layout from assigning equal, narrow
        flex columns to the window-name and close buttons. Every wrapper follows
