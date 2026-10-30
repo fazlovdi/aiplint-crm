@@ -8666,10 +8666,10 @@ def deal_calculation_dialog(deal_id, calc_id):
             except (TypeError, ValueError):
                 st.rerun()
         elif st.session_state.get("_crm_inside_dialog_host", False):
-            try:
-                st.rerun(scope="fragment")
-            except TypeError:
-                st.rerun()
+            # Кастомный хост диалогов не является st.fragment-функцией.
+            # scope="fragment" здесь вызывает StreamlitInvalidLayoutContextError,
+            # поэтому безопасно обновляем приложение обычным rerun.
+            st.rerun()
         else:
             st.rerun()
     deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id")) == str(deal_id)), None)
