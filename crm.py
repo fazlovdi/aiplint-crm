@@ -5447,10 +5447,25 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:first-child button {
         padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
     }
+    /* Close control matches the tab close button: fixed 27px hit area,
+       centered glyph, no inherited column/button padding or text offset. */
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child .stButton,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child [data-testid="stButton"] {
+        width:27px !important; min-width:27px !important; max-width:27px !important;
+        padding:0 !important; margin:0 !important; flex:0 0 27px !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button {
-        min-width:27px !important; width:27px !important; min-height:30px !important;
-        height:30px !important; padding:0 !important; margin:0 !important;
+        box-sizing:border-box !important; display:inline-flex !important;
+        align-items:center !important; justify-content:center !important;
+        min-width:27px !important; width:27px !important; max-width:27px !important;
+        min-height:30px !important; height:30px !important; max-height:30px !important;
+        padding:0 !important; margin:0 !important; text-align:center !important;
         color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button p,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button span {
+        width:100% !important; margin:0 !important; padding:0 !important;
+        text-align:center !important; line-height:1 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="column"]:last-child button:hover { color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
