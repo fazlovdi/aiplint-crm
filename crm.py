@@ -11536,13 +11536,20 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
     .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
     /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
-    .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 100px 0 0 !important; box-sizing:border-box !important; }
+    .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 52px 0 0 !important; box-sizing:border-box !important; }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
-        display:flex !important; flex-wrap:nowrap !important; gap:0 !important; column-gap:0 !important;
+        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+        gap:0 !important; column-gap:0 !important; row-gap:0 !important;
         align-items:center !important; justify-content:flex-start !important;
-        column-gap:0 !important; row-gap:0 !important;
         border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0 !important;
         width:100% !important; overflow-x:auto !important;
+    }
+    /* Each tab container must occupy only its own content width, not share
+       the available row width with neighboring tabs. */
+    .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > * {
+        flex:0 0 auto !important; flex-grow:0 !important; flex-shrink:0 !important;
+        width:max-content !important; min-width:max-content !important;
+        max-width:none !important; margin:0 !important;
     }
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="column"],
     .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
@@ -11573,9 +11580,12 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     /* Each tab has exactly one frame: the keyed tab container. Its two
        Streamlit buttons are deliberately borderless and visually transparent. */
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] {
-        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
-        align-items:center !important; gap:0 !important; column-gap:0 !important; width:max-content !important;
-        min-width:max-content !important; overflow:visible !important;
+        display:flex !important; flex:0 0 auto !important; flex-grow:0 !important;
+        flex-direction:row !important; flex-wrap:nowrap !important;
+        align-items:center !important; justify-content:flex-start !important;
+        gap:0 !important; column-gap:0 !important; width:max-content !important;
+        min-width:max-content !important; max-width:none !important;
+        margin:0 !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
         background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
@@ -11612,14 +11622,12 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] {
         position:absolute !important; top:0 !important; right:0 !important;
-        width:90px !important; min-width:90px !important; z-index:10 !important;
+        width:42px !important; min-width:42px !important; z-index:10 !important;
     }
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] .stButton,
     .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_minimize_wrap"] button {
-        width:90px !important; min-width:90px !important;
+        width:42px !important; min-width:42px !important;
     }
-    /* Suppress native hover tooltips for controls inside the workspace. */
-    .st-key-crm_workspace_window [title] { /* title attributes are disabled in Python for workspace buttons */ }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_window hr { display:none !important; }
     .st-key-crm_workspace_content [class*="st-key-close_row_"] { display:none !important; }
@@ -11646,17 +11654,17 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
         _tabs = _crm_active_window.get("tabs", [])
         _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
         _tab_count = len(_tabs)
-        with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False, gap=None):
+        with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
             for _i, _tab in enumerate(_tabs):
                 _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
-                with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None):
-                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=None):
+                with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+                    if st.button(_tab_title, key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}", type="primary" if _i == _active_index else "secondary", help=_tab_title):
                         _crm_active_window["active_tab"] = _i
                         st.session_state["_crm_active_dialog"] = _tab
                         st.rerun()
                     # The permanent client-card tab is intentionally not closable.
                     if _tab.get("name") != "client_detail_dialog":
-                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help=None):
+                        if st.button("×", key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}", help="Закрыть вкладку"):
                             _tabs_now = _crm_active_window.get("tabs", [])
                             if 0 <= _i < len(_tabs_now): _tabs_now.pop(_i)
                             if not _tabs_now:
@@ -11672,7 +11680,7 @@ if _crm_active_window and not _crm_active_window.get("minimized"):
                             _crm_workspace_queue_save()
                             st.rerun()
             with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
-                if st.button("Свернуть", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help=None):
+                if st.button("−", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
                     _crm_active_window["minimized"] = True
                     st.session_state["_crm_active_window_id"] = None
                     _crm_workspace_queue_save()
