@@ -1711,14 +1711,44 @@ def _crm_workspace_client_id(name, args=(), kwargs=None):
         if key in kwargs:
             found = find_client(kwargs[key])
             if found: return found
-    # Function-specific argument positions.
+    # Resolve deal/task ownership explicitly before generic ID matching.
+    # Deal IDs and client IDs may overlap, so treating a deal object's "id"
+    # as a client ID can route a tab into another client's workspace.
+    if name == "deal_detail_dialog" and args:
+        deal_value = args[0]
+        if isinstance(deal_value, dict):
+            owner_id = deal_value.get("client_id") or deal_value.get("cl_id")
+            if owner_id is not None:
+                found = find_client(owner_id)
+                if found is not None:
+                    return found
+            deal_value_id = deal_value.get("id")
+        else:
+            deal_value_id = deal_value
+        if deal_value_id is not None:
+            matched_deal = next((d for d in deals if str(d.get("id")) == str(deal_value_id)), None)
+            if matched_deal:
+                found = find_client(matched_deal.get("client_id") or matched_deal.get("cl_id"))
+                if found is not None:
+                    return found
+    if name == "task_detail_dialog" and args:
+        task_value = args[0]
+        if isinstance(task_value, dict):
+            owner_id = task_value.get("client_id") or task_value.get("cl_id")
+            if owner_id is not None:
+                found = find_client(owner_id)
+                if found is not None:
+                    return found
+            task_deal_id = task_value.get("deal_id")
+            if task_deal_id is not None:
+                matched_deal = next((d for d in deals if str(d.get("id")) == str(task_deal_id)), None)
+                if matched_deal:
+                    found = find_client(matched_deal.get("client_id") or matched_deal.get("cl_id"))
+                    if found is not None:
+                        return found
     if name in ("client_detail_dialog", "client_deals_dialog", "create_deal_dialog", "client_create_task_dialog", "client_create_deal_task_dialog", "client_tasks_dialog") and args:
         found = find_client(args[0])
         if found: return found
-    if name in ("deal_detail_dialog", "task_detail_dialog"):
-        for value in args:
-            found = find_client(value)
-            if found: return found
     if name in ("client_requisites_dialog", "client_requisites_view_dialog") and args:
         found = find_client(args[0])
         if found: return found
@@ -1825,16 +1855,35 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     windows = st.session_state.setdefault("_crm_windows", [])
     active_id = st.session_state.get("_crm_active_window_id")
     window = next((w for w in windows if w.get("id") == active_id), None)
-    # First locate an already-open copy of this exact tab across all windows.
-    # Only then fall back to a window belonging to the same client.
     requested_tab_key = _crm_workspace_tab_key(entry)
-    exact_tab_window = next((w for w in windows if any(
-        _crm_workspace_tab_key(tab) == requested_tab_key for tab in w.get("tabs", [])
-    )), None)
-    if exact_tab_window is not None:
-        window = exact_tab_window
-    elif client_id:
-        window = next((w for w in windows if str(w.get("client_id")) == str(client_id)), window if window and str(window.get("client_id")) == str(client_id) else None)
+    # A dialog launched from inside an open client workspace belongs to that
+    # workspace. Do not let an identical/stale tab in another window steal focus.
+    active_matches_client = bool(window and (client_id is None or str(window.get("client_id")) == str(client_id)))
+    if from_host and active_matches_client:
+        exact_in_active = next((i for i, tab in enumerate(window.get("tabs", []))
+                                if _crm_workspace_tab_key(tab) == requested_tab_key), None)
+        if exact_in_active is not None:
+            window["active_tab"] = exact_in_active
+    else:
+        window = None
+    # If the active workspace was not the source, prefer an exact existing tab.
+    if window is None:
+        exact_tab_window = next((w for w in windows if any(
+            _crm_workspace_tab_key(tab) == requested_tab_key for tab in w.get("tabs", [])
+        )), None)
+        if exact_tab_window is not None:
+            window = exact_tab_window
+    # Otherwise use the active window only when it belongs to this client;
+    # then an existing non-minimized window for the same client.
+    if window is None and client_id:
+        if active_matches_client:
+            window = next((w for w in windows if w.get("id") == active_id), None)
+        if window is None:
+            window = next((w for w in reversed(windows)
+                           if str(w.get("client_id")) == str(client_id) and not w.get("minimized")), None)
+        if window is None:
+            window = next((w for w in reversed(windows)
+                           if str(w.get("client_id")) == str(client_id)), None)
     if not window:
         client_id = client_id or None
         window_id = "cw_" + hashlib.sha1((str(client_id or "general") + "|" + str(moscow_now().timestamp()) + "|" + str(len(windows))).encode("utf-8")).hexdigest()[:12]
