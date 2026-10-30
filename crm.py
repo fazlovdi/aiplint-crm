@@ -52,10 +52,14 @@ st.set_page_config(
 # Диагностика производительности включается только при добавлении ?perf=1 к URL.
 # По умолчанию не создаёт дополнительных записей и не меняет поведение CRM.
 try:
-    _CRM_PERF_ENABLED = str(st.query_params.get("perf", "")) == "1"
-except Exception:
+    _CRM_PERF_QUERY_VALUE = st.query_params.get("perf", "")
+    _CRM_PERF_ENABLED = str(_CRM_PERF_QUERY_VALUE) == "1"
+except Exception as _crm_perf_query_error:
+    _CRM_PERF_QUERY_VALUE = f"<query_params_error:{type(_crm_perf_query_error).__name__}>"
     _CRM_PERF_ENABLED = False
 _CRM_PERF_RUN_STARTED = time.perf_counter()
+# Temporary diagnostic marker: proves which code is running and what Streamlit sees.
+print(f"CRM_PERF_DIAG loaded=crm_tabs_fixed_v14 query_perf={_CRM_PERF_QUERY_VALUE!r} enabled={_CRM_PERF_ENABLED}")
 
 
 # При первом входе боковая панель по умолчанию свернута.
