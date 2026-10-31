@@ -1955,6 +1955,25 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
             window["tabs"].insert(0, client_entry)
             if window.get("active_tab", 0) >= 0:
                 window["active_tab"] += 1
+    # При открытии задачи по сделке автоматически добавляем вкладку сделки
+    # рядом с карточкой клиента; сама задача остаётся активной.
+    if entry.get("name") == "task_detail_dialog" and len(entry.get("args", ()) or ()) >= 3:
+        _task_args = entry.get("args", ()) or ()
+        _task_deal = _task_args[2] if isinstance(_task_args[2], dict) else None
+        _task_client = _task_args[1] if len(_task_args) > 1 and isinstance(_task_args[1], dict) else None
+        if _task_deal and _task_client:
+            _deal_entry = {"name": "deal_detail_dialog", "title": "Подробности сделки", "width": "large",
+                           "args": (_task_deal, _task_client, st.session_state.get("user_name", ""), f"deal_{_task_deal.get('id')}"),
+                           "kwargs": {}, "signature": (_crm_dialog_signature_value((_task_deal, _task_client, st.session_state.get("user_name", ""), f"deal_{_task_deal.get('id')}")), _crm_dialog_signature_value({}))}
+            _deal_tab_key = _crm_workspace_tab_key(_deal_entry)
+            _deal_index = next((i for i, t in enumerate(window["tabs"]) if _crm_workspace_tab_key(t) == _deal_tab_key), None)
+            if _deal_index is None:
+                _insert_at = 1 if window.get("tabs") and window["tabs"][0].get("name") == "client_detail_dialog" else len(window["tabs"])
+                window["tabs"].insert(_insert_at, _deal_entry)
+                if window.get("active_tab", 0) >= _insert_at:
+                    window["active_tab"] += 1
+            else:
+                window["tabs"][_deal_index].update(_deal_entry)
     # Название окна создания клиента отдельно от названия вкладки.
     if entry.get("name") == "add_client_dialog":
         window["title"] = "Новый клиент"
@@ -2014,6 +2033,8 @@ def _crm_workspace_activate_tab(window_id, tab_index):
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window.get("id")
     st.session_state["_crm_active_dialog"] = tabs[index]
+    if tabs[index].get("name") == "notifications_dialog":
+        st.session_state.pop("_crm_return_to_notifications", None)
     # A tab selection is session state, not a structural workspace change.
     # Defer its disk persistence until the next open/close/minimize operation;
     # do not synchronously rewrite SQLite and enqueue cloud backups per click.
@@ -3976,7 +3997,7 @@ def _push_dialog_return():
 
 
 def _pop_dialog_return():
-    """Восстановить предыдущий диалог из стека при закрытии текущего."""
+    """Восстановить предыдущий диалог либо уведомления, из которых открыли объект."""
     stack = st.session_state.get("_dialog_return_stack", [])
     if stack:
         prev = stack.pop()
@@ -3988,6 +4009,20 @@ def _pop_dialog_return():
             else:
                 st.session_state[key] = val
         return True
+    if st.session_state.get("_crm_return_to_notifications"):
+        window_id = st.session_state.get("_crm_active_window_id")
+        window = next((w for w in st.session_state.get("_crm_windows", []) if w.get("id") == window_id), None)
+        if window:
+            tabs = window.get("tabs", [])
+            idx = next((i for i, tab in enumerate(tabs) if tab.get("name") == "notifications_dialog"), None)
+            if idx is not None:
+                window["active_tab"] = idx
+                window["minimized"] = False
+                st.session_state["_crm_active_dialog"] = tabs[idx]
+                st.session_state.pop("_crm_return_to_notifications", None)
+                _crm_workspace_queue_save()
+                return True
+        st.session_state.pop("_crm_return_to_notifications", None)
     return False
 
 # ====== УВЕДОМЛЕНИЯ ======
@@ -4067,20 +4102,131 @@ def mark_all_notifications_read():
             n["read"] = True
     save_data(st.session_state.crm_store)
 
+def _close_active_notification_tab():
+    """Закрыть вкладку уведомлений в текущем рабочем окне."""
+    window_id = st.session_state.get("_crm_active_window_id")
+    windows = st.session_state.get("_crm_windows", [])
+    window = next((w for w in windows if w.get("id") == window_id), None)
+    if window:
+        tabs = window.get("tabs", [])
+        idx = next((i for i, tab in enumerate(tabs) if tab.get("name") == "notifications_dialog"), None)
+        if idx is not None:
+            tabs.pop(idx)
+            if not tabs:
+                st.session_state["_crm_windows"] = [w for w in windows if w.get("id") != window_id]
+                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state.get("_crm_windows", []) if not w.get("minimized")), None)
+                st.session_state.pop("_crm_active_dialog", None)
+            else:
+                new_idx = idx - 1 if idx >= len(tabs) else min(idx, len(tabs)-1)
+                new_idx = max(0, new_idx)
+                window["active_tab"] = new_idx
+                st.session_state["_crm_active_dialog"] = tabs[new_idx]
+            _crm_workspace_clear_legacy_dialog_markers()
+            _crm_workspace_queue_save()
+    st.session_state.pop("show_notifications_dialog", None)
+    st.session_state["_in_dialog"] = False
+    st.rerun()
+
+
+def _notification_target(n):
+    """Определить объект CRM для перехода из текста уведомления."""
+    store = st.session_state.get("crm_store", {})
+    clients = store.get("clients", [])
+    deals = store.get("deals", [])
+    text_value = str(n.get("text", "") or "")
+
+    # Напоминания сохраняют точную ссылку на исходный объект.
+    reminder_id = n.get("reminder_id")
+    if reminder_id:
+        reminder = next((r for r in store.get("reminders", []) if str(r.get("id")) == str(reminder_id)), None)
+        if reminder:
+            etype = str(reminder.get("entity_type", "")).lower()
+            eid = str(reminder.get("entity_id", ""))
+            if etype in ("client", "клиент"):
+                cl = next((c for c in clients if str(c.get("id")) == eid), None)
+                if cl: return ("client", cl)
+            if etype in ("deal", "сделка"):
+                deal = next((d for d in deals if str(d.get("id")) == eid), None)
+                if deal:
+                    cl = next((c for c in clients if str(c.get("id")) == str(deal.get("client_id"))), None)
+                    return ("deal", deal, cl)
+            if etype in ("task", "задача", "client_task", "task_client"):
+                for cl in clients:
+                    for task in cl.get("tasks", []):
+                        if str(task.get("id", "")) == eid or str(task.get("task_number", "")) == eid:
+                            deal = next((d for d in deals if str(d.get("id")) == str(task.get("deal_id", ""))), None)
+                            return ("task", task, cl, deal)
+
+    # Задачи клиентов: сначала ищем номер задачи, если он указан в тексте.
+    task_numbers = re.findall(r"(?:задача на проверке|задача возвращена на доработку|делегирована задача|задач[аеиу])\s*[:：]?\s*(?:№\s*)?([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_-]*)", text_value, flags=re.IGNORECASE)
+    all_client_tasks = [(task, cl) for cl in clients for task in cl.get("tasks", [])]
+    for number in task_numbers:
+        match = next(((task, cl) for task, cl in all_client_tasks if str(task.get("task_number", "")).casefold() == number.casefold()), None)
+        if match:
+            task, cl = match
+            deal = next((d for d in deals if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
+            return ("task", task, cl, deal)
+
+    # Сделки: номер обычно стоит после слова «сделка».
+    deal_numbers = re.findall(r"сделк[аеиу]\s*(?:№\s*)?([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_-]*)", text_value, flags=re.IGNORECASE)
+    for number in deal_numbers:
+        deal = next((d for d in deals if str(d.get("deal_number", "")).casefold() == number.casefold()), None)
+        if deal:
+            cl = next((c for c in clients if str(c.get("id")) == str(deal.get("client_id"))), None)
+            return ("deal", deal, cl)
+
+    # Внутренние задачи имеют собственный список и открываются в своей вкладке.
+    internal_numbers = re.findall(r"(?:внутренн(?:яя|ую) задача|задача)\s*(?:№\s*)?([0-9]+)", text_value, flags=re.IGNORECASE)
+    for number in internal_numbers:
+        it = next((x for x in store.get("internal_tasks", []) if str(x.get("id", "")) == number), None)
+        if it:
+            return ("internal_task", it)
+
+    # Если номер не найден, попробуем найти клиента по полному имени из уведомления.
+    for cl in sorted(clients, key=lambda c: len(str(c.get("name", ""))), reverse=True):
+        name = str(cl.get("name", "") or "").strip()
+        if len(name) >= 3 and name.casefold() in text_value.casefold():
+            return ("client", cl)
+    return None
+
+
+def _open_notification_target(n):
+    """Отметить уведомление прочитанным и открыть связанную карточку в том же окне."""
+    for item in st.session_state.crm_store.get("notifications", []):
+        if str(item.get("id")) == str(n.get("id")):
+            item["read"] = True
+            break
+    save_data(st.session_state.crm_store)
+    st.session_state["_crm_return_to_notifications"] = True
+    target = _notification_target(n)
+    if not target:
+        st.toast("Уведомление отмечено прочитанным. Не удалось автоматически определить объект CRM.", icon="ℹ️")
+        st.rerun()
+        return
+    kind = target[0]
+    if kind == "client":
+        client_detail_dialog(target[1].get("id"))
+    elif kind == "deal":
+        deal, cl = target[1], target[2]
+        deal_detail_dialog(deal, cl, st.session_state.get("user_name", ""), f"deal_{deal.get('id')}")
+    elif kind == "task":
+        task, cl, deal = target[1], target[2], target[3]
+        task_detail_dialog(task, cl, deal, f"notif_task_{cl.get('id')}_{task.get('task_number', '')}_{deal.get('id') if deal else 'client'}")
+    elif kind == "internal_task":
+        internal_task_detail_dialog(target[1].get("id"))
+
+
 @_crm_dialog("🔔 Уведомления", width="large")
 def notifications_dialog():
     st.session_state["_in_dialog"] = True
     _key_prefix = "notif_dlg"
-    # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
             if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                st.session_state.pop("show_notifications_dialog", None)
-                st.session_state["_in_dialog"] = False
-                st.rerun()
+                _close_active_notification_tab()
     notifs = get_my_notifications()
     unread = get_unread_count()
     _nc1, _nc2 = st.columns(2)
@@ -4102,16 +4248,20 @@ def notifications_dialog():
     if not notifs:
         st.caption("Нет уведомлений")
     else:
+        st.markdown("Нажмите на уведомление, чтобы открыть связанный объект CRM.")
+        st.markdown("""<style>
+        [class*="st-key-notif_open_"] button { width:100%!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:48px!important; padding:9px 12px!important; justify-content:flex-start!important; }
+        [class*="st-key-notif_open_"] button p { white-space:pre-wrap!important; text-align:left!important; line-height:1.35!important; }
+        </style>""", unsafe_allow_html=True)
         for n in notifs:
-            bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
-            border = "1px solid #BBDEFB" if not n.get("read", False) else "1px solid #E8EBEF"
-            st.markdown(
-                f'<div style="background:{bg};border:{border};border-radius:10px;padding:5px 7px;margin-bottom:3px;line-height:1.2;">'
-                f'<span style="font-size:0.65rem;color:#95A5B7;">{n.get("date","")}</span><br>'
-                f'<span style="font-size:0.82rem;color:#2C3E50;">{n.get("text","")}</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
+            is_unread = not n.get("read", False)
+            bg = "#E3F2FD" if is_unread else "#F5F6F8"
+            border = "1px solid #BBDEFB" if is_unread else "1px solid #E8EBEF"
+            with st.container(border=True):
+                st.caption(str(n.get("date", "")))
+                label = ("🔵 " if is_unread else "✓ ") + str(n.get("text", ""))
+                if st.button(label, key=f"notif_open_{n.get('id')}", use_container_width=True, type="primary" if is_unread else "secondary"):
+                    _open_notification_target(n)
 
 def render_notifications_bell():
     """Кнопка уведомлений на всю ширину левой колонки, счётчик внутри справа от колокольчика."""
