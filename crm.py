@@ -9416,52 +9416,58 @@ def render_client_card_expanded(cl):
                         st.session_state["_in_dialog"] = False
                         commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
             else:
-                # Категория и промокод в одной строке
-                _cat_view, _promo_view = st.columns(2)
-                with _cat_view:
-                    st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
-                with _promo_view:
-                    st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
-                st.markdown("---")
-                st.markdown("**Информация о клиенте:**")
-                st.markdown(f"Телефон: **{cl.get('phone', '')}**")
-                cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
-                _cm_left, _cm_right = st.columns(2)
-                with _cm_left:
-                    cm = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}", placeholder="Выбери вариант...")
-                if cm != cl.get('contact_method', ''):
-                    cl['contact_method'] = cm
-                    cl["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store)
-                st.markdown(f"Email: **{cl.get('email','')}**")
-                st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
-                st.markdown(f"Основной адрес: **{cl.get('address','')}**")
-                st.markdown(f"Скидка: **{cl.get('discount',0)}%**")
-                st.markdown(f"Ответственный: **{cl.get('manager','—')}**")
-                cph = re.sub(r"\D", "", cl['phone'])
-                if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
-                elif not cph: cph = "79990000000"
-                mc1, mc2, mc3 = st.columns(3)
-                mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
-                mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
-                mc3.link_button("MAX", MAX_URL, use_container_width=True)
-                if cl.get("extra_phones"):
-                    st.markdown("**Доп. телефоны:**")
-                    for pi, p in enumerate(cl["extra_phones"]):
-                        st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
-                if cl.get("extra_addresses"):
-                    st.markdown("**Доп. адреса:**")
-                    for ea in cl["extra_addresses"]:
-                        if isinstance(ea, dict):
-                            st.markdown(f"- **{ea.get('address', '')}** {ea.get('resp_name', '')} {ea.get('resp_phone', '')}")
-            # Кнопка редактирования между информацией и чатом
-            if not show_edit:
-                pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
-                st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("✎", key=pencil_cli_key, help="Редактировать карточку клиента"):
-
-                    st.session_state[f"show_edit_{cl['id']}"] = True
-                    st.rerun()
+                _client_panel_key = f"client_info_panel_{cl['id']}"
+                st.markdown(
+                    f"<style>.st-key-{_client_panel_key} {{ background:#fbe0ec !important; border:1px solid #d9a9bd !important; border-radius:4px !important; padding:4px 6px 2px !important; }}</style>",
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=_client_panel_key):
+                    # Категория и промокод в одной строке
+                    _cat_view, _promo_view = st.columns(2)
+                    with _cat_view:
+                        st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
+                    with _promo_view:
+                        st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
+                    st.markdown("---")
+                    st.markdown("**Информация о клиенте:**")
+                    st.markdown(f"Телефон: **{cl.get('phone', '')}**")
+                    cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
+                    _cm_left, _cm_right = st.columns(2)
+                    with _cm_left:
+                        cm = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}", placeholder="Выбери вариант...")
+                    if cm != cl.get('contact_method', ''):
+                        cl['contact_method'] = cm
+                        cl["last_modified"] = now_str()
+                        save_data(st.session_state.crm_store)
+                    st.markdown(f"Email: **{cl.get('email','')}**")
+                    st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
+                    st.markdown(f"Основной адрес: **{cl.get('address','')}**")
+                    st.markdown(f"Скидка: **{cl.get('discount',0)}%**")
+                    st.markdown(f"Ответственный: **{cl.get('manager','—')}**")
+                    cph = re.sub(r"\D", "", cl['phone'])
+                    if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
+                    elif not cph: cph = "79990000000"
+                    mc1, mc2, mc3 = st.columns(3)
+                    mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
+                    mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
+                    mc3.link_button("MAX", MAX_URL, use_container_width=True)
+                    if cl.get("extra_phones"):
+                        st.markdown("**Доп. телефоны:**")
+                        for pi, p in enumerate(cl["extra_phones"]):
+                            st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
+                    if cl.get("extra_addresses"):
+                        st.markdown("**Доп. адреса:**")
+                        for ea in cl["extra_addresses"]:
+                            if isinstance(ea, dict):
+                                st.markdown(f"- **{ea.get('address', '')}** {ea.get('resp_name', '')} {ea.get('resp_phone', '')}")
+                    # Кнопка редактирования между информацией и чатом
+                    if not show_edit:
+                        pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
+                        st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                        if st.button("✎", key=pencil_cli_key, help="Редактировать карточку клиента"):
+        
+                            st.session_state[f"show_edit_{cl['id']}"] = True
+                            st.rerun()
             # Разделитель под кнопкой редактирования
             st.markdown("---")
             # Чат в левом столбце под информацией
