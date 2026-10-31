@@ -1354,7 +1354,7 @@ def get_thumbnail_base64(remote_path, size=220):
 
 
 def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
-    """Отображает вложения компактным списком: один файл — одна горизонтальная строка."""
+    """Отображает вложения списком; содержимое загружается только по запросу пользователя."""
     if not files:
         st.caption("Файлов нет")
         return
@@ -1362,21 +1362,18 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     st.markdown("""<style>
     .crm-file-row-icon { width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#F1F4F8;color:#526174;font-size:17px;margin:2px auto; }
     .crm-file-row-name { font-size:.88rem;font-weight:600;color:#253246;overflow-wrap:anywhere;padding:7px 0;line-height:1.25; }
-    div[class*="st-key-dl_"] button { min-height:34px!important;height:34px!important;width:38px!important;min-width:38px!important;padding:0!important;border-radius:10px!important;border:1px solid #D7DFEA!important;background:linear-gradient(180deg,#FFFFFF 0%,#F2F5FA 100%)!important;color:#31577D!important;font-size:17px!important;font-weight:700!important;box-shadow:0 1px 3px rgba(30,50,75,.08)!important;transition:all .15s ease!important; }
-    div[class*="st-key-dl_"] button:hover { background:#E7F0FA!important;border-color:#A9C3DF!important;transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,50,75,.12)!important; }
+    div[class*="st-key-dl_"] button, div[class*="st-key-dl_req_"] button { min-height:34px!important;height:34px!important;width:38px!important;min-width:38px!important;padding:0!important;border-radius:10px!important;border:1px solid #D7DFEA!important;background:linear-gradient(180deg,#FFFFFF 0%,#F2F5FA 100%)!important;color:#31577D!important;font-size:17px!important;font-weight:700!important;box-shadow:0 1px 3px rgba(30,50,75,.08)!important;transition:all .15s ease!important; }
+    div[class*="st-key-dl_"] button:hover, div[class*="st-key-dl_req_"] button:hover { background:#E7F0FA!important;border-color:#A9C3DF!important;transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,50,75,.12)!important; }
     div[class*="st-key-del_"] button { min-height:32px!important;height:32px!important;padding:0 8px!important;border-radius:9px!important;font-size:15px!important; }
     div[class*="st-key-fdesc_"] input { min-height:34px!important;height:34px!important;padding:7px 10px!important;font-size:.8rem!important;line-height:1.2!important;border-radius:9px!important; }
     div[class*="st-key-fdesc_"] div[data-testid="InputInstructions"] { display:none!important; }
     </style>""", unsafe_allow_html=True)
 
-    # По умолчанию показываем и загружаем содержимое только первых трёх файлов,
-    # чтобы окна с большим количеством вложений открывались быстрее.
+    # По умолчанию отображаем только первые три записи. Здесь читаются только
+    # метаданные CRM: байты файлов с Яндекс Диска не запрашиваются.
     _show_all_key = f"files_show_all_{prefix}"
     _show_all = bool(st.session_state.get(_show_all_key, False))
 
-    # Сначала новые вложения: используем дату файла, если она есть, затем
-    # timestamp из имени сохранённого файла; для старых вложений без даты
-    # сохраняем естественный порядок списка (новые добавляются в конец).
     def _file_recency(entry):
         _original_idx, _file = entry
         _date_value = str(_file.get("created_at") or _file.get("uploaded_at") or _file.get("last_modified") or "")
@@ -1391,11 +1388,8 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     _sorted_file_entries = sorted(enumerate(files), key=_file_recency, reverse=True)
     _visible_count = len(files) if _show_all else min(3, len(files))
     _visible_files = _sorted_file_entries[:_visible_count]
-    file_paths = [ff.get("file_path", ff.get("path")) for _, ff in _visible_files]
-    with ThreadPoolExecutor(max_workers=min(4, max(1, len(file_paths)))) as executor:
-        file_bytes_list = list(executor.map(get_file_bytes, file_paths))
 
-    for (i, ff), fb in zip(_visible_files, file_bytes_list):
+    for (i, ff) in _visible_files:
         fp = ff.get("file_path", ff.get("path"))
         fn = ff.get("file_name", ff.get("name", "файл"))
         ext = os.path.splitext(str(fn))[1].lower()
@@ -1437,13 +1431,24 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
         else:
             dl_col, del_col = 2, None
 
+        # Храним только один запрошенный файл на сессию, чтобы не накапливать
+        # большие вложения в session_state. Идентификатор устойчив к смене порядка списка.
+        _file_identity = hashlib.sha256(f"{fp or ''}|{fn or ''}".encode("utf-8", errors="replace")).hexdigest()
+        _download_payload = st.session_state.get("_crm_file_download_payload") or {}
         with cols[dl_col]:
-            if fb is not None:
-                st.download_button(label="⬇", help=f"Скачать {fn}", data=fb,
-                                   file_name=fn, key=f"dl_{prefix}_{i}",
-                                   use_container_width=True)
-            else:
-                st.caption("Недоступен")
+            if _download_payload.get("identity") == _file_identity and _download_payload.get("bytes") is not None:
+                st.download_button(label="⬇", help=f"Скачать {fn}", data=_download_payload["bytes"],
+                                   file_name=fn, key=f"dl_{prefix}_{i}", use_container_width=True)
+            elif st.button("⬇", help=f"Подготовить скачивание {fn}", key=f"dl_req_{prefix}_{i}", use_container_width=True):
+                with st.spinner("Загружаю файл…"):
+                    _file_bytes = get_file_bytes(fp)
+                if _file_bytes is not None:
+                    st.session_state["_crm_file_download_payload"] = {
+                        "identity": _file_identity, "bytes": _file_bytes, "filename": str(fn)
+                    }
+                    st.rerun()
+                else:
+                    st.warning(f"Не удалось получить файл «{fn}».")
 
         if is_admin_delete:
             with cols[del_col]:
@@ -1454,7 +1459,6 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
         st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
 
     if len(files) > 3:
-        _remaining = len(files) - _visible_count
         _button_label = "Скрыть дополнительные файлы" if _show_all else "Показать все файлы"
         _button_key = f"show_all_files_btn_{prefix}"
         if st.button(_button_label, key=_button_key, use_container_width=True):
