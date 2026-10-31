@@ -10644,6 +10644,38 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                 save_data(st.session_state.crm_store)
                 st.session_state[file_ver_key] = file_ver + 1
                 st.session_state.pop("dialog_task_completion", None)
+                # После подтверждения выполнения закрываем именно вкладку отчёта
+                # и возвращаем фокус на вкладку, из которой её открыли.
+                _report_window_id = st.session_state.get("_crm_active_window_id")
+                _report_window = next((w for w in st.session_state.get("_crm_windows", [])
+                                       if str(w.get("id")) == str(_report_window_id)), None)
+                if _report_window:
+                    _report_tabs = _report_window.get("tabs", [])
+                    _report_index = next((i for i, tab in enumerate(_report_tabs)
+                                          if tab.get("name") == "task_completion_report_dialog"
+                                          and len(tab.get("args", ()) or ()) >= 2
+                                          and str(tab.get("args", ())[0]) == str(client_id)
+                                          and str(tab.get("args", ())[1]) == str(task_number)
+                                          and (len(tab.get("args", ()) or ()) < 3
+                                               or str(tab.get("args", ())[2]) == str(key_prefix))), None)
+                    if _report_index is not None:
+                        _report_tabs.pop(_report_index)
+                        if _report_tabs:
+                            # Если отчёт был не первой вкладкой, выбираем предыдущую;
+                            # после удаления корректируем индекс с учётом сдвига.
+                            _return_index = max(0, _report_index - 1)
+                            _return_index = min(_return_index, len(_report_tabs) - 1)
+                            _report_window["active_tab"] = _return_index
+                            _report_window["minimized"] = False
+                            st.session_state["_crm_active_dialog"] = _report_tabs[_return_index]
+                        else:
+                            st.session_state["_crm_windows"] = [
+                                w for w in st.session_state.get("_crm_windows", [])
+                                if str(w.get("id")) != str(_report_window_id)
+                            ]
+                            st.session_state["_crm_active_window_id"] = None
+                            st.session_state.pop("_crm_active_dialog", None)
+                        _crm_workspace_queue_save()
                 st.toast("Задача отправлена на проверку", icon="✅")
                 st.rerun()
     with col_cancel:
