@@ -2810,6 +2810,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     et_topic = et_type
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                # Описание расположено рядом с основными полями, чтобы его было легко заметить.
+                et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
                     _selected_calc_id_edit, et_products = render_task_products_editor(
                         d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
@@ -2838,7 +2840,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
                 with _edit_track_col:
                     et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
-                et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 _save_col, _cancel_col = st.columns(2)
                 with _save_col:
                     if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
@@ -2930,7 +2931,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
-                if t.get('task_comment'): st.markdown(f"**Описание:** {linkify_text(t['task_comment'])}", unsafe_allow_html=True)
+                # Всегда показываем описание, даже если оно пока не заполнено.
+                _task_description = str(t.get("task_comment", "") or "").strip()
+                st.markdown(f"**Описание:** {linkify_text(_task_description) if _task_description else '—'}", unsafe_allow_html=True)
                 # Edit pencil button — same compact size, left-aligned, above action buttons
                 pencil_key = f"btn_pencil_edit_{key_prefix}"
                 st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
