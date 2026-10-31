@@ -623,16 +623,31 @@ def now_str():
 def get_sort_key(entity):
     return entity.get("last_modified", "1970-01-01 00:00:00")
 
+def _task_number_parts(value):
+    """Возвращает (год, категория K/C, порядковый номер) для старого и нового формата."""
+    value = str(value or "").strip()
+    m = re.match(r"^(?:ЗК|ЗС)(\d{2})-(\d+)$", value, re.IGNORECASE)
+    if m:
+        return m.group(1), ("C" if value.upper().startswith("ЗС") else "K"), int(m.group(2))
+    m = re.match(r"^(\d{2})-([ККCС])\s*(\d+)$", value, re.IGNORECASE)
+    if m:
+        cat = m.group(2).upper()
+        return m.group(1), ("C" if cat in ("C", "С") else "K"), int(m.group(3))
+    return None
+
+def _format_task_number(year, category, number):
+    return f"{year}-{'С' if category == 'C' else 'К'}{number}"
+
 def generate_task_number(prefix):
     year = moscow_now().strftime("%y")
+    category = "C" if prefix in ("ЗС", "С", "C") else "K"
     max_num = 0
     for c in st.session_state.crm_store.get("clients", []):
         for t in c.get("tasks", []):
-            tn = t.get("task_number", "")
-            if tn.startswith(f"{prefix}{year}-"):
-                try: max_num = max(max_num, int(tn.split("-")[1]))
-                except: pass
-    return f"{prefix}{year}-{max_num + 1}"
+            parts = _task_number_parts(t.get("task_number", ""))
+            if parts and parts[0] == year and parts[1] == category:
+                max_num = max(max_num, parts[2])
+    return _format_task_number(year, category, max_num + 1)
 
 def generate_deal_number():
     year = moscow_now().strftime("%y")
@@ -645,26 +660,25 @@ def generate_deal_number():
     return f"Сделка №{year}-{max_num + 1}"
 
 def assign_task_numbers(data):
-    year = moscow_now().strftime("%y")
-    zk_max, zs_max = 0, 0
-    for c in data.get("clients", []):
-        for t in c.get("tasks", []):
-            tn = t.get("task_number", "")
-            if tn.startswith(f"ЗК{year}-"):
-                try: zk_max = max(zk_max, int(tn.split("-")[1]))
-                except: pass
-            elif tn.startswith(f"ЗС{year}-"):
-                try: zs_max = max(zs_max, int(tn.split("-")[1]))
-                except: pass
-    for c in data.get("clients", []):
-        for t in c.get("tasks", []):
-            if not t.get("task_number"):
-                if t.get("deal_id"):
-                    zs_max += 1
-                    t["task_number"] = f"ЗС{year}-{zs_max}"
-                else:
-                    zk_max += 1
-                    t["task_number"] = f"ЗК{year}-{zk_max}"
+    """Мигрирует старые номера задач в формат 26-К15 / 26-С15 и нумерует пустые."""
+    max_by_year_category = {}
+    tasks = []
+    for client in data.get("clients", []):
+        for task in client.get("tasks", []):
+            tasks.append(task)
+            old_number = str(task.get("task_number", "") or "")
+            parts = _task_number_parts(old_number)
+            if parts:
+                year, category, number = parts
+                max_by_year_category[(year, category)] = max(max_by_year_category.get((year, category), 0), number)
+                task["task_number"] = _format_task_number(year, category, number)
+    current_year = moscow_now().strftime("%y")
+    for task in tasks:
+        if not task.get("task_number"):
+            category = "C" if task.get("deal_id") else "K"
+            key = (current_year, category)
+            max_by_year_category[key] = max_by_year_category.get(key, 0) + 1
+            task["task_number"] = _format_task_number(current_year, category, max_by_year_category[key])
 
 def assign_deal_numbers(data):
     year = moscow_now().strftime("%y")
@@ -1565,7 +1579,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Способ доставки:</b> {esc(task.get('ship_method', 'Не выбрано') or 'Не выбрано')}</div><div class="row"><b>Трек/комментарий:</b> {esc(task.get('tk_num', ''))}</div><div class="row"><b>Описание:</b> {esc(task.get('task_comment', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -2599,6 +2613,8 @@ def process_due_reminders():
         if u.get("telegram_chat_id"):
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
+DELIVERY_METHOD_OPTIONS = ["Не выбрано", "Деловые Линии", "СДЭК", "ПЭК", "КИТ", "Энергия", "Байкал Сервис", "ЖелДорЭкспедиция", "Самовывоз", "Доставка по г. Казань", "Доставка клиента"]
+
 def _render_task_shipping_fields(task, client, deal, key_prefix):
     """Поля отправки: изменение даты/статуса сохраняется по устойчивым ID записи."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
@@ -2809,10 +2825,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if _auto_amount_edit > 0:
                         st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
                     et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                    et_tk = st.text_input("Трек (подпиши если габариты не указаны):", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
-                    et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 else:
-                    et_comment = st.text_area("\\u041a\\u043e\\u043c\\u043c\\u0435\\u043d\\u0442\\u0430\\u0440\\u0438\\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                     et_products = t.get("products", "")
                     et_city = t.get("ship_city", "")
                     et_addr = t.get("ship_addr", "")
@@ -2820,7 +2833,12 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     et_rphone = t.get("receiver_phone", "")
                     et_pay = t.get("ship_pay", "")
                     et_amount = str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""
-                    et_tk = t.get("tk_num", "")
+                _edit_delivery_col, _edit_track_col = st.columns([1, 1])
+                with _edit_delivery_col:
+                    et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
+                with _edit_track_col:
+                    et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 _save_col, _cancel_col = st.columns(2)
                 with _save_col:
                     if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
@@ -2837,6 +2855,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["receiver"] = et_recv
                             t["receiver_phone"] = et_rphone
                             t["ship_pay"] = et_pay
+                            t["ship_method"] = et_method
                             t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
                             if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
                                 t["calculation_id"] = str(_selected_calc_id_edit)
@@ -2904,11 +2923,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
-                if t.get('tk_num'):
-                    st.markdown(f"**\u0422\u0440\u0435\u043a:** `{t['tk_num']}`")
+                _view_delivery_col, _view_track_col = st.columns([1, 1])
+                with _view_delivery_col:
+                    st.markdown(f"**Способ доставки:** {t.get('ship_method', 'Не выбрано') or 'Не выбрано'}")
+                with _view_track_col:
+                    st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
-                if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {linkify_text(t['task_comment'])}", unsafe_allow_html=True)
+                if t.get('task_comment'): st.markdown(f"**Описание:** {linkify_text(t['task_comment'])}", unsafe_allow_html=True)
                 # Edit pencil button — same compact size, left-aligned, above action buttons
                 pencil_key = f"btn_pencil_edit_{key_prefix}"
                 st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
@@ -2982,7 +3004,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                                             "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                                             "task_comments": [], "flagged": False,
-                                            "products": "", "ship_city": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "tk_num": ""
+                                            "products": "", "ship_city": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "ship_method": "Не выбрано", "tk_num": ""
                                         }
                                         cl.setdefault("tasks", []).append(new_task)
                                         if nt_mgr2:
@@ -3209,6 +3231,7 @@ def migrate_task_files(t):
     if "receiver" not in t: t["receiver"] = ""
     if "receiver_phone" not in t: t["receiver_phone"] = ""
     if "ship_pay" not in t: t["ship_pay"] = ""
+    if "ship_method" not in t: t["ship_method"] = "Не выбрано"
     if "tk_num" not in t: t["tk_num"] = ""
     if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
 
@@ -3374,6 +3397,7 @@ def _load_data_from_json():
                     if "receiver" not in t: t["receiver"] = ""
                     if "receiver_phone" not in t: t["receiver_phone"] = ""
                     if "ship_pay" not in t: t["ship_pay"] = ""
+                    if "ship_method" not in t: t["ship_method"] = "Не выбрано"
                     if "tk_num" not in t: t["tk_num"] = ""
                     if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
                     migrate_task_files(t)
@@ -4534,6 +4558,21 @@ def close_deal_dialog(deal_id):
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
+# Однократная миграция номеров задач в рабочей SQLite-базе и добавление поля способа доставки.
+_task_number_migration_changed = False
+_task_numbers_before = []
+for _migration_client in st.session_state.crm_store.get("clients", []):
+    for _migration_task in _migration_client.get("tasks", []):
+        _task_numbers_before.append(str(_migration_task.get("task_number", "") or ""))
+        if "ship_method" not in _migration_task:
+            _migration_task["ship_method"] = "Не выбрано"
+            _task_number_migration_changed = True
+assign_task_numbers(st.session_state.crm_store)
+_task_numbers_after = [str(_migration_task.get("task_number", "") or "") for _migration_client in st.session_state.crm_store.get("clients", []) for _migration_task in _migration_client.get("tasks", [])]
+if _task_numbers_before != _task_numbers_after:
+    _task_number_migration_changed = True
+if _task_number_migration_changed:
+    save_data(st.session_state.crm_store)
 # Журналируем запуск и текущую доступность базы, затем ставим резервное копирование в очередь.
 if not _CRM_BG_STATE["process_start_logged"]:
     _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": True})
@@ -6423,8 +6462,6 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         if _auto_amount_new > 0:
             st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
         norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
-        ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
-        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
     else:
@@ -6435,10 +6472,14 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         nreceiver_phone = ""
         nship_pay = ""
         norder_amount = ""
-        ntk_num = ""
-        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
         _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
         ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
+    _new_delivery_col, _new_track_col = st.columns([1, 1])
+    with _new_delivery_col:
+        nship_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=0, key=f"nt_method_{key_suffix}")
+    with _new_track_col:
+        ntk_num = st.text_input("Трек/комментарий:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер или комментарий")
+    ncomment = st.text_area("Описание:", key=f"nt_c_{key_suffix}")
     _create_file_upload_col, _create_file_pick_col = st.columns(2)
     with _create_file_upload_col:
         if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
@@ -6499,7 +6540,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "task_comments": [], "flagged": False,
                 "products": nproducts, "ship_city": nship_city, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
-                "ship_pay": nship_pay, "tk_num": ntk_num.strip(),
+                "ship_pay": nship_pay, "ship_method": nship_method, "tk_num": ntk_num.strip(),
                 "calculation_id": str(_selected_calc_id_new) if _selected_calc_id_new else ""
             }
             cl = get_client_by_id(cl_id)
@@ -10477,6 +10518,8 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     _et_pay_key = f"edit_pay_{key_prefix}"
                     _et_amount_key = f"edit_amount_{key_prefix}"
                     _et_tk_key = f"edit_tk_{key_prefix}"
+                    _et_method_key = f"edit_method_{key_prefix}"
+                    if _et_method_key in st.session_state: t["ship_method"] = st.session_state[_et_method_key]
                     if _et_prod_key in st.session_state: t["products"] = st.session_state[_et_prod_key]
                     if _et_addr_key in st.session_state: t["ship_addr"] = st.session_state[_et_addr_key]
                     if _et_city_key in st.session_state: t["ship_city"] = st.session_state[_et_city_key]
@@ -10636,7 +10679,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                         "task_number": generate_task_number(prefix), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                         "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                         "task_comments": [], "flagged": False, "products": "", "ship_city": "", "ship_addr": "", "receiver": "",
-                        "receiver_phone": "", "ship_pay": "", "tk_num": ""
+                        "receiver_phone": "", "ship_pay": "", "ship_method": "Не выбрано", "tk_num": ""
                     }
                     cl.setdefault("tasks", []).append(new_task)
                     if next_values["manager"]:
@@ -12234,11 +12277,19 @@ elif st.session_state.active_tab == "Задачи":
                         _print_rows = []
                         for _pt in tt_list:
                             _ptask = _pt["task_obj"]
+                            _pt_comments = []
+                            for _ptc in (_ptask.get("task_comments", []) or []):
+                                if isinstance(_ptc, dict) and not _ptc.get("deleted") and str(_ptc.get("text", "") or "").strip():
+                                    _pt_meta = " · ".join(str(_ptc.get(k, "")) for k in ("time", "date", "user", "author") if _ptc.get(k))
+                                    _pt_comments.append((f"{_pt_meta}: " if _pt_meta else "") + str(_ptc.get("text", "")))
                             _print_rows.append(
                                 "<tr>"
                                 f"<td>{html.escape(str(_ptask.get('task_number', '') or ''))}</td>"
+                                f"<td>{html.escape(str(_pt.get('client_name', '') or ''))}</td>"
                                 f"<td>{html.escape(str(_ptask.get('products', '') or '')).replace(chr(10), '<br>')}</td>"
                                 f"<td>{html.escape(str(_ptask.get('task_comment', '') or _ptask.get('text', '') or '')).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(chr(10).join(_pt_comments)).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(str(_ptask.get('ship_method', 'Не выбрано') or 'Не выбрано'))}</td>"
                                 f"<td>{html.escape(str(_ptask.get('tk_num', '') or ''))}</td>"
                                 "<td class='notes'></td>"
                                 "</tr>"
@@ -12252,13 +12303,15 @@ elif st.session_state.active_tab == "Задачи":
                         table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }}
                         th, td {{ border: 1px solid #555; padding: 6px; vertical-align: top; overflow-wrap: anywhere; }}
                         th {{ background: #eee; text-align: left; }}
-                        th:nth-child(1) {{ width: 9%; }} th:nth-child(2) {{ width: 24%; }}
-                        th:nth-child(3) {{ width: 29%; }} th:nth-child(4) {{ width: 17%; }} th:nth-child(5) {{ width: 21%; }}
+                        th:nth-child(1) {{ width: 8%; }} th:nth-child(2) {{ width: 14%; }}
+                        th:nth-child(3) {{ width: 17%; }} th:nth-child(4) {{ width: 15%; }}
+                        th:nth-child(5) {{ width: 15%; }} th:nth-child(6) {{ width: 10%; }}
+                        th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
                         td.notes {{ height: 28px; }}
                         @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
                         </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
-                        <table><thead><tr><th>№ задачи</th><th>Товары</th><th>Комментарий</th><th>Трек</th><th>Отметки</th></tr></thead>
-                        <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="5">На сегодня задач нет</td></tr>'}</tbody></table>
+                        <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
+                        <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
                         <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
                         components.html(_print_html, height=0, width=0)
                 if tt_list:
