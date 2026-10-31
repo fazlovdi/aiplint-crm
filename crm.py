@@ -4204,6 +4204,24 @@ def _open_notification_target(n):
         st.rerun()
         return
     kind = target[0]
+    # Уведомления остаются вкладкой-источником, но рабочее окно становится
+    # окном соответствующего клиента. Карточка клиента, сделка и задача
+    # добавляются вкладками в это же окно, а закрытие возвращает к уведомлениям.
+    target_client = None
+    if kind == "client":
+        target_client = target[1]
+    elif kind == "deal":
+        target_client = target[2]
+    elif kind == "task":
+        target_client = target[2]
+    if target_client:
+        _active_window_id = st.session_state.get("_crm_active_window_id")
+        _active_window = next((w for w in st.session_state.get("_crm_windows", [])
+                               if str(w.get("id")) == str(_active_window_id)), None)
+        if _active_window is not None:
+            _active_window["client_id"] = str(target_client.get("id"))
+            _active_window["title"] = str(target_client.get("name") or "Клиент")
+            _crm_workspace_queue_save()
     if kind == "client":
         client_detail_dialog(target[1].get("id"))
     elif kind == "deal":
@@ -4227,41 +4245,63 @@ def notifications_dialog():
         with _close_col:
             if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
                 _close_active_notification_tab()
+
     notifs = get_my_notifications()
     unread = get_unread_count()
-    _nc1, _nc2 = st.columns(2)
-    with _nc1:
-        if unread > 0:
-            if st.button("Прочитать все", key="btn_read_all_dlg", use_container_width=True, type="primary"):
-                mark_all_notifications_read()
+    st.markdown("""<style>
+    /* Compact notification action buttons, aligned at the left */
+    .st-key-notif_actions [data-testid="stHorizontalBlock"] { gap:4px!important; }
+    .st-key-notif_actions [data-testid="stColumn"] { flex:0 0 25%!important; width:25%!important; min-width:0!important; }
+    .st-key-notif_actions .stButton > button { width:100%!important; min-width:0!important; padding:0.25rem 0.35rem!important; min-height:32px!important; font-size:0.82rem!important; white-space:normal!important; }
+    .st-key-notif_actions [data-testid="stVerticalBlock"] { gap:0!important; }
+    /* List rows styled like the client list, with minimal vertical spacing */
+    [class*="st-key-notif_row_"] { background:#F8FAFC!important; border:1px solid #E0E6EF!important; border-left:3px solid #AAB4C0!important; border-radius:7px!important; padding:2px 6px!important; margin:2px 0!important; }
+    [class*="st-key-notif_row_unread_"] { background:#F5FBF6!important; border-left-color:#BC1661!important; }
+    [class*="st-key-notif_row_"] [data-testid="stHorizontalBlock"] { align-items:center!important; gap:8px!important; }
+    [class*="st-key-notif_row_"] [data-testid="stColumn"] { padding:0!important; }
+    [class*="st-key-notif_open_"] { width:100%!important; max-width:100%!important; }
+    [class*="st-key-notif_open_"] [data-testid="stButton"] { width:100%!important; max-width:100%!important; }
+    [class*="st-key-notif_open_"] .stButton > button { width:100%!important; max-width:100%!important; min-width:0!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:32px!important; padding:4px 8px!important; border-radius:6px!important; background:rgba(255,255,255,0.72)!important; border:1px solid #E0E6EF!important; box-shadow:none!important; color:#2C3E50!important; justify-content:flex-start!important; font-size:0.84rem!important; }
+    [class*="st-key-notif_open_"] .stButton > button:hover { border-color:#BC1661!important; }
+    [class*="st-key-notif_open_"] .stButton > button p { white-space:pre-wrap!important; text-align:left!important; line-height:1.25!important; margin:0!important; }
+    [class*="st-key-notif_date_"] { font-size:0.7rem!important; color:#7B8794!important; white-space:nowrap!important; overflow:hidden!important; }
+    [class*="st-key-notif_date_"] p { white-space:nowrap!important; margin:0!important; font-size:0.7rem!important; }
+    </style>""", unsafe_allow_html=True)
+
+    with st.container(key="notif_actions"):
+        _nc1, _nc2, _nc_space = st.columns([1, 1, 2], gap="small")
+        with _nc1:
+            if unread > 0:
+                if st.button("Прочитать все", key="btn_read_all_dlg", use_container_width=True, type="primary"):
+                    mark_all_notifications_read()
+                    save_data(st.session_state.crm_store)
+                    st.rerun()
+        with _nc2:
+            if st.button("Очистить прочитанные", key="btn_clear_read_dlg", use_container_width=True):
+                me = st.session_state.get("user_login", "")
+                st.session_state.crm_store["notifications"] = [
+                    n for n in st.session_state.crm_store.get("notifications", [])
+                    if not (n.get("to") == me and n.get("read", False))
+                ]
                 save_data(st.session_state.crm_store)
                 st.rerun()
-    with _nc2:
-        if st.button("Очистить прочитанные", key="btn_clear_read_dlg", use_container_width=True):
-            me = st.session_state.get("user_login", "")
-            st.session_state.crm_store["notifications"] = [
-                n for n in st.session_state.crm_store.get("notifications", [])
-                if not (n.get("to") == me and n.get("read", False))
-            ]
-            save_data(st.session_state.crm_store)
-            st.rerun()
+
     if not notifs:
         st.caption("Нет уведомлений")
     else:
-        st.markdown("Нажмите на уведомление, чтобы открыть связанный объект CRM.")
-        st.markdown("""<style>
-        [class*="st-key-notif_open_"] button { width:100%!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:48px!important; padding:9px 12px!important; justify-content:flex-start!important; }
-        [class*="st-key-notif_open_"] button p { white-space:pre-wrap!important; text-align:left!important; line-height:1.35!important; }
-        </style>""", unsafe_allow_html=True)
         for n in notifs:
             is_unread = not n.get("read", False)
-            bg = "#E3F2FD" if is_unread else "#F5F6F8"
-            border = "1px solid #BBDEFB" if is_unread else "1px solid #E8EBEF"
-            with st.container(border=True):
-                st.caption(str(n.get("date", "")))
-                label = ("🔵 " if is_unread else "✓ ") + str(n.get("text", ""))
-                if st.button(label, key=f"notif_open_{n.get('id')}", use_container_width=True, type="primary" if is_unread else "secondary"):
-                    _open_notification_target(n)
+            _nid = str(n.get("id", ""))
+            _row_key = ("notif_row_unread_" if is_unread else "notif_row_") + _nid
+            with st.container(key=_row_key):
+                _date_col, _button_col, _right_space = st.columns([1, 2, 1], gap="small")
+                with _date_col:
+                    with st.container(key=f"notif_date_{_nid}"):
+                        st.markdown(f"<div style='padding:7px 0 0 0'>{n.get('date', '')}</div>", unsafe_allow_html=True)
+                with _button_col:
+                    label = ("🔵 " if is_unread else "✓ ") + str(n.get("text", ""))
+                    if st.button(label, key=f"notif_open_{_nid}", use_container_width=True, type="secondary"):
+                        _open_notification_target(n)
 
 def render_notifications_bell():
     """Кнопка уведомлений на всю ширину левой колонки, счётчик внутри справа от колокольчика."""
