@@ -4103,29 +4103,45 @@ def mark_all_notifications_read():
     save_data(st.session_state.crm_store)
 
 def _close_active_notification_tab():
-    """Закрыть вкладку уведомлений в текущем рабочем окне."""
-    window_id = st.session_state.get("_crm_active_window_id")
+    """Надёжно закрыть вкладку уведомлений без повторного открытия legacy-диспетчером."""
     windows = st.session_state.get("_crm_windows", [])
-    window = next((w for w in windows if w.get("id") == window_id), None)
-    if window:
+    window_id = st.session_state.get("_crm_active_window_id")
+    window = next((w for w in windows if str(w.get("id")) == str(window_id)
+                   and any(tab.get("name") == "notifications_dialog" for tab in w.get("tabs", []))), None)
+    # При rerun активный id иногда уже указывает на окно объекта; ищем источник по вкладке.
+    if window is None:
+        window = next((w for w in reversed(windows)
+                       if any(tab.get("name") == "notifications_dialog" for tab in w.get("tabs", []))), None)
+    st.session_state["show_notifications_dialog"] = False
+    st.session_state.pop("_crm_return_to_notifications", None)
+    st.session_state["_in_dialog"] = False
+    if window is not None:
         tabs = window.get("tabs", [])
         idx = next((i for i, tab in enumerate(tabs) if tab.get("name") == "notifications_dialog"), None)
         if idx is not None:
             tabs.pop(idx)
             if not tabs:
-                st.session_state["_crm_windows"] = [w for w in windows if w.get("id") != window_id]
-                st.session_state["_crm_active_window_id"] = next((w.get("id") for w in st.session_state.get("_crm_windows", []) if not w.get("minimized")), None)
+                st.session_state["_crm_windows"] = [w for w in windows if str(w.get("id")) != str(window.get("id"))]
+                st.session_state["_crm_active_window_id"] = None
                 st.session_state.pop("_crm_active_dialog", None)
             else:
-                new_idx = idx - 1 if idx >= len(tabs) else min(idx, len(tabs)-1)
-                new_idx = max(0, new_idx)
+                # If the notification tab is closed from a client workspace, keep
+                # the remaining client/deal/task tabs available and activate a neighbor.
+                new_idx = max(0, min(idx - 1 if idx >= len(tabs) else idx, len(tabs) - 1))
                 window["active_tab"] = new_idx
+                window["minimized"] = False
+                st.session_state["_crm_active_window_id"] = window.get("id")
                 st.session_state["_crm_active_dialog"] = tabs[new_idx]
             _crm_workspace_clear_legacy_dialog_markers()
             _crm_workspace_queue_save()
-    st.session_state.pop("show_notifications_dialog", None)
-    st.session_state["_in_dialog"] = False
-    st.rerun()
+    # A fragment rerun avoids re-running the entire CRM and reduces visible flicker.
+    if st.session_state.get("_crm_inside_dialog_host", False):
+        try:
+            st.rerun(scope="fragment")
+        except (TypeError, ValueError):
+            st.rerun()
+    else:
+        st.rerun()
 
 
 def _notification_target(n):
@@ -4264,8 +4280,10 @@ def notifications_dialog():
     [class*="st-key-notif_open_"] .stButton > button { width:100%!important; max-width:100%!important; min-width:0!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:32px!important; padding:4px 8px!important; border-radius:6px!important; background:rgba(255,255,255,0.72)!important; border:1px solid #E0E6EF!important; box-shadow:none!important; color:#2C3E50!important; justify-content:flex-start!important; font-size:0.84rem!important; }
     [class*="st-key-notif_open_"] .stButton > button:hover { border-color:#BC1661!important; }
     [class*="st-key-notif_open_"] .stButton > button p { white-space:pre-wrap!important; text-align:left!important; line-height:1.25!important; margin:0!important; }
-    [class*="st-key-notif_date_"] { font-size:0.7rem!important; color:#7B8794!important; white-space:nowrap!important; overflow:hidden!important; }
-    [class*="st-key-notif_date_"] p { white-space:nowrap!important; margin:0!important; font-size:0.7rem!important; }
+    [class*="st-key-notif_date_"] { font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; white-space:nowrap!important; overflow:hidden!important; padding:0!important; margin:0!important; align-self:center!important; }
+    [class*="st-key-notif_date_"] p { white-space:nowrap!important; margin:0!important; padding:0!important; font-size:0.62rem!important; line-height:1.05!important; }
+    [class*="st-key-notif_open_"] { display:flex!important; justify-content:flex-start!important; margin-left:0!important; margin-right:auto!important; width:100%!important; max-width:100%!important; }
+    [class*="st-key-notif_open_"] .stButton { display:flex!important; justify-content:flex-start!important; width:100%!important; margin-left:0!important; margin-right:auto!important; }
     </style>""", unsafe_allow_html=True)
 
     with st.container(key="notif_actions"):
@@ -4274,7 +4292,6 @@ def notifications_dialog():
             if unread > 0:
                 if st.button("Прочитать все", key="btn_read_all_dlg", use_container_width=True, type="primary"):
                     mark_all_notifications_read()
-                    save_data(st.session_state.crm_store)
                     st.rerun()
         with _nc2:
             if st.button("Очистить прочитанные", key="btn_clear_read_dlg", use_container_width=True):
@@ -4294,10 +4311,10 @@ def notifications_dialog():
             _nid = str(n.get("id", ""))
             _row_key = ("notif_row_unread_" if is_unread else "notif_row_") + _nid
             with st.container(key=_row_key):
-                _date_col, _button_col, _right_space = st.columns([1, 2, 1], gap="small")
+                _date_col, _button_col, _right_space = st.columns([0.75, 2, 1.25], gap="small", vertical_alignment="center")
                 with _date_col:
                     with st.container(key=f"notif_date_{_nid}"):
-                        st.markdown(f"<div style='padding:7px 0 0 0'>{n.get('date', '')}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='padding:0;margin:0;font-size:0.62rem;line-height:1.05;white-space:nowrap;color:#7B8794'>{n.get('date', '')}</div>", unsafe_allow_html=True)
                 with _button_col:
                     label = ("🔵 " if is_unread else "✓ ") + str(n.get("text", ""))
                     if st.button(label, key=f"notif_open_{_nid}", use_container_width=True, type="secondary"):
