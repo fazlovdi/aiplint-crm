@@ -4238,6 +4238,42 @@ def _notification_target(n):
     return None
 
 
+def _notification_button_text(n):
+    """Текст кнопки уведомления: обязательно показываем номер задачи или сделки, если объект найден."""
+    raw = str(n.get("text", "") or "").strip()
+    if not raw:
+        return "Уведомление"
+    try:
+        target = _notification_target(n)
+    except Exception:
+        target = None
+    if not target:
+        return raw
+    kind = target[0]
+    number = ""
+    if kind == "task" and len(target) > 1:
+        number = str(target[1].get("task_number", "") or "").strip()
+    elif kind == "deal" and len(target) > 1:
+        number = str(target[1].get("deal_number", "") or "").strip()
+    elif kind == "internal_task" and len(target) > 1:
+        number = str(target[1].get("id", "") or "").strip()
+    if not number:
+        return raw
+    # Не дублируем номер, если он уже есть в тексте.
+    if re.search(r"№\s*" + re.escape(number) + r"(?:\b|$)", raw, flags=re.IGNORECASE):
+        return raw
+    if kind == "task":
+        match = re.match(r"(\s*Новая задача)\s*[:：]\s*(.*)", raw, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            return f"{match.group(1)} №{number}: {match.group(2)}"
+        return f"Задача №{number}: {raw}"
+    if kind == "deal":
+        return f"Сделка №{number}: {raw}"
+    if kind == "internal_task":
+        return f"Внутренняя задача №{number}: {raw}"
+    return raw
+
+
 def _open_notification_target(n):
     """Отметить уведомление прочитанным и открыть объект в отдельном окне клиента.
 
@@ -4354,9 +4390,10 @@ def notifications_dialog():
     [class*="st-key-notif_row_"] [data-testid="stColumn"] { padding:0!important; }
     [class*="st-key-notif_open_"] { width:100%!important; max-width:100%!important; }
     [class*="st-key-notif_open_"] [data-testid="stButton"] { width:100%!important; max-width:100%!important; }
-    [class*="st-key-notif_open_"] .stButton > button { width:100%!important; max-width:100%!important; min-width:0!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:32px!important; padding:4px 8px!important; border-radius:6px!important; background:rgba(255,255,255,0.72)!important; border:1px solid #E0E6EF!important; box-shadow:none!important; color:#2C3E50!important; justify-content:flex-start!important; font-size:0.84rem!important; }
+    [class*="st-key-notif_open_"] .stButton > button { width:100%!important; max-width:100%!important; min-width:0!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:32px!important; padding:4px 8px!important; border-radius:6px!important; background:rgba(255,255,255,0.72)!important; border:1px solid #E0E6EF!important; box-shadow:none!important; color:#2C3E50!important; justify-content:flex-start!important; align-items:flex-start!important; font-size:0.84rem!important; }
+    [class*="st-key-notif_open_"] .stButton > button > div { width:100%!important; flex:1 1 100%!important; text-align:left!important; justify-content:flex-start!important; align-items:flex-start!important; }
     [class*="st-key-notif_open_"] .stButton > button:hover { border-color:#BC1661!important; }
-    [class*="st-key-notif_open_"] .stButton > button p { white-space:pre-wrap!important; text-align:left!important; line-height:1.25!important; margin:0!important; }
+    [class*="st-key-notif_open_"] .stButton > button p { display:block!important; width:100%!important; white-space:pre-wrap!important; text-align:left!important; line-height:1.25!important; margin:0!important; }
     [class*="st-key-notif_date_"] { font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; white-space:nowrap!important; overflow:hidden!important; padding:0!important; margin:0!important; align-self:center!important; }
     [class*="st-key-notif_date_"] p { white-space:nowrap!important; margin:0!important; padding:0!important; font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; }
     [class*="st-key-notif_date_"] [data-testid="stCaptionContainer"] { white-space:nowrap!important; margin:0!important; padding:0!important; font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; }
@@ -4400,7 +4437,7 @@ def notifications_dialog():
                             _display_notif_date = _raw_notif_date or "—"
                         st.caption(_display_notif_date)
                 with _button_col:
-                    label = ("🔵 " if is_unread else "✓ ") + str(n.get("text", ""))
+                    label = ("🔵 " if is_unread else "✓ ") + _notification_button_text(n)
                     if st.button(label, key=f"notif_open_{_nid}", use_container_width=True, type="secondary"):
                         _open_notification_target(n)
 
@@ -6474,7 +6511,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                     d = get_deal_by_id(deal_id)
                     if d: d["last_modified"] = now_str()
                 if ntm:
-                    add_notification(ntm, f"Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
+                    add_notification(ntm, f"Новая задача №{tn}: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача №{tn}: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
                 return te
         return False
     return False
@@ -10603,7 +10640,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                     }
                     cl.setdefault("tasks", []).append(new_task)
                     if next_values["manager"]:
-                        add_notification(next_values["manager"], f"Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
+                        add_notification(next_values["manager"], f"Новая задача №{new_task['task_number']}: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача №{new_task['task_number']}: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
                 save_data(st.session_state.crm_store)
                 st.session_state[file_ver_key] = file_ver + 1
                 st.session_state.pop("dialog_task_completion", None)
