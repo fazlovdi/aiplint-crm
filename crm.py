@@ -7571,9 +7571,17 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     rows=_calculation_rows(calc,st.session_state.crm_store.get("products",DEFAULT_PRODUCT_CATALOG))
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
     total=round(sum(r["amount"] for r in rows)+delivery,2)
-    payer_name=requisites.get("legal_name","")
+    payer_name=str(requisites.get("legal_name", "") or "Физ. лицо")
     if requisites.get("payer_type")=="person":
-        payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}, {requisites.get('address','')}"
+        if payer_name.strip() == "Физ. лицо" and not any(str(requisites.get(k, "") or "").strip() for k in ("inn", "address")):
+            payer_details="Физ. лицо"
+        else:
+            payer_parts=[payer_name]
+            if str(requisites.get("inn", "") or "").strip():
+                payer_parts.append(f"ИНН {requisites.get('inn')}")
+            if str(requisites.get("address", "") or "").strip():
+                payer_parts.append(str(requisites.get("address")))
+            payer_details=", ".join(payer_parts)
     else:
         payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}"+(f"/КПП {requisites.get('kpp','')}" if requisites.get('kpp') else "")+f", {requisites.get('address','')}"
     calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
@@ -8891,13 +8899,21 @@ def invoice_document_dialog(deal_id, calc_id):
         ozon_invoice_col, ozon_payment_col = st.columns(2)
         with ozon_invoice_col:
             if st.button("Сформировать PDF-счёт в CRM", key=f"ozon_legal_invoice_make_{deal_id}_{calc_id}", use_container_width=True,
-                         disabled=(not selected_req or not bool(calc.get("items")))):
+                         disabled=(not bool(calc.get("items")))):
                 try:
-                    pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, selected_req)
+                    # Для PDF-счёта Ozon выбор сохранённых реквизитов необязателен.
+                    # Если реквизиты не выбраны, оформляем покупателя как физлицо.
+                    invoice_requisites = selected_req or {
+                        "payer_type": "person",
+                        "legal_name": "Физ. лицо",
+                        "inn": "",
+                        "address": "",
+                    }
+                    pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, invoice_requisites)
                     filename = f"Счёт {str(calc.get('name') or 'Расчёт').replace('Расчёт', '').strip() or 'Айплинт'} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
                     saved_file = _save_generated_document(
                         deal, pdf_bytes, filename, "Счёт Ozon (PDF из CRM)", calc,
-                        {"payer_type": selected_req.get("payer_type"), "bank": "Ozon", "requisite_id": selected_req.get("id")}
+                        {"payer_type": invoice_requisites.get("payer_type", "person"), "bank": "Ozon", "requisite_id": invoice_requisites.get("id", "")}
                     )
                     # _save_generated_document сохраняет данные CRM; заново получаем
                     # актуальные объекты, чтобы не записать устаревшую копию сделки.
@@ -8914,7 +8930,7 @@ def invoice_document_dialog(deal_id, calc_id):
                         "file_name": saved_file.get("file_name", filename),
                         "file_hash": saved_file.get("file_hash", hashlib.sha256(pdf_bytes).hexdigest()),
                         "calculation_id": str(calc.get("id")),
-                        "requisite_id": str(selected_req.get("id", "")),
+                        "requisite_id": str(invoice_requisites.get("id", "")),
                         "created_at": now_str(),
                     })
                     calc["updated_at"] = now_str()
