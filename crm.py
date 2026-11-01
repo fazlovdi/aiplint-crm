@@ -7236,7 +7236,10 @@ def _make_torg12_pdf(deal, client, calc):
     for i, x in enumerate(xs[:-1]):
         txt((x+xs[i+1])/2, 104.7, str(i+1), 4.6, align="center")
 
-    # Строки товаров. НДС — 22%, как в приложенном образце; сумма расчёта трактуется как сумма с НДС.
+    # Сумма расчёта трактуется как сумма с учётом выбранного НДС.
+    vat_label = str(calc.get("vat_rate", "Без НДС") or "Без НДС")
+    vat_percent = 0.0 if vat_label == "Без НДС" else float(vat_label.replace("%", "").replace(",", "."))
+    vat_multiplier = 1.0 + vat_percent / 100.0
     row_y = y_body
     item_heights = []
     for r in rows:
@@ -7258,8 +7261,8 @@ def _make_torg12_pdf(deal, client, calc):
         for x in xs[1:-1]:
             line(x, row_y, x, row_y+h)
         total_inc = float(r["amount"])
-        net = round(total_inc / 1.22, 2)
-        vat = round(total_inc-net, 2)
+        net = round(total_inc / vat_multiplier, 2) if vat_percent else round(total_inc, 2)
+        vat = round(total_inc-net, 2) if vat_percent else 0.0
         txt((xs[0]+xs[1])/2, row_y+h/2+1.5, str(i), 5.2, align="center")
         label = esc(r.get("name"))
         if r.get("sku"):
@@ -7271,12 +7274,14 @@ def _make_torg12_pdf(deal, client, calc):
         okei = "006" if unit.lower() in ("м", "м.", "метр", "метры") else ("796" if unit.lower() in ("шт", "шт.") else "")
         txt((xs[3]+xs[4])/2, row_y+h/2+1.5, okei, 5.0, align="center")
         txt((xs[4]+xs[5])/2, row_y+h/2+1.5, unit, 5.0, align="center")
-        txt((xs[9]+xs[10])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
-        txt((xs[10]+xs[11])/2, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="center")
-        txt((xs[11]+xs[12])/2, row_y+h/2+1.5, money(net), 4.8, align="center")
-        txt((xs[12]+xs[13])/2, row_y+h/2+1.5, "22", 4.8, align="center")
-        txt((xs[13]+xs[14])/2, row_y+h/2+1.5, money(vat), 4.8, align="center")
-        txt((xs[14]+xs[15])/2, row_y+h/2+1.5, money(total_inc), 4.8, align="center")
+        # Количество, цена, сумма без НДС, ставка, сумма НДС и сумма с НДС
+        # выводятся в соответствующих колонках формы ТОРГ-12.
+        txt((xs[6]+xs[7])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
+        txt((xs[9]+xs[10])/2, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="center")
+        txt((xs[10]+xs[11])/2, row_y+h/2+1.5, money(net), 4.8, align="center")
+        txt((xs[11]+xs[12])/2, row_y+h/2+1.5, vat_label if vat_percent else "Без НДС", 4.3, align="center")
+        txt((xs[12]+xs[13])/2, row_y+h/2+1.5, money(vat), 4.8, align="center")
+        txt((xs[13]+xs[15])/2, row_y+h/2+1.5, money(total_inc), 4.8, align="center")
         row_y += h
 
     # Итоговая строка.
@@ -7284,14 +7289,14 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[1]+xs[6])/2, row_y+3.6, "Всего по накладной", 5.2, bold, align="center")
     qty_total = sum(float(r["quantity"]) for r in rows)
     inc_total = round(sum(float(r["amount"]) for r in rows), 2)
-    net_total = round(inc_total/1.22, 2)
-    vat_total = round(inc_total-net_total, 2)
-    txt((xs[9]+xs[10])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
-    txt((xs[10]+xs[11])/2, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="center")
-    txt((xs[11]+xs[12])/2, row_y+3.6, money(net_total), 4.8, align="center")
-    txt((xs[12]+xs[13])/2, row_y+3.6, "22", 4.8, align="center")
-    txt((xs[13]+xs[14])/2, row_y+3.6, money(vat_total), 4.8, align="center")
-    txt((xs[14]+xs[15])/2, row_y+3.6, money(inc_total), 4.8, align="center")
+    net_total = round(inc_total / vat_multiplier, 2) if vat_percent else round(inc_total, 2)
+    vat_total = round(inc_total-net_total, 2) if vat_percent else 0.0
+    txt((xs[6]+xs[7])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
+    txt((xs[9]+xs[10])/2, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="center")
+    txt((xs[10]+xs[11])/2, row_y+3.6, money(net_total), 4.8, align="center")
+    txt((xs[11]+xs[12])/2, row_y+3.6, vat_label if vat_percent else "Без НДС", 4.3, align="center")
+    txt((xs[12]+xs[13])/2, row_y+3.6, money(vat_total), 4.8, align="center")
+    txt((xs[13]+xs[15])/2, row_y+3.6, money(inc_total), 4.8, align="center")
 
     # Нижняя часть формы: строки приложения, суммы прописью и подписи.
     y = row_y+10
@@ -9077,6 +9082,10 @@ def deal_calculation_dialog(deal_id, calc_id):
     calc.setdefault("delivery_amount", 0.0)
     calc.setdefault("discount_type", "Без скидки")
     calc.setdefault("individual_discount", 0.0)
+    calc.setdefault("vat_rate", "Без НДС")
+    vat_options = ["Без НДС", "5%", "7%", "10%", "22%"]
+    if str(calc.get("vat_rate", "Без НДС")) not in vat_options:
+        calc["vat_rate"] = "Без НДС"
     snapshot_key = f"{key}_original_snapshot"
     if snapshot_key not in st.session_state:
         st.session_state[snapshot_key] = copy.deepcopy(calc)
@@ -9091,6 +9100,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
         calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
         calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
+        calc["vat_rate"] = str(st.session_state.get(f"{key}_vat_rate", calc.get("vat_rate", "Без НДС")))
         catalog_now = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
         products_now = {str(x.get("id", x.get("sku", ""))): x for x in catalog_now}
         for row in calc.get("items", []):
@@ -9278,13 +9288,19 @@ def deal_calculation_dialog(deal_id, calc_id):
                 st.session_state[f"{key}_{_rid}_discount"] = _new_discount
                 _row["discount"] = _new_discount
         st.session_state[dirty_key] = True
-    name_col, dtype_col = st.columns([1.6, 1])
+    name_col, dtype_col, vat_col = st.columns([1.5, 1, 0.9])
     with name_col:
         st.text_input("Название расчёта:", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
     with dtype_col:
         selected_dtype = st.selectbox("Тип скидки:", dtype_options,
             index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
             on_change=_on_discount_type_change)
+    with vat_col:
+        vat_key = f"{key}_vat_rate"
+        if vat_key not in st.session_state:
+            st.session_state[vat_key] = calc.get("vat_rate", "Без НДС")
+        st.selectbox("НДС для ТОРГ-12:", vat_options, key=vat_key,
+            on_change=lambda: (calc.__setitem__("vat_rate", st.session_state.get(vat_key, "Без НДС")), st.session_state.__setitem__(dirty_key, True)))
     st.divider()
     catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
     active_products = [p for p in catalog if p.get("active", True)]
