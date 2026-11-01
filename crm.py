@@ -1525,23 +1525,29 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
         st.session_state[products_key] = str(existing_products or "")
     selected_id = ""
     if active:
-        if st.session_state.get(calc_key) not in calc_ids:
-            st.session_state[calc_key] = str(existing_calc_id) if str(existing_calc_id) in calc_ids else calc_ids[0]
+        if calc_key not in st.session_state:
+            st.session_state[calc_key] = str(existing_calc_id) if str(existing_calc_id) in calc_ids else ""
+        elif str(st.session_state.get(calc_key) or "") not in calc_ids and st.session_state.get(calc_key) != "":
+            st.session_state[calc_key] = ""
         selected_id = st.selectbox(
-            "Расчёт заказа:", calc_ids,
-            format_func=lambda cid: calc_by_id[cid].get("name", "Расчёт"),
-            key=calc_key
+            "Расчёт заказа:", [""] + calc_ids,
+            format_func=lambda cid: "Выберите расчёт..." if not cid else calc_by_id[cid].get("name", "Расчёт"),
+            key=calc_key, index=0,
         )
-        if last_calc_key not in st.session_state:
-            # При первом открытии редактирования сохраняем ручные товары из задачи.
-            # Если список пустой, заполняем его товарами выбранного расчёта.
-            if not str(st.session_state.get(products_key, "") or "").strip():
-                st.session_state[products_key] = "\\n".join(_task_products_from_calculation(deal, selected_id))
-            st.session_state[last_calc_key] = str(selected_id)
-        elif st.session_state.get(last_calc_key) != str(selected_id):
-            # При явной смене расчёта обновляем список из нового расчёта.
-            st.session_state[products_key] = "\\n".join(_task_products_from_calculation(deal, selected_id))
-            st.session_state[last_calc_key] = str(selected_id)
+        selected_id = str(selected_id or "")
+        if selected_id:
+            if last_calc_key not in st.session_state:
+                # При первом открытии редактирования сохраняем ручные товары из задачи.
+                # Если список пустой, заполняем его товарами выбранного расчёта.
+                if not str(st.session_state.get(products_key, "") or "").strip():
+                    st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
+                st.session_state[last_calc_key] = selected_id
+            elif st.session_state.get(last_calc_key) != selected_id:
+                # При явной смене расчёта обновляем список из нового расчёта.
+                st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
+                st.session_state[last_calc_key] = selected_id
+        elif last_calc_key not in st.session_state:
+            st.session_state[last_calc_key] = ""
     else:
         st.caption("В сделке пока нет сохранённых расчётов.")
     products = str(st.session_state.get(products_key, "") or "")
@@ -6421,7 +6427,7 @@ def _crm_close_created_task_form_tab():
     _idx = int(_window.get("active_tab", 0) or 0)
     if not (0 <= _idx < len(_tabs)):
         return False
-    _create_names = {"deal_create_task_dialog", "client_create_task_dialog", "client_create_deal_task_dialog"}
+    _create_names = {"deal_create_task_dialog", "client_create_task_dialog", "client_create_deal_task_dialog", "create_deal_dialog"}
     if _tabs[_idx].get("name") not in _create_names:
         return False
     _tabs.pop(_idx)
@@ -6436,6 +6442,27 @@ def _crm_close_created_task_form_tab():
     return True
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
+    # Очистка выполняется до создания виджетов, чтобы Streamlit не запрещал менять их состояние.
+    _clear_confirm_key = f"nt_clear_confirm_{key_suffix}"
+    _form_initialized_key = f"nt_form_initialized_{key_suffix}"
+    if not st.session_state.get(_form_initialized_key):
+        # Новая форма задачи всегда открывается без выбранного расчёта.
+        st.session_state[f"nt_order_calc_{key_suffix}"] = ""
+        st.session_state[_form_initialized_key] = True
+    if st.session_state.pop(f"nt_clear_apply_{key_suffix}", False):
+        for _state_key in list(st.session_state.keys()):
+            _sk = str(_state_key)
+            if (
+                _sk.endswith(f"_{key_suffix}") and _sk.startswith(("nt_", "nt_pick_existing_"))
+                or _sk.startswith(f"nt_file_{key_suffix}_")
+                or _sk == f"nt_uploaded_files_{key_suffix}"
+                or _sk.startswith(f"nt_client_picker_{key_suffix}")
+                or _sk.startswith(f"nt_show_client_picker_{key_suffix}")
+            ):
+                st.session_state.pop(_state_key, None)
+        st.session_state[f"nt_file_ver_{key_suffix}"] = int(st.session_state.get(f"nt_file_ver_{key_suffix}", 0) or 0) + 1
+        st.session_state[_clear_confirm_key] = False
+        st.rerun()
     # Для задачи по клиенту доступны только «Связаться» и «Отправить образцы».
     # В задаче по сделке сохраняем полный список типов без изменений.
     _task_type_options = TASK_TYPES if deal_id else [x for x in TASK_TYPES if x != "Отправить заказ"]
@@ -6449,8 +6476,10 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
         position:relative!important; border-right:0!important; padding-right:1.1rem!important;
     }}
+    /* Keep the vertical divider, but end it above the bottom action row. */
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child:after {{
-        content:""; position:absolute; right:-0.5rem; top:0; bottom:1.75rem; border-right:1px solid #D9DEE7; pointer-events:none;
+        content:""!important; display:block!important; position:absolute!important; top:0!important; right:-0.5rem!important;
+        bottom:5.5rem!important; width:1px!important; background:#DCE0E5!important; pointer-events:none!important;
     }}
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{ padding-left:1.1rem!important; }}
     .st-key-task_create_submit_{key_suffix} {{ width:50%!important; margin-left:auto!important; margin-right:auto!important; }}
@@ -6588,14 +6617,70 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 _create_file_options[f"{_i+1}. {_fname}  ·  {_dt_label}  ·  {_i}"] = _f
             if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
                 if _create_file_options:
-                    st.multiselect("Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:", list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}", placeholder="Нажми чтобы выбрать файл из загруженных...")
+                    st.caption("Выберите файлы в списке, затем нажмите «Прикрепить выбранные файлы».")
+                    _picked_existing_now = st.multiselect(
+                        "Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:",
+                        list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}",
+                        placeholder="Нажмите здесь и выберите один или несколько файлов..."
+                    )
+                    if _picked_existing_now:
+                        st.caption(f"Выбрано файлов: {len(_picked_existing_now)}.")
+                        for _picked_label in _picked_existing_now:
+                            st.markdown(f"- {html.escape(_picked_label.rsplit('  ·  ', 2)[0])}")
+                    _attach_col, _cancel_pick_col = st.columns([3, 1])
+                    with _attach_col:
+                        if st.button("Прикрепить выбранные файлы", key=f"nt_attach_existing_{key_suffix}", use_container_width=True, type="primary", disabled=not bool(_picked_existing_now)):
+                            _attached_now = list(st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or [])
+                            _attached_ids = {str(f.get("file_hash", "") or f.get("file_path", "") or f.get("path", "")) for f in _attached_now if isinstance(f, dict)}
+                            _attached_count_before = len(_attached_now)
+                            for _label_to_attach in _picked_existing_now:
+                                _f_to_attach = dict(_create_file_options[_label_to_attach])
+                                if not _f_to_attach.get("file_path") and _f_to_attach.get("path"):
+                                    _f_to_attach["file_path"] = _f_to_attach["path"]
+                                if not _f_to_attach.get("file_name") and _f_to_attach.get("name"):
+                                    _f_to_attach["file_name"] = _f_to_attach["name"]
+                                _fid_to_attach = str(_f_to_attach.get("file_hash", "") or _f_to_attach.get("file_path", ""))
+                                if _fid_to_attach and _fid_to_attach not in _attached_ids:
+                                    _attached_now.append(_f_to_attach)
+                                    _attached_ids.add(_fid_to_attach)
+                            st.session_state[f"nt_uploaded_files_{key_suffix}"] = _attached_now
+                            st.session_state[f"nt_pick_existing_select_{key_suffix}"] = []
+                            st.session_state[f"nt_pick_existing_open_{key_suffix}"] = False
+                            st.toast(f"Прикреплено новых файлов: {len(_attached_now) - _attached_count_before}", icon="📎")
+                            st.rerun()
+                    with _cancel_pick_col:
+                        if st.button("Отмена", key=f"nt_cancel_existing_{key_suffix}", use_container_width=True):
+                            st.session_state[f"nt_pick_existing_select_{key_suffix}"] = []
+                            st.session_state[f"nt_pick_existing_open_{key_suffix}"] = False
+                            st.rerun()
+                _already_attached = st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or []
+                if _already_attached:
+                    st.markdown("**Прикреплены к задаче:**")
+                    for _af in _already_attached:
+                        st.markdown(f"- {html.escape(str(_af.get('file_name') or _af.get('name') or os.path.basename(str(_af.get('file_path') or _af.get('path') or 'Файл'))))}")
                 else:
                     st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
 
-    _submit_left, _submit_center, _submit_right = st.columns([1, 2, 1])
+    _submit_left, _submit_center, _submit_right = st.columns([1, 1, 1], gap="small")
+    with _submit_left:
+        if st.button("Очистить", key=f"nt_clear_{key_suffix}", use_container_width=True):
+            st.session_state[_clear_confirm_key] = True
     with _submit_center:
         with st.container(key=f"task_create_submit_{key_suffix}"):
             _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
+    with _submit_right:
+        pass
+    if st.session_state.get(_clear_confirm_key, False):
+        st.warning("Очистить все заполненные поля и убрать выбранные/загруженные файлы? Это действие нельзя отменить.")
+        _clear_yes, _clear_no = st.columns(2)
+        with _clear_yes:
+            if st.button("Да, очистить всё", key=f"nt_clear_yes_{key_suffix}", type="primary", use_container_width=True):
+                st.session_state[f"nt_clear_apply_{key_suffix}"] = True
+                st.rerun()
+        with _clear_no:
+            if st.button("Отмена", key=f"nt_clear_no_{key_suffix}", use_container_width=True):
+                st.session_state[_clear_confirm_key] = False
+                st.rerun()
     if _create_clicked:
         if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
@@ -6630,7 +6715,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "task_number": tn, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                 "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                 "task_comments": [], "flagged": False,
-                "products": nproducts, "ship_city": nship_city, "ship_addr": nship_addr,
+                "products": "\n".join(line.strip() for line in str(nproducts or "").splitlines() if line.strip()), "ship_city": nship_city, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
                 "ship_pay": nship_pay, "ship_method": nship_method, "tk_num": ntk_num.strip(),
                 "calculation_id": str(_selected_calc_id_new) if _selected_calc_id_new else ""
@@ -11282,8 +11367,21 @@ def create_deal_dialog(cl_id):
         st.toast("Сделка создана", icon="✅")
         st.session_state.pop("dialog_create_deal_from_client", None)
         st.session_state["_in_dialog"] = False
-        _push_dialog_return()
-        st.session_state["_open_created_deal"] = did
+        # Close the creation tab, then activate the newly created deal tab in the same workspace.
+        _crm_close_created_task_form_tab()
+        _new_deal_client = get_client_by_id(cl_id)
+        _new_deal_entry = {
+            "name": "deal_detail_dialog", "title": "Подробности сделки", "width": "large",
+            "args": (new_deal, _new_deal_client, st.session_state.get("user_name", ""), f"deal_{did}"),
+            "kwargs": {},
+        }
+        _new_deal_entry["signature"] = (
+            _crm_dialog_signature_value(_new_deal_entry["args"]),
+            _crm_dialog_signature_value(_new_deal_entry["kwargs"]),
+        )
+        _crm_workspace_open_dialog(_new_deal_entry, client_id=cl_id, from_host=True)
+        st.session_state.pop("_open_created_deal", None)
+        st.session_state.pop("dialog_deal_key", None)
         st.rerun()
 
 
@@ -11313,6 +11411,10 @@ def deal_create_task_dialog(deal_id, client_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_create_deal_task_deal_id", None)
                     st.session_state.pop("dialog_create_deal_task_client_id", None)
+                    st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
+                    st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
+                    st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
+                    st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
     if _show_close_warning:
@@ -11328,12 +11430,22 @@ def deal_create_task_dialog(deal_id, client_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_create_deal_task_deal_id", None)
                     st.session_state.pop("dialog_create_deal_task_client_id", None)
+                    st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
+                    st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
+                    st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
+                    st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.rerun()
+    _task_form_lifecycle_key = f"nt_form_initialized_cdt_{deal_id}"
+    if not st.session_state.get(_task_form_lifecycle_key):
+        st.session_state[f"nt_order_calc_cdt_{deal_id}"] = ""
+        st.session_state[f"nt_last_products_calc_cdt_{deal_id}"] = ""
+        st.session_state[f"nt_prod_cdt_{deal_id}"] = ""
+        st.session_state[_task_form_lifecycle_key] = True
     _created_task = render_task_form(deal_id, client_id, f"cdt_{deal_id}")
     if _created_task:
         save_data(st.session_state.crm_store)
@@ -11349,6 +11461,10 @@ def deal_create_task_dialog(deal_id, client_id):
             st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_deal_task_deal_id", None)
         st.session_state.pop("dialog_create_deal_task_client_id", None)
+        st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
+        st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
+        st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
+        st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
         st.session_state["_in_dialog"] = False
         if _crm_close_created_task_form_tab():
             st.session_state.pop("dialog_task_key", None)
