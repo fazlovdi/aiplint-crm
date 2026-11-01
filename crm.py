@@ -6455,12 +6455,27 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         st.session_state[_task_type_key] = default_type if default_type in _task_type_options else _task_type_options[0]
 
     _layout_key = f"task_create_layout_{key_suffix}"
+    _submit_row_key = f"task_create_submit_row_{key_suffix}"
     st.markdown(f"""<style>
-    .st-key-{_layout_key} [data-testid="stHorizontalBlock"] {{ align-items:flex-start!important; }}
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
-        border-right:1px solid #DCE0E5!important; padding-right:1.1rem!important;
+    /* Разделитель расположен внутри строки двух колонок и заканчивается ДО нижнего края.
+       Поэтому он физически не может заходить на отдельную строку кнопки «Создать». */
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {{
+        align-items:flex-start!important; position:relative!important;
     }}
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{ padding-left:1.1rem!important; }}
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"]::after {{
+        content:""; position:absolute; top:0; bottom:3.75rem; left:50%;
+        width:1px; background:#DCE0E5; transform:translateX(-.5px); pointer-events:none;
+    }}
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
+        border-right:none!important; padding-right:1.1rem!important; min-width:0!important;
+    }}
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{
+        padding-left:1.1rem!important; min-width:0!important;
+    }}
+    /* Кнопка создания находится в отдельной одноколоночной строке. */
+    .st-key-{_submit_row_key} [data-testid="stHorizontalBlock"] {{ display:block!important; }}
+    .st-key-{_submit_row_key} [data-testid="stButton"] {{ width:100%!important; }}
+    .st-key-{_submit_row_key} [data-testid="stButton"] button {{ width:100%!important; }}
     </style>""", unsafe_allow_html=True)
 
     with st.container(key=_layout_key):
@@ -6595,9 +6610,12 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
                 if _create_file_options:
                     st.caption("Выберите файлы в списке, затем нажмите «Прикрепить выбранные файлы».")
+                    _pick_select_ver_key = f"nt_pick_existing_select_ver_{key_suffix}"
+                    _pick_select_ver = int(st.session_state.get(_pick_select_ver_key, 0) or 0)
+                    _pick_select_widget_key = f"nt_pick_existing_select_{key_suffix}_{_pick_select_ver}"
                     _picked_existing_now = st.multiselect(
                         "Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:",
-                        list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}",
+                        list(_create_file_options), key=_pick_select_widget_key,
                         placeholder="Нажмите здесь и выберите один или несколько файлов..."
                     )
                     if _picked_existing_now:
@@ -6621,7 +6639,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                                     _attached_now.append(_f_to_attach)
                                     _attached_ids.add(_fid_to_attach)
                             st.session_state[f"nt_uploaded_files_{key_suffix}"] = _attached_now
-                            st.session_state[f"nt_pick_existing_select_{key_suffix}"] = []
+                            # Сбрасываем выбор сменой ключа виджета. Не меняем состояние
+                            # multiselect после его отрисовки — Streamlit на этом падает.
+                            st.session_state[_pick_select_ver_key] = _pick_select_ver + 1
                             st.session_state[f"nt_pick_existing_open_{key_suffix}"] = True
                             st.toast(f"Прикреплено новых файлов: {len(_attached_now) - _attached_count_before}", icon="📎")
                             st.rerun()
@@ -6640,9 +6660,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         elif not st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
             st.caption("Загруженные файлы появятся здесь после прикрепления.")
 
-    # Кнопка создания находится в отдельной строке-контейнере на всю ширину,
-    # а не в одной из колонок формы: вертикальный разделитель её не пересекает.
-    _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
+    # Отдельная строка с одной колонкой, вне контейнера двухколоночной формы.
+    with st.container(key=_submit_row_key):
+        _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
     if _create_clicked:
         if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
@@ -6650,7 +6670,8 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             tfi_list = list(st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or [])
             if ntf:
                 tfi_list.extend(normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file")))
-            _picked_create_keys = st.session_state.get(f"nt_pick_existing_select_{key_suffix}", []) or []
+            _picked_create_ver = int(st.session_state.get(f"nt_pick_existing_select_ver_{key_suffix}", 0) or 0)
+            _picked_create_keys = st.session_state.get(f"nt_pick_existing_select_{key_suffix}_{_picked_create_ver}", []) or []
             _picked_create_files = []
             for _picked_create_key in _picked_create_keys:
                 if _picked_create_key in _create_file_options:
