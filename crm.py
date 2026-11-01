@@ -6409,6 +6409,32 @@ def _deal_items_total(items):
         total += qty * price * (1 - discount / 100.0)
     return round(total, 2)
 
+
+def _crm_close_created_task_form_tab():
+    """Close the current task-creation tab and return to the previous tab in its window."""
+    _windows = st.session_state.get("_crm_windows", [])
+    _active_id = st.session_state.get("_crm_active_window_id")
+    _window = next((w for w in _windows if w.get("id") == _active_id), None)
+    if not _window:
+        return False
+    _tabs = _window.get("tabs", [])
+    _idx = int(_window.get("active_tab", 0) or 0)
+    if not (0 <= _idx < len(_tabs)):
+        return False
+    _create_names = {"deal_create_task_dialog", "client_create_task_dialog", "client_create_deal_task_dialog"}
+    if _tabs[_idx].get("name") not in _create_names:
+        return False
+    _tabs.pop(_idx)
+    if _tabs:
+        _window["active_tab"] = max(0, min(_idx - 1, len(_tabs) - 1))
+        st.session_state["_crm_active_dialog"] = _tabs[_window["active_tab"]]
+    else:
+        _window["active_tab"] = 0
+        st.session_state.pop("_crm_active_dialog", None)
+    _window["minimized"] = False
+    _crm_workspace_queue_save()
+    return True
+
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
     # Для задачи по клиенту доступны только «Связаться» и «Отправить образцы».
     # В задаче по сделке сохраняем полный список типов без изменений.
@@ -6416,104 +6442,122 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     _task_type_key = f"nt_type_{key_suffix}"
     if st.session_state.get(_task_type_key) not in _task_type_options:
         st.session_state[_task_type_key] = default_type if default_type in _task_type_options else _task_type_options[0]
-    ntype = st.selectbox("Тип задачи:", _task_type_options, index=_task_type_options.index(st.session_state[_task_type_key]), key=_task_type_key)
-    if ntype not in ("Отправить заказ", "Отправить образцы"):
-        ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
-    else:
-        ntopic = ntype
-    ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
-    ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
-    _selected_calc_id_new = ""
-    if ntype in ("Отправить заказ", "Отправить образцы"):
-        _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
-        _selected_calc_id_new, nproducts = render_task_products_editor(
-            _deal_for_new_task, f"nt_{key_suffix}",
-            st.session_state.get(f"nt_{key_suffix}_prod", ""),
-            st.session_state.get(f"nt_{key_suffix}_order_calc", "")
-        )
-        nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
-        nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
-        _client_options = {str(c.get("id", "")): c for c in st.session_state.crm_store.get("clients", [])}
-        _client_display = {str(c.get("id", "")): str(c.get("name", "Клиент")) for c in _client_options.values()}
-        for _client_item in _client_options.values():
-            for _extra_phone in _client_item.get("extra_phones", []) or []:
-                if isinstance(_extra_phone, dict):
-                    _contact_key = f"{_client_item.get('id')}|{_extra_phone.get('phone','')}"
-                    _client_display[_contact_key] = f"{_client_item.get('name','Клиент')} — {(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
-        _receiver_row, _picker_row = st.columns([4, 1.5])
-        with _receiver_row:
-            nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
-        with _picker_row:
-            st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
-            if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
-                st.session_state[f"nt_show_client_picker_{key_suffix}"] = not st.session_state.get(f"nt_show_client_picker_{key_suffix}", False)
-        if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
-            _picked_contact = st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента")
-            if st.button("Заполнить поля", key=f"nt_apply_client_{key_suffix}", use_container_width=True):
-                if _picked_contact:
-                    _parts = str(_picked_contact).split("|", 1)
-                    _picked_client = _client_options.get(_parts[0])
-                    if _picked_client:
-                        if len(_parts) > 1:
-                            _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
-                            st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
-                            st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
-                        else:
-                            st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
-                            st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
-                    st.session_state[f"nt_show_client_picker_{key_suffix}"] = False
-                    st.rerun()
-        nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
-        nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
-        _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
-        _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
-        _amount_key_new = f"nt_amount_{key_suffix}"
-        if _auto_amount_new > 0:
-            st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
-        norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
-        _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
-        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
-    else:
-        nproducts = ""
-        nship_city = ""
-        nship_addr = ""
-        nreceiver = ""
-        nreceiver_phone = ""
-        nship_pay = ""
-        norder_amount = ""
-        _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
-        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
-    _new_delivery_col, _new_track_col = st.columns([1, 1])
-    with _new_delivery_col:
-        nship_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=0, key=f"nt_method_{key_suffix}")
-    with _new_track_col:
-        ntk_num = st.text_input("Трек/комментарий:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер или комментарий")
-    ncomment = st.text_area("Описание:", key=f"nt_c_{key_suffix}")
-    _create_file_upload_col, _create_file_pick_col = st.columns(2)
-    with _create_file_upload_col:
-        if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
-            if ntf:
-                _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
-                st.session_state.setdefault(f"nt_uploaded_files_{key_suffix}", []).extend(_new_uploaded_task_files)
-                st.session_state[f"nt_file_ver_{key_suffix}"] = _nt_file_ver + 1
-                st.rerun()
+
+    _layout_key = f"task_create_layout_{key_suffix}"
+    st.markdown(f"""<style>
+    .st-key-{_layout_key} [data-testid="stHorizontalBlock"] {{ align-items:flex-start!important; }}
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
+        border-right:1px solid #D9DEE7!important; padding-right:1.1rem!important;
+    }}
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{ padding-left:1.1rem!important; }}
+    .st-key-task_create_submit_{key_suffix} {{ width:50%!important; margin-left:auto!important; margin-right:auto!important; }}
+    .st-key-task_create_submit_{key_suffix} button {{ width:100%!important; }}
+    </style>""", unsafe_allow_html=True)
+
+    with st.container(key=_layout_key):
+        _left_col, _right_col = st.columns(2, gap="large")
+        with _left_col:
+            ntype = st.selectbox("Тип задачи:", _task_type_options, index=_task_type_options.index(st.session_state[_task_type_key]), key=_task_type_key)
+            if ntype not in ("Отправить заказ", "Отправить образцы"):
+                ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
             else:
-                st.warning("Выберите файл(ы) для загрузки.")
-    with _create_file_pick_col:
-        if st.button("Выбрать из загруженных", key=f"nt_pick_existing_btn_{key_suffix}", use_container_width=True):
-            _create_pick_key = f"nt_pick_existing_open_{key_suffix}"
-            st.session_state[_create_pick_key] = not st.session_state.get(_create_pick_key, False)
-    _create_source_deal = get_deal_by_id(deal_id) if deal_id else None
-    _create_source_client = get_client_by_id(cl_id)
-    _create_source_files = (_create_source_deal or {}).get("deal_files", []) if deal_id else (_create_source_client or {}).get("client_files", [])
-    _create_source_files = [f for f in (_create_source_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
-    _create_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_create_source_files)}
-    if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
-        if _create_file_options:
-            st.multiselect("Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:", list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}")
-        else:
-            st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
-    if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
+                ntopic = ntype
+            ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
+            ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
+            _selected_calc_id_new = ""
+            if ntype in ("Отправить заказ", "Отправить образцы"):
+                _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
+                _selected_calc_id_new, nproducts = render_task_products_editor(
+                    _deal_for_new_task, f"nt_{key_suffix}",
+                    st.session_state.get(f"nt_{key_suffix}_prod", ""),
+                    st.session_state.get(f"nt_{key_suffix}_order_calc", "")
+                )
+                nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
+                nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
+                _client_options = {str(c.get("id", "")): c for c in st.session_state.crm_store.get("clients", [])}
+                _client_display = {str(c.get("id", "")): str(c.get("name", "Клиент")) for c in _client_options.values()}
+                for _client_item in _client_options.values():
+                    for _extra_phone in _client_item.get("extra_phones", []) or []:
+                        if isinstance(_extra_phone, dict):
+                            _contact_key = f"{_client_item.get('id')}|{_extra_phone.get('phone','')}"
+                            _client_display[_contact_key] = f"{_client_item.get('name','Клиент')} — {(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
+                _receiver_row, _picker_row = st.columns([4, 1.5])
+                with _receiver_row:
+                    nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
+                with _picker_row:
+                    st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+                    if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
+                        st.session_state[f"nt_show_client_picker_{key_suffix}"] = not st.session_state.get(f"nt_show_client_picker_{key_suffix}", False)
+                if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
+                    _picked_contact = st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента")
+                    if st.button("Заполнить поля", key=f"nt_apply_client_{key_suffix}", use_container_width=True):
+                        if _picked_contact:
+                            _parts = str(_picked_contact).split("|", 1)
+                            _picked_client = _client_options.get(_parts[0])
+                            if _picked_client:
+                                if len(_parts) > 1:
+                                    _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
+                                    st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
+                                    st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
+                                else:
+                                    st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
+                                    st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
+                            st.session_state[f"nt_show_client_picker_{key_suffix}"] = False
+                            st.rerun()
+                nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
+                nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
+                _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
+                _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
+                _amount_key_new = f"nt_amount_{key_suffix}"
+                if _auto_amount_new > 0:
+                    st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
+                norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
+            else:
+                nproducts = ""
+                nship_city = ""
+                nship_addr = ""
+                nreceiver = ""
+                nreceiver_phone = ""
+                nship_pay = ""
+                norder_amount = ""
+            _new_delivery_col, _new_track_col = st.columns([1, 1])
+            with _new_delivery_col:
+                nship_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=0, key=f"nt_method_{key_suffix}")
+            with _new_track_col:
+                ntk_num = st.text_input("Трек/комментарий:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер или комментарий")
+            ncomment = st.text_area("Описание:", key=f"nt_c_{key_suffix}")
+
+        with _right_col:
+            st.markdown("**Добавление файлов**")
+            _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
+            ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
+            if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
+                if ntf:
+                    _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
+                    st.session_state.setdefault(f"nt_uploaded_files_{key_suffix}", []).extend(_new_uploaded_task_files)
+                    st.session_state[f"nt_file_ver_{key_suffix}"] = _nt_file_ver + 1
+                    st.rerun()
+                else:
+                    st.warning("Выберите файл(ы) для загрузки.")
+            if st.button("Выбрать из загруженных", key=f"nt_pick_existing_btn_{key_suffix}", use_container_width=True):
+                _create_pick_key = f"nt_pick_existing_open_{key_suffix}"
+                st.session_state[_create_pick_key] = not st.session_state.get(_create_pick_key, False)
+            _create_source_deal = get_deal_by_id(deal_id) if deal_id else None
+            _create_source_client = get_client_by_id(cl_id)
+            _create_source_files = (_create_source_deal or {}).get("deal_files", []) if deal_id else (_create_source_client or {}).get("client_files", [])
+            _create_source_files = [f for f in (_create_source_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+            _create_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_create_source_files)}
+            if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
+                if _create_file_options:
+                    st.multiselect("Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:", list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}", placeholder="Нажми чтобы выбрать файл из загруженных...")
+                else:
+                    st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
+
+    _submit_left, _submit_center, _submit_right = st.columns([1, 2, 1])
+    with _submit_center:
+        with st.container(key=f"task_create_submit_{key_suffix}"):
+            _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
+    if _create_clicked:
         if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
         else:
@@ -11267,9 +11311,13 @@ def deal_create_task_dialog(deal_id, client_id):
         st.session_state.pop("dialog_create_deal_task_deal_id", None)
         st.session_state.pop("dialog_create_deal_task_client_id", None)
         st.session_state["_in_dialog"] = False
-        _push_dialog_return()
-        st.session_state["dialog_task_key"] = f"cdt_{deal_id}_{_created_task.get('task_number', '')}"
-        st.session_state["_open_created_task"] = _created_task
+        if _crm_close_created_task_form_tab():
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("_open_created_task", None)
+        else:
+            _push_dialog_return()
+            st.session_state["dialog_task_key"] = f"cdt_{deal_id}_{_created_task.get('task_number', '')}"
+            st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
 
@@ -11324,9 +11372,13 @@ def client_create_task_dialog(cl_id):
         st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_client_task_client_id", None)
         st.session_state["_in_dialog"] = False
-        _push_dialog_return()
-        st.session_state["dialog_task_key"] = f"cct_{cl_id}_{_created_task.get('task_number', '')}"
-        st.session_state["_open_created_task"] = _created_task
+        if _crm_close_created_task_form_tab():
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("_open_created_task", None)
+        else:
+            _push_dialog_return()
+            st.session_state["dialog_task_key"] = f"cct_{cl_id}_{_created_task.get('task_number', '')}"
+            st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
 
@@ -11376,9 +11428,13 @@ def client_create_deal_task_dialog(cl_id):
         st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
         st.session_state["_in_dialog"] = False
-        _push_dialog_return()
-        st.session_state["dialog_task_key"] = f"ccdt_{cl_id}_{_created_task.get('task_number', '')}"
-        st.session_state["_open_created_task"] = _created_task
+        if _crm_close_created_task_form_tab():
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("_open_created_task", None)
+        else:
+            _push_dialog_return()
+            st.session_state["dialog_task_key"] = f"ccdt_{cl_id}_{_created_task.get('task_number', '')}"
+            st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
 @_crm_dialog("Задачи клиента", width="large")
