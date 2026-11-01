@@ -1178,31 +1178,31 @@ def save_uploaded_file(u_file, c_id, prefix=""):
     for c in st.session_state.crm_store.get("clients", []):
         for f in c.get("client_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
         for t in c.get("tasks", []):
             for f in t.get("task_files", []):
                 if f.get("file_hash") == file_hash and file_hash:
-                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
             for f in t.get("completion_files", []):
                 if f.get("file_hash") == file_hash and file_hash:
-                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
     for d in st.session_state.crm_store.get("deals", []):
         for f in d.get("deal_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
         for f in d.get("close_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
     name = f"{c_id}_{prefix}_{int(time.time())}_{u_file.name}"
     if YANDEX_TOKEN:
         rp = f"CRM_NE_TROGAT/uploads/{name}"
         if upload_file_to_yandex(b, name):
-            return {"path": rp, "name": u_file.name, "file_hash": file_hash}
+            return {"path": rp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str()}
         st.warning("Не удалось загрузить на Диск, файл сохранён локально")
     os.makedirs("uploads", exist_ok=True)
     lp = f"uploads/{name}"
     with open(lp, "wb") as f: f.write(b)
-    return {"path": lp, "name": u_file.name, "file_hash": file_hash}
+    return {"path": lp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str()}
 
 def save_uploaded_files(files, c_id, prefix=""):
     if files is None: return []
@@ -1210,7 +1210,7 @@ def save_uploaded_files(files, c_id, prefix=""):
     return [fi for fi in (save_uploaded_file(f, c_id, prefix) for f in files) if fi]
 
 def normalize_file_list(fi_list):
-    return [{"file_path": fi["path"], "file_name": fi["name"], "file_hash": fi.get("file_hash", "")} for fi in fi_list]
+    return [{"file_path": fi["path"], "file_name": fi["name"], "file_hash": fi.get("file_hash", ""), **({"created_at": fi.get("created_at")} if fi.get("created_at") else {})} for fi in fi_list]
 
 def normalize_remote_path(fp):
     if not fp: return None
@@ -6447,7 +6447,10 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     st.markdown(f"""<style>
     .st-key-{_layout_key} [data-testid="stHorizontalBlock"] {{ align-items:flex-start!important; }}
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
-        border-right:1px solid #D9DEE7!important; padding-right:1.1rem!important;
+        position:relative!important; border-right:0!important; padding-right:1.1rem!important;
+    }}
+    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child:after {{
+        content:""; position:absolute; right:-0.5rem; top:0; bottom:1.75rem; border-right:1px solid #D9DEE7; pointer-events:none;
     }}
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{ padding-left:1.1rem!important; }}
     .st-key-task_create_submit_{key_suffix} {{ width:50%!important; margin-left:auto!important; margin-right:auto!important; }}
@@ -6474,13 +6477,31 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 )
                 nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
                 nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
-                _client_options = {str(c.get("id", "")): c for c in st.session_state.crm_store.get("clients", [])}
-                _client_display = {str(c.get("id", "")): str(c.get("name", "Клиент")) for c in _client_options.values()}
-                for _client_item in _client_options.values():
-                    for _extra_phone in _client_item.get("extra_phones", []) or []:
-                        if isinstance(_extra_phone, dict):
-                            _contact_key = f"{_client_item.get('id')}|{_extra_phone.get('phone','')}"
-                            _client_display[_contact_key] = f"{_client_item.get('name','Клиент')} — {(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
+                _current_client = get_client_by_id(cl_id) or {}
+                _client_id_key = str(_current_client.get("id", cl_id or ""))
+                _client_options = {_client_id_key: _current_client} if _current_client else {}
+                _client_display = {_client_id_key: str(_current_client.get("name", "Клиент"))} if _current_client else {}
+                for _extra_phone in _current_client.get("extra_phones", []) or []:
+                    if isinstance(_extra_phone, dict):
+                        _contact_key = f"{_client_id_key}|{_extra_phone.get('phone','')}"
+                        _client_display[_contact_key] = f"{(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
+
+                def _apply_task_receiver_selection():
+                    _selected_contact_key = st.session_state.get(f"nt_client_picker_{key_suffix}")
+                    if not _selected_contact_key:
+                        return
+                    _parts = str(_selected_contact_key).split("|", 1)
+                    _picked_client = _client_options.get(_parts[0])
+                    if not _picked_client:
+                        return
+                    if len(_parts) > 1:
+                        _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
+                        st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
+                        st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
+                    else:
+                        st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
+                        st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
+
                 _receiver_row, _picker_row = st.columns([4, 1.5])
                 with _receiver_row:
                     nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
@@ -6489,21 +6510,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                     if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
                         st.session_state[f"nt_show_client_picker_{key_suffix}"] = not st.session_state.get(f"nt_show_client_picker_{key_suffix}", False)
                 if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
-                    _picked_contact = st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента")
-                    if st.button("Заполнить поля", key=f"nt_apply_client_{key_suffix}", use_container_width=True):
-                        if _picked_contact:
-                            _parts = str(_picked_contact).split("|", 1)
-                            _picked_client = _client_options.get(_parts[0])
-                            if _picked_client:
-                                if len(_parts) > 1:
-                                    _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
-                                    st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
-                                    st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
-                                else:
-                                    st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
-                                    st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
-                            st.session_state[f"nt_show_client_picker_{key_suffix}"] = False
-                            st.rerun()
+                    st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента", on_change=_apply_task_receiver_selection)
                 nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
                 nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
                 _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
@@ -6546,7 +6553,39 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             _create_source_client = get_client_by_id(cl_id)
             _create_source_files = (_create_source_deal or {}).get("deal_files", []) if deal_id else (_create_source_client or {}).get("client_files", [])
             _create_source_files = [f for f in (_create_source_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
-            _create_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_create_source_files)}
+            def _file_created_sort_value(_f):
+                _stamp = str(_f.get("created_at") or _f.get("uploaded_at") or _f.get("last_modified") or "")
+                if _stamp:
+                    try:
+                        return datetime.fromisoformat(_stamp.replace("Z", "+00:00")).timestamp()
+                    except Exception:
+                        for _fmt in ("%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M", "%Y-%m-%d"):
+                            try:
+                                return datetime.strptime(_stamp[:19], _fmt).timestamp()
+                            except Exception:
+                                pass
+                _path_name = str(_f.get("file_path") or _f.get("path") or "")
+                _match_stamp = re.search(r"_(\d{10})_", os.path.basename(_path_name))
+                if _match_stamp:
+                    try: return float(_match_stamp.group(1))
+                    except Exception: pass
+                return 0.0
+            _create_source_files.sort(key=_file_created_sort_value, reverse=True)
+            _create_file_options = {}
+            for _i, _f in enumerate(_create_source_files):
+                _fname = _f.get('file_name') or _f.get('name') or os.path.basename(str(_f.get('file_path') or _f.get('path') or 'Файл'))
+                _date_raw = str(_f.get("created_at") or _f.get("uploaded_at") or _f.get("last_modified") or "")
+                _dt_label = ""
+                if _date_raw:
+                    try: _dt_label = datetime.fromisoformat(_date_raw.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M")
+                    except Exception: _dt_label = _date_raw[:16]
+                if not _dt_label:
+                    _match_stamp = re.search(r"_(\d{10})_", os.path.basename(str(_f.get('file_path') or _f.get('path') or '')))
+                    if _match_stamp:
+                        try: _dt_label = datetime.fromtimestamp(int(_match_stamp.group(1))).strftime("%d.%m.%Y %H:%M")
+                        except Exception: pass
+                if not _dt_label: _dt_label = "Дата неизвестна"
+                _create_file_options[f"{_i+1}. {_fname}  ·  {_dt_label}  ·  {_i}"] = _f
             if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
                 if _create_file_options:
                     st.multiselect("Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:", list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}", placeholder="Нажми чтобы выбрать файл из загруженных...")
