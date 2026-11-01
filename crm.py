@@ -6410,7 +6410,13 @@ def _deal_items_total(items):
     return round(total, 2)
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
-    ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
+    # Для задачи по клиенту доступны только «Связаться» и «Отправить образцы».
+    # В задаче по сделке сохраняем полный список типов без изменений.
+    _task_type_options = TASK_TYPES if deal_id else [x for x in TASK_TYPES if x != "Отправить заказ"]
+    _task_type_key = f"nt_type_{key_suffix}"
+    if st.session_state.get(_task_type_key) not in _task_type_options:
+        st.session_state[_task_type_key] = default_type if default_type in _task_type_options else _task_type_options[0]
+    ntype = st.selectbox("Тип задачи:", _task_type_options, index=_task_type_options.index(st.session_state[_task_type_key]), key=_task_type_key)
     if ntype not in ("Отправить заказ", "Отправить образцы"):
         ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
     else:
@@ -7193,7 +7199,7 @@ def _make_torg12_pdf(deal, client, calc):
     line(xs[11], y_top, xs[11], y_body) # сумма без НДС / НДС
     line(xs[12], y_h1, xs[12], y_body)  # НДС: ставка / сумма
     line(xs[13], y_top, xs[13], y_body) # НДС / сумма с НДС
-    line(xs[14], y_h1, xs[14], y_body)  # сумма с НДС: отдельные значения в строках данных
+    # Колонка 14 убрана: итоговая сумма с НДС занимает объединённую область справа.
     # Горизонтали заголовка рисуем отдельными сегментами с учётом объединённых ячеек.
     # В колонке № по порядку ячейка объединена по высоте, поэтому линии там нет.
     # В колонке «Товар» нужны верхняя и нижняя границы подзаголовка, но не
@@ -7211,8 +7217,8 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[1]+xs[2])/2, 94.0, "наименование, характеристика, сорт, артикул", 4.1, align="center")
     txt((xs[1]+xs[2])/2, 99.2, "товара", 4.5, align="center")
     txt((xs[2]+xs[4])/2, 85.7, "Единица измерения", 4.7, align="center")
-    txt((xs[2]+xs[3])/2, 99.2, "код", 4.5, align="center")
-    txt((xs[3]+xs[4])/2, 99.2, "наименование", 4.0, align="center")
+    txt((xs[2]+xs[3])/2, 99.2, "наименование", 4.0, align="center")
+    txt((xs[3]+xs[4])/2, 99.2, "код ОКЕИ", 4.2, align="center")
     txt((xs[4]+xs[5])/2, 85.2, "Вид", 4.8, align="center")
     txt((xs[4]+xs[5])/2, 88.0, "упаковки", 4.8, align="center")
     txt((xs[5]+xs[7])/2, 85.5, "Количество", 4.7, align="center")
@@ -7234,7 +7240,11 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[13]+xs[15])/2, 85.0, "Сумма с учётом", 4.2, align="center")
     txt((xs[13]+xs[15])/2, 88.0, "НДС, руб. коп.", 4.2, align="center")
     for i, x in enumerate(xs[:-1]):
-        txt((x+xs[i+1])/2, 104.7, str(i+1), 4.6, align="center")
+        # Нумерация без лишней колонки 14; последняя объединённая колонка получает номер 14.
+        if i == 13:
+            continue
+        _col_number = i + 1 if i < 13 else 14
+        txt((x+xs[i+1])/2, 104.7, str(_col_number), 4.6, align="center")
 
     # Сумма расчёта трактуется как сумма с учётом выбранного НДС.
     vat_label = str(calc.get("vat_rate", "Без НДС") or "Без НДС")
@@ -7259,6 +7269,8 @@ def _make_torg12_pdf(deal, client, calc):
     for i, (r, h) in enumerate(zip(rows, item_heights), 1):
         line(xs[0], row_y+h, xs[-1], row_y+h)
         for x in xs[1:-1]:
+            if x == xs[14]:  # убрать разделитель лишней колонки 14
+                continue
             line(x, row_y, x, row_y+h)
         total_inc = float(r["amount"])
         net = round(total_inc / vat_multiplier, 2) if vat_percent else round(total_inc, 2)
@@ -7272,11 +7284,11 @@ def _make_torg12_pdf(deal, client, calc):
         wrap(label, xs[1]+1.5, row_y+3, xs[2]-xs[1]-3, 4.7, leading=2.5, maxlines=max(1, int(h/2.5)))
         unit = esc(r.get("unit") or "шт.")
         okei = "006" if unit.lower() in ("м", "м.", "метр", "метры") else ("796" if unit.lower() in ("шт", "шт.") else "")
+        # Единица измерения размещается в колонке 3, код ОКЕИ — в соседней кодовой колонке.
+        txt((xs[2]+xs[3])/2, row_y+h/2+1.5, unit, 5.0, align="center")
         txt((xs[3]+xs[4])/2, row_y+h/2+1.5, okei, 5.0, align="center")
-        txt((xs[4]+xs[5])/2, row_y+h/2+1.5, unit, 5.0, align="center")
-        # Количество, цена, сумма без НДС, ставка, сумма НДС и сумма с НДС
-        # выводятся в соответствующих колонках формы ТОРГ-12.
-        txt((xs[6]+xs[7])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
+        # Количество по требованию находится в колонке 9.
+        txt((xs[8]+xs[9])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
         txt((xs[9]+xs[10])/2, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="center")
         txt((xs[10]+xs[11])/2, row_y+h/2+1.5, money(net), 4.8, align="center")
         txt((xs[11]+xs[12])/2, row_y+h/2+1.5, vat_label if vat_percent else "Без НДС", 4.3, align="center")
@@ -7291,7 +7303,7 @@ def _make_torg12_pdf(deal, client, calc):
     inc_total = round(sum(float(r["amount"]) for r in rows), 2)
     net_total = round(inc_total / vat_multiplier, 2) if vat_percent else round(inc_total, 2)
     vat_total = round(inc_total-net_total, 2) if vat_percent else 0.0
-    txt((xs[6]+xs[7])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
+    txt((xs[8]+xs[9])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
     txt((xs[9]+xs[10])/2, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="center")
     txt((xs[10]+xs[11])/2, row_y+3.6, money(net_total), 4.8, align="center")
     txt((xs[11]+xs[12])/2, row_y+3.6, vat_label if vat_percent else "Без НДС", 4.3, align="center")
@@ -7503,7 +7515,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     return out.getvalue(), due.strftime("%d.%m.%Y")
 
 
-def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None):
+def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None, description_override=None):
     """Надёжно сохраняет PDF и прикрепляет его к актуальной записи сделки."""
     deal_id = deal.get("id")
     current_deal = get_deal_by_id(deal_id) or deal
@@ -7522,7 +7534,7 @@ def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None):
             f.write(pdf_bytes)
     created_at = now_str()
     file_obj = {"file_path": path, "file_name": safe_name, "file_hash": digest,
-                "description": f"{kind} · {calc.get('name', 'Расчёт')}",
+                "description": str(description_override or f"{kind} · {calc.get('name', 'Расчёт')}"),
                 "document_type": kind, "calculation_id": str(calc.get("id")), "created_at": created_at}
     current_deal.setdefault("deal_files", []).append(file_obj)
     doc_obj = {"id": uuid.uuid4().hex, "kind": kind, "file_name": safe_name,
@@ -7534,6 +7546,42 @@ def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None):
     current_deal["last_modified"] = created_at
     save_data(st.session_state.crm_store)
     return file_obj
+
+
+def _attach_auto_torg12_to_task(task, deal_id, client_id):
+    """Формирует ТОРГ-12 по выбранному расчёту задачи заказа и прикладывает к сделке и задаче."""
+    if not isinstance(task, dict) or task.get("type") != "Отправить заказ" or not deal_id:
+        return False
+    calc_id = str(task.get("calculation_id", "") or "")
+    if not calc_id:
+        return False
+    deal = get_deal_by_id(deal_id)
+    client = get_client_by_id(client_id)
+    if not deal or not client:
+        raise ValueError("Не удалось найти сделку или клиента для формирования ТОРГ-12.")
+    calc = next((c for c in (deal.get("calculations", []) or [])
+                 if str(c.get("id", "")) == calc_id and not c.get("deleted")), None)
+    if not calc:
+        raise ValueError("Выбранный расчёт не найден. ТОРГ-12 не сформирована.")
+    if any(str(f.get("calculation_id", "")) == calc_id and
+           f.get("document_type") == "Товарная накладная ТОРГ-12" and
+           f.get("description") == "Сформирован автоматически"
+           for f in (task.get("task_files", []) or []) if isinstance(f, dict)):
+        return True
+    pdf = _make_torg12_pdf(deal, client, calc)
+    if isinstance(pdf, tuple):
+        pdf = pdf[0]
+    filename = f"ТОРГ-12 №{_deal_doc_number(deal)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
+    file_obj = _save_generated_document(
+        deal, pdf, filename, "Товарная накладная ТОРГ-12", calc,
+        description_override="Сформирован автоматически"
+    )
+    task_file = dict(file_obj)
+    task_file["description"] = "Сформирован автоматически"
+    task.setdefault("task_files", []).append(task_file)
+    task["last_modified"] = now_str()
+    save_data(st.session_state.crm_store)
+    return True
 
 
 def _ensure_paid_deal_torg12(deal):
@@ -11186,7 +11234,14 @@ def deal_create_task_dialog(deal_id, client_id):
     _created_task = render_task_form(deal_id, client_id, f"cdt_{deal_id}")
     if _created_task:
         save_data(st.session_state.crm_store)
-        st.toast("Задача создана", icon="✅")
+        if _created_task.get("type") == "Отправить заказ" and _created_task.get("calculation_id"):
+            try:
+                _attach_auto_torg12_to_task(_created_task, deal_id, client_id)
+                st.toast("Задача создана, ТОРГ-12 сформирована и прикреплена к сделке и задаче", icon="✅")
+            except Exception as _auto_torg_error:
+                st.warning(f"Задача создана, но автоматически сформировать ТОРГ-12 не удалось: {_auto_torg_error}")
+        else:
+            st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_deal_task_deal_id", None)
         st.session_state.pop("dialog_create_deal_task_client_id", None)
         st.session_state["_in_dialog"] = False
