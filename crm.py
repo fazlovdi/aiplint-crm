@@ -7181,7 +7181,7 @@ def _make_torg12_pdf(deal, client, calc):
 
     # Табличная часть ТОРГ-12. Вертикали строятся по группам заголовков,
     # а в строках товаров и итогов присутствуют границы всех 15 колонок.
-    xs = [10, 25, 84, 92, 111, 123, 138, 148, 158, 180, 199, 221, 235, 250, 263, 288]
+    xs = [10, 25, 77, 98, 110, 121, 136, 146, 156, 178, 197, 219, 233, 248, 261, 288]
     y_top, y_h1, y_h2, y_h3, y_body = 82, 90, 96, 101, 107
     # Рисуем сетку сегментами: вертикали в объединённых заголовках не продолжаются
     # через ячейки, которые по форме ТОРГ-12 должны оставаться объединёнными.
@@ -7240,11 +7240,11 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[13]+xs[15])/2, 85.0, "Сумма с учётом", 4.2, align="center")
     txt((xs[13]+xs[15])/2, 88.0, "НДС, руб. коп.", 4.2, align="center")
     for i, x in enumerate(xs[:-1]):
-        # Нумерация без лишней колонки 14; последняя объединённая колонка получает номер 14.
-        if i == 13:
+        # Колонка 14 — объединённая правая колонка итоговой суммы.
+        if i >= 13:
             continue
-        _col_number = i + 1 if i < 13 else 14
-        txt((x+xs[i+1])/2, 104.7, str(_col_number), 4.6, align="center")
+        txt((x+xs[i+1])/2, 104.7, str(i + 1), 4.6, align="center")
+    txt((xs[13]+xs[15])/2, 104.7, "14", 4.6, align="center")
 
     # Сумма расчёта трактуется как сумма с учётом выбранного НДС.
     vat_label = str(calc.get("vat_rate", "Без НДС") or "Без НДС")
@@ -7309,6 +7309,9 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[11]+xs[12])/2, row_y+3.6, vat_label if vat_percent else "Без НДС", 4.3, align="center")
     txt((xs[12]+xs[13])/2, row_y+3.6, money(vat_total), 4.8, align="center")
     txt((xs[13]+xs[15])/2, row_y+3.6, money(inc_total), 4.8, align="center")
+    # Внешние границы таблицы продолжаются через товарные строки и строку итога.
+    line(xs[0], y_top, xs[0], row_y+5.5, 0.45)
+    line(xs[-1], y_top, xs[-1], row_y+5.5, 0.45)
 
     # Нижняя часть формы: строки приложения, суммы прописью и подписи.
     y = row_y+10
@@ -7549,10 +7552,11 @@ def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None, 
 
 
 def _attach_auto_torg12_to_task(task, deal_id, client_id):
-    """Формирует ТОРГ-12 по выбранному расчёту задачи заказа и прикладывает к сделке и задаче."""
+    """Формирует ТОРГ-12 по выбранному расчёту и надёжно прикладывает к сделке и актуальной задаче."""
     if not isinstance(task, dict) or task.get("type") != "Отправить заказ" or not deal_id:
         return False
     calc_id = str(task.get("calculation_id", "") or "")
+    task_number = str(task.get("task_number", "") or "")
     if not calc_id:
         return False
     deal = get_deal_by_id(deal_id)
@@ -7563,11 +7567,18 @@ def _attach_auto_torg12_to_task(task, deal_id, client_id):
                  if str(c.get("id", "")) == calc_id and not c.get("deleted")), None)
     if not calc:
         raise ValueError("Выбранный расчёт не найден. ТОРГ-12 не сформирована.")
+
+    # После сохранения файла сделки повторно находим задачу в актуальном хранилище:
+    # ссылка на исходный объект могла стать устаревшей после транзакционного save_data.
+    current_client = get_client_by_id(client_id) or client
+    current_task = next((t for t in current_client.get("tasks", [])
+                         if isinstance(t, dict) and str(t.get("task_number", "")) == task_number), task)
     if any(str(f.get("calculation_id", "")) == calc_id and
            f.get("document_type") == "Товарная накладная ТОРГ-12" and
            f.get("description") == "Сформирован автоматически"
-           for f in (task.get("task_files", []) or []) if isinstance(f, dict)):
+           for f in (current_task.get("task_files", []) or []) if isinstance(f, dict)):
         return True
+
     pdf = _make_torg12_pdf(deal, client, calc)
     if isinstance(pdf, tuple):
         pdf = pdf[0]
@@ -7576,10 +7587,19 @@ def _attach_auto_torg12_to_task(task, deal_id, client_id):
         deal, pdf, filename, "Товарная накладная ТОРГ-12", calc,
         description_override="Сформирован автоматически"
     )
-    task_file = dict(file_obj)
-    task_file["description"] = "Сформирован автоматически"
-    task.setdefault("task_files", []).append(task_file)
-    task["last_modified"] = now_str()
+
+    # Повторно разрешаем клиент/задачу после сохранения документа, чтобы не потерять вложение.
+    current_client = get_client_by_id(client_id) or current_client
+    current_task = next((t for t in current_client.get("tasks", [])
+                         if isinstance(t, dict) and str(t.get("task_number", "")) == task_number), current_task)
+    task_files = current_task.setdefault("task_files", [])
+    digest = str(file_obj.get("file_hash", "") or file_obj.get("file_path", ""))
+    if not any(str(f.get("file_hash", "") or f.get("file_path", "")) == digest
+               for f in task_files if isinstance(f, dict)):
+        task_file = dict(file_obj)
+        task_file["description"] = "Сформирован автоматически"
+        task_files.append(task_file)
+    current_task["last_modified"] = now_str()
     save_data(st.session_state.crm_store)
     return True
 
@@ -11236,7 +11256,9 @@ def deal_create_task_dialog(deal_id, client_id):
         save_data(st.session_state.crm_store)
         if _created_task.get("type") == "Отправить заказ" and _created_task.get("calculation_id"):
             try:
-                _attach_auto_torg12_to_task(_created_task, deal_id, client_id)
+                with st.status("Идёт процесс формирования товарной накладной", state="running", expanded=False) as _torg_status:
+                    _attach_auto_torg12_to_task(_created_task, deal_id, client_id)
+                    _torg_status.update(label="Товарная накладная сформирована", state="complete", expanded=False)
                 st.toast("Задача создана, ТОРГ-12 сформирована и прикреплена к сделке и задаче", icon="✅")
             except Exception as _auto_torg_error:
                 st.warning(f"Задача создана, но автоматически сформировать ТОРГ-12 не удалось: {_auto_torg_error}")
