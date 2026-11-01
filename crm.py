@@ -6442,27 +6442,11 @@ def _crm_close_created_task_form_tab():
     return True
 
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
-    # Очистка выполняется до создания виджетов, чтобы Streamlit не запрещал менять их состояние.
-    _clear_confirm_key = f"nt_clear_confirm_{key_suffix}"
+    # Новая форма задачи открывается без выбранного расчёта.
     _form_initialized_key = f"nt_form_initialized_{key_suffix}"
     if not st.session_state.get(_form_initialized_key):
-        # Новая форма задачи всегда открывается без выбранного расчёта.
         st.session_state[f"nt_order_calc_{key_suffix}"] = ""
         st.session_state[_form_initialized_key] = True
-    if st.session_state.pop(f"nt_clear_apply_{key_suffix}", False):
-        for _state_key in list(st.session_state.keys()):
-            _sk = str(_state_key)
-            if (
-                _sk.endswith(f"_{key_suffix}") and _sk.startswith(("nt_", "nt_pick_existing_"))
-                or _sk.startswith(f"nt_file_{key_suffix}_")
-                or _sk == f"nt_uploaded_files_{key_suffix}"
-                or _sk.startswith(f"nt_client_picker_{key_suffix}")
-                or _sk.startswith(f"nt_show_client_picker_{key_suffix}")
-            ):
-                st.session_state.pop(_state_key, None)
-        st.session_state[f"nt_file_ver_{key_suffix}"] = int(st.session_state.get(f"nt_file_ver_{key_suffix}", 0) or 0) + 1
-        st.session_state[_clear_confirm_key] = False
-        st.rerun()
     # Для задачи по клиенту доступны только «Связаться» и «Отправить образцы».
     # В задаче по сделке сохраняем полный список типов без изменений.
     _task_type_options = TASK_TYPES if deal_id else [x for x in TASK_TYPES if x != "Отправить заказ"]
@@ -6474,16 +6458,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
     st.markdown(f"""<style>
     .st-key-{_layout_key} [data-testid="stHorizontalBlock"] {{ align-items:flex-start!important; }}
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
-        position:relative!important; border-right:0!important; padding-right:1.1rem!important;
-    }}
-    /* Keep the vertical divider, but end it above the bottom action row. */
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child:after {{
-        content:""!important; display:block!important; position:absolute!important; top:0!important; right:-0.5rem!important;
-        bottom:5.5rem!important; width:1px!important; background:#DCE0E5!important; pointer-events:none!important;
+        border-right:1px solid #DCE0E5!important; padding-right:1.1rem!important;
     }}
     .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{ padding-left:1.1rem!important; }}
-    .st-key-task_create_submit_{key_suffix} {{ width:50%!important; margin-left:auto!important; margin-right:auto!important; }}
-    .st-key-task_create_submit_{key_suffix} button {{ width:100%!important; }}
     </style>""", unsafe_allow_html=True)
 
     with st.container(key=_layout_key):
@@ -6645,7 +6622,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                                     _attached_ids.add(_fid_to_attach)
                             st.session_state[f"nt_uploaded_files_{key_suffix}"] = _attached_now
                             st.session_state[f"nt_pick_existing_select_{key_suffix}"] = []
-                            st.session_state[f"nt_pick_existing_open_{key_suffix}"] = False
+                            st.session_state[f"nt_pick_existing_open_{key_suffix}"] = True
                             st.toast(f"Прикреплено новых файлов: {len(_attached_now) - _attached_count_before}", icon="📎")
                             st.rerun()
                     with _cancel_pick_col:
@@ -6653,34 +6630,19 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                             st.session_state[f"nt_pick_existing_select_{key_suffix}"] = []
                             st.session_state[f"nt_pick_existing_open_{key_suffix}"] = False
                             st.rerun()
-                _already_attached = st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or []
-                if _already_attached:
-                    st.markdown("**Прикреплены к задаче:**")
-                    for _af in _already_attached:
-                        st.markdown(f"- {html.escape(str(_af.get('file_name') or _af.get('name') or os.path.basename(str(_af.get('file_path') or _af.get('path') or 'Файл'))))}")
-                else:
-                    st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
+            # Список прикреплённых файлов всегда виден, даже когда список выбора закрыт.
+            
+        _already_attached = st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or []
+        if _already_attached:
+            st.markdown("**Прикреплены к задаче:**")
+            for _af in _already_attached:
+                st.markdown(f"- {html.escape(str(_af.get('file_name') or _af.get('name') or os.path.basename(str(_af.get('file_path') or _af.get('path') or 'Файл'))))}")
+        elif not st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
+            st.caption("Загруженные файлы появятся здесь после прикрепления.")
 
-    _submit_left, _submit_center, _submit_right = st.columns([1, 1, 1], gap="small")
-    with _submit_left:
-        if st.button("Очистить", key=f"nt_clear_{key_suffix}", use_container_width=True):
-            st.session_state[_clear_confirm_key] = True
-    with _submit_center:
-        with st.container(key=f"task_create_submit_{key_suffix}"):
-            _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
-    with _submit_right:
-        pass
-    if st.session_state.get(_clear_confirm_key, False):
-        st.warning("Очистить все заполненные поля и убрать выбранные/загруженные файлы? Это действие нельзя отменить.")
-        _clear_yes, _clear_no = st.columns(2)
-        with _clear_yes:
-            if st.button("Да, очистить всё", key=f"nt_clear_yes_{key_suffix}", type="primary", use_container_width=True):
-                st.session_state[f"nt_clear_apply_{key_suffix}"] = True
-                st.rerun()
-        with _clear_no:
-            if st.button("Отмена", key=f"nt_clear_no_{key_suffix}", use_container_width=True):
-                st.session_state[_clear_confirm_key] = False
-                st.rerun()
+    # Кнопка создания находится в отдельной строке-контейнере на всю ширину,
+    # а не в одной из колонок формы: вертикальный разделитель её не пересекает.
+    _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
     if _create_clicked:
         if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
