@@ -1498,7 +1498,10 @@ def _task_products_from_calculation(deal, calculation_id):
         except (TypeError, ValueError):
             qty_text = str(qty)
         unit = str(row.get("unit", "шт.") or "шт.")
+        color = str(row.get("color", "") or row.get("colour", "") or "").strip()
         title = " ".join(x for x in (sku, name) if x)
+        if color:
+            title = f"{title} — {color}" if title else color
         if title:
             result.append(f"{title} — {qty_text} {unit}")
     return result
@@ -1577,6 +1580,47 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
                 st.rerun()
     return str(selected_id), str(st.session_state.get(products_key, "") or "")
 
+def _task_torg12_print_b64(task, copies=2):
+    """Возвращает PDF Торг-12 из файлов задачи, повторённый нужное число раз."""
+    candidates = []
+    for item in (task.get("task_files", []) or []):
+        if not isinstance(item, dict):
+            continue
+        filename = str(item.get("file_name") or item.get("name") or "")
+        normalized = filename.lower().replace("ё", "е").replace(" ", "")
+        if "торг-12" not in normalized and "торг12" not in normalized:
+            continue
+        if os.path.splitext(filename)[1].lower() != ".pdf":
+            continue
+        raw = get_file_bytes(item.get("file_path") or item.get("path"))
+        if raw:
+            candidates.append(raw)
+    if not candidates:
+        return ""
+    try:
+        from pypdf import PdfReader, PdfWriter
+        writer = PdfWriter()
+        for raw in candidates:
+            reader = PdfReader(io.BytesIO(raw))
+            for _ in range(max(1, int(copies or 1))):
+                for page in reader.pages:
+                    writer.add_page(page)
+        output = io.BytesIO()
+        writer.write(output)
+        return base64.b64encode(output.getvalue()).decode("ascii")
+    except Exception as exc:
+        print(f"TORG12 print preparation failed: {type(exc).__name__}: {str(exc)[:200]}")
+        return ""
+
+
+def _torg12_print_section(task, copies=2):
+    payload = _task_torg12_print_b64(task, copies=copies)
+    if not payload:
+        return ""
+    return ("<div class='torg12-print'><h2>Торг-12 — два экземпляра</h2>"
+            f"<iframe title='Торг-12' src='data:application/pdf;base64,{payload}'></iframe></div>")
+
+
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     products_html = esc(task.get('products', '')).replace('\n', '<br>')
@@ -1585,7 +1629,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Способ доставки:</b> {esc(task.get('ship_method', 'Не выбрано') or 'Не выбрано')}</div><div class="row"><b>Трек/комментарий:</b> {esc(task.get('tk_num', ''))}</div><div class="row"><b>Описание:</b> {esc(task.get('task_comment', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }} .torg12-print {{ page-break-before:always; break-before:page; }} .torg12-print iframe {{ width:100%;height:95vh;border:0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Способ доставки:</b> {esc(task.get('ship_method', 'Не выбрано') or 'Не выбрано')}</div><div class="row"><b>Трек/комментарий:</b> {esc(task.get('tk_num', ''))}</div><div class="row"><b>Описание:</b> {esc(task.get('task_comment', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div>{_torg12_print_section(task, copies=2)}</body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -2789,8 +2833,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
+                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
                         _render_task_shipping_fields(t, cl, d, key_prefix)
-                    elif not show_shipping_status:
+                    else:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             else:
                 _hdr_inner, _status_inner = st.columns([3, 2])
@@ -2805,8 +2850,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
+                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
                         _render_task_shipping_fields(t, cl, d, key_prefix)
-                    elif not show_shipping_status:
+                    else:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             if show_edit_task:
                 # Inline editing mode
@@ -12595,7 +12641,7 @@ elif st.session_state.active_tab == "Задачи":
                                 f"<td>{html.escape(str(_ptask.get('products', '') or '')).replace(chr(10), '<br>')}</td>"
                                 f"<td>{html.escape(str(_ptask.get('task_comment', '') or _ptask.get('text', '') or '')).replace(chr(10), '<br>')}</td>"
                                 f"<td>{html.escape(chr(10).join(_pt_comments)).replace(chr(10), '<br>')}</td>"
-                                f"<td>{html.escape(str(_ptask.get('ship_method', 'Не выбрано') or 'Не выбрано'))}</td>"
+                                f"<td>{html.escape(str(_ptask.get('ship_method', 'Не выбрано') or 'Не выбрано'))}{(' / ' + html.escape(str(_ptask.get('ship_city', '') or '').strip())) if str(_ptask.get('ship_city', '') or '').strip() else ''}</td>"
                                 f"<td>{html.escape(str(_ptask.get('tk_num', '') or ''))}</td>"
                                 "<td class='notes'></td>"
                                 "</tr>"
@@ -12615,9 +12661,11 @@ elif st.session_state.active_tab == "Задачи":
                         th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
                         td.notes {{ height: 28px; }}
                         @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
+                        .torg12-print {{ page-break-before: always; break-before: page; }} .torg12-print iframe {{ width:100%;height:95vh;border:0; }}
                         </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
                         <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
                         <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
+                        {''.join(_torg12_print_section(_pt['task_obj'], copies=2) for _pt in tt_list)}
                         <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
                         components.html(_print_html, height=0, width=0)
                 if tt_list:
