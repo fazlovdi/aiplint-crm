@@ -3220,6 +3220,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
 
+def _task_is_ready_to_ship(task):
+    """Единый признак готовности: актуальный статус отправки + старое булево поле."""
+    if not isinstance(task, dict):
+        return False
+    status = str(task.get("shipping_status", "") or "").strip().casefold()
+    return status == "готово к отправке" or bool(task.get("ready_to_ship", False))
+
+
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
     tk_done = t.get("done", False)
@@ -3232,8 +3240,8 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-    if t.get('ready_to_ship') and not tk_done:
-        tk_label = f"✓  {tk_label} | Готово к отправке"
+    if _task_is_ready_to_ship(t) and not tk_done:
+        tk_label = f"✅ {tk_label} | Готово к отправке"
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
     tk_border = "#2196F3" if tk_selected else tk_bc
@@ -3241,9 +3249,11 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     _rework_css = ""
     if tk_rework and not tk_done:
         _rework_css = f".st-key-tk_btn_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }} {_rework_css}</style>", unsafe_allow_html=True)
+    _ready_icon_css = f".st-key-tk_btn_wrap_{task_key} button svg {{ color: #16A34A !important; fill: #16A34A !important; }}" if _task_is_ready_to_ship(t) and not tk_done else ""
+    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }} {_rework_css} {_ready_icon_css}</style>", unsafe_allow_html=True)
     with st.container(key=f"tk_btn_wrap_{task_key}"):
-        if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
+        _tk_ready_icon = ":material/check_circle:" if _task_is_ready_to_ship(t) and not tk_done else None
+        if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary", icon=_tk_ready_icon):
             if is_tk_exp:
                 st.session_state.expanded_task_key = None
                 save_scroll_and_rerun()
@@ -12556,14 +12566,16 @@ elif st.session_state.active_tab == "Задачи":
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
-            if task.get('ready_to_ship'):
-                exp_label = f"✓  {exp_label} | Готово к отправке"
+            if _task_is_ready_to_ship(task):
+                # Put the green check directly in the button text: unlike the
+                # optional Streamlit icon parameter, this is always rendered.
+                exp_label = f"✅ {exp_label} | Готово к отправке"
             _rework_css = ""
             if task.get('needs_rework'):
                 _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
             _ready_css = ""
-            if task.get('ready_to_ship'):
-                _ready_css = f".st-key-tb_wrap_{task_key} button::before {{ content: '✓'; display: inline-block; color: #16A34A; font-size: 1rem; font-weight: 900; margin-right: 7px; vertical-align: baseline; }}"
+            if _task_is_ready_to_ship(task):
+                _ready_css = f".st-key-tb_wrap_{task_key} button svg {{ color: #16A34A !important; fill: #16A34A !important; }}"
             st.markdown(f"""<style>
             .st-key-tb_wrap_{task_key} button {{
                 background-color: {tk_bg} !important;
@@ -12592,7 +12604,8 @@ elif st.session_state.active_tab == "Задачи":
             {_ready_css}
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
-                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
+                _task_ready_icon = ":material/check_circle:" if _task_is_ready_to_ship(task) else None
+                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True, icon=_task_ready_icon):
                     # Open through the workspace host so an already-open task tab
                     # is activated instead of being sent to the legacy dialog dispatcher.
                     _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
