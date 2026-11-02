@@ -6282,16 +6282,28 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] p { margin:0 !important; padding:0 !important; line-height:1 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
+    /* Keep keyed Streamlit containers horizontal using CSS only; avoids
+       version-specific horizontal arguments in st.container(). */
+    [class*="st-key-crm_workspace_bottom_"] > div[data-testid="stVerticalBlock"],
+    [class*="st-key-crm_workspace_window_item_"] > div[data-testid="stVerticalBlock"],
+    [class*="st-key-crm_workspace_tabbar"] > div[data-testid="stVerticalBlock"],
+    [class*="st-key-crm_workspace_tab_item_"] > div[data-testid="stVerticalBlock"] {
+        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+        align-items:center !important; gap:0 !important; width:max-content !important;
+        min-width:0 !important;
+    }
+    [class*="st-key-crm_workspace_tabbar"] { display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; overflow-x:auto !important; }
+    [class*="st-key-crm_workspace_tab_item_"] { display:flex !important; flex:0 0 auto !important; width:max-content !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
-    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, gap="small", horizontal_alignment="left"):
+    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         for _w in list(_bottom_windows):
             _label = str(_w.get("title") or "CRM")[:24]
             if not in_workspace:
                 _label = ("▣ " if _w.get("minimized") else "● ") + _label
-            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, gap="small", width="content", horizontal_alignment="left"):
+            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
                 if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
                     # A window switch is an explicit navigation action. Clear any
@@ -13217,10 +13229,10 @@ def _crm_render_workspace_fragment():
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
-            with st.container(key="crm_workspace_tabbar", horizontal=True, gap="small", horizontal_alignment="left"):
+            with st.container(key="crm_workspace_tabbar"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
-                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, gap="small", width="content", horizontal_alignment="left"):
+                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}"):
                         st.button(
                             _tab_title,
                             key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}",
