@@ -623,31 +623,16 @@ def now_str():
 def get_sort_key(entity):
     return entity.get("last_modified", "1970-01-01 00:00:00")
 
-def _task_number_parts(value):
-    """Возвращает (год, категория K/C, порядковый номер) для старого и нового формата."""
-    value = str(value or "").strip()
-    m = re.match(r"^(?:ЗК|ЗС)(\d{2})-(\d+)$", value, re.IGNORECASE)
-    if m:
-        return m.group(1), ("C" if value.upper().startswith("ЗС") else "K"), int(m.group(2))
-    m = re.match(r"^(\d{2})-([ККCС])\s*(\d+)$", value, re.IGNORECASE)
-    if m:
-        cat = m.group(2).upper()
-        return m.group(1), ("C" if cat in ("C", "С") else "K"), int(m.group(3))
-    return None
-
-def _format_task_number(year, category, number):
-    return f"{year}-{'С' if category == 'C' else 'К'}{number}"
-
 def generate_task_number(prefix):
     year = moscow_now().strftime("%y")
-    category = "C" if prefix in ("ЗС", "С", "C") else "K"
     max_num = 0
     for c in st.session_state.crm_store.get("clients", []):
         for t in c.get("tasks", []):
-            parts = _task_number_parts(t.get("task_number", ""))
-            if parts and parts[0] == year and parts[1] == category:
-                max_num = max(max_num, parts[2])
-    return _format_task_number(year, category, max_num + 1)
+            tn = t.get("task_number", "")
+            if tn.startswith(f"{prefix}{year}-"):
+                try: max_num = max(max_num, int(tn.split("-")[1]))
+                except: pass
+    return f"{prefix}{year}-{max_num + 1}"
 
 def generate_deal_number():
     year = moscow_now().strftime("%y")
@@ -660,25 +645,26 @@ def generate_deal_number():
     return f"Сделка №{year}-{max_num + 1}"
 
 def assign_task_numbers(data):
-    """Мигрирует старые номера задач в формат 26-К15 / 26-С15 и нумерует пустые."""
-    max_by_year_category = {}
-    tasks = []
-    for client in data.get("clients", []):
-        for task in client.get("tasks", []):
-            tasks.append(task)
-            old_number = str(task.get("task_number", "") or "")
-            parts = _task_number_parts(old_number)
-            if parts:
-                year, category, number = parts
-                max_by_year_category[(year, category)] = max(max_by_year_category.get((year, category), 0), number)
-                task["task_number"] = _format_task_number(year, category, number)
-    current_year = moscow_now().strftime("%y")
-    for task in tasks:
-        if not task.get("task_number"):
-            category = "C" if task.get("deal_id") else "K"
-            key = (current_year, category)
-            max_by_year_category[key] = max_by_year_category.get(key, 0) + 1
-            task["task_number"] = _format_task_number(current_year, category, max_by_year_category[key])
+    year = moscow_now().strftime("%y")
+    zk_max, zs_max = 0, 0
+    for c in data.get("clients", []):
+        for t in c.get("tasks", []):
+            tn = t.get("task_number", "")
+            if tn.startswith(f"ЗК{year}-"):
+                try: zk_max = max(zk_max, int(tn.split("-")[1]))
+                except: pass
+            elif tn.startswith(f"ЗС{year}-"):
+                try: zs_max = max(zs_max, int(tn.split("-")[1]))
+                except: pass
+    for c in data.get("clients", []):
+        for t in c.get("tasks", []):
+            if not t.get("task_number"):
+                if t.get("deal_id"):
+                    zs_max += 1
+                    t["task_number"] = f"ЗС{year}-{zs_max}"
+                else:
+                    zk_max += 1
+                    t["task_number"] = f"ЗК{year}-{zk_max}"
 
 def assign_deal_numbers(data):
     year = moscow_now().strftime("%y")
@@ -1178,31 +1164,31 @@ def save_uploaded_file(u_file, c_id, prefix=""):
     for c in st.session_state.crm_store.get("clients", []):
         for f in c.get("client_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
         for t in c.get("tasks", []):
             for f in t.get("task_files", []):
                 if f.get("file_hash") == file_hash and file_hash:
-                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
             for f in t.get("completion_files", []):
                 if f.get("file_hash") == file_hash and file_hash:
-                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
     for d in st.session_state.crm_store.get("deals", []):
         for f in d.get("deal_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
         for f in d.get("close_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash}
     name = f"{c_id}_{prefix}_{int(time.time())}_{u_file.name}"
     if YANDEX_TOKEN:
         rp = f"CRM_NE_TROGAT/uploads/{name}"
         if upload_file_to_yandex(b, name):
-            return {"path": rp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str()}
+            return {"path": rp, "name": u_file.name, "file_hash": file_hash}
         st.warning("Не удалось загрузить на Диск, файл сохранён локально")
     os.makedirs("uploads", exist_ok=True)
     lp = f"uploads/{name}"
     with open(lp, "wb") as f: f.write(b)
-    return {"path": lp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str()}
+    return {"path": lp, "name": u_file.name, "file_hash": file_hash}
 
 def save_uploaded_files(files, c_id, prefix=""):
     if files is None: return []
@@ -1210,7 +1196,7 @@ def save_uploaded_files(files, c_id, prefix=""):
     return [fi for fi in (save_uploaded_file(f, c_id, prefix) for f in files) if fi]
 
 def normalize_file_list(fi_list):
-    return [{"file_path": fi["path"], "file_name": fi["name"], "file_hash": fi.get("file_hash", ""), **({"created_at": fi.get("created_at")} if fi.get("created_at") else {})} for fi in fi_list]
+    return [{"file_path": fi["path"], "file_name": fi["name"], "file_hash": fi.get("file_hash", "")} for fi in fi_list]
 
 def normalize_remote_path(fp):
     if not fp: return None
@@ -1368,7 +1354,7 @@ def get_thumbnail_base64(remote_path, size=220):
 
 
 def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
-    """Отображает вложения списком; содержимое загружается только по запросу пользователя."""
+    """Отображает вложения компактным списком: один файл — одна горизонтальная строка."""
     if not files:
         st.caption("Файлов нет")
         return
@@ -1376,18 +1362,21 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     st.markdown("""<style>
     .crm-file-row-icon { width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#F1F4F8;color:#526174;font-size:17px;margin:2px auto; }
     .crm-file-row-name { font-size:.88rem;font-weight:600;color:#253246;overflow-wrap:anywhere;padding:7px 0;line-height:1.25; }
-    div[class*="st-key-dl_"] button, div[class*="st-key-dl_req_"] button { min-height:34px!important;height:34px!important;width:38px!important;min-width:38px!important;padding:0!important;border-radius:10px!important;border:1px solid #D7DFEA!important;background:linear-gradient(180deg,#FFFFFF 0%,#F2F5FA 100%)!important;color:#31577D!important;font-size:17px!important;font-weight:700!important;box-shadow:0 1px 3px rgba(30,50,75,.08)!important;transition:all .15s ease!important; }
-    div[class*="st-key-dl_"] button:hover, div[class*="st-key-dl_req_"] button:hover { background:#E7F0FA!important;border-color:#A9C3DF!important;transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,50,75,.12)!important; }
+    div[class*="st-key-dl_"] button { min-height:34px!important;height:34px!important;width:38px!important;min-width:38px!important;padding:0!important;border-radius:10px!important;border:1px solid #D7DFEA!important;background:linear-gradient(180deg,#FFFFFF 0%,#F2F5FA 100%)!important;color:#31577D!important;font-size:17px!important;font-weight:700!important;box-shadow:0 1px 3px rgba(30,50,75,.08)!important;transition:all .15s ease!important; }
+    div[class*="st-key-dl_"] button:hover { background:#E7F0FA!important;border-color:#A9C3DF!important;transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,50,75,.12)!important; }
     div[class*="st-key-del_"] button { min-height:32px!important;height:32px!important;padding:0 8px!important;border-radius:9px!important;font-size:15px!important; }
     div[class*="st-key-fdesc_"] input { min-height:34px!important;height:34px!important;padding:7px 10px!important;font-size:.8rem!important;line-height:1.2!important;border-radius:9px!important; }
     div[class*="st-key-fdesc_"] div[data-testid="InputInstructions"] { display:none!important; }
     </style>""", unsafe_allow_html=True)
 
-    # По умолчанию отображаем только первые три записи. Здесь читаются только
-    # метаданные CRM: байты файлов с Яндекс Диска не запрашиваются.
+    # По умолчанию показываем и загружаем содержимое только первых трёх файлов,
+    # чтобы окна с большим количеством вложений открывались быстрее.
     _show_all_key = f"files_show_all_{prefix}"
     _show_all = bool(st.session_state.get(_show_all_key, False))
 
+    # Сначала новые вложения: используем дату файла, если она есть, затем
+    # timestamp из имени сохранённого файла; для старых вложений без даты
+    # сохраняем естественный порядок списка (новые добавляются в конец).
     def _file_recency(entry):
         _original_idx, _file = entry
         _date_value = str(_file.get("created_at") or _file.get("uploaded_at") or _file.get("last_modified") or "")
@@ -1402,8 +1391,11 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     _sorted_file_entries = sorted(enumerate(files), key=_file_recency, reverse=True)
     _visible_count = len(files) if _show_all else min(3, len(files))
     _visible_files = _sorted_file_entries[:_visible_count]
+    file_paths = [ff.get("file_path", ff.get("path")) for _, ff in _visible_files]
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(file_paths)))) as executor:
+        file_bytes_list = list(executor.map(get_file_bytes, file_paths))
 
-    for (i, ff) in _visible_files:
+    for (i, ff), fb in zip(_visible_files, file_bytes_list):
         fp = ff.get("file_path", ff.get("path"))
         fn = ff.get("file_name", ff.get("name", "файл"))
         ext = os.path.splitext(str(fn))[1].lower()
@@ -1445,24 +1437,13 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
         else:
             dl_col, del_col = 2, None
 
-        # Храним только один запрошенный файл на сессию, чтобы не накапливать
-        # большие вложения в session_state. Идентификатор устойчив к смене порядка списка.
-        _file_identity = hashlib.sha256(f"{fp or ''}|{fn or ''}".encode("utf-8", errors="replace")).hexdigest()
-        _download_payload = st.session_state.get("_crm_file_download_payload") or {}
         with cols[dl_col]:
-            if _download_payload.get("identity") == _file_identity and _download_payload.get("bytes") is not None:
-                st.download_button(label="⬇", help=f"Скачать {fn}", data=_download_payload["bytes"],
-                                   file_name=fn, key=f"dl_{prefix}_{i}", use_container_width=True)
-            elif st.button("⬇", help=f"Подготовить скачивание {fn}", key=f"dl_req_{prefix}_{i}", use_container_width=True):
-                with st.spinner("Загружаю файл…"):
-                    _file_bytes = get_file_bytes(fp)
-                if _file_bytes is not None:
-                    st.session_state["_crm_file_download_payload"] = {
-                        "identity": _file_identity, "bytes": _file_bytes, "filename": str(fn)
-                    }
-                    st.rerun()
-                else:
-                    st.warning(f"Не удалось получить файл «{fn}».")
+            if fb is not None:
+                st.download_button(label="⬇", help=f"Скачать {fn}", data=fb,
+                                   file_name=fn, key=f"dl_{prefix}_{i}",
+                                   use_container_width=True)
+            else:
+                st.caption("Недоступен")
 
         if is_admin_delete:
             with cols[del_col]:
@@ -1473,6 +1454,7 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
         st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
 
     if len(files) > 3:
+        _remaining = len(files) - _visible_count
         _button_label = "Скрыть дополнительные файлы" if _show_all else "Показать все файлы"
         _button_key = f"show_all_files_btn_{prefix}"
         if st.button(_button_label, key=_button_key, use_container_width=True):
@@ -1498,10 +1480,7 @@ def _task_products_from_calculation(deal, calculation_id):
         except (TypeError, ValueError):
             qty_text = str(qty)
         unit = str(row.get("unit", "шт.") or "шт.")
-        color = str(row.get("color", "") or row.get("colour", "") or "").strip()
         title = " ".join(x for x in (sku, name) if x)
-        if color:
-            title = f"{title} — {color}" if title else color
         if title:
             result.append(f"{title} — {qty_text} {unit}")
     return result
@@ -1528,30 +1507,23 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
         st.session_state[products_key] = str(existing_products or "")
     selected_id = ""
     if active:
-        if calc_key not in st.session_state:
-            st.session_state[calc_key] = str(existing_calc_id) if str(existing_calc_id) in calc_ids else ""
-        elif str(st.session_state.get(calc_key) or "") not in calc_ids and st.session_state.get(calc_key) != "":
-            st.session_state[calc_key] = ""
+        if st.session_state.get(calc_key) not in calc_ids:
+            st.session_state[calc_key] = str(existing_calc_id) if str(existing_calc_id) in calc_ids else calc_ids[0]
         selected_id = st.selectbox(
-            "Расчёт заказа:", [""] + calc_ids,
-            format_func=lambda cid: "Выберите расчёт..." if not cid else calc_by_id[cid].get("name", "Расчёт"),
-            key=calc_key, index=0,
+            "Расчёт заказа:", calc_ids,
+            format_func=lambda cid: calc_by_id[cid].get("name", "Расчёт"),
+            key=calc_key
         )
-        selected_id = str(selected_id or "")
-        if selected_id:
-            if last_calc_key not in st.session_state:
-                # При первом открытии редактирования сохраняем ручные товары из задачи.
-                # Если список пустой, заполняем его товарами выбранного расчёта.
-                if not str(st.session_state.get(products_key, "") or "").strip():
-                    st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
-                st.session_state[last_calc_key] = selected_id
-            elif str(st.session_state.get(last_calc_key) or "") != selected_id:
-                # При каждой смене расчёта сразу перерисовываем товары из выбранного расчёта.
-                # Список в форме редактирования обновляется в этом же проходе Streamlit.
-                st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
-                st.session_state[last_calc_key] = selected_id
-        elif last_calc_key not in st.session_state:
-            st.session_state[last_calc_key] = ""
+        if last_calc_key not in st.session_state:
+            # При первом открытии редактирования сохраняем ручные товары из задачи.
+            # Если список пустой, заполняем его товарами выбранного расчёта.
+            if not str(st.session_state.get(products_key, "") or "").strip():
+                st.session_state[products_key] = "\\n".join(_task_products_from_calculation(deal, selected_id))
+            st.session_state[last_calc_key] = str(selected_id)
+        elif st.session_state.get(last_calc_key) != str(selected_id):
+            # При явной смене расчёта обновляем список из нового расчёта.
+            st.session_state[products_key] = "\\n".join(_task_products_from_calculation(deal, selected_id))
+            st.session_state[last_calc_key] = str(selected_id)
     else:
         st.caption("В сделке пока нет сохранённых расчётов.")
     products = str(st.session_state.get(products_key, "") or "")
@@ -1581,47 +1553,6 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
                 st.rerun()
     return str(selected_id), str(st.session_state.get(products_key, "") or "")
 
-def _task_torg12_print_b64(task, copies=2):
-    """Возвращает PDF Торг-12 из файлов задачи, повторённый нужное число раз."""
-    candidates = []
-    for item in (task.get("task_files", []) or []):
-        if not isinstance(item, dict):
-            continue
-        filename = str(item.get("file_name") or item.get("name") or "")
-        normalized = filename.lower().replace("ё", "е").replace(" ", "")
-        if "торг-12" not in normalized and "торг12" not in normalized:
-            continue
-        if os.path.splitext(filename)[1].lower() != ".pdf":
-            continue
-        raw = get_file_bytes(item.get("file_path") or item.get("path"))
-        if raw:
-            candidates.append(raw)
-    if not candidates:
-        return ""
-    try:
-        from pypdf import PdfReader, PdfWriter
-        writer = PdfWriter()
-        for raw in candidates:
-            reader = PdfReader(io.BytesIO(raw))
-            for _ in range(max(1, int(copies or 1))):
-                for page in reader.pages:
-                    writer.add_page(page)
-        output = io.BytesIO()
-        writer.write(output)
-        return base64.b64encode(output.getvalue()).decode("ascii")
-    except Exception as exc:
-        print(f"TORG12 print preparation failed: {type(exc).__name__}: {str(exc)[:200]}")
-        return ""
-
-
-def _torg12_print_section(task, copies=2):
-    payload = _task_torg12_print_b64(task, copies=copies)
-    if not payload:
-        return ""
-    return ("<div class='torg12-print'><h2>Торг-12 — два экземпляра</h2>"
-            f"<iframe title='Торг-12' src='data:application/pdf;base64,{payload}'></iframe></div>")
-
-
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     products_html = esc(task.get('products', '')).replace('\n', '<br>')
@@ -1630,7 +1561,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }} .torg12-print {{ page-break-before:always; break-before:page; }} .torg12-print iframe {{ width:100%;height:95vh;border:0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Способ доставки:</b> {esc(task.get('ship_method', 'Не выбрано') or 'Не выбрано')}</div><div class="row"><b>Трек/комментарий:</b> {esc(task.get('tk_num', ''))}</div><div class="row"><b>Описание:</b> {esc(task.get('task_comment', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div>{_torg12_print_section(task, copies=2)}</body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Трек:</b> {esc(task.get('tk_num', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div></body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
@@ -2020,25 +1951,6 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
             window["tabs"].insert(0, client_entry)
             if window.get("active_tab", 0) >= 0:
                 window["active_tab"] += 1
-    # При открытии задачи по сделке автоматически добавляем вкладку сделки
-    # рядом с карточкой клиента; сама задача остаётся активной.
-    if entry.get("name") == "task_detail_dialog" and len(entry.get("args", ()) or ()) >= 3:
-        _task_args = entry.get("args", ()) or ()
-        _task_deal = _task_args[2] if isinstance(_task_args[2], dict) else None
-        _task_client = _task_args[1] if len(_task_args) > 1 and isinstance(_task_args[1], dict) else None
-        if _task_deal and _task_client:
-            _deal_entry = {"name": "deal_detail_dialog", "title": "Подробности сделки", "width": "large",
-                           "args": (_task_deal, _task_client, st.session_state.get("user_name", ""), f"deal_{_task_deal.get('id')}"),
-                           "kwargs": {}, "signature": (_crm_dialog_signature_value((_task_deal, _task_client, st.session_state.get("user_name", ""), f"deal_{_task_deal.get('id')}")), _crm_dialog_signature_value({}))}
-            _deal_tab_key = _crm_workspace_tab_key(_deal_entry)
-            _deal_index = next((i for i, t in enumerate(window["tabs"]) if _crm_workspace_tab_key(t) == _deal_tab_key), None)
-            if _deal_index is None:
-                _insert_at = 1 if window.get("tabs") and window["tabs"][0].get("name") == "client_detail_dialog" else len(window["tabs"])
-                window["tabs"].insert(_insert_at, _deal_entry)
-                if window.get("active_tab", 0) >= _insert_at:
-                    window["active_tab"] += 1
-            else:
-                window["tabs"][_deal_index].update(_deal_entry)
     # Название окна создания клиента отдельно от названия вкладки.
     if entry.get("name") == "add_client_dialog":
         window["title"] = "Новый клиент"
@@ -2098,8 +2010,6 @@ def _crm_workspace_activate_tab(window_id, tab_index):
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window.get("id")
     st.session_state["_crm_active_dialog"] = tabs[index]
-    if tabs[index].get("name") == "notifications_dialog":
-        st.session_state.pop("_crm_return_to_notifications", None)
     # A tab selection is session state, not a structural workspace change.
     # Defer its disk persistence until the next open/close/minimize operation;
     # do not synchronously rewrite SQLite and enqueue cloud backups per click.
@@ -2664,8 +2574,6 @@ def process_due_reminders():
         if u.get("telegram_chat_id"):
             send_telegram(u["telegram_chat_id"], f"🔔 <b>Напоминание</b>\n{html.escape(str(r.get('text','')))}\nОбъект: {html.escape(str(r.get('entity_label','')))}")
 
-DELIVERY_METHOD_OPTIONS = ["Не выбрано", "Деловые Линии", "СДЭК", "ПЭК", "КИТ", "Энергия", "Байкал Сервис", "ЖелДорЭкспедиция", "Самовывоз", "Доставка по г. Казань", "Доставка клиента"]
-
 def _render_task_shipping_fields(task, client, deal, key_prefix):
     """Поля отправки: изменение даты/статуса сохраняется по устойчивым ID записи."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
@@ -2774,22 +2682,6 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
                     st.rerun()
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
-    # Всегда работаем с актуальным объектом из основного хранилища.
-    # Окно задачи может жить дольше одного rerun и содержать устаревшую копию.
-    _task_number_lookup = str((t or {}).get("task_number", ""))
-    _client_id_lookup = str((cl or {}).get("id", ""))
-    _deal_id_lookup = str((t or {}).get("deal_id", "") or "")
-    _stored_client = next((x for x in st.session_state.crm_store.get("clients", [])
-                           if str(x.get("id", "")) == _client_id_lookup), None)
-    if _stored_client is not None:
-        _stored_task = next((x for x in _stored_client.get("tasks", [])
-                             if str(x.get("task_number", "")) == _task_number_lookup
-                             and str(x.get("deal_id", "") or "") == _deal_id_lookup), None)
-        if _stored_task is not None:
-            t, cl = _stored_task, _stored_client
-            if _deal_id_lookup:
-                d = next((x for x in st.session_state.crm_store.get("deals", [])
-                          if str(x.get("id", "")) == _deal_id_lookup), d)
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # CSS to align print and edit buttons
@@ -2850,9 +2742,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
-                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
                         _render_task_shipping_fields(t, cl, d, key_prefix)
-                    else:
+                    elif not show_shipping_status:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             else:
                 _hdr_inner, _status_inner = st.columns([3, 2])
@@ -2867,9 +2758,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
-                        render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
                         _render_task_shipping_fields(t, cl, d, key_prefix)
-                    else:
+                    elif not show_shipping_status:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
             if show_edit_task:
                 # Inline editing mode
@@ -2879,8 +2769,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     et_topic = et_type
                 et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                # Описание расположено рядом с основными полями, чтобы его было легко заметить.
-                et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
                     _selected_calc_id_edit, et_products = render_task_products_editor(
                         d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
@@ -2896,7 +2784,10 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if _auto_amount_edit > 0:
                         st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
                     et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
+                    et_tk = st.text_input("Трек (подпиши если габариты не указаны):", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                    et_comment = st.text_area("\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                 else:
+                    et_comment = st.text_area("\\u041a\\u043e\\u043c\\u043c\\u0435\\u043d\\u0442\\u0430\\u0440\\u0438\\u0438:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
                     et_products = t.get("products", "")
                     et_city = t.get("ship_city", "")
                     et_addr = t.get("ship_addr", "")
@@ -2904,11 +2795,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     et_rphone = t.get("receiver_phone", "")
                     et_pay = t.get("ship_pay", "")
                     et_amount = str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""
-                _edit_delivery_col, _edit_track_col = st.columns([1, 1])
-                with _edit_delivery_col:
-                    et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
-                with _edit_track_col:
-                    et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                    et_tk = t.get("tk_num", "")
                 _save_col, _cancel_col = st.columns(2)
                 with _save_col:
                     if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
@@ -2925,7 +2812,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             t["receiver"] = et_recv
                             t["receiver_phone"] = et_rphone
                             t["ship_pay"] = et_pay
-                            t["ship_method"] = et_method
                             t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
                             if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
                                 t["calculation_id"] = str(_selected_calc_id_edit)
@@ -2970,11 +2856,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 mgr_options = get_managers_list()
                 current_mgr = t.get("manager", "")
                 current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
-                _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
-                # Для уже взятой задачи синхронизируем значение до создания selectbox.
-                if t.get("in_work") and current_mgr in mgr_options and st.session_state.get(_task_mgr_widget_key) != current_mgr:
-                    st.session_state[_task_mgr_widget_key] = current_mgr
-                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=f"task_mgr_inline_{key_prefix}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
                 if new_mgr != current_mgr and new_mgr:
                     t["manager"] = new_mgr
                     t["delegated_to"] = new_mgr
@@ -2997,16 +2879,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
                 if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']} ({t.get('receiver_phone', '')})")
                 if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
-                _view_delivery_col, _view_track_col = st.columns([1, 1])
-                with _view_delivery_col:
-                    st.markdown(f"**Способ доставки:** {t.get('ship_method', 'Не выбрано') or 'Не выбрано'}")
-                with _view_track_col:
-                    st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
+                if t.get('tk_num'):
+                    st.markdown(f"**\u0422\u0440\u0435\u043a:** `{t['tk_num']}`")
                 if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                 if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
-                # Всегда показываем описание, даже если оно пока не заполнено.
-                _task_description = str(t.get("task_comment", "") or "").strip()
-                st.markdown(f"**Описание:** {linkify_text(_task_description) if _task_description else '—'}", unsafe_allow_html=True)
+                if t.get('task_comment'): st.markdown(f"**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438:** {linkify_text(t['task_comment'])}", unsafe_allow_html=True)
                 # Edit pencil button — same compact size, left-aligned, above action buttons
                 pencil_key = f"btn_pencil_edit_{key_prefix}"
                 st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
@@ -3080,7 +2957,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             "task_number": tn2, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                                             "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                                             "task_comments": [], "flagged": False,
-                                            "products": "", "ship_city": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "ship_method": "Не выбрано", "tk_num": ""
+                                            "products": "", "ship_city": "", "ship_addr": "", "receiver": "", "receiver_phone": "", "ship_pay": "", "tk_num": ""
                                         }
                                         cl.setdefault("tasks", []).append(new_task)
                                         if nt_mgr2:
@@ -3220,6 +3097,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
 
+def _task_is_ready_to_ship(task):
+    """Единый признак задачи, готовой к отправке."""
+    if not isinstance(task, dict):
+        return False
+    status = str(task.get("shipping_status", "") or "").strip().casefold()
+    return status == "готово к отправке" or bool(task.get("ready_to_ship", False))
+
+
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
     tk_done = t.get("done", False)
@@ -3232,7 +3117,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-    if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
+    if _task_is_ready_to_ship(t) and not tk_done: tk_label = f"✅ {tk_label} | Готово к отправке"
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
     tk_border = "#2196F3" if tk_selected else tk_bc
@@ -3307,7 +3192,6 @@ def migrate_task_files(t):
     if "receiver" not in t: t["receiver"] = ""
     if "receiver_phone" not in t: t["receiver_phone"] = ""
     if "ship_pay" not in t: t["ship_pay"] = ""
-    if "ship_method" not in t: t["ship_method"] = "Не выбрано"
     if "tk_num" not in t: t["tk_num"] = ""
     if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
 
@@ -3473,7 +3357,6 @@ def _load_data_from_json():
                     if "receiver" not in t: t["receiver"] = ""
                     if "receiver_phone" not in t: t["receiver_phone"] = ""
                     if "ship_pay" not in t: t["ship_pay"] = ""
-                    if "ship_method" not in t: t["ship_method"] = "Не выбрано"
                     if "tk_num" not in t: t["tk_num"] = ""
                     if t.get("type") == "Отправка": t["type"] = "Отправить заказ"
                     migrate_task_files(t)
@@ -4097,7 +3980,7 @@ def _push_dialog_return():
 
 
 def _pop_dialog_return():
-    """Восстановить предыдущий диалог либо уведомления, из которых открыли объект."""
+    """Восстановить предыдущий диалог из стека при закрытии текущего."""
     stack = st.session_state.get("_dialog_return_stack", [])
     if stack:
         prev = stack.pop()
@@ -4109,20 +3992,6 @@ def _pop_dialog_return():
             else:
                 st.session_state[key] = val
         return True
-    if st.session_state.get("_crm_return_to_notifications"):
-        window_id = st.session_state.get("_crm_active_window_id")
-        window = next((w for w in st.session_state.get("_crm_windows", []) if w.get("id") == window_id), None)
-        if window:
-            tabs = window.get("tabs", [])
-            idx = next((i for i, tab in enumerate(tabs) if tab.get("name") == "notifications_dialog"), None)
-            if idx is not None:
-                window["active_tab"] = idx
-                window["minimized"] = False
-                st.session_state["_crm_active_dialog"] = tabs[idx]
-                st.session_state.pop("_crm_return_to_notifications", None)
-                _crm_workspace_queue_save()
-                return True
-        st.session_state.pop("_crm_return_to_notifications", None)
     return False
 
 # ====== УВЕДОМЛЕНИЯ ======
@@ -4202,344 +4071,51 @@ def mark_all_notifications_read():
             n["read"] = True
     save_data(st.session_state.crm_store)
 
-def _close_active_notification_tab():
-    """Закрыть окно уведомлений без повторного открытия legacy-диспетчером."""
-    windows = st.session_state.get("_crm_windows", [])
-    window_id = st.session_state.get("_crm_active_window_id")
-    window = next((w for w in windows if str(w.get("id")) == str(window_id)
-                   and any(tab.get("name") == "notifications_dialog" for tab in w.get("tabs", []))), None)
-    if window is None:
-        window = next((w for w in reversed(windows)
-                       if any(tab.get("name") == "notifications_dialog" for tab in w.get("tabs", []))), None)
-
-    st.session_state["show_notifications_dialog"] = False
-    st.session_state.pop("_crm_return_to_notifications", None)
-    st.session_state["_in_dialog"] = False
-    if window is not None:
-        # Уведомления открываются как самостоятельное окно, поэтому крестик
-        # закрывает всё окно, а не только вкладку, которая legacy-кодом создавалась снова.
-        st.session_state["_crm_windows"] = [w for w in windows if str(w.get("id")) != str(window.get("id"))]
-        remaining = st.session_state["_crm_windows"]
-        preferred_id = window.get("return_to_window_id")
-        next_window = next((w for w in remaining if str(w.get("id")) == str(preferred_id)), None)
-        if next_window is None:
-            next_window = next((w for w in reversed(remaining) if not w.get("minimized")), None)
-        if next_window:
-            next_window["minimized"] = False
-            st.session_state["_crm_active_window_id"] = next_window.get("id")
-            tabs = next_window.get("tabs", [])
-            idx = max(0, min(int(next_window.get("active_tab", 0) or 0), len(tabs)-1)) if tabs else -1
-            if idx >= 0:
-                next_window["active_tab"] = idx
-                st.session_state["_crm_active_dialog"] = tabs[idx]
-            else:
-                st.session_state.pop("_crm_active_dialog", None)
-        else:
-            st.session_state["_crm_active_window_id"] = None
-            st.session_state.pop("_crm_active_dialog", None)
-        _crm_workspace_clear_legacy_dialog_markers()
-        _crm_workspace_queue_save()
-    try:
-        st.rerun(scope="fragment")
-    except (TypeError, ValueError):
-        st.rerun()
-
-
-def _notification_target(n):
-    """Определить объект CRM для перехода из текста уведомления."""
-    store = st.session_state.get("crm_store", {})
-    clients = store.get("clients", [])
-    deals = store.get("deals", [])
-    text_value = str(n.get("text", "") or "")
-
-    # Напоминания сохраняют точную ссылку на исходный объект.
-    reminder_id = n.get("reminder_id")
-    if reminder_id:
-        reminder = next((r for r in store.get("reminders", []) if str(r.get("id")) == str(reminder_id)), None)
-        if reminder:
-            etype = str(reminder.get("entity_type", "")).lower()
-            eid = str(reminder.get("entity_id", ""))
-            if etype in ("client", "клиент"):
-                cl = next((c for c in clients if str(c.get("id")) == eid), None)
-                if cl: return ("client", cl)
-            if etype in ("deal", "сделка"):
-                deal = next((d for d in deals if str(d.get("id")) == eid), None)
-                if deal:
-                    cl = next((c for c in clients if str(c.get("id")) == str(deal.get("client_id"))), None)
-                    return ("deal", deal, cl)
-            if etype in ("task", "задача", "client_task", "task_client"):
-                for cl in clients:
-                    for task in cl.get("tasks", []):
-                        if str(task.get("id", "")) == eid or str(task.get("task_number", "")) == eid:
-                            deal = next((d for d in deals if str(d.get("id")) == str(task.get("deal_id", ""))), None)
-                            return ("task", task, cl, deal)
-
-    # Задачи клиентов: сначала ищем номер задачи, если он указан в тексте.
-    all_client_tasks = [(task, cl) for cl in clients for task in cl.get("tasks", [])]
-
-    # Уведомления о новой задаче часто содержат её название, а не номер.
-    # Ищем точное название задачи до разделителя «| Клиент:».
-    task_title_match = re.search(r"новая задача\s*[:：]\s*(.+?)(?=\s*\|\s*(?:клиент|срок)\s*:|$)", text_value, flags=re.IGNORECASE)
-    if task_title_match:
-        title_from_notice = task_title_match.group(1).strip().strip('«»\"')
-        if title_from_notice:
-            title_matches = []
-            for task, cl in all_client_tasks:
-                task_title = str(task.get("text", task.get("title", task.get("topic", ""))) or "").strip()
-                if task_title and task_title.casefold() == title_from_notice.casefold():
-                    # Если уведомление содержит имя клиента, используем его для снятия неоднозначности.
-                    client_marker = re.search(r"клиент\s*[:：]\s*(.+?)(?=\s*\|\s*(?:срок|город)\s*:|$)", text_value, flags=re.IGNORECASE)
-                    if client_marker and client_marker.group(1).strip().casefold() not in str(cl.get("name", "")).casefold():
-                        continue
-                    title_matches.append((task, cl))
-            if len(title_matches) == 1:
-                task, cl = title_matches[0]
-                deal = next((d for d in deals if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
-                return ("task", task, cl, deal)
-            elif title_matches:
-                # Предпочитаем задачу у клиента, чьё имя прямо упомянуто в уведомлении.
-                client_marker = re.search(r"клиент\s*[:：]\s*(.+?)(?=\s*\|\s*(?:срок|город)\s*:|$)", text_value, flags=re.IGNORECASE)
-                if client_marker:
-                    cname = client_marker.group(1).strip().casefold()
-                    match = next(((task, cl) for task, cl in title_matches if str(cl.get("name", "")).casefold() == cname), None)
-                    if match:
-                        task, cl = match
-                        deal = next((d for d in deals if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
-                        return ("task", task, cl, deal)
-
-    task_numbers = re.findall(r"(?:задача на проверке|задача возвращена на доработку|делегирована задача|задач[аеиу])\s*[:：]?\s*(?:№\s*)?([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_-]*)", text_value, flags=re.IGNORECASE)
-    for number in task_numbers:
-        match = next(((task, cl) for task, cl in all_client_tasks if str(task.get("task_number", "")).casefold() == number.casefold()), None)
-        if match:
-            task, cl = match
-            deal = next((d for d in deals if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
-            return ("task", task, cl, deal)
-
-    # Сделки: номер обычно стоит после слова «сделка».
-    deal_numbers = re.findall(r"сделк[аеиу]\s*(?:№\s*)?([A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_-]*)", text_value, flags=re.IGNORECASE)
-    for number in deal_numbers:
-        deal = next((d for d in deals if str(d.get("deal_number", "")).casefold() == number.casefold()), None)
-        if deal:
-            cl = next((c for c in clients if str(c.get("id")) == str(deal.get("client_id"))), None)
-            return ("deal", deal, cl)
-
-    # Внутренние задачи имеют собственный список и открываются в своей вкладке.
-    internal_numbers = re.findall(r"(?:внутренн(?:яя|ую) задача|задача)\s*(?:№\s*)?([0-9]+)", text_value, flags=re.IGNORECASE)
-    for number in internal_numbers:
-        it = next((x for x in store.get("internal_tasks", []) if str(x.get("id", "")) == number), None)
-        if it:
-            return ("internal_task", it)
-
-    # Если номер не найден, попробуем найти клиента по полному имени из уведомления.
-    for cl in sorted(clients, key=lambda c: len(str(c.get("name", ""))), reverse=True):
-        name = str(cl.get("name", "") or "").strip()
-        if len(name) >= 3 and name.casefold() in text_value.casefold():
-            return ("client", cl)
-    return None
-
-
-def _notification_button_text(n):
-    """Текст кнопки уведомления: обязательно показываем номер задачи или сделки, если объект найден."""
-    raw = str(n.get("text", "") or "").strip()
-    if not raw:
-        return "Уведомление"
-    try:
-        target = _notification_target(n)
-    except Exception:
-        target = None
-    if not target:
-        return raw
-    kind = target[0]
-    number = ""
-    if kind == "task" and len(target) > 1:
-        number = str(target[1].get("task_number", "") or "").strip()
-    elif kind == "deal" and len(target) > 1:
-        number = str(target[1].get("deal_number", "") or "").strip()
-    elif kind == "internal_task" and len(target) > 1:
-        number = str(target[1].get("id", "") or "").strip()
-    if not number:
-        return raw
-    # Не дублируем номер, если он уже есть в тексте.
-    if re.search(r"№\s*" + re.escape(number) + r"(?:\b|$)", raw, flags=re.IGNORECASE):
-        return raw
-    if kind == "task":
-        match = re.match(r"(\s*Новая задача)\s*[:：]\s*(.*)", raw, flags=re.IGNORECASE | re.DOTALL)
-        if match:
-            return f"{match.group(1)} №{number}: {match.group(2)}"
-        return f"Задача №{number}: {raw}"
-    if kind == "deal":
-        return f"Сделка №{number}: {raw}"
-    if kind == "internal_task":
-        return f"Внутренняя задача №{number}: {raw}"
-    return raw
-
-
-def _open_notification_target(n):
-    """Отметить уведомление прочитанным и открыть объект в отдельном окне клиента.
-
-    Окно уведомлений остаётся нетронутым. Новое окно содержит карточку клиента,
-    связанную сделку (если есть) и задачу; активной сразу становится задача.
-    """
-    for item in st.session_state.crm_store.get("notifications", []):
-        if str(item.get("id")) == str(n.get("id")):
-            item["read"] = True
-            break
-    # Сохраняем прочтение один раз; окно уведомлений при этом не меняется.
-    save_data(st.session_state.crm_store)
-    target = _notification_target(n)
-    if not target:
-        st.toast("Уведомление отмечено прочитанным. Не удалось автоматически определить объект CRM.", icon="ℹ️")
-        st.rerun()
-        return
-
-    kind = target[0]
-    tabs = []
-    client = None
-    deal = None
-    task = None
-    if kind == "client":
-        client = target[1]
-    elif kind == "deal":
-        deal, client = target[1], target[2]
-    elif kind == "task":
-        task, client, deal = target[1], target[2], target[3]
-    elif kind == "internal_task":
-        # Внутренние задачи не принадлежат клиенту: открываем их отдельным окном.
-        it = target[1]
-        entry = {"name": "internal_task_detail_dialog", "title": "Внутренняя задача", "width": "large",
-                 "args": (it.get("id"),), "kwargs": {},
-                 "signature": (_crm_dialog_signature_value((it.get("id"),)), _crm_dialog_signature_value({}))}
-        client_id = None
-        tabs = [entry]
-
-    source_window_id = st.session_state.get("_crm_active_window_id")
-    source_window = next((w for w in st.session_state.get("_crm_windows", [])
-                          if str(w.get("id")) == str(source_window_id)), None)
-
-    if client is not None:
-        client_id = str(client.get("id"))
-        client_entry = {"name": "client_detail_dialog", "title": "Карточка клиента", "width": "large",
-                        "args": (client.get("id"),), "kwargs": {},
-                        "signature": (_crm_dialog_signature_value((client.get("id"),)), _crm_dialog_signature_value({}))}
-        tabs.append(client_entry)
-        if deal is not None:
-            deal_args = (deal, client, st.session_state.get("user_name", ""), f"deal_{deal.get('id')}")
-            tabs.append({"name": "deal_detail_dialog", "title": "Подробности сделки", "width": "large",
-                         "args": deal_args, "kwargs": {},
-                         "signature": (_crm_dialog_signature_value(deal_args), _crm_dialog_signature_value({}))})
-        if task is not None:
-            task_args = (task, client, deal, f"notif_task_{client.get('id')}_{task.get('task_number', task.get('id', ''))}_{deal.get('id') if deal else 'client'}")
-            tabs.append({"name": "task_detail_dialog", "title": "Задача", "width": "large",
-                         "args": task_args, "kwargs": {},
-                         "signature": (_crm_dialog_signature_value(task_args), _crm_dialog_signature_value({}))})
-    else:
-        client_id = None
-
-    if not tabs:
-        st.toast("Не удалось сформировать окно для этого уведомления.", icon="⚠️")
-        st.rerun()
-        return
-
-    # Создаём отдельное окно напрямую: вызов декорированных dialog-функций здесь
-    # добавил бы вкладку в активное окно уведомлений и запустил лишние rerun.
-    windows = st.session_state.setdefault("_crm_windows", [])
-    window_id = "cw_notif_" + uuid.uuid4().hex[:12]
-    window_title = str(client.get("name") or "Клиент") if client is not None else "Внутренняя задача"
-    active_index = len(tabs) - 1 if task is not None else (1 if deal is not None else 0)
-    new_window = {"id": window_id, "client_id": client_id, "title": window_title,
-                  "tabs": tabs, "active_tab": active_index, "minimized": False,
-                  "return_to_window_id": source_window.get("id") if source_window else source_window_id}
-    windows.append(new_window)
-    st.session_state["_crm_active_window_id"] = window_id
-    st.session_state["_crm_active_dialog"] = tabs[active_index]
-    # Legacy-кнопка открытия уведомлений больше не должна перехватывать фокус
-    # при полном rerun. Сама вкладка остаётся в отдельном окне и доступна в панели окон.
-    st.session_state["show_notifications_dialog"] = False
-    _crm_workspace_clear_legacy_dialog_markers()
-    _crm_workspace_queue_save()
-    try:
-        st.rerun(scope="fragment")
-    except (TypeError, ValueError):
-        st.rerun()
-
-
 @_crm_dialog("🔔 Уведомления", width="large")
 def notifications_dialog():
     st.session_state["_in_dialog"] = True
     _key_prefix = "notif_dlg"
+    # Close button
     _close_css_key = f"close_row_{_key_prefix}"
-    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;font-size:1.2rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:8px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
             if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                _close_active_notification_tab()
-
+                st.session_state.pop("show_notifications_dialog", None)
+                st.session_state["_in_dialog"] = False
+                st.rerun()
     notifs = get_my_notifications()
     unread = get_unread_count()
-    st.markdown("""<style>
-    /* Compact notification action buttons, aligned at the left */
-    .st-key-notif_actions [data-testid="stHorizontalBlock"] { gap:4px!important; }
-    .st-key-notif_actions [data-testid="stColumn"] { flex:0 0 25%!important; width:25%!important; min-width:0!important; }
-    .st-key-notif_actions .stButton > button { width:100%!important; min-width:0!important; padding:0.25rem 0.35rem!important; min-height:32px!important; font-size:0.82rem!important; white-space:normal!important; }
-    .st-key-notif_actions [data-testid="stVerticalBlock"] { gap:0!important; }
-    /* List rows styled like the client list, with minimal vertical spacing */
-    [class*="st-key-notif_row_"] { background:#F8FAFC!important; border:1px solid #E0E6EF!important; border-left:3px solid #AAB4C0!important; border-radius:7px!important; padding:2px 6px!important; margin:2px 0!important; }
-    [class*="st-key-notif_row_unread_"] { background:#F5FBF6!important; border-left-color:#BC1661!important; }
-    [class*="st-key-notif_row_"] [data-testid="stHorizontalBlock"] { align-items:center!important; gap:8px!important; }
-    [class*="st-key-notif_row_"] [data-testid="stColumn"] { padding:0!important; }
-    [class*="st-key-notif_open_"] { width:100%!important; max-width:100%!important; }
-    [class*="st-key-notif_open_"] [data-testid="stButton"] { width:100%!important; max-width:100%!important; }
-    [class*="st-key-notif_open_"] .stButton > button { width:100%!important; max-width:100%!important; min-width:0!important; text-align:left!important; white-space:normal!important; height:auto!important; min-height:32px!important; padding:4px 8px!important; border-radius:6px!important; background:rgba(255,255,255,0.72)!important; border:1px solid #E0E6EF!important; box-shadow:none!important; color:#2C3E50!important; justify-content:flex-start!important; align-items:flex-start!important; font-size:0.84rem!important; }
-    [class*="st-key-notif_open_"] .stButton > button > div { width:100%!important; flex:1 1 100%!important; text-align:left!important; justify-content:flex-start!important; align-items:flex-start!important; }
-    [class*="st-key-notif_open_"] .stButton > button:hover { border-color:#BC1661!important; }
-    [class*="st-key-notif_open_"] .stButton > button p { display:block!important; width:100%!important; white-space:pre-wrap!important; text-align:left!important; line-height:1.25!important; margin:0!important; }
-    [class*="st-key-notif_date_"] { font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; white-space:nowrap!important; overflow:hidden!important; padding:0!important; margin:0!important; align-self:center!important; }
-    [class*="st-key-notif_date_"] p { white-space:nowrap!important; margin:0!important; padding:0!important; font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; }
-    [class*="st-key-notif_date_"] [data-testid="stCaptionContainer"] { white-space:nowrap!important; margin:0!important; padding:0!important; font-size:0.62rem!important; line-height:1.05!important; color:#7B8794!important; }
-    [class*="st-key-notif_open_"] { display:flex!important; justify-content:flex-start!important; margin-left:0!important; margin-right:auto!important; width:100%!important; max-width:100%!important; }
-    [class*="st-key-notif_open_"] .stButton { display:flex!important; justify-content:flex-start!important; width:100%!important; margin-left:0!important; margin-right:auto!important; }
-    </style>""", unsafe_allow_html=True)
-
-    with st.container(key="notif_actions"):
-        _nc1, _nc2, _nc_space = st.columns([1, 1, 2], gap="small")
-        with _nc1:
-            if unread > 0:
-                if st.button("Прочитать все", key="btn_read_all_dlg", use_container_width=True, type="primary"):
-                    mark_all_notifications_read()
-                    st.rerun()
-        with _nc2:
-            if st.button("Очистить прочитанные", key="btn_clear_read_dlg", use_container_width=True):
-                me = st.session_state.get("user_login", "")
-                st.session_state.crm_store["notifications"] = [
-                    n for n in st.session_state.crm_store.get("notifications", [])
-                    if not (n.get("to") == me and n.get("read", False))
-                ]
+    _nc1, _nc2 = st.columns(2)
+    with _nc1:
+        if unread > 0:
+            if st.button("Прочитать все", key="btn_read_all_dlg", use_container_width=True, type="primary"):
+                mark_all_notifications_read()
                 save_data(st.session_state.crm_store)
                 st.rerun()
-
+    with _nc2:
+        if st.button("Очистить прочитанные", key="btn_clear_read_dlg", use_container_width=True):
+            me = st.session_state.get("user_login", "")
+            st.session_state.crm_store["notifications"] = [
+                n for n in st.session_state.crm_store.get("notifications", [])
+                if not (n.get("to") == me and n.get("read", False))
+            ]
+            save_data(st.session_state.crm_store)
+            st.rerun()
     if not notifs:
         st.caption("Нет уведомлений")
     else:
         for n in notifs:
-            is_unread = not n.get("read", False)
-            _nid = str(n.get("id", ""))
-            _row_key = ("notif_row_unread_" if is_unread else "notif_row_") + _nid
-            with st.container(key=_row_key):
-                _date_col, _button_col, _right_space = st.columns([0.75, 2, 1.25], gap="small", vertical_alignment="center")
-                with _date_col:
-                    with st.container(key=f"notif_date_{_nid}"):
-                        _raw_notif_date = str(n.get("date", "") or "").strip()
-                        try:
-                            _parsed_notif_date = datetime.strptime(_raw_notif_date[:19], "%Y-%m-%d %H:%M:%S")
-                            _display_notif_date = _parsed_notif_date.strftime("%d.%m.%Y %H:%M")
-                        except Exception:
-                            _display_notif_date = _raw_notif_date or "—"
-                        st.caption(_display_notif_date)
-                with _button_col:
-                    label = ("🔵 " if is_unread else "✓ ") + _notification_button_text(n)
-                    if st.button(label, key=f"notif_open_{_nid}", use_container_width=True, type="secondary"):
-                        _open_notification_target(n)
+            bg = "#E3F2FD" if not n.get("read", False) else "#F5F6F8"
+            border = "1px solid #BBDEFB" if not n.get("read", False) else "1px solid #E8EBEF"
+            st.markdown(
+                f'<div style="background:{bg};border:{border};border-radius:10px;padding:5px 7px;margin-bottom:3px;line-height:1.2;">'
+                f'<span style="font-size:0.65rem;color:#95A5B7;">{n.get("date","")}</span><br>'
+                f'<span style="font-size:0.82rem;color:#2C3E50;">{n.get("text","")}</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
 def render_notifications_bell():
     """Кнопка уведомлений на всю ширину левой колонки, счётчик внутри справа от колокольчика."""
@@ -4634,21 +4210,6 @@ def close_deal_dialog(deal_id):
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
         st.session_state.crm_store = load_data()
-# Однократная миграция номеров задач в рабочей SQLite-базе и добавление поля способа доставки.
-_task_number_migration_changed = False
-_task_numbers_before = []
-for _migration_client in st.session_state.crm_store.get("clients", []):
-    for _migration_task in _migration_client.get("tasks", []):
-        _task_numbers_before.append(str(_migration_task.get("task_number", "") or ""))
-        if "ship_method" not in _migration_task:
-            _migration_task["ship_method"] = "Не выбрано"
-            _task_number_migration_changed = True
-assign_task_numbers(st.session_state.crm_store)
-_task_numbers_after = [str(_migration_task.get("task_number", "") or "") for _migration_client in st.session_state.crm_store.get("clients", []) for _migration_task in _migration_client.get("tasks", [])]
-if _task_numbers_before != _task_numbers_after:
-    _task_number_migration_changed = True
-if _task_number_migration_changed:
-    save_data(st.session_state.crm_store)
 # Журналируем запуск и текущую доступность базы, затем ставим резервное копирование в очередь.
 if not _CRM_BG_STATE["process_start_logged"]:
     _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": True})
@@ -6296,8 +5857,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     _crm_workspace_queue_save()
                     st.rerun()
                 if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
-                    if any(_tab.get("name") == "notifications_dialog" for _tab in _w.get("tabs", [])):
-                        st.session_state["show_notifications_dialog"] = False
                     # При закрытии окна отключаем все формы создания клиента в нём,
                     # иначе legacy-рендерер откроет их снова на следующем rerun.
                     for _closing_tab in _w.get("tabs", []):
@@ -6314,16 +5873,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 
                     # Пока остаётся хотя бы одно окно клиента, рабочее пространство
                     # не закрываем: переключаемся на другое доступное окно.
-                    _return_window_id = _w.get("return_to_window_id")
                     _next_window = next(
-                        (w for w in _remaining_windows if _return_window_id and str(w.get("id")) == str(_return_window_id)),
+                        (w for w in reversed(_remaining_windows) if not w.get("minimized")),
                         None
                     )
-                    if _next_window is None:
-                        _next_window = next(
-                            (w for w in reversed(_remaining_windows) if not w.get("minimized")),
-                            None
-                        )
                     if _next_window is None and _remaining_windows:
                         # Если все оставшиеся окна свёрнуты, разворачиваем последнее.
                         _next_window = _remaining_windows[-1]
@@ -6482,263 +6035,110 @@ def _deal_items_total(items):
         total += qty * price * (1 - discount / 100.0)
     return round(total, 2)
 
-
-def _crm_close_created_task_form_tab():
-    """Close the current task-creation tab and return to the previous tab in its window."""
-    _windows = st.session_state.get("_crm_windows", [])
-    _active_id = st.session_state.get("_crm_active_window_id")
-    _window = next((w for w in _windows if w.get("id") == _active_id), None)
-    if not _window:
-        return False
-    _tabs = _window.get("tabs", [])
-    _idx = int(_window.get("active_tab", 0) or 0)
-    if not (0 <= _idx < len(_tabs)):
-        return False
-    _create_names = {"deal_create_task_dialog", "client_create_task_dialog", "client_create_deal_task_dialog", "create_deal_dialog"}
-    if _tabs[_idx].get("name") not in _create_names:
-        return False
-    _tabs.pop(_idx)
-    if _tabs:
-        _window["active_tab"] = max(0, min(_idx - 1, len(_tabs) - 1))
-        st.session_state["_crm_active_dialog"] = _tabs[_window["active_tab"]]
-    else:
-        _window["active_tab"] = 0
-        st.session_state.pop("_crm_active_dialog", None)
-    _window["minimized"] = False
-    _crm_workspace_queue_save()
-    return True
-
 def render_task_form(deal_id, cl_id, key_suffix, default_type="Связаться"):
-    # Новая форма задачи открывается без выбранного расчёта.
-    _form_initialized_key = f"nt_form_initialized_{key_suffix}"
-    if not st.session_state.get(_form_initialized_key):
-        st.session_state[f"nt_order_calc_{key_suffix}"] = ""
-        st.session_state[_form_initialized_key] = True
-    # Для задачи по клиенту доступны только «Связаться» и «Отправить образцы».
-    # В задаче по сделке сохраняем полный список типов без изменений.
-    _task_type_options = TASK_TYPES if deal_id else [x for x in TASK_TYPES if x != "Отправить заказ"]
-    _task_type_key = f"nt_type_{key_suffix}"
-    if st.session_state.get(_task_type_key) not in _task_type_options:
-        st.session_state[_task_type_key] = default_type if default_type in _task_type_options else _task_type_options[0]
-
-    _layout_key = f"task_create_layout_{key_suffix}"
-    _submit_row_key = f"task_create_submit_row_{key_suffix}"
-    st.markdown(f"""<style>
-    /* Разделитель расположен внутри строки двух колонок и заканчивается ДО нижнего края.
-       Поэтому он физически не может заходить на отдельную строку кнопки «Создать». */
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {{
-        align-items:flex-start!important; position:relative!important;
-    }}
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"]::after {{
-        content:""; position:absolute; top:0; bottom:3.75rem; left:50%;
-        width:1px; background:#DCE0E5; transform:translateX(-.5px); pointer-events:none;
-    }}
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {{
-        border-right:none!important; padding-right:1.1rem!important; min-width:0!important;
-    }}
-    .st-key-{_layout_key} > [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {{
-        padding-left:1.1rem!important; min-width:0!important;
-    }}
-    /* Кнопка создания находится в отдельной одноколоночной строке. */
-    .st-key-{_submit_row_key} [data-testid="stHorizontalBlock"] {{ display:block!important; }}
-    .st-key-{_submit_row_key} [data-testid="stButton"] {{ width:100%!important; }}
-    .st-key-{_submit_row_key} [data-testid="stButton"] button {{ width:100%!important; }}
-    </style>""", unsafe_allow_html=True)
-
-    with st.container(key=_layout_key):
-        _left_col, _right_col = st.columns(2, gap="large")
-        with _left_col:
-            ntype = st.selectbox("Тип задачи:", _task_type_options, index=_task_type_options.index(st.session_state[_task_type_key]), key=_task_type_key)
-            if ntype not in ("Отправить заказ", "Отправить образцы"):
-                ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
-            else:
-                ntopic = ntype
-            ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
-            ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
-            _selected_calc_id_new = ""
-            if ntype in ("Отправить заказ", "Отправить образцы"):
-                _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
-                _selected_calc_id_new, nproducts = render_task_products_editor(
-                    _deal_for_new_task, f"nt_{key_suffix}",
-                    st.session_state.get(f"nt_{key_suffix}_prod", ""),
-                    st.session_state.get(f"nt_{key_suffix}_order_calc", "")
-                )
-                nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
-                nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
-                _current_client = get_client_by_id(cl_id) or {}
-                _client_id_key = str(_current_client.get("id", cl_id or ""))
-                _client_options = {_client_id_key: _current_client} if _current_client else {}
-                _client_display = {_client_id_key: str(_current_client.get("name", "Клиент"))} if _current_client else {}
-                for _extra_phone in _current_client.get("extra_phones", []) or []:
-                    if isinstance(_extra_phone, dict):
-                        _contact_key = f"{_client_id_key}|{_extra_phone.get('phone','')}"
-                        _client_display[_contact_key] = f"{(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
-
-                def _apply_task_receiver_selection():
-                    _selected_contact_key = st.session_state.get(f"nt_client_picker_{key_suffix}")
-                    if not _selected_contact_key:
-                        return
-                    _parts = str(_selected_contact_key).split("|", 1)
+    ntype = st.selectbox("Тип задачи:", TASK_TYPES, index=TASK_TYPES.index(default_type) if default_type in TASK_TYPES else 0, key=f"nt_type_{key_suffix}")
+    if ntype not in ("Отправить заказ", "Отправить образцы"):
+        ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
+    else:
+        ntopic = ntype
+    ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
+    ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
+    _selected_calc_id_new = ""
+    if ntype in ("Отправить заказ", "Отправить образцы"):
+        _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
+        _selected_calc_id_new, nproducts = render_task_products_editor(
+            _deal_for_new_task, f"nt_{key_suffix}",
+            st.session_state.get(f"nt_{key_suffix}_prod", ""),
+            st.session_state.get(f"nt_{key_suffix}_order_calc", "")
+        )
+        nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
+        nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
+        _client_options = {str(c.get("id", "")): c for c in st.session_state.crm_store.get("clients", [])}
+        _client_display = {str(c.get("id", "")): str(c.get("name", "Клиент")) for c in _client_options.values()}
+        for _client_item in _client_options.values():
+            for _extra_phone in _client_item.get("extra_phones", []) or []:
+                if isinstance(_extra_phone, dict):
+                    _contact_key = f"{_client_item.get('id')}|{_extra_phone.get('phone','')}"
+                    _client_display[_contact_key] = f"{_client_item.get('name','Клиент')} — {(_extra_phone.get('name') or 'Доп. контакт')} ({_extra_phone.get('phone','')})"
+        _receiver_row, _picker_row = st.columns([4, 1.5])
+        with _receiver_row:
+            nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
+        with _picker_row:
+            st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+            if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
+                st.session_state[f"nt_show_client_picker_{key_suffix}"] = not st.session_state.get(f"nt_show_client_picker_{key_suffix}", False)
+        if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
+            _picked_contact = st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента")
+            if st.button("Заполнить поля", key=f"nt_apply_client_{key_suffix}", use_container_width=True):
+                if _picked_contact:
+                    _parts = str(_picked_contact).split("|", 1)
                     _picked_client = _client_options.get(_parts[0])
-                    if not _picked_client:
-                        return
-                    if len(_parts) > 1:
-                        _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
-                        st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
-                        st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
-                    else:
-                        st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
-                        st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
-
-                _receiver_row, _picker_row = st.columns([4, 1.5])
-                with _receiver_row:
-                    nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
-                with _picker_row:
-                    st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
-                    if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
-                        st.session_state[f"nt_show_client_picker_{key_suffix}"] = not st.session_state.get(f"nt_show_client_picker_{key_suffix}", False)
-                if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
-                    st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента", on_change=_apply_task_receiver_selection)
-                nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
-                nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
-                _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
-                _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
-                _amount_key_new = f"nt_amount_{key_suffix}"
-                if _auto_amount_new > 0:
-                    st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
-                norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
-            else:
-                nproducts = ""
-                nship_city = ""
-                nship_addr = ""
-                nreceiver = ""
-                nreceiver_phone = ""
-                nship_pay = ""
-                norder_amount = ""
-            _new_delivery_col, _new_track_col = st.columns([1, 1])
-            with _new_delivery_col:
-                nship_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=0, key=f"nt_method_{key_suffix}")
-            with _new_track_col:
-                ntk_num = st.text_input("Трек/комментарий:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер или комментарий")
-            ncomment = st.text_area("Описание:", key=f"nt_c_{key_suffix}")
-
-        with _right_col:
-            st.markdown("**Добавление файлов**")
-            _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
-            ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
-            if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
-                if ntf:
-                    _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
-                    st.session_state.setdefault(f"nt_uploaded_files_{key_suffix}", []).extend(_new_uploaded_task_files)
-                    st.session_state[f"nt_file_ver_{key_suffix}"] = _nt_file_ver + 1
+                    if _picked_client:
+                        if len(_parts) > 1:
+                            _extra = next((p for p in _picked_client.get("extra_phones", []) or [] if isinstance(p, dict) and str(p.get("phone", "")) == _parts[1]), {})
+                            st.session_state[f"nt_recv_{key_suffix}"] = str(_extra.get("name", "") or _picked_client.get("name", ""))
+                            st.session_state[f"nt_rphone_{key_suffix}"] = str(_extra.get("phone", ""))
+                        else:
+                            st.session_state[f"nt_recv_{key_suffix}"] = str(_picked_client.get("name", ""))
+                            st.session_state[f"nt_rphone_{key_suffix}"] = str(_picked_client.get("phone", ""))
+                    st.session_state[f"nt_show_client_picker_{key_suffix}"] = False
                     st.rerun()
-                else:
-                    st.warning("Выберите файл(ы) для загрузки.")
-            if st.button("Выбрать из загруженных", key=f"nt_pick_existing_btn_{key_suffix}", use_container_width=True):
-                _create_pick_key = f"nt_pick_existing_open_{key_suffix}"
-                st.session_state[_create_pick_key] = not st.session_state.get(_create_pick_key, False)
-            _create_source_deal = get_deal_by_id(deal_id) if deal_id else None
-            _create_source_client = get_client_by_id(cl_id)
-            _create_source_files = (_create_source_deal or {}).get("deal_files", []) if deal_id else (_create_source_client or {}).get("client_files", [])
-            _create_source_files = [f for f in (_create_source_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
-            def _file_created_sort_value(_f):
-                _stamp = str(_f.get("created_at") or _f.get("uploaded_at") or _f.get("last_modified") or "")
-                if _stamp:
-                    try:
-                        return datetime.fromisoformat(_stamp.replace("Z", "+00:00")).timestamp()
-                    except Exception:
-                        for _fmt in ("%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M", "%Y-%m-%d"):
-                            try:
-                                return datetime.strptime(_stamp[:19], _fmt).timestamp()
-                            except Exception:
-                                pass
-                _path_name = str(_f.get("file_path") or _f.get("path") or "")
-                _match_stamp = re.search(r"_(\d{10})_", os.path.basename(_path_name))
-                if _match_stamp:
-                    try: return float(_match_stamp.group(1))
-                    except Exception: pass
-                return 0.0
-            _create_source_files.sort(key=_file_created_sort_value, reverse=True)
-            _create_file_options = {}
-            for _i, _f in enumerate(_create_source_files):
-                _fname = _f.get('file_name') or _f.get('name') or os.path.basename(str(_f.get('file_path') or _f.get('path') or 'Файл'))
-                _date_raw = str(_f.get("created_at") or _f.get("uploaded_at") or _f.get("last_modified") or "")
-                _dt_label = ""
-                if _date_raw:
-                    try: _dt_label = datetime.fromisoformat(_date_raw.replace("Z", "+00:00")).strftime("%d.%m.%Y %H:%M")
-                    except Exception: _dt_label = _date_raw[:16]
-                if not _dt_label:
-                    _match_stamp = re.search(r"_(\d{10})_", os.path.basename(str(_f.get('file_path') or _f.get('path') or '')))
-                    if _match_stamp:
-                        try: _dt_label = datetime.fromtimestamp(int(_match_stamp.group(1))).strftime("%d.%m.%Y %H:%M")
-                        except Exception: pass
-                if not _dt_label: _dt_label = "Дата неизвестна"
-                _create_file_options[f"{_i+1}. {_fname}  ·  {_dt_label}  ·  {_i}"] = _f
-            if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
-                if _create_file_options:
-                    st.caption("Выберите файлы в списке, затем нажмите «Прикрепить выбранные файлы».")
-                    _pick_select_ver_key = f"nt_pick_existing_select_ver_{key_suffix}"
-                    _pick_select_ver = int(st.session_state.get(_pick_select_ver_key, 0) or 0)
-                    _pick_select_widget_key = f"nt_pick_existing_select_{key_suffix}_{_pick_select_ver}"
-                    _picked_existing_now = st.multiselect(
-                        "Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:",
-                        list(_create_file_options), key=_pick_select_widget_key,
-                        placeholder="Нажмите здесь и выберите один или несколько файлов..."
-                    )
-                    if _picked_existing_now:
-                        st.caption(f"Выбрано файлов: {len(_picked_existing_now)}.")
-                        for _picked_label in _picked_existing_now:
-                            st.markdown(f"- {html.escape(_picked_label.rsplit('  ·  ', 2)[0])}")
-                    _attach_col, _cancel_pick_col = st.columns([3, 1])
-                    with _attach_col:
-                        if st.button("Прикрепить выбранные файлы", key=f"nt_attach_existing_{key_suffix}", use_container_width=True, type="primary", disabled=not bool(_picked_existing_now)):
-                            _attached_now = list(st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or [])
-                            _attached_ids = {str(f.get("file_hash", "") or f.get("file_path", "") or f.get("path", "")) for f in _attached_now if isinstance(f, dict)}
-                            _attached_count_before = len(_attached_now)
-                            for _label_to_attach in _picked_existing_now:
-                                _f_to_attach = dict(_create_file_options[_label_to_attach])
-                                if not _f_to_attach.get("file_path") and _f_to_attach.get("path"):
-                                    _f_to_attach["file_path"] = _f_to_attach["path"]
-                                if not _f_to_attach.get("file_name") and _f_to_attach.get("name"):
-                                    _f_to_attach["file_name"] = _f_to_attach["name"]
-                                _fid_to_attach = str(_f_to_attach.get("file_hash", "") or _f_to_attach.get("file_path", ""))
-                                if _fid_to_attach and _fid_to_attach not in _attached_ids:
-                                    _attached_now.append(_f_to_attach)
-                                    _attached_ids.add(_fid_to_attach)
-                            st.session_state[f"nt_uploaded_files_{key_suffix}"] = _attached_now
-                            # Сбрасываем выбор сменой ключа виджета. Не меняем состояние
-                            # multiselect после его отрисовки — Streamlit на этом падает.
-                            st.session_state[_pick_select_ver_key] = _pick_select_ver + 1
-                            st.session_state[f"nt_pick_existing_open_{key_suffix}"] = True
-                            st.toast(f"Прикреплено новых файлов: {len(_attached_now) - _attached_count_before}", icon="📎")
-                            st.rerun()
-                    with _cancel_pick_col:
-                        if st.button("Отмена", key=f"nt_cancel_existing_{key_suffix}", use_container_width=True):
-                            st.session_state[f"nt_pick_existing_select_{key_suffix}"] = []
-                            st.session_state[f"nt_pick_existing_open_{key_suffix}"] = False
-                            st.rerun()
-            # Список прикреплённых файлов всегда виден, даже когда список выбора закрыт.
-            
-        _already_attached = st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or []
-        if _already_attached:
-            st.markdown("**Прикреплены к задаче:**")
-            for _af in _already_attached:
-                st.markdown(f"- {html.escape(str(_af.get('file_name') or _af.get('name') or os.path.basename(str(_af.get('file_path') or _af.get('path') or 'Файл'))))}")
-        elif not st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
-            st.caption("Загруженные файлы появятся здесь после прикрепления.")
-
-    # Отдельная строка с одной колонкой, вне контейнера двухколоночной формы.
-    with st.container(key=_submit_row_key):
-        _create_clicked = st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary")
-    if _create_clicked:
+        nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
+        nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
+        _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
+        _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
+        _amount_key_new = f"nt_amount_{key_suffix}"
+        if _auto_amount_new > 0:
+            st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
+        norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
+        ntk_num = st.text_input("Трек (подпиши если габариты не указаны):", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер")
+        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
+        _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
+        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
+    else:
+        nproducts = ""
+        nship_city = ""
+        nship_addr = ""
+        nreceiver = ""
+        nreceiver_phone = ""
+        nship_pay = ""
+        norder_amount = ""
+        ntk_num = ""
+        ncomment = st.text_area("Комментарии:", key=f"nt_c_{key_suffix}")
+        _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
+        ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
+    _create_file_upload_col, _create_file_pick_col = st.columns(2)
+    with _create_file_upload_col:
+        if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
+            if ntf:
+                _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
+                st.session_state.setdefault(f"nt_uploaded_files_{key_suffix}", []).extend(_new_uploaded_task_files)
+                st.session_state[f"nt_file_ver_{key_suffix}"] = _nt_file_ver + 1
+                st.rerun()
+            else:
+                st.warning("Выберите файл(ы) для загрузки.")
+    with _create_file_pick_col:
+        if st.button("Выбрать из загруженных", key=f"nt_pick_existing_btn_{key_suffix}", use_container_width=True):
+            _create_pick_key = f"nt_pick_existing_open_{key_suffix}"
+            st.session_state[_create_pick_key] = not st.session_state.get(_create_pick_key, False)
+    _create_source_deal = get_deal_by_id(deal_id) if deal_id else None
+    _create_source_client = get_client_by_id(cl_id)
+    _create_source_files = (_create_source_deal or {}).get("deal_files", []) if deal_id else (_create_source_client or {}).get("client_files", [])
+    _create_source_files = [f for f in (_create_source_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+    _create_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_create_source_files)}
+    if st.session_state.get(f"nt_pick_existing_open_{key_suffix}", False):
+        if _create_file_options:
+            st.multiselect("Файлы из карточки клиента:" if not deal_id else "Файлы из окна сделки:", list(_create_file_options), key=f"nt_pick_existing_select_{key_suffix}")
+        else:
+            st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
+    if st.button("Создать", key=f"nt_go_{key_suffix}", use_container_width=True, type="primary"):
         if ntype not in ("Отправить заказ", "Отправить образцы") and not ntopic.strip():
             st.warning("Введите тему задачи")
         else:
             tfi_list = list(st.session_state.get(f"nt_uploaded_files_{key_suffix}", []) or [])
             if ntf:
                 tfi_list.extend(normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file")))
-            _picked_create_ver = int(st.session_state.get(f"nt_pick_existing_select_ver_{key_suffix}", 0) or 0)
-            _picked_create_keys = st.session_state.get(f"nt_pick_existing_select_{key_suffix}_{_picked_create_ver}", []) or []
+            _picked_create_keys = st.session_state.get(f"nt_pick_existing_select_{key_suffix}", []) or []
             _picked_create_files = []
             for _picked_create_key in _picked_create_keys:
                 if _picked_create_key in _create_file_options:
@@ -6765,9 +6165,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 "task_number": tn, "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                 "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                 "task_comments": [], "flagged": False,
-                "products": "\n".join(line.strip() for line in str(nproducts or "").splitlines() if line.strip()), "ship_city": nship_city, "ship_addr": nship_addr,
+                "products": nproducts, "ship_city": nship_city, "ship_addr": nship_addr,
                 "receiver": nreceiver, "receiver_phone": nreceiver_phone,
-                "ship_pay": nship_pay, "ship_method": nship_method, "tk_num": ntk_num.strip(),
+                "ship_pay": nship_pay, "tk_num": ntk_num.strip(),
                 "calculation_id": str(_selected_calc_id_new) if _selected_calc_id_new else ""
             }
             cl = get_client_by_id(cl_id)
@@ -6779,7 +6179,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                     d = get_deal_by_id(deal_id)
                     if d: d["last_modified"] = now_str()
                 if ntm:
-                    add_notification(ntm, f"Новая задача №{tn}: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача №{tn}: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
+                    add_notification(ntm, f"Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}", f"📝 Новая задача: {ntopic.strip()} | Клиент: {cl.get('name','')} | Срок: {ntd.isoformat()}")
                 return te
         return False
     return False
@@ -7399,7 +6799,7 @@ def _make_torg12_pdf(deal, client, calc):
 
     # Табличная часть ТОРГ-12. Вертикали строятся по группам заголовков,
     # а в строках товаров и итогов присутствуют границы всех 15 колонок.
-    xs = [10, 25, 77, 98, 110, 121, 136, 146, 156, 178, 197, 219, 233, 248, 261, 288]
+    xs = [10, 25, 84, 92, 111, 123, 138, 148, 158, 180, 199, 221, 235, 250, 263, 288]
     y_top, y_h1, y_h2, y_h3, y_body = 82, 90, 96, 101, 107
     # Рисуем сетку сегментами: вертикали в объединённых заголовках не продолжаются
     # через ячейки, которые по форме ТОРГ-12 должны оставаться объединёнными.
@@ -7417,7 +6817,7 @@ def _make_torg12_pdf(deal, client, calc):
     line(xs[11], y_top, xs[11], y_body) # сумма без НДС / НДС
     line(xs[12], y_h1, xs[12], y_body)  # НДС: ставка / сумма
     line(xs[13], y_top, xs[13], y_body) # НДС / сумма с НДС
-    # Колонка 14 убрана: итоговая сумма с НДС занимает объединённую область справа.
+    line(xs[14], y_h1, xs[14], y_body)  # сумма с НДС: отдельные значения в строках данных
     # Горизонтали заголовка рисуем отдельными сегментами с учётом объединённых ячеек.
     # В колонке № по порядку ячейка объединена по высоте, поэтому линии там нет.
     # В колонке «Товар» нужны верхняя и нижняя границы подзаголовка, но не
@@ -7435,8 +6835,8 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[1]+xs[2])/2, 94.0, "наименование, характеристика, сорт, артикул", 4.1, align="center")
     txt((xs[1]+xs[2])/2, 99.2, "товара", 4.5, align="center")
     txt((xs[2]+xs[4])/2, 85.7, "Единица измерения", 4.7, align="center")
-    txt((xs[2]+xs[3])/2, 99.2, "наименование", 4.0, align="center")
-    txt((xs[3]+xs[4])/2, 99.2, "код ОКЕИ", 4.2, align="center")
+    txt((xs[2]+xs[3])/2, 99.2, "код", 4.5, align="center")
+    txt((xs[3]+xs[4])/2, 99.2, "наименование", 4.0, align="center")
     txt((xs[4]+xs[5])/2, 85.2, "Вид", 4.8, align="center")
     txt((xs[4]+xs[5])/2, 88.0, "упаковки", 4.8, align="center")
     txt((xs[5]+xs[7])/2, 85.5, "Количество", 4.7, align="center")
@@ -7458,16 +6858,9 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[13]+xs[15])/2, 85.0, "Сумма с учётом", 4.2, align="center")
     txt((xs[13]+xs[15])/2, 88.0, "НДС, руб. коп.", 4.2, align="center")
     for i, x in enumerate(xs[:-1]):
-        # Колонка 14 — объединённая правая колонка итоговой суммы.
-        if i >= 13:
-            continue
-        txt((x+xs[i+1])/2, 104.7, str(i + 1), 4.6, align="center")
-    txt((xs[13]+xs[15])/2, 104.7, "14", 4.6, align="center")
+        txt((x+xs[i+1])/2, 104.7, str(i+1), 4.6, align="center")
 
-    # Сумма расчёта трактуется как сумма с учётом выбранного НДС.
-    vat_label = str(calc.get("vat_rate", "Без НДС") or "Без НДС")
-    vat_percent = 0.0 if vat_label == "Без НДС" else float(vat_label.replace("%", "").replace(",", "."))
-    vat_multiplier = 1.0 + vat_percent / 100.0
+    # Строки товаров. НДС — 22%, как в приложенном образце; сумма расчёта трактуется как сумма с НДС.
     row_y = y_body
     item_heights = []
     for r in rows:
@@ -7487,12 +6880,10 @@ def _make_torg12_pdf(deal, client, calc):
     for i, (r, h) in enumerate(zip(rows, item_heights), 1):
         line(xs[0], row_y+h, xs[-1], row_y+h)
         for x in xs[1:-1]:
-            if x == xs[14]:  # убрать разделитель лишней колонки 14
-                continue
             line(x, row_y, x, row_y+h)
         total_inc = float(r["amount"])
-        net = round(total_inc / vat_multiplier, 2) if vat_percent else round(total_inc, 2)
-        vat = round(total_inc-net, 2) if vat_percent else 0.0
+        net = round(total_inc / 1.22, 2)
+        vat = round(total_inc-net, 2)
         txt((xs[0]+xs[1])/2, row_y+h/2+1.5, str(i), 5.2, align="center")
         label = esc(r.get("name"))
         if r.get("sku"):
@@ -7502,16 +6893,14 @@ def _make_torg12_pdf(deal, client, calc):
         wrap(label, xs[1]+1.5, row_y+3, xs[2]-xs[1]-3, 4.7, leading=2.5, maxlines=max(1, int(h/2.5)))
         unit = esc(r.get("unit") or "шт.")
         okei = "006" if unit.lower() in ("м", "м.", "метр", "метры") else ("796" if unit.lower() in ("шт", "шт.") else "")
-        # Единица измерения размещается в колонке 3, код ОКЕИ — в соседней кодовой колонке.
-        txt((xs[2]+xs[3])/2, row_y+h/2+1.5, unit, 5.0, align="center")
         txt((xs[3]+xs[4])/2, row_y+h/2+1.5, okei, 5.0, align="center")
-        # Количество по требованию находится в колонке 9.
-        txt((xs[8]+xs[9])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
-        txt((xs[9]+xs[10])/2, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="center")
-        txt((xs[10]+xs[11])/2, row_y+h/2+1.5, money(net), 4.8, align="center")
-        txt((xs[11]+xs[12])/2, row_y+h/2+1.5, vat_label if vat_percent else "Без НДС", 4.3, align="center")
-        txt((xs[12]+xs[13])/2, row_y+h/2+1.5, money(vat), 4.8, align="center")
-        txt((xs[13]+xs[15])/2, row_y+h/2+1.5, money(total_inc), 4.8, align="center")
+        txt((xs[4]+xs[5])/2, row_y+h/2+1.5, unit, 5.0, align="center")
+        txt((xs[9]+xs[10])/2, row_y+h/2+1.5, f"{float(r['quantity']):g}", 5.0, align="center")
+        txt((xs[10]+xs[11])/2, row_y+h/2+1.5, money(net/float(r["quantity"]) if r["quantity"] else 0), 4.8, align="center")
+        txt((xs[11]+xs[12])/2, row_y+h/2+1.5, money(net), 4.8, align="center")
+        txt((xs[12]+xs[13])/2, row_y+h/2+1.5, "22", 4.8, align="center")
+        txt((xs[13]+xs[14])/2, row_y+h/2+1.5, money(vat), 4.8, align="center")
+        txt((xs[14]+xs[15])/2, row_y+h/2+1.5, money(total_inc), 4.8, align="center")
         row_y += h
 
     # Итоговая строка.
@@ -7519,17 +6908,14 @@ def _make_torg12_pdf(deal, client, calc):
     txt((xs[1]+xs[6])/2, row_y+3.6, "Всего по накладной", 5.2, bold, align="center")
     qty_total = sum(float(r["quantity"]) for r in rows)
     inc_total = round(sum(float(r["amount"]) for r in rows), 2)
-    net_total = round(inc_total / vat_multiplier, 2) if vat_percent else round(inc_total, 2)
-    vat_total = round(inc_total-net_total, 2) if vat_percent else 0.0
-    txt((xs[8]+xs[9])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
-    txt((xs[9]+xs[10])/2, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="center")
-    txt((xs[10]+xs[11])/2, row_y+3.6, money(net_total), 4.8, align="center")
-    txt((xs[11]+xs[12])/2, row_y+3.6, vat_label if vat_percent else "Без НДС", 4.3, align="center")
-    txt((xs[12]+xs[13])/2, row_y+3.6, money(vat_total), 4.8, align="center")
-    txt((xs[13]+xs[15])/2, row_y+3.6, money(inc_total), 4.8, align="center")
-    # Внешние границы таблицы продолжаются через товарные строки и строку итога.
-    line(xs[0], y_top, xs[0], row_y+5.5, 0.45)
-    line(xs[-1], y_top, xs[-1], row_y+5.5, 0.45)
+    net_total = round(inc_total/1.22, 2)
+    vat_total = round(inc_total-net_total, 2)
+    txt((xs[9]+xs[10])/2, row_y+3.6, f"{qty_total:g}", 5.0, align="center")
+    txt((xs[10]+xs[11])/2, row_y+3.6, money(net_total/qty_total if qty_total else 0), 4.8, align="center")
+    txt((xs[11]+xs[12])/2, row_y+3.6, money(net_total), 4.8, align="center")
+    txt((xs[12]+xs[13])/2, row_y+3.6, "22", 4.8, align="center")
+    txt((xs[13]+xs[14])/2, row_y+3.6, money(vat_total), 4.8, align="center")
+    txt((xs[14]+xs[15])/2, row_y+3.6, money(inc_total), 4.8, align="center")
 
     # Нижняя часть формы: строки приложения, суммы прописью и подписи.
     y = row_y+10
@@ -7638,17 +7024,9 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     rows=_calculation_rows(calc,st.session_state.crm_store.get("products",DEFAULT_PRODUCT_CATALOG))
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
     total=round(sum(r["amount"] for r in rows)+delivery,2)
-    payer_name=str(requisites.get("legal_name", "") or "Физ. лицо")
+    payer_name=requisites.get("legal_name","")
     if requisites.get("payer_type")=="person":
-        if payer_name.strip() == "Физ. лицо" and not any(str(requisites.get(k, "") or "").strip() for k in ("inn", "address")):
-            payer_details="Физ. лицо"
-        else:
-            payer_parts=[payer_name]
-            if str(requisites.get("inn", "") or "").strip():
-                payer_parts.append(f"ИНН {requisites.get('inn')}")
-            if str(requisites.get("address", "") or "").strip():
-                payer_parts.append(str(requisites.get("address")))
-            payer_details=", ".join(payer_parts)
+        payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}, {requisites.get('address','')}"
     else:
         payer_details=f"{payer_name}, ИНН {requisites.get('inn','')}"+(f"/КПП {requisites.get('kpp','')}" if requisites.get('kpp') else "")+f", {requisites.get('address','')}"
     calc_name=str(calc.get("name") or _calculation_display_name(deal,calc))
@@ -7744,7 +7122,7 @@ def _make_invoice_pdf(deal, client, calc, requisites):
     return out.getvalue(), due.strftime("%d.%m.%Y")
 
 
-def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None, description_override=None):
+def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None):
     """Надёжно сохраняет PDF и прикрепляет его к актуальной записи сделки."""
     deal_id = deal.get("id")
     current_deal = get_deal_by_id(deal_id) or deal
@@ -7763,7 +7141,7 @@ def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None, 
             f.write(pdf_bytes)
     created_at = now_str()
     file_obj = {"file_path": path, "file_name": safe_name, "file_hash": digest,
-                "description": str(description_override or f"{kind} · {calc.get('name', 'Расчёт')}"),
+                "description": f"{kind} · {calc.get('name', 'Расчёт')}",
                 "document_type": kind, "calculation_id": str(calc.get("id")), "created_at": created_at}
     current_deal.setdefault("deal_files", []).append(file_obj)
     doc_obj = {"id": uuid.uuid4().hex, "kind": kind, "file_name": safe_name,
@@ -7775,59 +7153,6 @@ def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None, 
     current_deal["last_modified"] = created_at
     save_data(st.session_state.crm_store)
     return file_obj
-
-
-def _attach_auto_torg12_to_task(task, deal_id, client_id):
-    """Формирует ТОРГ-12 по выбранному расчёту и надёжно прикладывает к сделке и актуальной задаче."""
-    if not isinstance(task, dict) or task.get("type") != "Отправить заказ" or not deal_id:
-        return False
-    calc_id = str(task.get("calculation_id", "") or "")
-    task_number = str(task.get("task_number", "") or "")
-    if not calc_id:
-        return False
-    deal = get_deal_by_id(deal_id)
-    client = get_client_by_id(client_id)
-    if not deal or not client:
-        raise ValueError("Не удалось найти сделку или клиента для формирования ТОРГ-12.")
-    calc = next((c for c in (deal.get("calculations", []) or [])
-                 if str(c.get("id", "")) == calc_id and not c.get("deleted")), None)
-    if not calc:
-        raise ValueError("Выбранный расчёт не найден. ТОРГ-12 не сформирована.")
-
-    # После сохранения файла сделки повторно находим задачу в актуальном хранилище:
-    # ссылка на исходный объект могла стать устаревшей после транзакционного save_data.
-    current_client = get_client_by_id(client_id) or client
-    current_task = next((t for t in current_client.get("tasks", [])
-                         if isinstance(t, dict) and str(t.get("task_number", "")) == task_number), task)
-    if any(str(f.get("calculation_id", "")) == calc_id and
-           f.get("document_type") == "Товарная накладная ТОРГ-12" and
-           f.get("description") == "Сформирован автоматически"
-           for f in (current_task.get("task_files", []) or []) if isinstance(f, dict)):
-        return True
-
-    pdf = _make_torg12_pdf(deal, client, calc)
-    if isinstance(pdf, tuple):
-        pdf = pdf[0]
-    filename = f"ТОРГ-12 №{_deal_doc_number(deal)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
-    file_obj = _save_generated_document(
-        deal, pdf, filename, "Товарная накладная ТОРГ-12", calc,
-        description_override="Сформирован автоматически"
-    )
-
-    # Повторно разрешаем клиент/задачу после сохранения документа, чтобы не потерять вложение.
-    current_client = get_client_by_id(client_id) or current_client
-    current_task = next((t for t in current_client.get("tasks", [])
-                         if isinstance(t, dict) and str(t.get("task_number", "")) == task_number), current_task)
-    task_files = current_task.setdefault("task_files", [])
-    digest = str(file_obj.get("file_hash", "") or file_obj.get("file_path", ""))
-    if not any(str(f.get("file_hash", "") or f.get("file_path", "")) == digest
-               for f in task_files if isinstance(f, dict)):
-        task_file = dict(file_obj)
-        task_file["description"] = "Сформирован автоматически"
-        task_files.append(task_file)
-    current_task["last_modified"] = now_str()
-    save_data(st.session_state.crm_store)
-    return True
 
 
 def _ensure_paid_deal_torg12(deal):
@@ -8966,21 +8291,13 @@ def invoice_document_dialog(deal_id, calc_id):
         ozon_invoice_col, ozon_payment_col = st.columns(2)
         with ozon_invoice_col:
             if st.button("Сформировать PDF-счёт в CRM", key=f"ozon_legal_invoice_make_{deal_id}_{calc_id}", use_container_width=True,
-                         disabled=(not bool(calc.get("items")))):
+                         disabled=(not selected_req or not bool(calc.get("items")))):
                 try:
-                    # Для PDF-счёта Ozon выбор сохранённых реквизитов необязателен.
-                    # Если реквизиты не выбраны, оформляем покупателя как физлицо.
-                    invoice_requisites = selected_req or {
-                        "payer_type": "person",
-                        "legal_name": "Физ. лицо",
-                        "inn": "",
-                        "address": "",
-                    }
-                    pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, invoice_requisites)
+                    pdf_bytes, due_date = _make_invoice_pdf(deal, client, calc, selected_req)
                     filename = f"Счёт {str(calc.get('name') or 'Расчёт').replace('Расчёт', '').strip() or 'Айплинт'} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
                     saved_file = _save_generated_document(
                         deal, pdf_bytes, filename, "Счёт Ozon (PDF из CRM)", calc,
-                        {"payer_type": invoice_requisites.get("payer_type", "person"), "bank": "Ozon", "requisite_id": invoice_requisites.get("id", "")}
+                        {"payer_type": selected_req.get("payer_type"), "bank": "Ozon", "requisite_id": selected_req.get("id")}
                     )
                     # _save_generated_document сохраняет данные CRM; заново получаем
                     # актуальные объекты, чтобы не записать устаревшую копию сделки.
@@ -8997,7 +8314,7 @@ def invoice_document_dialog(deal_id, calc_id):
                         "file_name": saved_file.get("file_name", filename),
                         "file_hash": saved_file.get("file_hash", hashlib.sha256(pdf_bytes).hexdigest()),
                         "calculation_id": str(calc.get("id")),
-                        "requisite_id": str(invoice_requisites.get("id", "")),
+                        "requisite_id": str(selected_req.get("id", "")),
                         "created_at": now_str(),
                     })
                     calc["updated_at"] = now_str()
@@ -9384,10 +8701,6 @@ def deal_calculation_dialog(deal_id, calc_id):
     calc.setdefault("delivery_amount", 0.0)
     calc.setdefault("discount_type", "Без скидки")
     calc.setdefault("individual_discount", 0.0)
-    calc.setdefault("vat_rate", "Без НДС")
-    vat_options = ["Без НДС", "5%", "7%", "10%", "22%"]
-    if str(calc.get("vat_rate", "Без НДС")) not in vat_options:
-        calc["vat_rate"] = "Без НДС"
     snapshot_key = f"{key}_original_snapshot"
     if snapshot_key not in st.session_state:
         st.session_state[snapshot_key] = copy.deepcopy(calc)
@@ -9402,7 +8715,6 @@ def deal_calculation_dialog(deal_id, calc_id):
         calc["discount_type"] = st.session_state.get(f"{key}_discount_type", calc.get("discount_type", "Без скидки"))
         calc["delivery_amount"] = float(st.session_state.get(f"{key}_delivery", calc.get("delivery_amount", 0)) or 0)
         calc["individual_discount"] = float(st.session_state.get(f"{key}_individual_discount", calc.get("individual_discount", 0)) or 0)
-        calc["vat_rate"] = str(st.session_state.get(f"{key}_vat_rate", calc.get("vat_rate", "Без НДС")))
         catalog_now = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
         products_now = {str(x.get("id", x.get("sku", ""))): x for x in catalog_now}
         for row in calc.get("items", []):
@@ -9590,19 +8902,13 @@ def deal_calculation_dialog(deal_id, calc_id):
                 st.session_state[f"{key}_{_rid}_discount"] = _new_discount
                 _row["discount"] = _new_discount
         st.session_state[dirty_key] = True
-    name_col, dtype_col, vat_col = st.columns([1.5, 1, 0.9])
+    name_col, dtype_col = st.columns([1.6, 1])
     with name_col:
         st.text_input("Название расчёта:", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
     with dtype_col:
         selected_dtype = st.selectbox("Тип скидки:", dtype_options,
             index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
             on_change=_on_discount_type_change)
-    with vat_col:
-        vat_key = f"{key}_vat_rate"
-        if vat_key not in st.session_state:
-            st.session_state[vat_key] = calc.get("vat_rate", "Без НДС")
-        st.selectbox("НДС для ТОРГ-12:", vat_options, key=vat_key,
-            on_change=lambda: (calc.__setitem__("vat_rate", st.session_state.get(vat_key, "Без НДС")), st.session_state.__setitem__(dirty_key, True)))
     st.divider()
     catalog = st.session_state.crm_store.get("products", DEFAULT_PRODUCT_CATALOG)
     active_products = [p for p in catalog if p.get("active", True)]
@@ -10114,58 +9420,52 @@ def render_client_card_expanded(cl):
                         st.session_state["_in_dialog"] = False
                         commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
             else:
-                _client_panel_key = f"client_info_panel_{cl['id']}"
-                st.markdown(
-                    f"<style>.st-key-{_client_panel_key} {{ background:#fbe0ec !important; border:1px solid #d9a9bd !important; border-radius:4px !important; padding:4px 6px 2px !important; }}</style>",
-                    unsafe_allow_html=True,
-                )
-                with st.container(key=_client_panel_key):
-                    # Категория и промокод в одной строке
-                    _cat_view, _promo_view = st.columns(2)
-                    with _cat_view:
-                        st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
-                    with _promo_view:
-                        st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
-                    st.markdown("---")
-                    st.markdown("**Информация о клиенте:**")
-                    st.markdown(f"Телефон: **{cl.get('phone', '')}**")
-                    cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
-                    _cm_left, _cm_right = st.columns(2)
-                    with _cm_left:
-                        cm = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}", placeholder="Выбери вариант...")
-                    if cm != cl.get('contact_method', ''):
-                        cl['contact_method'] = cm
-                        cl["last_modified"] = now_str()
-                        save_data(st.session_state.crm_store)
-                    st.markdown(f"Email: **{cl.get('email','')}**")
-                    st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
-                    st.markdown(f"Основной адрес: **{cl.get('address','')}**")
-                    st.markdown(f"Скидка: **{cl.get('discount',0)}%**")
-                    st.markdown(f"Ответственный: **{cl.get('manager','—')}**")
-                    cph = re.sub(r"\D", "", cl['phone'])
-                    if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
-                    elif not cph: cph = "79990000000"
-                    mc1, mc2, mc3 = st.columns(3)
-                    mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
-                    mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
-                    mc3.link_button("MAX", MAX_URL, use_container_width=True)
-                    if cl.get("extra_phones"):
-                        st.markdown("**Доп. телефоны:**")
-                        for pi, p in enumerate(cl["extra_phones"]):
-                            st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
-                    if cl.get("extra_addresses"):
-                        st.markdown("**Доп. адреса:**")
-                        for ea in cl["extra_addresses"]:
-                            if isinstance(ea, dict):
-                                st.markdown(f"- **{ea.get('address', '')}** {ea.get('resp_name', '')} {ea.get('resp_phone', '')}")
-                    # Кнопка редактирования между информацией и чатом
-                    if not show_edit:
-                        pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
-                        st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                        if st.button("✎", key=pencil_cli_key, help="Редактировать карточку клиента"):
-        
-                            st.session_state[f"show_edit_{cl['id']}"] = True
-                            st.rerun()
+                # Категория и промокод в одной строке
+                _cat_view, _promo_view = st.columns(2)
+                with _cat_view:
+                    st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
+                with _promo_view:
+                    st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
+                st.markdown("---")
+                st.markdown("**Информация о клиенте:**")
+                st.markdown(f"Телефон: **{cl.get('phone', '')}**")
+                cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
+                _cm_left, _cm_right = st.columns(2)
+                with _cm_left:
+                    cm = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}", placeholder="Выбери вариант...")
+                if cm != cl.get('contact_method', ''):
+                    cl['contact_method'] = cm
+                    cl["last_modified"] = now_str()
+                    save_data(st.session_state.crm_store)
+                st.markdown(f"Email: **{cl.get('email','')}**")
+                st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
+                st.markdown(f"Основной адрес: **{cl.get('address','')}**")
+                st.markdown(f"Скидка: **{cl.get('discount',0)}%**")
+                st.markdown(f"Ответственный: **{cl.get('manager','—')}**")
+                cph = re.sub(r"\D", "", cl['phone'])
+                if cph.startswith("8") and len(cph) == 11: cph = "7" + cph[1:]
+                elif not cph: cph = "79990000000"
+                mc1, mc2, mc3 = st.columns(3)
+                mc1.link_button("WhatsApp", f"https://wa.me/{cph}", use_container_width=True)
+                mc2.link_button("Telegram", f"https://t.me/+{cph}", use_container_width=True)
+                mc3.link_button("MAX", MAX_URL, use_container_width=True)
+                if cl.get("extra_phones"):
+                    st.markdown("**Доп. телефоны:**")
+                    for pi, p in enumerate(cl["extra_phones"]):
+                        st.markdown(f"- {p['phone']} — {p['name']} ({p['role']})")
+                if cl.get("extra_addresses"):
+                    st.markdown("**Доп. адреса:**")
+                    for ea in cl["extra_addresses"]:
+                        if isinstance(ea, dict):
+                            st.markdown(f"- **{ea.get('address', '')}** {ea.get('resp_name', '')} {ea.get('resp_phone', '')}")
+            # Кнопка редактирования между информацией и чатом
+            if not show_edit:
+                pencil_cli_key = f"btn_pencil_cli_{cl['id']}"
+                st.markdown(f"<style>.st-key-{pencil_cli_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                if st.button("✎", key=pencil_cli_key, help="Редактировать карточку клиента"):
+
+                    st.session_state[f"show_edit_{cl['id']}"] = True
+                    st.rerun()
             # Разделитель под кнопкой редактирования
             st.markdown("---")
             # Чат в левом столбце под информацией
@@ -10839,8 +10139,6 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     _et_pay_key = f"edit_pay_{key_prefix}"
                     _et_amount_key = f"edit_amount_{key_prefix}"
                     _et_tk_key = f"edit_tk_{key_prefix}"
-                    _et_method_key = f"edit_method_{key_prefix}"
-                    if _et_method_key in st.session_state: t["ship_method"] = st.session_state[_et_method_key]
                     if _et_prod_key in st.session_state: t["products"] = st.session_state[_et_prod_key]
                     if _et_addr_key in st.session_state: t["ship_addr"] = st.session_state[_et_addr_key]
                     if _et_city_key in st.session_state: t["ship_city"] = st.session_state[_et_city_key]
@@ -11000,46 +10298,14 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                         "task_number": generate_task_number(prefix), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""),
                         "in_work": False, "ready_to_ship": False, "delegated_to": None, "needs_rework": False, "reviewed": False,
                         "task_comments": [], "flagged": False, "products": "", "ship_city": "", "ship_addr": "", "receiver": "",
-                        "receiver_phone": "", "ship_pay": "", "ship_method": "Не выбрано", "tk_num": ""
+                        "receiver_phone": "", "ship_pay": "", "tk_num": ""
                     }
                     cl.setdefault("tasks", []).append(new_task)
                     if next_values["manager"]:
-                        add_notification(next_values["manager"], f"Новая задача №{new_task['task_number']}: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача №{new_task['task_number']}: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
+                        add_notification(next_values["manager"], f"Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}", f"📝 Новая задача: {new_task['text']} | Клиент: {cl.get('name','')} | Срок: {new_task['deadline']}")
                 save_data(st.session_state.crm_store)
                 st.session_state[file_ver_key] = file_ver + 1
                 st.session_state.pop("dialog_task_completion", None)
-                # После подтверждения выполнения закрываем именно вкладку отчёта
-                # и возвращаем фокус на вкладку, из которой её открыли.
-                _report_window_id = st.session_state.get("_crm_active_window_id")
-                _report_window = next((w for w in st.session_state.get("_crm_windows", [])
-                                       if str(w.get("id")) == str(_report_window_id)), None)
-                if _report_window:
-                    _report_tabs = _report_window.get("tabs", [])
-                    _report_index = next((i for i, tab in enumerate(_report_tabs)
-                                          if tab.get("name") == "task_completion_report_dialog"
-                                          and len(tab.get("args", ()) or ()) >= 2
-                                          and str(tab.get("args", ())[0]) == str(client_id)
-                                          and str(tab.get("args", ())[1]) == str(task_number)
-                                          and (len(tab.get("args", ()) or ()) < 3
-                                               or str(tab.get("args", ())[2]) == str(key_prefix))), None)
-                    if _report_index is not None:
-                        _report_tabs.pop(_report_index)
-                        if _report_tabs:
-                            # Если отчёт был не первой вкладкой, выбираем предыдущую;
-                            # после удаления корректируем индекс с учётом сдвига.
-                            _return_index = max(0, _report_index - 1)
-                            _return_index = min(_return_index, len(_report_tabs) - 1)
-                            _report_window["active_tab"] = _return_index
-                            _report_window["minimized"] = False
-                            st.session_state["_crm_active_dialog"] = _report_tabs[_return_index]
-                        else:
-                            st.session_state["_crm_windows"] = [
-                                w for w in st.session_state.get("_crm_windows", [])
-                                if str(w.get("id")) != str(_report_window_id)
-                            ]
-                            st.session_state["_crm_active_window_id"] = None
-                            st.session_state.pop("_crm_active_dialog", None)
-                        _crm_workspace_queue_save()
                 st.toast("Задача отправлена на проверку", icon="✅")
                 st.rerun()
     with col_cancel:
@@ -11433,21 +10699,8 @@ def create_deal_dialog(cl_id):
         st.toast("Сделка создана", icon="✅")
         st.session_state.pop("dialog_create_deal_from_client", None)
         st.session_state["_in_dialog"] = False
-        # Close the creation tab, then activate the newly created deal tab in the same workspace.
-        _crm_close_created_task_form_tab()
-        _new_deal_client = get_client_by_id(cl_id)
-        _new_deal_entry = {
-            "name": "deal_detail_dialog", "title": "Подробности сделки", "width": "large",
-            "args": (new_deal, _new_deal_client, st.session_state.get("user_name", ""), f"deal_{did}"),
-            "kwargs": {},
-        }
-        _new_deal_entry["signature"] = (
-            _crm_dialog_signature_value(_new_deal_entry["args"]),
-            _crm_dialog_signature_value(_new_deal_entry["kwargs"]),
-        )
-        _crm_workspace_open_dialog(_new_deal_entry, client_id=cl_id, from_host=True)
-        st.session_state.pop("_open_created_deal", None)
-        st.session_state.pop("dialog_deal_key", None)
+        _push_dialog_return()
+        st.session_state["_open_created_deal"] = did
         st.rerun()
 
 
@@ -11477,10 +10730,6 @@ def deal_create_task_dialog(deal_id, client_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_create_deal_task_deal_id", None)
                     st.session_state.pop("dialog_create_deal_task_client_id", None)
-                    st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
     if _show_close_warning:
@@ -11496,49 +10745,22 @@ def deal_create_task_dialog(deal_id, client_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_create_deal_task_deal_id", None)
                     st.session_state.pop("dialog_create_deal_task_client_id", None)
-                    st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
                     st.session_state["_in_dialog"] = False
                     st.rerun()
             with _wcol2:
                 if st.button("Отмена", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.rerun()
-    _task_form_lifecycle_key = f"nt_form_initialized_cdt_{deal_id}"
-    if not st.session_state.get(_task_form_lifecycle_key):
-        st.session_state[f"nt_order_calc_cdt_{deal_id}"] = ""
-        st.session_state[f"nt_last_products_calc_cdt_{deal_id}"] = ""
-        st.session_state[f"nt_prod_cdt_{deal_id}"] = ""
-        st.session_state[_task_form_lifecycle_key] = True
     _created_task = render_task_form(deal_id, client_id, f"cdt_{deal_id}")
     if _created_task:
         save_data(st.session_state.crm_store)
-        if _created_task.get("type") == "Отправить заказ" and _created_task.get("calculation_id"):
-            try:
-                with st.status("Идёт процесс формирования товарной накладной", state="running", expanded=False) as _torg_status:
-                    _attach_auto_torg12_to_task(_created_task, deal_id, client_id)
-                    _torg_status.update(label="Товарная накладная сформирована", state="complete", expanded=False)
-                st.toast("Задача создана, ТОРГ-12 сформирована и прикреплена к сделке и задаче", icon="✅")
-            except Exception as _auto_torg_error:
-                st.warning(f"Задача создана, но автоматически сформировать ТОРГ-12 не удалось: {_auto_torg_error}")
-        else:
-            st.toast("Задача создана", icon="✅")
+        st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_deal_task_deal_id", None)
         st.session_state.pop("dialog_create_deal_task_client_id", None)
-        st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
-        st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
-        st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
-        st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
         st.session_state["_in_dialog"] = False
-        if _crm_close_created_task_form_tab():
-            st.session_state.pop("dialog_task_key", None)
-            st.session_state.pop("_open_created_task", None)
-        else:
-            _push_dialog_return()
-            st.session_state["dialog_task_key"] = f"cdt_{deal_id}_{_created_task.get('task_number', '')}"
-            st.session_state["_open_created_task"] = _created_task
+        _push_dialog_return()
+        st.session_state["dialog_task_key"] = f"cdt_{deal_id}_{_created_task.get('task_number', '')}"
+        st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
 
@@ -11593,13 +10815,9 @@ def client_create_task_dialog(cl_id):
         st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_client_task_client_id", None)
         st.session_state["_in_dialog"] = False
-        if _crm_close_created_task_form_tab():
-            st.session_state.pop("dialog_task_key", None)
-            st.session_state.pop("_open_created_task", None)
-        else:
-            _push_dialog_return()
-            st.session_state["dialog_task_key"] = f"cct_{cl_id}_{_created_task.get('task_number', '')}"
-            st.session_state["_open_created_task"] = _created_task
+        _push_dialog_return()
+        st.session_state["dialog_task_key"] = f"cct_{cl_id}_{_created_task.get('task_number', '')}"
+        st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
 
@@ -11649,13 +10867,9 @@ def client_create_deal_task_dialog(cl_id):
         st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
         st.session_state["_in_dialog"] = False
-        if _crm_close_created_task_form_tab():
-            st.session_state.pop("dialog_task_key", None)
-            st.session_state.pop("_open_created_task", None)
-        else:
-            _push_dialog_return()
-            st.session_state["dialog_task_key"] = f"ccdt_{cl_id}_{_created_task.get('task_number', '')}"
-            st.session_state["_open_created_task"] = _created_task
+        _push_dialog_return()
+        st.session_state["dialog_task_key"] = f"ccdt_{cl_id}_{_created_task.get('task_number', '')}"
+        st.session_state["_open_created_task"] = _created_task
         st.rerun()
 
 @_crm_dialog("Задачи клиента", width="large")
@@ -12555,13 +11769,10 @@ elif st.session_state.active_tab == "Задачи":
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
-            if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
+            if _task_is_ready_to_ship(task): exp_label = f"✅ {exp_label} | Готово к отправке"
             _rework_css = ""
             if task.get('needs_rework'):
                 _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-            _ready_css = ""
-            if task.get('ready_to_ship'):
-                _ready_css = f".st-key-tb_wrap_{task_key} button::before {{ content: '✓'; display: inline-block; color: #16A34A; font-size: 1rem; font-weight: 900; margin-right: 7px; vertical-align: baseline; }}"
             st.markdown(f"""<style>
             .st-key-tb_wrap_{task_key} button {{
                 background-color: {tk_bg} !important;
@@ -12587,7 +11798,6 @@ elif st.session_state.active_tab == "Задачи":
                 border-color: {tk_bc} !important;
             }}
             {_rework_css}
-            {_ready_css}
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
@@ -12654,19 +11864,11 @@ elif st.session_state.active_tab == "Задачи":
                         _print_rows = []
                         for _pt in tt_list:
                             _ptask = _pt["task_obj"]
-                            _pt_comments = []
-                            for _ptc in (_ptask.get("task_comments", []) or []):
-                                if isinstance(_ptc, dict) and not _ptc.get("deleted") and str(_ptc.get("text", "") or "").strip():
-                                    _pt_meta = " · ".join(str(_ptc.get(k, "")) for k in ("time", "date", "user", "author") if _ptc.get(k))
-                                    _pt_comments.append((f"{_pt_meta}: " if _pt_meta else "") + str(_ptc.get("text", "")))
                             _print_rows.append(
                                 "<tr>"
                                 f"<td>{html.escape(str(_ptask.get('task_number', '') or ''))}</td>"
-                                f"<td>{html.escape(str(_pt.get('client_name', '') or ''))}</td>"
                                 f"<td>{html.escape(str(_ptask.get('products', '') or '')).replace(chr(10), '<br>')}</td>"
                                 f"<td>{html.escape(str(_ptask.get('task_comment', '') or _ptask.get('text', '') or '')).replace(chr(10), '<br>')}</td>"
-                                f"<td>{html.escape(chr(10).join(_pt_comments)).replace(chr(10), '<br>')}</td>"
-                                f"<td>{html.escape(str(_ptask.get('ship_method', 'Не выбрано') or 'Не выбрано'))}{(' / ' + html.escape(str(_ptask.get('ship_city', '') or '').strip())) if str(_ptask.get('ship_city', '') or '').strip() else ''}</td>"
                                 f"<td>{html.escape(str(_ptask.get('tk_num', '') or ''))}</td>"
                                 "<td class='notes'></td>"
                                 "</tr>"
@@ -12680,17 +11882,13 @@ elif st.session_state.active_tab == "Задачи":
                         table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }}
                         th, td {{ border: 1px solid #555; padding: 6px; vertical-align: top; overflow-wrap: anywhere; }}
                         th {{ background: #eee; text-align: left; }}
-                        th:nth-child(1) {{ width: 8%; }} th:nth-child(2) {{ width: 14%; }}
-                        th:nth-child(3) {{ width: 17%; }} th:nth-child(4) {{ width: 15%; }}
-                        th:nth-child(5) {{ width: 15%; }} th:nth-child(6) {{ width: 10%; }}
-                        th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
+                        th:nth-child(1) {{ width: 9%; }} th:nth-child(2) {{ width: 24%; }}
+                        th:nth-child(3) {{ width: 29%; }} th:nth-child(4) {{ width: 17%; }} th:nth-child(5) {{ width: 21%; }}
                         td.notes {{ height: 28px; }}
                         @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
-                        .torg12-print {{ page-break-before: always; break-before: page; }} .torg12-print iframe {{ width:100%;height:95vh;border:0; }}
                         </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
-                        <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
-                        <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
-                        {''.join(_torg12_print_section(_pt['task_obj'], copies=2) for _pt in tt_list)}
+                        <table><thead><tr><th>№ задачи</th><th>Товары</th><th>Комментарий</th><th>Трек</th><th>Отметки</th></tr></thead>
+                        <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="5">На сегодня задач нет</td></tr>'}</tbody></table>
                         <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
                         components.html(_print_html, height=0, width=0)
                 if tt_list:
@@ -13222,8 +12420,6 @@ def _crm_render_workspace_fragment():
                                 _tabs_now = _crm_active_window.get("tabs", [])
                                 if 0 <= _i < len(_tabs_now):
                                     _closing_tab = _tabs_now[_i]
-                                    if _closing_tab.get("name") == "notifications_dialog":
-                                        _close_active_notification_tab()
                                     if _closing_tab.get("name") == "add_client_dialog":
                                         _closing_args = _closing_tab.get("args", ()) or ()
                                         if _closing_args:
@@ -13240,19 +12436,13 @@ def _crm_render_workspace_fragment():
                                     st.session_state["_crm_active_dialog"] = _tabs_now[_new_active]
                                 _crm_workspace_clear_legacy_dialog_markers()
                                 _crm_workspace_queue_save()
-                                try:
-                                    st.rerun(scope="fragment")
-                                except (TypeError, ValueError):
-                                    st.rerun()
+                                st.rerun()
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                     if st.button("Свернуть", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
                         _crm_active_window["minimized"] = True
                         st.session_state["_crm_active_window_id"] = None
                         _crm_workspace_queue_save()
-                        try:
-                            st.rerun(scope="fragment")
-                        except (TypeError, ValueError):
-                            st.rerun()
+                        st.rerun()
 
             with st.container(key="crm_workspace_content"):
                 # Preserve original CRM button sizes, spacing and layout in window contents.
