@@ -1545,8 +1545,9 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
                 if not str(st.session_state.get(products_key, "") or "").strip():
                     st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
                 st.session_state[last_calc_key] = selected_id
-            elif st.session_state.get(last_calc_key) != selected_id:
-                # При явной смене расчёта обновляем список из нового расчёта.
+            elif str(st.session_state.get(last_calc_key) or "") != selected_id:
+                # При каждой смене расчёта сразу перерисовываем товары из выбранного расчёта.
+                # Список в форме редактирования обновляется в этом же проходе Streamlit.
                 st.session_state[products_key] = "\n".join(_task_products_from_calculation(deal, selected_id))
                 st.session_state[last_calc_key] = selected_id
         elif last_calc_key not in st.session_state:
@@ -2773,6 +2774,22 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
                     st.rerun()
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
+    # Всегда работаем с актуальным объектом из основного хранилища.
+    # Окно задачи может жить дольше одного rerun и содержать устаревшую копию.
+    _task_number_lookup = str((t or {}).get("task_number", ""))
+    _client_id_lookup = str((cl or {}).get("id", ""))
+    _deal_id_lookup = str((t or {}).get("deal_id", "") or "")
+    _stored_client = next((x for x in st.session_state.crm_store.get("clients", [])
+                           if str(x.get("id", "")) == _client_id_lookup), None)
+    if _stored_client is not None:
+        _stored_task = next((x for x in _stored_client.get("tasks", [])
+                             if str(x.get("task_number", "")) == _task_number_lookup
+                             and str(x.get("deal_id", "") or "") == _deal_id_lookup), None)
+        if _stored_task is not None:
+            t, cl = _stored_task, _stored_client
+            if _deal_id_lookup:
+                d = next((x for x in st.session_state.crm_store.get("deals", [])
+                          if str(x.get("id", "")) == _deal_id_lookup), d)
     with st.container(border=True, key=f"task_detail_{key_prefix}"):
         st.markdown(f'<style>.st-key-task_detail_{key_prefix} {{ padding: 0.5rem !important; }} .st-key-task_detail_{key_prefix} .stVerticalBlock {{ gap: 0.15rem !important; }}</style>', unsafe_allow_html=True)
         # CSS to align print and edit buttons
@@ -2953,7 +2970,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 mgr_options = get_managers_list()
                 current_mgr = t.get("manager", "")
                 current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
-                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=f"task_mgr_inline_{key_prefix}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+                _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
+                # Для уже взятой задачи синхронизируем значение до создания selectbox.
+                if t.get("in_work") and current_mgr in mgr_options and st.session_state.get(_task_mgr_widget_key) != current_mgr:
+                    st.session_state[_task_mgr_widget_key] = current_mgr
+                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
                 if new_mgr != current_mgr and new_mgr:
                     t["manager"] = new_mgr
                     t["delegated_to"] = new_mgr
