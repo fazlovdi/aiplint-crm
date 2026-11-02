@@ -6296,94 +6296,89 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_tab_item_"] { display:flex !important; flex:0 0 auto !important; width:max-content !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
-    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}"):
-        if not _bottom_windows:
+    _has_expand = (not in_workspace and any(w.get("minimized") for w in _bottom_windows))
+    # Do not create keyed st.container wrappers here. This panel is rendered
+    # from inside a Streamlit fragment and the deployed Streamlit runtime has
+    # raised an exception while constructing even a plain keyed container.
+    # Direct columns keep the controls functional without nested containers.
+    _slot_count = max(1, len(_bottom_windows) * 2 + (1 if _has_expand else 0))
+    _slots = st.columns(_slot_count)
+    if not _bottom_windows:
+        with _slots[0]:
             st.caption("Нет открытых окон")
-        for _w in list(_bottom_windows):
-            _label = str(_w.get("title") or "CRM")[:24]
-            if not in_workspace:
-                _label = ("▣ " if _w.get("minimized") else "● ") + _label
-            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}"):
-                _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
-                if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
-                    # A window switch is an explicit navigation action. Clear any
-                    # legacy one-shot dialog request left by the previously rendered
-                    # tab so it cannot steal focus again during this rerun.
-                    _w["minimized"] = False
-                    st.session_state["_crm_active_window_id"] = _w.get("id")
-                    _w_tabs = _w.get("tabs", [])
-                    _w_index = max(0, min(int(_w.get("active_tab", 0) or 0), len(_w_tabs) - 1)) if _w_tabs else -1
-                    if _w_index >= 0:
-                        st.session_state["_crm_active_dialog"] = _w_tabs[_w_index]
-                    _crm_workspace_clear_legacy_dialog_markers()
-                    _crm_workspace_queue_save()
-                    st.rerun()
-                if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
-                    if any(_tab.get("name") == "notifications_dialog" for _tab in _w.get("tabs", [])):
-                        st.session_state["show_notifications_dialog"] = False
-                    # При закрытии окна отключаем все формы создания клиента в нём,
-                    # иначе legacy-рендерер откроет их снова на следующем rerun.
-                    for _closing_tab in _w.get("tabs", []):
-                        if _closing_tab.get("name") == "add_client_dialog":
-                            _closing_args = _closing_tab.get("args", ()) or ()
-                            if _closing_args:
-                                st.session_state[f"show_add_client_dialog_{_closing_args[0]}"] = False
-                    # Закрываем только выбранное окно клиента.
-                    st.session_state["_crm_windows"] = [
-                        w for w in st.session_state.get("_crm_windows", [])
-                        if w.get("id") != _w.get("id")
-                    ]
-                    _remaining_windows = st.session_state.get("_crm_windows", [])
-
-                    # Пока остаётся хотя бы одно окно клиента, рабочее пространство
-                    # не закрываем: переключаемся на другое доступное окно.
-                    _return_window_id = _w.get("return_to_window_id")
-                    _next_window = next(
-                        (w for w in _remaining_windows if _return_window_id and str(w.get("id")) == str(_return_window_id)),
-                        None
-                    )
-                    if _next_window is None:
-                        _next_window = next(
-                            (w for w in reversed(_remaining_windows) if not w.get("minimized")),
-                            None
-                        )
-                    if _next_window is None and _remaining_windows:
-                        # Если все оставшиеся окна свёрнуты, разворачиваем последнее.
-                        _next_window = _remaining_windows[-1]
-                        _next_window["minimized"] = False
-
-                    if _next_window:
-                        st.session_state["_crm_active_window_id"] = _next_window.get("id")
-                        _next_tabs = _next_window.get("tabs", [])
-                        _next_index = max(
-                            0, min(int(_next_window.get("active_tab", 0) or 0), len(_next_tabs) - 1)
-                        ) if _next_tabs else -1
-                        if _next_index >= 0:
-                            _next_window["active_tab"] = _next_index
-                            st.session_state["_crm_active_dialog"] = _next_tabs[_next_index]
-                        else:
-                            st.session_state.pop("_crm_active_dialog", None)
+    for _wi, _w in enumerate(list(_bottom_windows)):
+        _label = str(_w.get("title") or "CRM")[:24]
+        if not in_workspace:
+            _label = ("▣ " if _w.get("minimized") else "● ") + _label
+        _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
+        with _slots[_wi * 2]:
+            if st.button(
+                _label,
+                key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}",
+                type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary",
+                use_container_width=True,
+            ):
+                _w["minimized"] = False
+                st.session_state["_crm_active_window_id"] = _w.get("id")
+                _w_tabs = _w.get("tabs", [])
+                _w_index = max(0, min(int(_w.get("active_tab", 0) or 0), len(_w_tabs) - 1)) if _w_tabs else -1
+                if _w_index >= 0:
+                    st.session_state["_crm_active_dialog"] = _w_tabs[_w_index]
+                _crm_workspace_clear_legacy_dialog_markers()
+                _crm_workspace_queue_save()
+                st.rerun()
+        with _slots[_wi * 2 + 1]:
+            if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}", help="Закрыть окно"):
+                if any(_tab.get("name") == "notifications_dialog" for _tab in _w.get("tabs", [])):
+                    st.session_state["show_notifications_dialog"] = False
+                for _closing_tab in _w.get("tabs", []):
+                    if _closing_tab.get("name") == "add_client_dialog":
+                        _closing_args = _closing_tab.get("args", ()) or ()
+                        if _closing_args:
+                            st.session_state[f"show_add_client_dialog_{_closing_args[0]}"] = False
+                st.session_state["_crm_windows"] = [
+                    w for w in st.session_state.get("_crm_windows", [])
+                    if w.get("id") != _w.get("id")
+                ]
+                _remaining_windows = st.session_state.get("_crm_windows", [])
+                _return_window_id = _w.get("return_to_window_id")
+                _next_window = next(
+                    (w for w in _remaining_windows if _return_window_id and str(w.get("id")) == str(_return_window_id)),
+                    None,
+                )
+                if _next_window is None:
+                    _next_window = next((w for w in reversed(_remaining_windows) if not w.get("minimized")), None)
+                if _next_window is None and _remaining_windows:
+                    _next_window = _remaining_windows[-1]
+                    _next_window["minimized"] = False
+                if _next_window:
+                    st.session_state["_crm_active_window_id"] = _next_window.get("id")
+                    _next_tabs = _next_window.get("tabs", [])
+                    _next_index = max(0, min(int(_next_window.get("active_tab", 0) or 0), len(_next_tabs) - 1)) if _next_tabs else -1
+                    if _next_index >= 0:
+                        _next_window["active_tab"] = _next_index
+                        st.session_state["_crm_active_dialog"] = _next_tabs[_next_index]
                     else:
-                        # На главную возвращаемся только после закрытия последнего окна.
-                        st.session_state["_crm_active_window_id"] = None
                         st.session_state.pop("_crm_active_dialog", None)
-
-                    _crm_workspace_clear_legacy_dialog_markers()
-                    _crm_workspace_queue_save()
-                    st.rerun()
-        if not in_workspace and any(w.get("minimized") for w in st.session_state.get("_crm_windows", [])):
-            with st.container(key="crm_workspace_main_expand_wrap"):
-                if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
-                    _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized")), None)
-                    if _restore_window:
-                        _restore_window["minimized"] = False
-                        st.session_state["_crm_active_window_id"] = _restore_window.get("id")
-                        _restore_tabs = _restore_window.get("tabs", [])
-                        _restore_index = max(0, min(int(_restore_window.get("active_tab", 0) or 0), len(_restore_tabs)-1)) if _restore_tabs else -1
-                        if _restore_index >= 0:
-                            st.session_state["_crm_active_dialog"] = _restore_tabs[_restore_index]
-                    _crm_workspace_queue_save()
-                    st.rerun()
+                else:
+                    st.session_state["_crm_active_window_id"] = None
+                    st.session_state.pop("_crm_active_dialog", None)
+                _crm_workspace_clear_legacy_dialog_markers()
+                _crm_workspace_queue_save()
+                st.rerun()
+    if _has_expand:
+        with _slots[-1]:
+            if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов", use_container_width=True):
+                _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized")), None)
+                if _restore_window:
+                    _restore_window["minimized"] = False
+                    st.session_state["_crm_active_window_id"] = _restore_window.get("id")
+                    _restore_tabs = _restore_window.get("tabs", [])
+                    _restore_index = max(0, min(int(_restore_window.get("active_tab", 0) or 0), len(_restore_tabs) - 1)) if _restore_tabs else -1
+                    if _restore_index >= 0:
+                        st.session_state["_crm_active_dialog"] = _restore_tabs[_restore_index]
+                _crm_workspace_queue_save()
+                st.rerun()
 
 # Восстанавливаем персональное рабочее пространство до первого рендеринга
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
