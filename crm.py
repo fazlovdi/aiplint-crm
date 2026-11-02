@@ -3252,8 +3252,8 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     _ready_icon_css = f".st-key-tk_btn_wrap_{task_key} button svg {{ color: #16A34A !important; fill: #16A34A !important; }}" if _task_is_ready_to_ship(t) and not tk_done else ""
     st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }} {_rework_css} {_ready_icon_css}</style>", unsafe_allow_html=True)
     with st.container(key=f"tk_btn_wrap_{task_key}"):
-        _tk_ready_icon = ":material/check_circle:" if _task_is_ready_to_ship(t) and not tk_done else None
-        if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary", icon=_tk_ready_icon):
+        if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
+
             if is_tk_exp:
                 st.session_state.expanded_task_key = None
                 save_scroll_and_rerun()
@@ -6284,14 +6284,14 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
-    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
+    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, gap="small", horizontal_alignment="left"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         for _w in list(_bottom_windows):
             _label = str(_w.get("title") or "CRM")[:24]
             if not in_workspace:
                 _label = ("▣ " if _w.get("minimized") else "● ") + _label
-            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, gap="small", width="content", horizontal_alignment="left"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
                 if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
                     # A window switch is an explicit navigation action. Clear any
@@ -12604,8 +12604,7 @@ elif st.session_state.active_tab == "Задачи":
             {_ready_css}
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
-                _task_ready_icon = ":material/check_circle:" if _task_is_ready_to_ship(task) else None
-                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True, icon=_task_ready_icon):
+                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
                     # Open through the workspace host so an already-open task tab
                     # is activated instead of being sent to the legacy dialog dispatcher.
                     _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
@@ -13218,10 +13217,10 @@ def _crm_render_workspace_fragment():
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
-            with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
+            with st.container(key="crm_workspace_tabbar", horizontal=True, gap="small", horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
-                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, gap="small", width="content", horizontal_alignment="left"):
                         st.button(
                             _tab_title,
                             key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}",
