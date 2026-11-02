@@ -3232,7 +3232,8 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-    if t.get('ready_to_ship') and not tk_done: tk_label += ' | Готово к отправке'
+    if t.get('ready_to_ship') and not tk_done:
+        tk_label = f"✓  {tk_label} | Готово к отправке"
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
     tk_border = "#2196F3" if tk_selected else tk_bc
@@ -12555,7 +12556,8 @@ elif st.session_state.active_tab == "Задачи":
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
-            if task.get('ready_to_ship'): exp_label += ' | Готово к отправке'
+            if task.get('ready_to_ship'):
+                exp_label = f"✓  {exp_label} | Готово к отправке"
             _rework_css = ""
             if task.get('needs_rework'):
                 _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
@@ -13267,7 +13269,10 @@ def _crm_render_workspace_fragment():
                             _active_spec["func"](*_active_entry.get("args", ()), **_active_entry.get("kwargs", {}))
                         finally:
                             st.session_state["_crm_inside_dialog_host"] = False
-
+    else:
+        # When all workspace windows are minimized, keep the taskbar visible
+        # on the main CRM screen so the user can restore a window.
+        _crm_workspace_render_bottom_panel(in_workspace=False)
 
     # When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
 
