@@ -3220,6 +3220,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
 
+def _task_is_ready_to_ship(task):
+    """Единый признак задачи, готовой к отправке."""
+    if not isinstance(task, dict):
+        return False
+    status = str(task.get("shipping_status", "") or "").strip().casefold()
+    return status == "готово к отправке" or bool(task.get("ready_to_ship", False))
+
+
 def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
     tk_done = t.get("done", False)
@@ -3232,7 +3240,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
-    _ready_to_ship = bool(t.get('ready_to_ship') and t.get('type') in ('Отправить заказ', 'Отправить образцы') and not tk_done)
+    _ready_to_ship = _task_is_ready_to_ship(t) and not tk_done
     if _ready_to_ship: tk_label = '✅ ' + tk_label + ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
@@ -3241,8 +3249,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     _rework_css = ""
     if tk_rework and not tk_done:
         _rework_css = f".st-key-tk_btn_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-    _ready_css = f".st-key-tk_btn_wrap_{task_key} button p::before {{ content: '✓'; display: inline-block; color: #16803C; font-size: 1.15rem; font-weight: 900; margin-right: 7px; }}" if _ready_to_ship else ''
-    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }} {_rework_css} {_ready_css}</style>", unsafe_allow_html=True)
+    st.markdown(f"<style>.st-key-tk_btn_wrap_{task_key} button {{ background-color: {tk_bg} !important; color: #2C3E50 !important; border: 2px solid {tk_border} !important; border-radius: 10px !important; {tk_shadow} }} {_rework_css}</style>", unsafe_allow_html=True)
     with st.container(key=f"tk_btn_wrap_{task_key}"):
         if st.button(tk_label, key=f"tk_card_{task_key}", use_container_width=True, type="primary" if is_tk_exp else "secondary"):
             if is_tk_exp:
@@ -12557,12 +12564,11 @@ elif st.session_state.active_tab == "Задачи":
             elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
-            _ready_to_ship = bool(task.get('ready_to_ship') and task.get('type') in ('Отправить заказ', 'Отправить образцы'))
+            _ready_to_ship = _task_is_ready_to_ship(task)
             if _ready_to_ship: exp_label = '✅ ' + exp_label + ' | Готово к отправке'
             _rework_css = ""
             if task.get('needs_rework'):
                 _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-            _ready_css = f".st-key-tb_wrap_{task_key} button p::before {{ content: '✓'; display: inline-block; color: #16803C; font-size: 1.15rem; font-weight: 900; margin-right: 7px; }}" if _ready_to_ship else ''
             st.markdown(f"""<style>
             .st-key-tb_wrap_{task_key} button {{
                 background-color: {tk_bg} !important;
@@ -12588,7 +12594,6 @@ elif st.session_state.active_tab == "Задачи":
                 border-color: {tk_bc} !important;
             }}
             {_rework_css}
-            {_ready_css}
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
