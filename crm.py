@@ -3622,65 +3622,12 @@ def _sqlite_connect():
     return conn
 
 def _load_valid_yandex_backup_for_initialization():
-    """Ищет валидную резервную копию на Диске только для первичной инициализации пустой SQLite.
+    """Автоматическое чтение/восстановление базы с Яндекс Диска запрещено.
 
-    Ничего не скачивает поверх существующей базы: функция вызывается только когда
-    таблица crm_state ещё не содержит данных. Подозрительные/повреждённые копии
-    пропускаются, а не используются для восстановления.
+    Резервные копии на Диске предназначены только для хранения.
+    Восстановление допускается исключительно через отдельное ручное действие
+    администратора в интерфейсе CRM.
     """
-    if not YANDEX_TOKEN:
-        return None
-    try:
-        listing = requests.get(
-            YANDEX_API_URL,
-            params={"path": "disk:/CRM_NE_TROGAT/backups", "limit": 100},
-            headers=yandex_headers(), timeout=15)
-        if listing.status_code != 200:
-            return None
-        items = listing.json().get("_embedded", {}).get("items", [])
-        candidates = [x for x in items if isinstance(x, dict)
-                      and str(x.get("name", "")).lower().endswith(".json")
-                      and x.get("path")]
-        # Сначала проверяем CRM_latest, затем остальные по дате изменения.
-        candidates.sort(key=lambda x: (x.get("name") != "CRM_latest.json", x.get("modified", "")), reverse=False)
-        if candidates and candidates[0].get("name") == "CRM_latest.json":
-            latest = candidates.pop(0)
-            candidates.sort(key=lambda x: x.get("modified", ""), reverse=True)
-            candidates.insert(0, latest)
-        else:
-            candidates.sort(key=lambda x: x.get("modified", ""), reverse=True)
-        for item in candidates:
-            try:
-                response = requests.get(
-                    f"{YANDEX_API_URL}/download",
-                    params={"path": item["path"]},
-                    headers=yandex_headers(), timeout=15)
-                if response.status_code != 200:
-                    continue
-                href = response.json().get("href")
-                if not href:
-                    continue
-                downloaded = requests.get(href, timeout=30)
-                if downloaded.status_code != 200:
-                    continue
-                raw = downloaded.content.decode("utf-8-sig")
-                data = _validate_backup_snapshot(raw)
-                # Приводим к текущей схеме в памяти; оригинал на Диске не меняется.
-                if data.get("_migrated") != "v2":
-                    data = migrate_data(data)
-                else:
-                    data.setdefault("internal_tasks", [])
-                    data.setdefault("chat_messages", [])
-                    data.setdefault("qa_entries", [])
-                    data.setdefault("suppliers", [])
-                    data.setdefault("notifications", [])
-                    data.setdefault("products", copy.deepcopy(DEFAULT_PRODUCT_CATALOG))
-                return data
-            except Exception:
-                # Проверяем следующую копию; никогда не принимаем сомнительный файл.
-                continue
-    except Exception:
-        return None
     return None
 
 
@@ -3692,29 +3639,22 @@ def _ensure_sqlite_store():
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None:
-                # Сначала используем локальный JSON, если он есть. Если его нет,
-                # пытаемся восстановиться только из проверенной резервной копии.
-                # Существующая запись SQLite выше имеет приоритет и не затрагивается.
+                # Автоматически используем ТОЛЬКО локальный JSON.
+                # Яндекс Диск никогда не является источником инициализации CRM.
+                # Если локальной базы нет, запуск останавливается: администратор
+                # должен выполнить отдельное ручное восстановление из скачанного файла.
                 local_data = None
-                local_text = None
                 if os.path.exists(FILE_NAME):
-                    with open(FILE_NAME, "r", encoding="utf-8") as local_file:
-                        local_text = local_file.read()
                     local_data = _load_data_from_json()
 
-                remote_data = _load_valid_yandex_backup_for_initialization()
-                if remote_data is not None and local_data is not None:
-                    remote_text = json.dumps(remote_data, ensure_ascii=False, separators=(",", ":"))
-                    # При пустой SQLite выбираем более свежий снимок, а не безусловно локальный JSON.
-                    initial_data = (remote_data if _backup_freshness_key(remote_text) >
-                                    _backup_freshness_key(local_text) else local_data)
-                elif remote_data is not None:
-                    initial_data = remote_data
-                elif local_data is not None:
+                if local_data is not None:
                     initial_data = local_data
                 else:
-                    # Нет ни одной проверенной копии — не создаём пустую базу.
-                    raise RuntimeError("Нет доступной валидной локальной или облачной резервной копии")
+                    raise RuntimeError(
+                        "Локальная база отсутствует или недоступна. "
+                        "Автоматическая загрузка с Яндекс Диска запрещена. "
+                        "Требуется ручное восстановление резервной копии администратором."
+                    )
                 initial_json = json.dumps(initial_data, ensure_ascii=False, separators=(",", ":"))
                 conn.execute("BEGIN IMMEDIATE")
                 try:
@@ -4772,7 +4712,7 @@ if _task_number_migration_changed:
     save_data(st.session_state.crm_store)
 # Журналируем запуск и текущую доступность базы, затем ставим резервное копирование в очередь.
 if not _CRM_BG_STATE["process_start_logged"]:
-    _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": True})
+    _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": False, "manual_restore_only": True})
     _CRM_BG_STATE["process_start_logged"] = True
 # При запуске восстанавливаем только незавершённую очередь резервирования.
 # Текущая SQLite не отправляется в облако автоматически: это исключает затирание latest старой базой.
