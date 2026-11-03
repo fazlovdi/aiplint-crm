@@ -3233,7 +3233,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
     tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
     _ready_to_ship = bool(t.get('ready_to_ship') and t.get('type') in ('Отправить заказ', 'Отправить образцы') and not tk_done)
-    if _ready_to_ship: tk_label += ' | Готово к отправке'
+    if _ready_to_ship: tk_label = '✅ ' + tk_label + ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
     tk_border = "#2196F3" if tk_selected else tk_bc
@@ -12558,7 +12558,7 @@ elif st.session_state.active_tab == "Задачи":
             else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
             exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
             _ready_to_ship = bool(task.get('ready_to_ship') and task.get('type') in ('Отправить заказ', 'Отправить образцы'))
-            if _ready_to_ship: exp_label += ' | Готово к отправке'
+            if _ready_to_ship: exp_label = '✅ ' + exp_label + ' | Готово к отправке'
             _rework_css = ""
             if task.get('needs_rework'):
                 _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
