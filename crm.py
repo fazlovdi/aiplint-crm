@@ -867,6 +867,46 @@ def _prepare_backup_snapshot(snapshot_text):
     _validate_backup_snapshot(safe_text)
     return safe_text
 
+def _backup_freshness_key(snapshot_text):
+    """Сравнительный ключ свежести снимка: максимальная дата изменения и объём данных."""
+    try:
+        data = _validate_backup_snapshot(snapshot_text)
+        timestamps = _collect_all_timestamps(data)
+        latest_ts = max((str(x) for x in timestamps if x), default="")
+        return (latest_ts, len(data.get("clients", [])), len(data.get("deals", [])),
+                len(data.get("users", [])), len(data.get("internal_tasks", [])))
+    except Exception:
+        return ("", 0, 0, 0, 0)
+
+
+def _remote_latest_is_newer(incoming_text):
+    """Не даёт заведомо более старому снимку перезаписать CRM_latest.json."""
+    if not YANDEX_TOKEN:
+        return False
+    try:
+        meta = requests.get(
+            f"{YANDEX_API_URL}/download",
+            params={"path": "disk:/CRM_NE_TROGAT/backups/CRM_latest.json"},
+            headers=yandex_headers(), timeout=12)
+        if meta.status_code == 404:
+            return False
+        if meta.status_code != 200:
+            # При недоступности проверки безопаснее не перезаписывать latest.
+            raise RuntimeError(f"HTTP {meta.status_code} при проверке текущей резервной копии")
+        href = meta.json().get("href")
+        if not href:
+            raise RuntimeError("Яндекс Диск не вернул ссылку для проверки CRM_latest.json")
+        downloaded = requests.get(href, timeout=20)
+        if downloaded.status_code != 200:
+            raise RuntimeError(f"HTTP {downloaded.status_code} при чтении текущей резервной копии")
+        remote_text = downloaded.content.decode("utf-8-sig")
+        _validate_backup_snapshot(remote_text)
+        return _backup_freshness_key(remote_text) > _backup_freshness_key(incoming_text)
+    except Exception as exc:
+        # Нельзя безопасно доказать, что входящий снимок новее — upload запрещаем.
+        raise RuntimeError(f"Не удалось проверить свежесть CRM_latest.json; перезапись отменена: {str(exc)[:220]}")
+
+
 def _upload_yandex_snapshot(snapshot_text, daily=False):
     """Сохраняет одну перезаписываемую актуальную копию и отдельную архивную копию за день."""
 
@@ -886,6 +926,9 @@ def _upload_yandex_snapshot(snapshot_text, daily=False):
         overwrite = "true"
 
     remote_path = f"disk:/CRM_NE_TROGAT/backups/{remote_name}"
+    if not daily and _remote_latest_is_newer(safe_text):
+        _CRM_BG_STATE["cloud_last_backup_name"] = remote_name
+        return "skipped_older"
     last_error = "Не удалось загрузить резервную копию на Яндекс Диск"
 
     for attempt in range(3):
@@ -955,63 +998,129 @@ def _upload_yandex_pre_restore_snapshot(snapshot_text):
             time.sleep(0.5 * (attempt + 1))
     raise RuntimeError(last_error)
 
+def _cloud_pending_file_path():
+    return SQLITE_FILE + ".backup_pending.json"
+
+
+def _persist_cloud_pending_snapshot(snapshot_text):
+    """Дублирует ожидающий upload в локальный outbox, чтобы пережить сбой потока."""
+    if not snapshot_text:
+        return
+    path = _cloud_pending_file_path()
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(snapshot_text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception as exc:
+        _crm_log("BACKUP_OUTBOX_WRITE_ERROR", {"target": path}, exc=exc)
+
+
+def _clear_cloud_pending_snapshot():
+    try:
+        os.remove(_cloud_pending_file_path())
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+
 def _cloud_sync_worker():
-    """Объединяет серию быстрых сохранений в один фоновый upload."""
+    """Повторяет резервирование до успеха; не выбрасывает снимок при HTTP 503."""
     state = _CRM_BG_STATE
-    debounce_seconds = 45
+    retry_delays = (5, 15, 30, 60, 120, 300)
     while True:
-        time.sleep(debounce_seconds)
         with state["cloud_lock"]:
             snapshot = state["cloud_pending_snapshot"]
-            state["cloud_pending_snapshot"] = None
             if snapshot is None:
                 state["cloud_worker_running"] = False
                 return
         try:
-            ok = _upload_yandex_snapshot(snapshot)
-            state["cloud_last_ok"] = bool(ok)
+            result = _upload_yandex_snapshot(snapshot)
+            ok = bool(result)
+            state["cloud_last_ok"] = ok
             state["cloud_last_error"] = "" if ok else "Не удалось загрузить базу на Яндекс Диск"
-            _crm_log("BACKUP_UPLOAD_OK" if ok else "BACKUP_UPLOAD_ERROR", {"target": "CRM_latest.json"}, remote=True)
-            try:
-                _upload_yandex_snapshot(snapshot, daily=True)
-            except Exception:
-                pass
+            if ok:
+                _crm_log("BACKUP_UPLOAD_OK" if result != "skipped_older" else "BACKUP_UPLOAD_SKIPPED_OLDER",
+                         {"target": "CRM_latest.json"}, remote=True)
+                if result != "skipped_older":
+                    try:
+                        _upload_yandex_snapshot(snapshot, daily=True)
+                    except Exception as daily_exc:
+                        _crm_log("DAILY_BACKUP_UPLOAD_ERROR", {"target": "daily"}, exc=daily_exc, remote=True)
+                with state["cloud_lock"]:
+                    # Если за время upload пришёл новый снимок, отправим его следующим.
+                    if state["cloud_pending_snapshot"] == snapshot:
+                        state["cloud_pending_snapshot"] = None
+                        _clear_cloud_pending_snapshot()
+                        state["cloud_worker_running"] = False
+                        return
+                    newer_pending = state["cloud_pending_snapshot"]
+                if newer_pending:
+                    _persist_cloud_pending_snapshot(newer_pending)
+                continue
+            raise RuntimeError("Не удалось загрузить резервную копию")
         except Exception as exc:
             state["cloud_last_ok"] = False
             state["cloud_last_error"] = str(exc)[:300]
             _crm_log("BACKUP_UPLOAD_ERROR", {"target": "CRM_latest.json"}, exc=exc, remote=True)
+            # Сохраняем именно самый новый ожидающий снимок и продолжаем повторы.
+            with state["cloud_lock"]:
+                current = state["cloud_pending_snapshot"]
+                if current:
+                    snapshot = current
+            _persist_cloud_pending_snapshot(snapshot)
+            # Backoff увеличивается по числу последовательных неудач.
+            failures = int(state.get("cloud_retry_count", 0)) + 1
+            state["cloud_retry_count"] = failures
+            delay = retry_delays[min(failures - 1, len(retry_delays) - 1)]
+            time.sleep(delay)
+
 
 def _queue_yandex_snapshot(snapshot_text):
     state = _CRM_BG_STATE
-    if not YANDEX_TOKEN:
+    if not YANDEX_TOKEN or not snapshot_text:
         return
+    # Снимок уже должен быть валидным: не отправляем повреждённый JSON.
+    _prepare_backup_snapshot(snapshot_text)
+    _persist_cloud_pending_snapshot(snapshot_text)
     with state["cloud_lock"]:
         state["cloud_pending_snapshot"] = snapshot_text
+        state["cloud_retry_count"] = 0
         if not state["cloud_worker_running"]:
             state["cloud_worker_running"] = True
             state["cloud_executor"].submit(_cloud_sync_worker)
 
+
 def _queue_startup_backup_once():
-    """Ставит начальную копию в очередь только один раз на процесс приложения."""
+    """Стартовая SQLite никогда не отправляется в latest: это могло затереть свежий backup."""
+    # Резервирование запускается только после успешного save_data(), а не при старте.
+    return
+
+
+def _restore_pending_cloud_snapshot():
+    """Поднимает outbox после rerun, если локальный диск процесса сохранился."""
     state = _CRM_BG_STATE
     if not YANDEX_TOKEN:
         return
-    with state["cloud_lock"]:
-        if state["startup_backup_queued"]:
-            return
-        try:
-            conn = _sqlite_connect()
-            try:
-                row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
-            finally:
-                conn.close()
-            if not row or not row[0]:
-                return
-            state["startup_backup_queued"] = True
-            snapshot = row[0]
-        except Exception:
-            return
-    _queue_yandex_snapshot(snapshot)
+    try:
+        with open(_cloud_pending_file_path(), "r", encoding="utf-8") as f:
+            pending = f.read()
+        _prepare_backup_snapshot(pending)
+        with state["cloud_lock"]:
+            if state["cloud_pending_snapshot"] is None:
+                state["cloud_pending_snapshot"] = pending
+            if not state["cloud_worker_running"]:
+                state["cloud_worker_running"] = True
+                state["cloud_executor"].submit(_cloud_sync_worker)
+    except FileNotFoundError:
+        return
+    except Exception as exc:
+        state["cloud_last_ok"] = False
+        state["cloud_last_error"] = f"Не удалось восстановить очередь резервирования: {str(exc)[:220]}"
+
 
 def upload_file_to_yandex(file_bytes, remote_name):
     if not YANDEX_TOKEN: return False
@@ -3586,13 +3695,26 @@ def _ensure_sqlite_store():
                 # Сначала используем локальный JSON, если он есть. Если его нет,
                 # пытаемся восстановиться только из проверенной резервной копии.
                 # Существующая запись SQLite выше имеет приоритет и не затрагивается.
+                local_data = None
+                local_text = None
                 if os.path.exists(FILE_NAME):
-                    initial_data = _load_data_from_json()
+                    with open(FILE_NAME, "r", encoding="utf-8") as local_file:
+                        local_text = local_file.read()
+                    local_data = _load_data_from_json()
+
+                remote_data = _load_valid_yandex_backup_for_initialization()
+                if remote_data is not None and local_data is not None:
+                    remote_text = json.dumps(remote_data, ensure_ascii=False, separators=(",", ":"))
+                    # При пустой SQLite выбираем более свежий снимок, а не безусловно локальный JSON.
+                    initial_data = (remote_data if _backup_freshness_key(remote_text) >
+                                    _backup_freshness_key(local_text) else local_data)
+                elif remote_data is not None:
+                    initial_data = remote_data
+                elif local_data is not None:
+                    initial_data = local_data
                 else:
-                    initial_data = _load_valid_yandex_backup_for_initialization()
-                    if initial_data is None:
-                        # Сохраняем понятную ошибку и не создаём пустую базу.
-                        _load_data_from_json()
+                    # Нет ни одной проверенной копии — не создаём пустую базу.
+                    raise RuntimeError("Нет доступной валидной локальной или облачной резервной копии")
                 initial_json = json.dumps(initial_data, ensure_ascii=False, separators=(",", ":"))
                 conn.execute("BEGIN IMMEDIATE")
                 try:
@@ -3638,19 +3760,18 @@ def load_data():
         finally:
             conn.close()
     except Exception as exc:
-        _crm_log("DATABASE_LOAD_ERROR", {"stage": "SQLite/JSON fallback"}, exc=exc)
-        # JSON fallback нужен только для аварийного восстановления; при его использовании
-        # базовая ревизия неизвестна, поэтому следующий save применит консервативную политику.
+        _crm_log("DATABASE_LOAD_ERROR", {"stage": "SQLite load; automatic JSON fallback disabled"}, exc=exc)
+        # Не открываем CRM на потенциально устаревшем JSON: это могло привести к
+        # незаметному откату и последующей перезаписи актуальной базы.
+        message = ("ОСТАНОВЛЕНА ЗАГРУЗКА БАЗЫ: SQLite недоступна или повреждена. "
+                   "Автоматический переход на локальный JSON отключён, чтобы не откатить данные. "
+                   f"Техническая причина: {str(exc)[:300]}")
         try:
-            st.sidebar.error(f"SQLite недоступна, используется резервная загрузка JSON: {exc}")
+            st.error(message)
         except Exception:
             pass
-        data = _load_data_from_json()
-        _remember_session_base(data, 0)
-        return data
-    data = _load_data_from_json()
-    _remember_session_base(data, 0)
-    return data
+        raise RuntimeError(message) from exc
+    raise RuntimeError("SQLite не содержит рабочей записи базы данных; автоматическая загрузка JSON запрещена")
 
 _MISSING = object()
 
@@ -4653,7 +4774,9 @@ if _task_number_migration_changed:
 if not _CRM_BG_STATE["process_start_logged"]:
     _crm_log("APP_START", {"database": "SQLite", "restore_from_yandex_enabled": True})
     _CRM_BG_STATE["process_start_logged"] = True
-# При запуске приложения создаём резервную копию текущей SQLite, не читая данные с Яндекс Диска.
+# При запуске восстанавливаем только незавершённую очередь резервирования.
+# Текущая SQLite не отправляется в облако автоматически: это исключает затирание latest старой базой.
+_restore_pending_cloud_snapshot()
 _queue_startup_backup_once()
 # Каталог товаров добавляется совместимо с уже работающей базой.
 if "products" not in st.session_state.crm_store:
