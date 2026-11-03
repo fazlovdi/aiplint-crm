@@ -12559,9 +12559,6 @@ elif st.session_state.active_tab == "Задачи":
             _rework_css = ""
             if task.get('needs_rework'):
                 _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-            _ready_css = ""
-            if task.get('ready_to_ship'):
-                _ready_css = f".st-key-tb_wrap_{task_key} button::before {{ content: '✓'; display: inline-block; color: #16A34A; font-size: 1rem; font-weight: 900; margin-right: 7px; vertical-align: baseline; }}"
             st.markdown(f"""<style>
             .st-key-tb_wrap_{task_key} button {{
                 background-color: {tk_bg} !important;
@@ -12587,7 +12584,6 @@ elif st.session_state.active_tab == "Задачи":
                 border-color: {tk_bc} !important;
             }}
             {_rework_css}
-            {_ready_css}
             </style>""", unsafe_allow_html=True)
             with st.container(key=f"tb_wrap_{task_key}"):
                 if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
