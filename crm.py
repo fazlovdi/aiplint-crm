@@ -467,15 +467,15 @@ if st.session_state.get("_crm_sidebar_visible", True):
         section[data-testid="stSidebar"] {
             display: block !important;
             visibility: visible !important;
-            width: 21rem !important;
-            min-width: 21rem !important;
-            max-width: 21rem !important;
+            width: var(--sidebar-width, 21rem) !important;
+            min-width: 14rem !important;
+            max-width: 38rem !important;
             transform: translateX(0) !important;
             margin-left: 0 !important;
             opacity: 1 !important;
             pointer-events: auto !important;
         }
-        section[data-testid="stSidebar"] > div { width: 21rem !important; }
+        section[data-testid="stSidebar"] > div { width: 100% !important; min-width: 0 !important; }
     </style>""", unsafe_allow_html=True)
 else:
     st.markdown("""<style>
@@ -6172,14 +6172,21 @@ with st.sidebar:
                 else: st.error("Заполните все поля")
             st.markdown("---")
             for u in st.session_state.crm_store.get("users", []):
-                ucl, urc, ucr = st.columns([3, 2, 1])
+                # Первая строка: имя/логин и удаление. Вторая: выбор роли и сохранение.
+                ucl, ucr = st.columns([5, 1])
                 with ucl:
                     st.markdown(f"**{u.get('name', u['login'])}**")
                     st.caption(u.get("login", ""))
-                with urc:
+                with ucr:
                     if u["login"] != st.session_state.user_login:
-                        current_role = u.get("role", "manager")
-                        role_options = ["manager", "director", "admin"]
+                        if st.button("X", key=f"del_u_{u['login']}", use_container_width=True):
+                            st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
+                            commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
+                if u["login"] != st.session_state.user_login:
+                    current_role = u.get("role", "manager")
+                    role_options = ["manager", "director", "admin"]
+                    role_col, save_col = st.columns([3, 2])
+                    with role_col:
                         new_role = st.selectbox(
                             "Роль",
                             role_options,
@@ -6188,17 +6195,13 @@ with st.sidebar:
                             key=f"edit_role_{u['login']}",
                             label_visibility="collapsed",
                         )
+                    with save_col:
                         if new_role != current_role:
                             if st.button("Сохранить", key=f"save_role_{u['login']}", use_container_width=True):
                                 u["role"] = new_role
                                 commit_and_rerun(st.session_state.crm_store, f"Роль сотрудника {u.get('name', u['login'])} изменена")
-                    else:
-                        st.caption(f"Ваша роль: {role_label(u.get('role'))}")
-                with ucr:
-                    if u["login"] != st.session_state.user_login:
-                        if st.button("X", key=f"del_u_{u['login']}"):
-                            st.session_state.crm_store["users"] = [x for x in st.session_state.crm_store["users"] if x["login"] != u["login"]]
-                            commit_and_rerun(st.session_state.crm_store, "Сотрудник удалён")
+                else:
+                    st.caption(f"Ваша роль: {role_label(u.get('role'))}")
     if st.session_state.get("user_role") == "admin":
         with st.expander("Журнал системы"):
             st.caption("История событий и ошибок хранится на Яндекс Диске и сохраняется после Reboot.")
