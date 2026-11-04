@@ -6791,10 +6791,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             st.rerun()
                     else:
                         st.rerun()
-        if not in_workspace and any(w.get("minimized") for w in st.session_state.get("_crm_windows", [])):
+        if not in_workspace and any(w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) for w in st.session_state.get("_crm_windows", [])):
             with st.container(key="crm_workspace_main_expand_wrap"):
                 if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
-                    _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized")), None)
+                    _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))), None)
                     if _restore_window:
                         _restore_window["minimized"] = False
                         st.session_state["_crm_active_window_id"] = _restore_window.get("id")
