@@ -12225,18 +12225,41 @@ def statistics_dialog(section="Общая статистика"):
 
     today = moscow_now().date()
     period_options = [
-        ("Этот месяц", "Месяц"),
-        ("Прошлый месяц", "Прошлый"),
+        ("Этот месяц", "Этот месяц"),
+        ("Прошлый месяц", "Прошлый месяц"),
         ("Последние 7 дней", "7 дней"),
         ("Последние 30 дней", "30 дней"),
         ("Этот квартал", "Квартал"),
         ("Этот год", "Год"),
-        ("Всё время", "Всё время"),
+        ("Всё время", "За все время"),
         ("Произвольный период", "Свой период"),
     ]
     if "statistics_period_choice" not in st.session_state:
         st.session_state["statistics_period_choice"] = "Этот месяц"
-    _period_cols = st.columns(len(period_options), gap="small")
+    st.markdown(
+        """<style>
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) {
+            align-items: stretch;
+            gap: 6px !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) div[data-testid="column"] {
+            padding: 0 !important;
+            min-width: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) div[data-testid="stButton"] {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) button {
+            min-height: 38px;
+            height: 38px;
+            padding: 0 4px !important;
+            white-space: nowrap;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    _period_cols = st.columns(len(period_options), gap=0)
     for _idx, (_period_value, _period_label) in enumerate(period_options):
         with _period_cols[_idx]:
             st.button(
@@ -12395,7 +12418,7 @@ def statistics_dialog(section="Общая статистика"):
                     _svg_parts.append(f'<circle cx="{_xy[0][0]:.1f}" cy="{_xy[0][1]:.1f}" r="4" fill="#bc1661"/>')
                 else:
                     _polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _xy)
-                    _svg_parts.append(f'<polyline points="{_polyline}" fill="none" stroke="#bc1661" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>')
+                    _svg_parts.append(f'<polyline points="{_polyline}" fill="none" stroke="#bc1661" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>')
                     _svg_parts.extend(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="#bc1661"/>' for x, y in _xy)
                 _label_step = max(1, (len(_labels) + 6) // 7)
                 for _i in range(0, len(_labels), _label_step):
