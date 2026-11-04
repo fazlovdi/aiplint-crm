@@ -6670,9 +6670,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 
                     _crm_workspace_clear_legacy_dialog_markers()
                     _crm_workspace_queue_save()
-                    # Нажатие st.button уже запускает rerun текущего скрипта/фрагмента.
-                    # Дополнительный st.rerun() здесь запускал второй цикл рендера,
-                    # вызывая двойное мигание и увеличивая время закрытия окна.
+                    # После изменения списка окон явно обновляем нужную область:
+                    # fragment rerun при закрытии окна внутри рабочего пространства,
+                    # полный rerun — когда закрываем последнее окно или панель снаружи.
+                    if in_workspace and _remaining_windows:
+                        try:
+                            st.rerun(scope="fragment")
+                        except (TypeError, ValueError):
+                            st.rerun()
+                    else:
+                        st.rerun()
         if not in_workspace and any(w.get("minimized") for w in st.session_state.get("_crm_windows", [])):
             with st.container(key="crm_workspace_main_expand_wrap"):
                 if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
