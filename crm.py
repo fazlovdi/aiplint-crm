@@ -14518,11 +14518,17 @@ def _crm_render_workspace_fragment():
 # Условие проверяется после восстановления авторизации и определения роли.
 if st.session_state.get("user_role") != "admin":
     st.markdown("""<style>
+    /* Streamlit Cloud status/deploy control and legacy Hosted with Streamlit badge. */
     [data-testid="stStatusWidget"],
     [data-testid="stAppDeployButton"],
-    .stDeployButton {
+    .stDeployButton,
+    .viewerBadge_container__1QSob,
+    [class*="viewerBadge_container"],
+    [class*="viewerBadge_link"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     </style>""", unsafe_allow_html=True)
 
