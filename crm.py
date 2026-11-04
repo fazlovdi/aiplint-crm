@@ -5086,6 +5086,9 @@ def _create_browser_session(user, remember=True):
     st.session_state.remember_login = bool(remember)
     st.session_state._auth_token_current = token
     st.session_state._auth_last_activity = moscow_now()
+    # Защита от устаревшего crm_session_expired: CookieManager может вернуть
+    # старое значение cookie на первом rerun сразу после успешного входа.
+    st.session_state["_auth_just_created_at"] = moscow_now()
     try:
         _activity_now_ms = str(int(time.time() * 1000))
         # CookieManager will write these values on the current browser response.
@@ -5502,6 +5505,15 @@ if _auth_token and not st.session_state.get("authenticated") and not st.session_
 
 # Sliding expiry обновляется только при новой активности в браузере или по серверному времени.
 if st.session_state.get("authenticated"):
+    _just_created_at = st.session_state.get("_auth_just_created_at")
+    _ignore_stale_expired_cookie = False
+    if isinstance(_just_created_at, datetime):
+        _ignore_stale_expired_cookie = (moscow_now() - _just_created_at) < timedelta(seconds=30)
+    if _client_expired and _ignore_stale_expired_cookie:
+        # После логина используем новую серверную сессию, а не старый флаг выхода из cookie.
+        _client_expired = False
+    elif _just_created_at and not _ignore_stale_expired_cookie:
+        st.session_state.pop("_auth_just_created_at", None)
     _last_activity = st.session_state.get("_auth_last_activity")
     if not isinstance(_last_activity, datetime):
         _last_activity = _client_activity or moscow_now()
