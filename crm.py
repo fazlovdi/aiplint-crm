@@ -6280,13 +6280,33 @@ def _crm_statistics_window_tabs():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Продажи"]
+    _is_manager_user = st.session_state.get("user_role") != "admin"
+    if _is_manager_user:
+        _current_login = str(st.session_state.get("user_login") or "")
+        _current_user = next(
+            (u for u in (store.get("users", []) or []) if str(u.get("login") or "") == _current_login),
+            {},
+        )
+        _own_manager_name = str(
+            _current_user.get("name") or st.session_state.get("user_name") or _current_login
+        ).strip()
+        section_items = [
+            ("Общая статистика", "Общая статистика"),
+            (_own_manager_name, "Моя статистика"),
+            ("План / факт", "План / факт"),
+            ("Материалы", "Материалы"),
+            ("Продажи", "Продажи"),
+        ]
+    else:
+        section_items = [(name, name) for name in (
+            ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Продажи"]
+        )]
     tabs = []
-    for section_name in section_names:
+    for section_name, tab_title in section_items:
         args = (section_name,)
         tabs.append({
             "name": "statistics_dialog",
-            "title": section_name,
+            "title": tab_title,
             "width": "large",
             "args": args,
             "kwargs": {},
@@ -12211,6 +12231,19 @@ def statistics_dialog(section="Общая статистика"):
             str(d.get("manager") or "").strip() for d in deals_all
             if str(d.get("manager") or "").strip()
         })
+    _is_manager_user = st.session_state.get("user_role") != "admin"
+    _current_login = str(st.session_state.get("user_login") or "")
+    _current_user = next(
+        (u for u in users if str(u.get("login") or "") == _current_login),
+        {},
+    )
+    _own_manager_name = str(
+        _current_user.get("name") or st.session_state.get("user_name") or _current_login
+    ).strip()
+    if _is_manager_user and section not in (
+        "Общая статистика", _own_manager_name, "План / факт", "Материалы", "Продажи"
+    ):
+        section = "Общая статистика"
 
 
     def _stat_num(value):
@@ -12295,8 +12328,19 @@ def statistics_dialog(section="Общая статистика"):
             ("Этот квартал", "Квартал"), ("Этот год", "Год"),
             ("Всё время", "За все время"), ("Произвольный период", "Свой период"),
         ]
+        if _is_manager_user:
+            period_options = [item for item in period_options if item[0] != "Всё время"]
         if "statistics_period_choice" not in st.session_state:
             st.session_state["statistics_period_choice"] = "Этот месяц"
+        if _is_manager_user and st.session_state.get("statistics_period_choice") == "Всё время":
+            st.session_state["statistics_period_choice"] = "Этот месяц"
+        _manager_date_min = today - timedelta(days=365) if _is_manager_user else None
+        _manager_date_max = today if _is_manager_user else None
+        if _is_manager_user:
+            for _date_key in ("statistics_date_from", "statistics_date_to"):
+                _saved_date = st.session_state.get(_date_key)
+                if isinstance(_saved_date, type(today)):
+                    st.session_state[_date_key] = min(today, max(_manager_date_min, _saved_date))
         st.markdown("""<style>
         div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) { align-items:center!important; gap:6px!important; }
         div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="column"],
@@ -12306,17 +12350,25 @@ def statistics_dialog(section="Общая статистика"):
         div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] { margin:0!important; padding:0!important; }
         div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] input { min-height:38px!important; height:38px!important; }
         </style>""", unsafe_allow_html=True)
-        _period_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1.35, 1.35], gap="small")
+        _period_cols = st.columns([1] * len(period_options) + [1.35, 1.35], gap="small")
         for _idx, (_period_value, _period_label) in enumerate(period_options):
             with _period_cols[_idx]:
                 st.button(_period_label, key=f"statistics_period_btn_{_idx}",
                     type="primary" if st.session_state.get("statistics_period_choice") == _period_value else "secondary",
                     use_container_width=True,
                     on_click=lambda value=_period_value: st.session_state.__setitem__("statistics_period_choice", value))
-        with _period_cols[8]:
-            _start = st.date_input("С даты", value=today.replace(day=1), format="DD.MM.YYYY", key="statistics_date_from", label_visibility="collapsed")
-        with _period_cols[9]:
-            _end = st.date_input("По дату", value=today, format="DD.MM.YYYY", key="statistics_date_to", label_visibility="collapsed")
+        with _period_cols[len(period_options)]:
+            _start = st.date_input(
+                "С даты", value=today.replace(day=1), format="DD.MM.YYYY",
+                key="statistics_date_from", label_visibility="collapsed",
+                min_value=_manager_date_min, max_value=_manager_date_max,
+            )
+        with _period_cols[len(period_options) + 1]:
+            _end = st.date_input(
+                "По дату", value=today, format="DD.MM.YYYY",
+                key="statistics_date_to", label_visibility="collapsed",
+                min_value=_manager_date_min, max_value=_manager_date_max,
+            )
         _period = st.session_state.get("statistics_period_choice", "Этот месяц")
         if _period == "Этот месяц":
             _start, _end = today.replace(day=1), today
@@ -12334,6 +12386,9 @@ def statistics_dialog(section="Общая статистика"):
         elif _period == "Произвольный период":
             _start = st.session_state.get("statistics_date_from", today.replace(day=1))
             _end = st.session_state.get("statistics_date_to", today)
+            if _is_manager_user:
+                _start = min(today, max(today - timedelta(days=365), _start))
+                _end = min(today, max(today - timedelta(days=365), _end))
             if _start > _end:
                 _start, _end = _end, _start
         else:
