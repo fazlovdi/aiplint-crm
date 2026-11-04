@@ -12906,7 +12906,7 @@ def statistics_dialog(section="Общая статистика"):
                     if _source_labels and (len(_source_labels)-1) % _source_label_step != 0:
                         _source_svg.append(f'<text x="{_sw-_sright}" y="{_sh-27}" font-size="11" fill="currentColor" text-anchor="end">{_source_labels[-1][1]}</text>')
                     _source_svg.append('</svg>')
-                    st.markdown("\\n".join(_source_svg), unsafe_allow_html=True)
+                    st.markdown("\n".join(_source_svg), unsafe_allow_html=True)
                 else:
                     st.info("За выбранный период нет сделок с датой для построения графика.")
             st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
