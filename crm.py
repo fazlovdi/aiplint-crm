@@ -6280,7 +6280,7 @@ def _crm_statistics_window_tabs():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    section_names = ["Общая статистика", "Источник"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Повторные продажи", "Скорость работы"]
+    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Продажи"]
     tabs = []
     for section_name in section_names:
         args = (section_name,)
@@ -12378,56 +12378,6 @@ def statistics_dialog(section="Общая статистика"):
         f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
         "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
     )
-    if section == "Источник":
-        st.markdown("#### Эффективность источников клиентов")
-        _clients_by_source = defaultdict(list)
-        for _client in clients:
-            _source_name = str(_client.get("source") or "").strip() or "Не указан"
-            _clients_by_source[_source_name].append(_client)
-        _deals_by_client = defaultdict(list)
-        for _row in deal_rows:
-            _deals_by_client[str(_row["deal"].get("client_id", ""))].append(_row)
-        _source_stats = []
-        for _source_name, _source_clients in _clients_by_source.items():
-            _source_client_ids = {str(_client.get("id", "")) for _client in _source_clients}
-            _source_deals = [_row for _client_id in _source_client_ids for _row in _deals_by_client.get(_client_id, [])]
-            _source_paid = [x for x in _source_deals if x["paid"]]
-            _source_active = [x for x in _source_deals if not x["paid"] and str(x["status"]).strip().lower() not in ("сделка закрыта", "отказ", "отменено", "завершено", "выполнено")]
-            _source_stats.append({
-                "Источник": _source_name,
-                "Клиентов": len(_source_clients),
-                "Сделок": len(_source_deals),
-                "Оплачено": len(_source_paid),
-                "В работе": len(_source_active),
-                "Конверсия, %": round(len(_source_paid) / len(_source_deals) * 100, 1) if _source_deals else 0.0,
-                "Сумма заказов, ₽": round(sum(x["amount"] for x in _source_deals)),
-                "Продано, м": round(sum(x["metres"] for x in _source_deals), 1),
-            })
-        _source_stats.sort(key=lambda x: (x["Сумма заказов, ₽"], x["Клиентов"]), reverse=True)
-        _source_leads_total = sum(x["Клиентов"] for x in _source_stats)
-        _source_deals_total = sum(x["Сделок"] for x in _source_stats)
-        _source_paid_total = sum(x["Оплачено"] for x in _source_stats)
-        _source_revenue_total = sum(x["Сумма заказов, ₽"] for x in _source_stats)
-        _src1, _src2, _src3, _src4 = st.columns(4, gap="small")
-        _src1.metric("Клиентов", _source_leads_total)
-        _src2.metric("Сделок", _source_deals_total)
-        _src3.metric("Оплачено", _source_paid_total)
-        _src4.metric("Сумма заказов", f"{_source_revenue_total:,.0f} ₽".replace(",", " "))
-        if _source_stats:
-            st.markdown("##### Сводка по источникам")
-            st.dataframe(_source_stats, use_container_width=True, hide_index=True)
-            _source_chart_rows = [x for x in _source_stats if x["Источник"] != "Не указан"]
-            if _source_chart_rows:
-                _source_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Клиентов"], reverse=True)
-                st.markdown("##### Количество привлечённых клиентов")
-                st.bar_chart(_source_chart_rows, x="Источник", y="Клиентов")
-                _revenue_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True)
-                st.markdown("##### Сумма заказов по источникам")
-                st.bar_chart(_revenue_chart_rows, x="Источник", y="Сумма заказов, ₽")
-            st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
-        else:
-            st.info("За выбранный период клиентов пока нет.")
-
     if section == "Общая статистика":
         _total_amount = sum(x["amount"] for x in deal_rows)
         _total_metres = sum(x["metres"] for x in deal_rows)
@@ -12747,7 +12697,7 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
 
-    elif section == "Повторные продажи":
+    elif section == "Продажи":
         st.markdown("#### Повторные продажи")
         _client_deal_counts = {}
         _client_deal_amounts = {}
@@ -12783,7 +12733,59 @@ def statistics_dialog(section="Общая статистика"):
             st.info("За выбранный период нет клиентов с двумя и более сделками.")
         st.caption("Повторным считается клиент, у которого за всё время в CRM более одной сделки. В таблице показаны его заказы и суммы именно за выбранный период. Сделки без привязки к карточке клиента не учитываются.")
 
-    elif section == "Скорость работы":
+
+        st.markdown("#### Источники продаж")
+        _clients_by_source = defaultdict(list)
+        for _client in clients:
+            _source_name = str(_client.get("source") or "").strip() or "Не указан"
+            _clients_by_source[_source_name].append(_client)
+        _deals_by_client = defaultdict(list)
+        for _row in deal_rows:
+            _deals_by_client[str(_row["deal"].get("client_id", ""))].append(_row)
+        _source_stats = []
+        for _source_name, _source_clients in _clients_by_source.items():
+            _source_client_ids = {str(_client.get("id", "")) for _client in _source_clients}
+            _source_deals = [_row for _client_id in _source_client_ids for _row in _deals_by_client.get(_client_id, [])]
+            _source_paid = [x for x in _source_deals if x["paid"]]
+            _source_active = [x for x in _source_deals if not x["paid"] and str(x["status"]).strip().lower() not in ("сделка закрыта", "отказ", "отменено", "завершено", "выполнено")]
+            _source_stats.append({
+                "Источник": _source_name,
+                "Клиентов": len(_source_clients),
+                "Сделок": len(_source_deals),
+                "Оплачено": len(_source_paid),
+                "В работе": len(_source_active),
+                "Конверсия, %": round(len(_source_paid) / len(_source_deals) * 100, 1) if _source_deals else 0.0,
+                "Сумма заказов, ₽": round(sum(x["amount"] for x in _source_deals)),
+                "Продано, м": round(sum(x["metres"] for x in _source_deals), 1),
+            })
+        _source_stats.sort(key=lambda x: (x["Сумма заказов, ₽"], x["Клиентов"]), reverse=True)
+        _source_leads_total = sum(x["Клиентов"] for x in _source_stats)
+        _source_deals_total = sum(x["Сделок"] for x in _source_stats)
+        _source_paid_total = sum(x["Оплачено"] for x in _source_stats)
+        _source_revenue_total = sum(x["Сумма заказов, ₽"] for x in _source_stats)
+        _src1, _src2, _src3, _src4 = st.columns(4, gap="small")
+        _src1.metric("Клиентов", _source_leads_total)
+        _src2.metric("Сделок", _source_deals_total)
+        _src3.metric("Оплачено", _source_paid_total)
+        _src4.metric("Сумма заказов", f"{_source_revenue_total:,.0f} ₽".replace(",", " "))
+        if _source_stats:
+            st.markdown("##### Сводка по источникам")
+            st.dataframe(_source_stats, use_container_width=True, hide_index=True)
+            _source_chart_rows = [x for x in _source_stats if x["Источник"] != "Не указан"]
+            if _source_chart_rows:
+                _source_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Клиентов"], reverse=True)
+                st.markdown("##### Количество привлечённых клиентов")
+                st.bar_chart(_source_chart_rows, x="Источник", y="Клиентов")
+                _revenue_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True)
+                st.markdown("##### Сумма заказов по источникам")
+                st.bar_chart(_revenue_chart_rows, x="Источник", y="Сумма заказов, ₽")
+            st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
+        else:
+            st.info("За выбранный период клиентов пока нет.")
+
+
+
+
         st.markdown("#### Скорость работы")
         _active_rows = []
         _today = moscow_now().date()
@@ -12823,6 +12825,8 @@ def statistics_dialog(section="Общая статистика"):
         if _all_tasks:
             st.markdown("#### Задачи за период")
             st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
+
+
 
     elif section == "План / факт":
         st.markdown("#### План продаж по метрам")
