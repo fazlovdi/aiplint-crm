@@ -13801,6 +13801,15 @@ def _crm_render_workspace_fragment():
     _crm_active_window = next((w for w in _crm_windows if w.get("id") == _crm_active_window_id), None)
     if _crm_active_window and not _crm_active_window.get("minimized"):
         st.markdown("""<style>
+        /* Workspace occupies the whole viewport. Hide the sidebar while it is open,
+           so it cannot cover the workspace controls (including the minimize button). */
+        section[data-testid="stSidebar"], [data-testid="stSidebar"] {
+            display: none !important;
+            visibility: hidden !important;
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+        }
         .st-key-crm_workspace_window { position: fixed !important; z-index: 100000 !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; transform: none !important; margin: 0 !important; overflow: auto !important; box-sizing: border-box !important; background: #f8f9fa !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 16px 14px 16px !important; }
         .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
         /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
