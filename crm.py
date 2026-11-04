@@ -6266,9 +6266,8 @@ with _header_right:
     </script>
     """, height=48, scrolling=False)
 
-def _crm_open_statistics_window():
-    """Открывает единое окно статистики с отдельными вкладками в панели CRM."""
-    windows = st.session_state.setdefault("_crm_windows", [])
+def _crm_statistics_window_tabs():
+    """Build the persistent Statistics window tabs from the current CRM users."""
     store = st.session_state.get("crm_store", {})
     manager_names = sorted({
         str(u.get("name") or u.get("login") or "").strip()
@@ -6292,31 +6291,44 @@ def _crm_open_statistics_window():
             "kwargs": {},
             "signature": (_crm_dialog_signature_value(args), _crm_dialog_signature_value({})),
         })
+    return tabs
+
+
+def _crm_ensure_statistics_window():
+    """Keep one permanent Statistics taskbar item, even while its window is closed."""
+    windows = st.session_state.setdefault("_crm_windows", [])
     window = next(
-        (w for w in reversed(windows)
+        (w for w in windows
          if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))),
         None,
     )
     if window is None:
-        window_id = "cw_statistics"
-        if any(str(w.get("id")) == window_id for w in windows):
-            window_id = "cw_statistics_" + uuid.uuid4().hex[:8]
         window = {
-            "id": window_id,
+            "id": "cw_statistics",
             "client_id": None,
             "title": "Статистика",
-            "tabs": tabs,
+            "tabs": _crm_statistics_window_tabs(),
             "active_tab": 0,
-            "minimized": False,
+            "minimized": True,
         }
-        windows.append(window)
+        windows.insert(0, window)
     else:
-        window["minimized"] = False
         window["title"] = "Статистика"
-        window["tabs"] = tabs
-        window["active_tab"] = 0
+        window["tabs"] = _crm_statistics_window_tabs()
+        window["active_tab"] = max(0, min(int(window.get("active_tab", 0) or 0), len(window["tabs"]) - 1))
+    windows.sort(key=lambda w: 0 if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) else 1)
+    return window
+
+
+def _crm_open_statistics_window():
+    """Open or restore the permanent Statistics window."""
+    window = _crm_ensure_statistics_window()
+    window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window.get("id")
-    st.session_state["_crm_active_dialog"] = tabs[0]
+    tabs = window.get("tabs", [])
+    if tabs:
+        window["active_tab"] = 0
+        st.session_state["_crm_active_dialog"] = tabs[0]
     st.session_state["_crm_sidebar_collapse_requested"] = True
     st.session_state["_crm_sidebar_collapse_script_emitted"] = False
     _crm_workspace_clear_legacy_dialog_markers()
@@ -6329,7 +6341,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"**{st.session_state.user_name}**")
     st.markdown(f"Роль: `{st.session_state.user_role}`")
-    st.button("📊 Статистика", key="crm_open_statistics_window", use_container_width=True, on_click=_crm_open_statistics_window)
     if not YANDEX_TOKEN:
         st.error("Резервное копирование отключено: не задан YANDEX_DISK_TOKEN в Secrets")
     elif _CRM_BG_STATE["cloud_last_ok"] is True:
@@ -6612,7 +6623,7 @@ def _crm_workspace_clear_legacy_dialog_markers():
     st.session_state["_crm_dialog_requested_this_run"] = True
 
 def _crm_workspace_render_bottom_panel(in_workspace=False):
-    _bottom_windows = st.session_state.get("_crm_windows", [])
+    _bottom_windows = sorted(st.session_state.get("_crm_windows", []), key=lambda w: 0 if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) else 1)
     _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     [class*="st-key-crm_workspace_bottom_"] {
@@ -6661,8 +6672,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         for _w in list(_bottom_windows):
-            _label = str(_w.get("title") or "CRM")[:24]
-            if not in_workspace:
+            _is_statistics_window = any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
+            _label = "📊 Статистика" if _is_statistics_window else str(_w.get("title") or "CRM")[:24]
+            if not in_workspace and not _is_statistics_window:
                 _label = ("▣ " if _w.get("minimized") else "● ") + _label
             with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
@@ -6689,9 +6701,37 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             st.rerun()
                     else:
                         st.rerun()
-                if st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
+                if (in_workspace or not _is_statistics_window) and st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
                     if any(_tab.get("name") == "notifications_dialog" for _tab in _w.get("tabs", [])):
                         st.session_state["show_notifications_dialog"] = False
+                    if _is_statistics_window:
+                        _w["minimized"] = True
+                        if str(st.session_state.get("_crm_active_window_id")) == str(_w.get("id")):
+                            _next_visible = next(
+                                (candidate for candidate in st.session_state.get("_crm_windows", [])
+                                 if str(candidate.get("id")) != str(_w.get("id")) and not candidate.get("minimized")),
+                                None,
+                            )
+                            if _next_visible:
+                                st.session_state["_crm_active_window_id"] = _next_visible.get("id")
+                                _next_tabs = _next_visible.get("tabs", [])
+                                _next_index = max(0, min(int(_next_visible.get("active_tab", 0) or 0), len(_next_tabs) - 1)) if _next_tabs else -1
+                                if _next_index >= 0:
+                                    st.session_state["_crm_active_dialog"] = _next_tabs[_next_index]
+                                else:
+                                    st.session_state.pop("_crm_active_dialog", None)
+                            else:
+                                st.session_state["_crm_active_window_id"] = None
+                                st.session_state.pop("_crm_active_dialog", None)
+                        _crm_workspace_clear_legacy_dialog_markers()
+                        _crm_workspace_queue_save()
+                        if in_workspace:
+                            try:
+                                st.rerun(scope="fragment")
+                            except (TypeError, ValueError):
+                                st.rerun()
+                        else:
+                            st.rerun()
                     # При закрытии окна отключаем все формы создания клиента в нём,
                     # иначе legacy-рендерер откроет их снова на следующем rerun.
                     for _closing_tab in _w.get("tabs", []):
@@ -6768,6 +6808,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 # Восстанавливаем персональное рабочее пространство до первого рендеринга
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
 _crm_workspace_init()
+
+# Статистика всегда присутствует первой в панели окон, даже если её окно закрыто.
+_crm_ensure_statistics_window()
 
 # Миграция уже сохранённых окон создания клиента: в них не должно быть
 # автоматической вкладки «Карточка клиента», добавленной прежней версией.
