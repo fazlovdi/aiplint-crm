@@ -5852,8 +5852,8 @@ MGR_PLACEHOLDER = "Выбери ответственного"
 
 st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div > p, .stTextArea > div > div > p { display: none !important; }</style>""", unsafe_allow_html=True)
 
-# Авторизация CRM: единственный способ входа — зарегистрированный Face ID / Passkey.
-# Логин/пароль и PIN не используются как альтернативные способы входа.
+# Авторизация CRM: отдельная форма логина/пароля и дополнительный способ входа Face ID / Passkey.
+# Старый PIN-вход отключён; парольная сессия не зависит от browser-cookie.
 if not st.session_state.authenticated:
     if st.session_state.pop("_auth_expired", False):
         st.info("Сессия завершена после 12 часов бездействия. Войдите снова.")
