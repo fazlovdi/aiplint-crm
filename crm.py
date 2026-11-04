@@ -5013,6 +5013,190 @@ if "_dialog_return_stack" not in st.session_state: st.session_state._dialog_retu
 if "dialog_it_key" not in st.session_state: st.session_state.dialog_it_key = None
 if "dialog_close_deal_id" not in st.session_state: st.session_state.dialog_close_deal_id = None
 
+def _pin_hash(pin, salt=None):
+    """Store a salted PBKDF2 hash; never store a PIN in plain text."""
+    salt_bytes = secrets.token_bytes(16) if salt is None else base64.urlsafe_b64decode(str(salt) + "=" * (-len(str(salt)) % 4))
+    digest = hashlib.pbkdf2_hmac("sha256", str(pin).encode("utf-8"), salt_bytes, 240000)
+    return {
+        "salt": base64.urlsafe_b64encode(salt_bytes).decode("ascii").rstrip("="),
+        "hash": base64.urlsafe_b64encode(digest).decode("ascii").rstrip("="),
+    }
+
+
+def _pin_verify(user, pin):
+    saved = user.get("login_pin")
+    if not isinstance(saved, dict) or not saved.get("salt") or not saved.get("hash"):
+        return False
+    try:
+        candidate = _pin_hash(pin, saved["salt"])["hash"]
+        return secrets.compare_digest(candidate, str(saved["hash"]))
+    except Exception:
+        return False
+
+
+def _create_browser_session(user, remember=True):
+    """Create a revocable per-browser session cookie for the current authenticated run."""
+    token = secrets.token_urlsafe(32)
+    sessions = user.setdefault("auth_sessions", [])
+    if not isinstance(sessions, list):
+        sessions = []
+        user["auth_sessions"] = sessions
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    session_record = {
+        "token_hash": token_hash,
+        "created_at": now_str(),
+        "expires_at": (moscow_now() + timedelta(hours=12)).isoformat(timespec="seconds"),
+    }
+    sessions.append(session_record)
+    user.pop("auth_token", None)
+    user["auth_sessions"] = sessions[-30:]
+    save_data(st.session_state.crm_store)
+
+    # save_data() refreshes crm_store with a deep-copied merged snapshot. Rebind the
+    # user and verify that the new token hash survived the merge before issuing the cookie.
+    login_key = str(user.get("login", ""))
+    user = next((u for u in st.session_state.crm_store.get("users", [])
+                 if str(u.get("login", "")) == login_key), None)
+    if user is None:
+        raise RuntimeError("Не удалось сохранить пользователя для новой сессии")
+    saved_sessions = user.get("auth_sessions", [])
+    token_is_saved = any(
+        isinstance(item, dict) and secrets.compare_digest(str(item.get("token_hash", "")), token_hash)
+        for item in saved_sessions
+    )
+    if not token_is_saved:
+        if not isinstance(saved_sessions, list):
+            saved_sessions = []
+        saved_sessions.append(session_record)
+        user["auth_sessions"] = saved_sessions[-30:]
+        user.pop("auth_token", None)
+        save_data(st.session_state.crm_store)
+        user = next((u for u in st.session_state.crm_store.get("users", [])
+                     if str(u.get("login", "")) == login_key), None)
+        if user is None or not any(
+            isinstance(item, dict) and secrets.compare_digest(str(item.get("token_hash", "")), token_hash)
+            for item in user.get("auth_sessions", [])
+        ):
+            raise RuntimeError("Токен сессии не сохранился в базе CRM")
+
+    st.session_state.authenticated = True
+    st.session_state.user_role = user.get("role")
+    st.session_state.user_login = user.get("login")
+    st.session_state.user_name = user.get("name", user.get("login", ""))
+    st.session_state.remember_login = bool(remember)
+    st.session_state._auth_token_current = token
+    st.session_state._auth_last_activity = moscow_now()
+    # Обычный вход без «Запомнить меня» должен жить в текущей Streamlit-сессии.
+    # Не требуем записи cookie и принудительной перезагрузки: именно этот путь
+    # ломает вход в браузерах, которые блокируют/не успевают сохранить session-cookie.
+    if not remember:
+        try:
+            cookie_manager.delete("auth_token")
+            cookie_manager.delete("remembered_user")
+            cookie_manager.delete("crm_session_expired")
+        except Exception:
+            pass
+        return
+    try:
+        _activity_now_ms = str(int(time.time() * 1000))
+        # CookieManager will write these values on the current browser response.
+        cookie_manager.set("crm_last_activity", _activity_now_ms,
+                           expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+                           key="set_crm_last_activity_cookie")
+        cookie_manager.delete("crm_session_expired")
+    except Exception:
+        pass
+    # One signed-by-randomness bearer cookie; server-side record limits it to 60 minutes
+    # of inactivity. The browser cookie can persist, but an expired server session cannot.
+    if remember:
+        cookie_manager.set(
+            "auth_token", token,
+            expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+            key="set_auth_token_cookie",
+        )
+    else:
+        # Session cookie: keep this login only for the current browser session.
+        cookie_manager.set("auth_token", token, key="set_auth_token_cookie")
+    # This cookie selects the PIN screen on this browser. It contains only the
+    # login identifier, never the PIN or password; authentication still requires
+    # the valid auth_token or a correct PIN.
+    if remember:
+        cookie_manager.set(
+            "remembered_user", str(user.get("login", "")),
+            expires_at=moscow_now().replace(microsecond=0) + timedelta(days=3650),
+            key="set_remembered_user_cookie",
+        )
+    else:
+        try:
+            cookie_manager.delete("remembered_user")
+        except Exception:
+            pass
+
+    # CookieManager updates can be lost when the caller immediately triggers st.rerun().
+    # Write the bearer/session cookies synchronously in the browser, then reload only after
+    # the browser confirms the writes have been issued. This also makes the PIN screen
+    # survive a hard page refresh instead of falling back to username/password.
+    try:
+        _cookie_token_js = json.dumps(token)
+        _cookie_login_js = json.dumps(str(user.get("login", "")))
+        _cookie_remember_js = "true" if remember else "false"
+        components.html(f"""
+        <script>
+        (() => {{
+          const status = document.getElementById('auth-cookie-write-status');
+          try {{
+            const win = window.parent;
+            const doc = win.document;
+            const secure = win.location.protocol === 'https:' ? '; Secure' : '';
+            const base = '; path=/; SameSite=Lax' + secure;
+            const token = {_cookie_token_js};
+            const login = {_cookie_login_js};
+            const remember = {_cookie_remember_js};
+            const readCookie = (name) => {{
+              const prefix = name + '=';
+              const item = doc.cookie.split('; ').find(v => v.startsWith(prefix));
+              return item ? decodeURIComponent(item.slice(prefix.length)) : '';
+            }};
+            const persistence = remember ? '; max-age=315360000' : '';
+            doc.cookie = 'auth_token=' + encodeURIComponent(token) + base + persistence;
+            doc.cookie = 'crm_last_activity=' + encodeURIComponent(String(Date.now())) + base + persistence;
+            doc.cookie = 'crm_session_expired=' + base + '; max-age=0';
+            if (remember) {{
+              doc.cookie = 'remembered_user=' + encodeURIComponent(login) + base + '; max-age=315360000';
+            }} else {{
+              doc.cookie = 'remembered_user=' + base + '; max-age=0';
+            }}
+            // Never reload just because cookie assignment did not throw: browsers can silently
+            // reject a cookie. Confirm that the exact session token is readable first.
+            const deadline = Date.now() + 2500;
+            const confirmAndReload = () => {{
+              const tokenSaved = readCookie('auth_token') === token;
+              const loginSaved = !remember || readCookie('remembered_user') === login;
+              if (tokenSaved && loginSaved) {{
+                if (status) status.textContent = 'Сессия сохранена. Выполняется вход…';
+                win.setTimeout(() => win.location.reload(), 150);
+              }} else if (Date.now() < deadline) {{
+                win.setTimeout(confirmAndReload, 100);
+              }} else {{
+                if (status) status.textContent = 'Браузер не сохранил токен авторизации. Разрешите cookies для этого сайта и повторите вход. PIN-код сохранён.';
+              }}
+            }};
+            confirmAndReload();
+          }} catch (e) {{
+            if (status) status.textContent = 'Не удалось сохранить сессию в браузере. Разрешите cookies для этого сайта и повторите вход.';
+          }}
+        }})();
+        </script>
+        <div id="auth-cookie-write-status" style="font-size:12px;color:#b42318;padding:6px 0"></div>
+        """, height=42, width=500)
+        # Stop this run so the browser-side cookie write/reload, not an immediate Python
+        # rerun, completes the login transition.
+        st.stop()
+    except Exception:
+        # Keep the regular Streamlit cookie manager as a fallback on unusual deployments.
+        pass
+
+
 def _passkey_b64url_encode(value):
     return base64.urlsafe_b64encode(bytes(value)).decode("ascii").rstrip("=")
 
@@ -5392,7 +5576,7 @@ if st.session_state.get("authenticated"):
     _last_activity = st.session_state.get("_auth_last_activity")
     if not isinstance(_last_activity, datetime):
         _last_activity = _client_activity or moscow_now()
-    if _client_expired or moscow_now() - _last_activity >= timedelta(hours=12):
+    if (_client_expired and bool(_auth_token)) or moscow_now() - _last_activity >= timedelta(hours=12):
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -5672,38 +5856,63 @@ st.markdown("""<style>.stTextInput > div > div > p, .stNumberInput > div > div >
 if not st.session_state.authenticated:
     if st.session_state.pop("_auth_expired", False):
         st.info("Сессия завершена после 12 часов бездействия. Войдите снова.")
-
     st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Вход по Face ID / Passkey</p>", unsafe_allow_html=True)
-    lc, mc, rc = st.columns([1, 2, 1])
-    with mc:
+    st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Войдите по логину и паролю или используйте Face ID</p>", unsafe_allow_html=True)
+    left, center, right = st.columns([1, 2, 1])
+    with center:
         with st.container(border=True):
+            with st.form("crm_password_login_form", clear_on_submit=False):
+                username = st.text_input("Логин", placeholder="Введите логин", key="auth_v2_username")
+                password = st.text_input("Пароль", type="password", placeholder="Введите пароль", key="auth_v2_password")
+                submitted = st.form_submit_button("Войти", use_container_width=True, type="primary")
+            if submitted:
+                try:
+                    user = next((u for u in st.session_state.crm_store.get("users", []) if str(u.get("login", "")).strip() == str(username or "").strip()), None)
+                    if user and verify_password(password, user.get("password", "")):
+                        st.session_state.authenticated = True
+                        st.session_state.user_role = user.get("role")
+                        st.session_state.user_login = user.get("login")
+                        st.session_state.user_name = user.get("name", user.get("login", ""))
+                        st.session_state.remember_login = False
+                        st.session_state["_auth_last_activity"] = moscow_now()
+                        st.session_state.pop("_auth_token_current", None)
+                        st.session_state.pop("_passkey_login_pending", None)
+                        st.session_state.pop("_force_password_login", None)
+                        st.session_state.pop("_show_pin_login", None)
+                        try:
+                            cookie_manager.delete("auth_token")
+                            cookie_manager.delete("remembered_user")
+                            cookie_manager.delete("crm_session_expired")
+                            cookie_manager.delete("crm_last_activity")
+                        except Exception:
+                            pass
+                        st.rerun()
+                    else:
+                        st.error("Неверный логин или пароль.")
+                except Exception as exc:
+                    st.error(f"Не удалось выполнить вход: {type(exc).__name__}: {str(exc)[:200]}")
+            st.markdown("---")
+            st.markdown("**Или войдите по Face ID / Passkey**")
             if st.session_state.get("_passkey_login_message"):
                 st.error(st.session_state.pop("_passkey_login_message"))
-
             if not PASSKEY_AVAILABLE:
-                st.error("Вход по Face ID недоступен: проверьте зависимость webauthn>=2.2,<3 и публикацию приложения.")
+                st.info("Face ID временно недоступен. Можно войти по логину и паролю.")
             else:
-                _pk_pending = st.session_state.get("_passkey_login_pending")
-                if not _pk_pending or not _passkey_pending_is_fresh(_pk_pending):
+                pending = st.session_state.get("_passkey_login_pending")
+                if not pending or not _passkey_pending_is_fresh(pending):
                     try:
-                        _pk_pending = _passkey_make_authentication_pending()
-                        st.session_state["_passkey_login_pending"] = _pk_pending
-                    except Exception as _pk_exc:
-                        _pk_pending = None
-                        st.error(f"Не удалось подготовить вход по Face ID: {str(_pk_exc)[:200]}")
-
-                if _pk_pending:
-                    _pk_result = crm_passkey_component(
-                        mode="login",
-                        options_json=_pk_pending["options_json"],
-                        event_id=_pk_pending["event_id"],
-                        button_label="Войти с Face ID",
-                        key="crm_passkey_login_component_only",
-                        default=None,
+                        pending = _passkey_make_authentication_pending()
+                        st.session_state["_passkey_login_pending"] = pending
+                    except Exception as exc:
+                        pending = None
+                        st.caption(f"Не удалось подготовить Face ID: {str(exc)[:180]}")
+                if pending:
+                    result = crm_passkey_component(
+                        mode="login", options_json=pending["options_json"],
+                        event_id=pending["event_id"], button_label="Войти с Face ID",
+                        key="crm_passkey_login_component_v2", default=None,
                     )
-                    _passkey_process_login_result(_pk_result, _pk_pending)
-
+                    _passkey_process_login_result(result, pending)
     st.stop()
 
 process_due_reminders()
