@@ -12655,7 +12655,7 @@ def statistics_dialog(section="Общая статистика"):
                     "Продукт": name,
                     "Метры": round(values["metres"], 1),
                     "Сумма, ₽": round(values["amount"], 2),
-                    "Доля": f"{(values["amount"] / _product_total_amount * 100):.1f}%" if _product_total_amount else "0.0%",
+                    "Доля": (format(values["amount"] / _product_total_amount * 100, ".1f") + "%") if _product_total_amount else "0.0%",
                 }
                 for name, values in sorted(_product_summary.items(), key=lambda item: item[1]["amount"], reverse=True)
             ]
