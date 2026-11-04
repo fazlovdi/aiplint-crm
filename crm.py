@@ -6280,7 +6280,7 @@ def _crm_open_statistics_window():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    section_names = ["Общая статистика"] + manager_names + ["Материалы"]
+    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы"]
     tabs = []
     for section_name in section_names:
         args = (section_name,)
@@ -12365,11 +12365,15 @@ def statistics_dialog(section="Общая статистика"):
         _paid_count = sum(1 for x in deal_rows if x["paid"])
         _waiting_count = sum(1 for x in deal_rows if x["status"] in ("Ожидание оплаты", "На паузе") or str(x["deal"].get("payment_status") or "") == "Оплачен частично")
         _avg_check = _total_amount / len(deal_rows) if deal_rows else 0
-        _m1, _m2, _m3, _m4 = st.columns(4)
+        _avg_metres = _total_metres / len(deal_rows) if deal_rows else 0
+        _conversion = (_paid_count / len(deal_rows) * 100) if deal_rows else 0
+        _m1, _m2, _m3, _m4, _m5, _m6 = st.columns(6, gap="small")
         _m1.metric("Заказов / сделок", f"{len(deal_rows):,}".replace(",", " "))
         _m2.metric("Продано, м", f"{_total_metres:,.1f}".replace(",", " "))
         _m3.metric("Сумма заказов", f"{_total_amount:,.0f} ₽".replace(",", " "))
         _m4.metric("Средний заказ", f"{_avg_check:,.0f} ₽".replace(",", " "))
+        _m5.metric("Средний заказ, м", f"{_avg_metres:,.1f}".replace(",", " "))
+        _m6.metric("Конверсия в оплату", f"{_conversion:.1f}%")
         _m5, _m6, _m7 = st.columns(3)
         _m5.metric("Оплачено полностью", _paid_count)
         _m6.metric("Ожидают оплаты / на паузе", _waiting_count)
@@ -12466,16 +12470,21 @@ def statistics_dialog(section="Общая статистика"):
         _manager_amount = sum(x["amount"] for x in _manager_rows)
         _manager_metres = sum(x["metres"] for x in _manager_rows)
         _manager_paid = sum(1 for x in _manager_rows if x["paid"])
+        _manager_conversion = (_manager_paid / len(_manager_rows) * 100) if _manager_rows else 0
+        _manager_avg_check = _manager_amount / len(_manager_rows) if _manager_rows else 0
+        _manager_avg_metres = _manager_metres / len(_manager_rows) if _manager_rows else 0
         _manager_clients = sum(
             1 for client in clients
             if str(client.get("manager") or client.get("responsible") or "") == _manager_name
         )
-        _c1, _c2, _c3, _c4, _c5 = st.columns(5, gap="small")
+        _c1, _c2, _c3, _c4, _c5, _c6, _c7 = st.columns(7, gap="small")
         _c1.metric("Заказов / сделок", len(_manager_rows))
         _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
         _c3.metric("Сумма заказов", f"{_manager_amount:,.0f} ₽".replace(",", " "))
         _c4.metric("Оплачено полностью", _manager_paid)
-        _c5.metric("Клиентов закреплено / создано за период", _manager_clients)
+        _c5.metric("Конверсия в оплату", f"{_manager_conversion:.1f}%")
+        _c6.metric("Средний заказ", f"{_manager_avg_check:,.0f} ₽".replace(",", " "))
+        _c7.metric("Средний заказ, м", f"{_manager_avg_metres:,.1f}".replace(",", " "))
         if _manager_rows:
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
@@ -12560,6 +12569,62 @@ def statistics_dialog(section="Общая статистика"):
             st.info("За выбранный период у менеджера нет сделок.")
 
 
+    elif section == "Рейтинг менеджеров":
+        _ranking_rows = []
+        for _ranking_name in manager_names:
+            _rows = [x for x in deal_rows if x["manager"] == _ranking_name]
+            _amount = sum(x["amount"] for x in _rows)
+            _metres = sum(x["metres"] for x in _rows)
+            _paid = sum(1 for x in _rows if x["paid"])
+            _count = len(_rows)
+            _ranking_rows.append({
+                "Менеджер": _ranking_name,
+                "Сделок": _count,
+                "Продано, м": round(_metres, 1),
+                "Сумма заказов, ₽": round(_amount, 2),
+                "Оплачено": _paid,
+                "Конверсия в оплату": f"{(_paid / _count * 100):.1f}%" if _count else "0.0%",
+                "Средний заказ, ₽": round(_amount / _count, 2) if _count else 0,
+                "Средний заказ, м": round(_metres / _count, 1) if _count else 0,
+            })
+        _ranking_rows.sort(key=lambda item: (item["Сумма заказов, ₽"], item["Продано, м"]), reverse=True)
+        if _ranking_rows:
+            st.dataframe(_ranking_rows, use_container_width=True, hide_index=True)
+            st.caption("Рейтинг отсортирован по сумме заказов за выбранный период. Конверсия — доля сделок со статусом полной оплаты среди всех сделок менеджера.")
+        else:
+            st.info("Нет данных по менеджерам за выбранный период.")
+
+    elif section == "План / факт":
+        st.markdown("#### План продаж по метрам")
+        _plan_monthly_metres = 3000.0
+        if _start and _end:
+            _plan_days = max(1, (_end - _start).days + 1)
+            _days_in_start_month = calendar.monthrange(_start.year, _start.month)[1]
+            _days_in_end_month = calendar.monthrange(_end.year, _end.month)[1]
+            if _start.year == _end.year and _start.month == _end.month:
+                _plan_metres = _plan_monthly_metres * _plan_days / _days_in_start_month
+            else:
+                _plan_metres = 0.0
+                _plan_cursor = _start.replace(day=1)
+                while _plan_cursor <= _end.replace(day=1):
+                    _month_start = max(_start, _plan_cursor)
+                    _month_end_date = calendar.monthrange(_plan_cursor.year, _plan_cursor.month)[1]
+                    _month_end = min(_end, _plan_cursor.replace(day=_month_end_date))
+                    _plan_metres += _plan_monthly_metres * ((_month_end - _month_start).days + 1) / _month_end_date
+                    _plan_cursor = _plan_cursor.replace(year=_plan_cursor.year + 1, month=1) if _plan_cursor.month == 12 else _plan_cursor.replace(month=_plan_cursor.month + 1)
+        else:
+            _plan_metres = _plan_monthly_metres
+        _fact_metres = sum(x["metres"] for x in deal_rows)
+        _plan_percent = (_fact_metres / _plan_metres * 100) if _plan_metres else 0
+        _plan_remaining = max(0.0, _plan_metres - _fact_metres)
+        _p1, _p2, _p3, _p4 = st.columns(4, gap="small")
+        _p1.metric("План, м", f"{_plan_metres:,.0f}".replace(",", " "))
+        _p2.metric("Факт, м", f"{_fact_metres:,.1f}".replace(",", " "))
+        _p3.metric("Выполнение плана", f"{_plan_percent:.1f}%")
+        _p4.metric("До плана, м", f"{_plan_remaining:,.1f}".replace(",", " "))
+        st.progress(min(1.0, max(0.0, _plan_percent / 100)))
+        st.caption("План — 3 000 м в месяц. Для выбранного диапазона он рассчитывается пропорционально количеству календарных дней; факт считается по сделкам, созданным в этом периоде.")
+
     elif section == "Материалы":
         _materials = {}
         for row in deal_rows:
@@ -12571,6 +12636,30 @@ def statistics_dialog(section="Общая статистика"):
                 _materials[_key]["revenue"] += line["amount"]
                 _materials[_key]["orders"].add(str(row["deal"].get("id") or row["deal"].get("deal_number") or ""))
         if _materials:
+            _product_summary = {}
+            for _material_key, _material_value in _materials.items():
+                _material_name = str(_material_key[0] or "").lower()
+                if "slim" in _material_name or "слим" in _material_name or "тонк" in _material_name:
+                    _product_label = "Айплинт Slim"
+                elif "магнит" in _material_name:
+                    _product_label = "Магнитный"
+                else:
+                    _product_label = str(_material_key[0] or "Другие товары")
+                _product_summary.setdefault(_product_label, {"metres": 0.0, "amount": 0.0})
+                _product_summary[_product_label]["metres"] += _material_value["quantity"]
+                _product_summary[_product_label]["amount"] += _material_value["revenue"]
+            _product_total_amount = sum(v["amount"] for v in _product_summary.values())
+            st.markdown("#### Структура продаж по продуктам")
+            _product_rows = [
+                {
+                    "Продукт": name,
+                    "Метры": round(values["metres"], 1),
+                    "Сумма, ₽": round(values["amount"], 2),
+                    "Доля": f"{(values["amount"] / _product_total_amount * 100):.1f}%" if _product_total_amount else "0.0%",
+                }
+                for name, values in sorted(_product_summary.items(), key=lambda item: item[1]["amount"], reverse=True)
+            ]
+            st.dataframe(_product_rows, use_container_width=True, hide_index=True)
             _material_rows = [
                 {
                     "Материал / товар": name,
