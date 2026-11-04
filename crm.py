@@ -12676,7 +12676,7 @@ def statistics_dialog(section="Общая статистика"):
                 continue
             _reason = next((
                 str(_deal.get(_key) or "").strip()
-                for _key in ("loss_reason", "lost_reason", "cancel_reason", " отказ_reason", "reason", " отказ_reason", " отказ_comment")
+                for _key in ("loss_reason", "lost_reason", "cancel_reason", "reason", "reason_lost", " отказ_reason")
                 if str(_deal.get(_key) or "").strip()
             ), "")
             if not _reason:
@@ -12708,7 +12708,6 @@ def statistics_dialog(section="Общая статистика"):
         _pipeline_rows = []
         _pipeline_amount = 0.0
         _pipeline_metres = 0.0
-        _pipeline_paid_amount = 0.0
         for _row in deal_rows:
             _deal = _row["deal"]
             _status_lower = str(_row["status"] or "").strip().lower()
@@ -12737,13 +12736,18 @@ def statistics_dialog(section="Общая статистика"):
         st.markdown("#### Повторные продажи")
         _client_deal_counts = {}
         _client_deal_amounts = {}
+        _historical_client_counts = {}
+        for _historical_deal in deals_all:
+            _historical_client_id = str(_historical_deal.get("client_id") or "").strip()
+            if _historical_client_id:
+                _historical_client_counts[_historical_client_id] = _historical_client_counts.get(_historical_client_id, 0) + 1
         for _row in deal_rows:
             _client_id = str(_row["deal"].get("client_id") or "").strip()
             if not _client_id:
                 continue
             _client_deal_counts[_client_id] = _client_deal_counts.get(_client_id, 0) + 1
             _client_deal_amounts[_client_id] = _client_deal_amounts.get(_client_id, 0.0) + _row["amount"]
-        _repeat_ids = {key for key, value in _client_deal_counts.items() if value > 1}
+        _repeat_ids = {key for key in _client_deal_counts if _historical_client_counts.get(key, 0) > 1}
         _repeat_amount = sum(_client_deal_amounts.get(key, 0.0) for key in _repeat_ids)
         _repeat_clients = {str(c.get("id")): c for c in clients_all}
         _repeat_rows = []
@@ -12762,7 +12766,7 @@ def statistics_dialog(section="Общая статистика"):
             st.dataframe(sorted(_repeat_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True), use_container_width=True, hide_index=True)
         else:
             st.info("За выбранный период нет клиентов с двумя и более сделками.")
-        st.caption("Повторным считается клиент, у которого в выбранном периоде создано более одной сделки. Сделки без привязки к карточке клиента не учитываются.")
+        st.caption("Повторным считается клиент, у которого за всё время в CRM более одной сделки. В таблице показаны его заказы и суммы именно за выбранный период. Сделки без привязки к карточке клиента не учитываются.")
 
     elif section == "Скорость работы":
         st.markdown("#### Скорость работы")
