@@ -6069,10 +6069,8 @@ if not st.session_state.authenticated:
                                 save_data(st.session_state.crm_store)
                                 # The auth_token cookie remembers this browser; no separate login cookie is needed.
                             else:
-                                # Не возвращаемся к PIN-экрану после обычного входа.
-                                # Старый cookie может удаляться асинхронно, поэтому
-                                # принудительно оставляем режим входа по паролю.
-                                st.session_state["_force_password_login"] = True
+                                # Удаляем старую метку запомненного браузера, но не
+                                # оставляем флаг, который мешает штатной авторизации.
                                 try:
                                     cookie_manager.delete("remembered_user")
                                 except Exception:
