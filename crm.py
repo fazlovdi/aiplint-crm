@@ -12783,10 +12783,7 @@ def statistics_dialog(section="Общая статистика"):
         st.caption("Повторным считается клиент, у которого за всё время в CRM более одной сделки. В таблице показаны его заказы и суммы именно за выбранный период. Сделки без привязки к карточке клиента не учитываются.")
 
 
-        st.markdown(
-            '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
-            unsafe_allow_html=True,
-        )
+        _stat_divider()
 
         st.markdown("#### Источники продаж")
         _clients_by_source = defaultdict(list)
