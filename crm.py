@@ -6623,7 +6623,18 @@ def _crm_workspace_clear_legacy_dialog_markers():
     st.session_state["_crm_dialog_requested_this_run"] = True
 
 def _crm_workspace_render_bottom_panel(in_workspace=False):
-    _bottom_windows = sorted(st.session_state.get("_crm_windows", []), key=lambda w: 0 if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) else 1)
+    _all_bottom_windows = st.session_state.get("_crm_windows", [])
+    # На главном экране показываем только свёрнутые окна и постоянную кнопку статистики.
+    # Внутри открытого рабочего пространства доступны все окна для переключения.
+    _visible_bottom_windows = [
+        w for w in _all_bottom_windows
+        if in_workspace or w.get("minimized")
+        or any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
+    ]
+    _bottom_windows = sorted(
+        _visible_bottom_windows,
+        key=lambda w: 0 if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) else 1,
+    )
     _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     [class*="st-key-crm_workspace_bottom_"] {
@@ -6781,11 +6792,11 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 
                     _crm_workspace_clear_legacy_dialog_markers()
                     _crm_workspace_queue_save()
-                    # После изменения списка окон явно обновляем нужную область:
-                    # fragment rerun при закрытии окна внутри рабочего пространства,
-                    # полный rerun — когда закрываем последнее окно или панель снаружи.
-                    # Обновляем всё приложение: главная панель окон находится вне fragment.
-                    st.rerun()
+                    # Главная панель находится вне fragment, поэтому явно обновляем всё приложение.
+                    try:
+                        st.rerun(scope="app")
+                    except (TypeError, ValueError):
+                        st.rerun()
         if not in_workspace and any(w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) for w in st.session_state.get("_crm_windows", [])):
             with st.container(key="crm_workspace_main_expand_wrap"):
                 if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
@@ -14475,8 +14486,11 @@ def _crm_render_workspace_fragment():
                         _crm_active_window["minimized"] = True
                         st.session_state["_crm_active_window_id"] = None
                         _crm_workspace_queue_save()
-                        # Полный rerun синхронизирует панель окон на главном экране.
-                        st.rerun()
+                        # Полный rerun обновляет главную панель окон вне fragment.
+                        try:
+                            st.rerun(scope="app")
+                        except (TypeError, ValueError):
+                            st.rerun()
 
             with st.container(key="crm_workspace_content"):
                 # Preserve original CRM button sizes, spacing and layout in window contents.
