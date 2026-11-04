@@ -5507,7 +5507,10 @@ def _user_has_auth_token(user, token):
 _auth_token = cookies.get("auth_token")
 _remembered_login = str(cookies.get("remembered_user") or "").strip()
 _client_activity_raw = cookies.get("crm_last_activity")
-_client_expired = str(cookies.get("crm_session_expired") or "").strip() == "1"
+_client_expired = (
+    str(cookies.get("crm_session_expired") or "").strip() == "1"
+    and not st.session_state.get("authenticated")
+)
 _client_activity = None
 try:
     # Browser timestamp is milliseconds since epoch; reject malformed/future values.
