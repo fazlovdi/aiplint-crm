@@ -6172,8 +6172,28 @@ with st.sidebar:
                 else: st.error("Заполните все поля")
             st.markdown("---")
             for u in st.session_state.crm_store.get("users", []):
-                ucl, ucr = st.columns([3, 1])
-                with ucl: st.markdown(f"**{u.get('name', u['login'])}** ({role_label(u.get('role'))})")
+                ucl, urc, ucr = st.columns([3, 2, 1])
+                with ucl:
+                    st.markdown(f"**{u.get('name', u['login'])}**")
+                    st.caption(u.get("login", ""))
+                with urc:
+                    if u["login"] != st.session_state.user_login:
+                        current_role = u.get("role", "manager")
+                        role_options = ["manager", "director", "admin"]
+                        new_role = st.selectbox(
+                            "Роль",
+                            role_options,
+                            index=role_options.index(current_role) if current_role in role_options else 0,
+                            format_func=role_label,
+                            key=f"edit_role_{u['login']}",
+                            label_visibility="collapsed",
+                        )
+                        if new_role != current_role:
+                            if st.button("Сохранить", key=f"save_role_{u['login']}", use_container_width=True):
+                                u["role"] = new_role
+                                commit_and_rerun(st.session_state.crm_store, f"Роль сотрудника {u.get('name', u['login'])} изменена")
+                    else:
+                        st.caption(f"Ваша роль: {role_label(u.get('role'))}")
                 with ucr:
                     if u["login"] != st.session_state.user_login:
                         if st.button("X", key=f"del_u_{u['login']}"):
