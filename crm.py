@@ -12595,6 +12595,7 @@ def statistics_dialog(section="Общая статистика"):
         _mc4.metric("Просрочено задач", _manager_overdue_tasks)
         _mc5.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
         if _manager_rows:
+            _stat_divider()
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
                 (_stat_deal_date(row["deal"]), row["amount"])
@@ -12663,6 +12664,7 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_svg.append(f'<text x="{_manager_left + _manager_plot_w:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_manager_labels[-1][1]}</text>')
                 _manager_svg.append('</svg>')
                 st.markdown("\n".join(_manager_svg), unsafe_allow_html=True)
+            _stat_divider()
             st.dataframe([
                 {
                     "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
@@ -12818,6 +12820,7 @@ def statistics_dialog(section="Общая статистика"):
                 if x["Источник"] != "Не указан"
             )
             if _source_names_for_chart:
+                _stat_divider()
                 _source_options_for_chart = ["Все источники"] + _source_names_for_chart
                 _selected_source_chart = st.selectbox(
                     "Источник для графика",
