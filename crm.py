@@ -2201,6 +2201,20 @@ def _crm_workspace_load_remote(login):
     except Exception:
         return None
 
+def _crm_workspace_rerun():
+    """Rerun only the workspace fragment for dialog interactions when possible.
+
+    Detail cards are rendered inside _crm_render_workspace_fragment. A full-app
+    rerun here repeats the CRM's expensive top-level loading and slows opening,
+    closing, and moving between related client/deal/task cards.
+    """
+    try:
+        st.rerun(scope="fragment")
+    except Exception:
+        # Compatibility fallback for callers rendered outside the fragment.
+        st.rerun()
+
+
 def _crm_workspace_activate_tab(window_id, tab_index):
     """Activate a workspace tab before the main script reruns.
 
@@ -11130,7 +11144,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
-                    st.rerun()
+                    _crm_workspace_rerun()
             with _wcol2:
                 if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
@@ -11142,11 +11156,11 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
             with _wcol3:
                 if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
 
     render_task_detail(task, cl, d, key_prefix, show_shipping_status=True)
 
@@ -11428,7 +11442,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             if st.button("\u2715", key=_close_btn_key, use_container_width=True):
                 if _is_editing and not _show_close_warning:
                     st.session_state[f"_show_close_warning_{key_prefix}"] = True
-                    st.rerun()
+                    _crm_workspace_rerun()
                 else:
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
@@ -11436,7 +11450,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
 
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{key_prefix}"
@@ -11466,7 +11480,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
-                    st.rerun()
+                    _crm_workspace_rerun()
             with _wcol2:
                 if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
@@ -11474,11 +11488,11 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
             with _wcol3:
                 if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
 
     render_deal_detail(d, cl, cu, key_prefix)
 
@@ -11556,7 +11570,7 @@ def client_detail_dialog(cl_id):
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
                     st.toast("Сохранено", icon="\u2705")
-                    st.rerun()
+                    _crm_workspace_rerun()
             with _wcol2:
                 if st.button("Без сохр.", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
@@ -11564,11 +11578,11 @@ def client_detail_dialog(cl_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
             with _wcol3:
                 if st.button("Отмена", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     render_client_card_expanded(cl)
 
 
