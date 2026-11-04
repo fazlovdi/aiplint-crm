@@ -588,6 +588,7 @@ YANDEX_API_URL = "https://cloud-api.yandex.net/v1/disk/resources"
 MAX_URL = "https://max.ru"
 MAX_NUMBER = "+79003293300"
 CATEGORIES = ["Не определён", "Дизайнер", "Строитель", "Дилер", "Покупатель"]
+CLIENT_SOURCE_OPTIONS = ["Входящий звонок", "Исходящий от менеджера", "Инстаграм", "Ютуб", "Входящий в мессенджер", "Дизайнер/строитель", "Дилер/магазин", "Выставка", "Сарафанное радио"]
 CONTACT_METHODS = ["", "Телефон", "WhatsApp", "Telegram", "MAX", "Директ", "eMail"]
 TASK_TYPES = ["Связаться", "Отправить заказ", "Отправить образцы"]
 SHIP_PAY_OPTIONS = ["", "Включено в счёт", "Клиентом при получении"]
@@ -6279,7 +6280,7 @@ def _crm_statistics_window_tabs():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Повторные продажи", "Скорость работы"]
+    section_names = ["Общая статистика", "Источник"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Повторные продажи", "Скорость работы"]
     tabs = []
     for section_name in section_names:
         args = (section_name,)
@@ -10481,6 +10482,9 @@ def render_client_card_expanded(cl):
                     ec = st.selectbox("Категория", CATEGORIES, index=ec_idx, key=f"ec_{cl['id']}")
                 with _promo_col:
                     promo_code = st.text_input("Промокод", value=cl.get('promo_code', ''), key=f"promo_code_{cl['id']}")
+                _source_current = cl.get("source", "")
+                _source_idx = CLIENT_SOURCE_OPTIONS.index(_source_current) + 1 if _source_current in CLIENT_SOURCE_OPTIONS else 0
+                source_edit = st.selectbox("Источник:", [""] + CLIENT_SOURCE_OPTIONS, index=_source_idx, key=f"client_source_edit_{cl['id']}", placeholder="Выберите источник")
                 em = st.selectbox("Ответственный:", get_managers_list(), index=0 if cl.get('manager', '') not in get_managers_list() else (get_managers_list()).index(cl.get('manager', '')), key=f"em_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 st.markdown("---")
                 # Доп. телефоны, Email, адреса — те же, что в окне создания клиента
@@ -10531,12 +10535,13 @@ def render_client_card_expanded(cl):
                         cl['address'] = ea_val
                         cl['discount'] = int(ed)
                         cl['category'] = ec
+                        cl['source'] = source_edit
                         cl['promo_code'] = promo_code.strip()
                         cl['manager'] = em
                         # Доп. телефоны, email, адреса уже обновлены через session_state
                         cl["last_modified"] = now_str()
                         _actor = st.session_state.get("user_name", st.session_state.get("user_login", ""))
-                        cl.setdefault("change_log", []).append({"date": now_str(), "author": _actor, "fields": "ФИО / Компания, телефон, способ связи, email, адрес, скидка, категория, ответственный"})
+                        cl.setdefault("change_log", []).append({"date": now_str(), "author": _actor, "fields": "ФИО / Компания, телефон, способ связи, email, адрес, скидка, категория, источник, ответственный"})
                         st.session_state[f"show_edit_{cl['id']}"] = False
                         commit_and_rerun(st.session_state.crm_store, "Данные клиента сохранены")
                 with _cec_col:
@@ -10566,6 +10571,7 @@ def render_client_card_expanded(cl):
                         st.markdown(f"Категория: **{cl.get('category', 'Не определён')}**")
                     with _promo_view:
                         st.markdown(f"Промокод: **{cl.get('promo_code', '') or '—'}**")
+                    st.markdown(f"Источник: **{cl.get('source') or '—'}**")
                     st.markdown("---")
                     st.markdown("**Информация о клиенте:**")
                     st.markdown(f"Телефон: **{cl.get('phone', '')}**")
@@ -10976,7 +10982,7 @@ def add_client_dialog(fv):
     # виджетов возвращаем сохранённые значения из независимого черновика.
     _draft_fields = {
         "name": f"cn_{fv}", "phone": f"cp_{fv}", "email": f"ce_{fv}",
-        "discount": f"cd_{fv}", "category": f"cc_{fv}", "promo": f"cpromo_{fv}",
+        "discount": f"cd_{fv}", "category": f"cc_{fv}", "source": f"csource_{fv}", "promo": f"cpromo_{fv}",
         "manager": f"cm_{fv}", "contact_method": f"new_contact_method_{fv}",
         "city": f"city_new_{fv}", "address": f"ca_{fv}", "comment_input": f"new_cc_form_{fv}",
     }
@@ -10992,6 +10998,7 @@ def add_client_dialog(fv):
                 st.session_state.get(f"cn_{fv}", "").strip() or
                 st.session_state.get(f"cp_{fv}", "").strip() or
                 st.session_state.get(f"cpromo_{fv}", "").strip() or
+                st.session_state.get(f"csource_{fv}", "").strip() or
                 st.session_state.get(f"ce_{fv}", "").strip() or
                 st.session_state.get(f"city_new_{fv}", "").strip() or
                 st.session_state.get(f"ca_{fv}", "").strip() or
@@ -11048,6 +11055,7 @@ def add_client_dialog(fv):
             cc = st.selectbox("Категория", [""] + CATEGORIES, index=0, key=f"cc_{fv}", on_change=_add_client_save_draft, args=(fv, "category", f"cc_{fv}"), placeholder="Выбери категорию")
         with cd_cc3:
             cpromo = st.text_input("Промокод", key=f"cpromo_{fv}", on_change=_add_client_save_draft, args=(fv, "promo", f"cpromo_{fv}"), placeholder="Введите промокод")
+        csource = st.selectbox("Источник:", [""] + CLIENT_SOURCE_OPTIONS, index=0, key=f"csource_{fv}", on_change=_add_client_save_draft, args=(fv, "source", f"csource_{fv}"), placeholder="Выберите источник")
         cm = st.selectbox("Ответственный:", get_managers_list(), index=0, key=f"cm_{fv}", on_change=_add_client_save_draft, args=(fv, "manager", f"cm_{fv}"), placeholder=MGR_PLACEHOLDER)
         contact_method_new = st.selectbox("Предпочтительный способ связи:", [""] + CONTACT_METHODS, index=0, key=f"new_contact_method_{fv}", on_change=_add_client_save_draft, args=(fv, "contact_method", f"new_contact_method_{fv}"), placeholder="Выберите способ связи")
         city_new = st.text_input("Город", key=f"city_new_{fv}", on_change=_add_client_save_draft, args=(fv, "city", f"city_new_{fv}"), placeholder="Введите город")
@@ -11151,7 +11159,7 @@ def add_client_dialog(fv):
             else:
                 clients = st.session_state.crm_store["clients"]
                 nid = (max([c['id'] for c in clients]) if clients else 0) + 1
-                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "city": city_new.strip(), "address": ca, "category": cc, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state[_ph_key] if p["phone"].strip()], "extra_emails": [e for e in st.session_state[_em_key] if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state[_ad_key] if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
+                nc = {"id": nid, "name": cn, "phone": format_phone(cp), "email": ce, "city": city_new.strip(), "address": ca, "category": cc, "source": csource, "promo_code": cpromo.strip(), "discount": int(cd) if cd is not None else 0, "base_comment": "", "manager": cm, "contact_method": contact_method_new, "extra_phones": [{"phone": format_phone(p["phone"]), "name": p["name"], "role": p["role"]} for p in st.session_state[_ph_key] if p["phone"].strip()], "extra_emails": [e for e in st.session_state[_em_key] if e.strip()], "extra_addresses": [{"address": a["address"], "resp_name": a["resp_name"], "resp_role": a["resp_role"], "resp_phone": a["resp_phone"], "resp_email": a["resp_email"]} for a in st.session_state[_ad_key] if a["address"].strip()], "client_files": [], "client_comments": [], "comments": [], "tasks": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "viewed": False, "change_log": [], "client_chat": []}
                 if cf:
                     fi_list = save_uploaded_files(cf, nid, "profile")
                     if fi_list: nc["client_files"].extend(normalize_file_list(fi_list))
@@ -12368,6 +12376,56 @@ def statistics_dialog(section="Общая статистика"):
         f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
         "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
     )
+    if section == "Источник":
+        st.markdown("#### Эффективность источников клиентов")
+        _clients_by_source = defaultdict(list)
+        for _client in clients:
+            _source_name = str(_client.get("source") or "").strip() or "Не указан"
+            _clients_by_source[_source_name].append(_client)
+        _deals_by_client = defaultdict(list)
+        for _row in deal_rows:
+            _deals_by_client[str(_row["deal"].get("client_id", ""))].append(_row)
+        _source_stats = []
+        for _source_name, _source_clients in _clients_by_source.items():
+            _source_client_ids = {str(_client.get("id", "")) for _client in _source_clients}
+            _source_deals = [_row for _client_id in _source_client_ids for _row in _deals_by_client.get(_client_id, [])]
+            _source_paid = [x for x in _source_deals if x["paid"]]
+            _source_active = [x for x in _source_deals if not x["paid"] and str(x["status"]).strip().lower() not in ("сделка закрыта", "отказ", "отменено", "завершено", "выполнено")]
+            _source_stats.append({
+                "Источник": _source_name,
+                "Клиентов": len(_source_clients),
+                "Сделок": len(_source_deals),
+                "Оплачено": len(_source_paid),
+                "В работе": len(_source_active),
+                "Конверсия, %": round(len(_source_paid) / len(_source_deals) * 100, 1) if _source_deals else 0.0,
+                "Сумма заказов, ₽": round(sum(x["amount"] for x in _source_deals)),
+                "Продано, м": round(sum(x["metres"] for x in _source_deals), 1),
+            })
+        _source_stats.sort(key=lambda x: (x["Сумма заказов, ₽"], x["Клиентов"]), reverse=True)
+        _source_leads_total = sum(x["Клиентов"] for x in _source_stats)
+        _source_deals_total = sum(x["Сделок"] for x in _source_stats)
+        _source_paid_total = sum(x["Оплачено"] for x in _source_stats)
+        _source_revenue_total = sum(x["Сумма заказов, ₽"] for x in _source_stats)
+        _src1, _src2, _src3, _src4 = st.columns(4, gap="small")
+        _src1.metric("Клиентов", _source_leads_total)
+        _src2.metric("Сделок", _source_deals_total)
+        _src3.metric("Оплачено", _source_paid_total)
+        _src4.metric("Сумма заказов", f"{_source_revenue_total:,.0f} ₽".replace(",", " "))
+        if _source_stats:
+            st.markdown("##### Сводка по источникам")
+            st.dataframe(_source_stats, use_container_width=True, hide_index=True)
+            _source_chart_rows = [x for x in _source_stats if x["Источник"] != "Не указан"]
+            if _source_chart_rows:
+                _source_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Клиентов"], reverse=True)
+                st.markdown("##### Количество привлечённых клиентов")
+                st.bar_chart({x["Источник"]: x["Клиентов"] for x in _source_chart_rows})
+                _revenue_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True)
+                st.markdown("##### Сумма заказов по источникам")
+                st.bar_chart({x["Источник"]: x["Сумма заказов, ₽"] for x in _revenue_chart_rows})
+            st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
+        else:
+            st.info("За выбранный период клиентов пока нет.")
+
     if section == "Общая статистика":
         _total_amount = sum(x["amount"] for x in deal_rows)
         _total_metres = sum(x["metres"] for x in deal_rows)
