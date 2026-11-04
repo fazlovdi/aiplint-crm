@@ -754,8 +754,9 @@ def _collect_all_timestamps(data):
     return [ts for ts in timestamps if ts]
 
 def download_db_from_yandex():
-    """Чтение резервной базы с Яндекс Диска отключено намеренно: Диск — только для резервных копий."""
-    return None
+    """Возвращает проверенную резервную копию с Яндекс Диска в формате JSON."""
+    data = _load_valid_yandex_backup_for_initialization()
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")) if data is not None else None
 
 def upload_db_to_yandex_sync():
     """Создаёт отдельную версию резервной копии; существующие копии не перезаписываются."""
@@ -3680,10 +3681,9 @@ def _ensure_sqlite_store():
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None:
-                # Автоматически используем ТОЛЬКО локальный JSON.
-                # Яндекс Диск никогда не является источником инициализации CRM.
-                # Если локальной базы нет, запуск останавливается: администратор
-                # должен выполнить отдельное ручное восстановление из скачанного файла.
+                # Сначала проверяем локальное JSON-зеркало; если его нет,
+                # используем валидную облачную резервную копию. Рабочая запись
+                # SQLite при этом уже проверена выше и не перезаписывается.
                 local_data = None
                 if os.path.exists(FILE_NAME):
                     local_data = _load_data_from_json()
