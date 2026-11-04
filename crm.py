@@ -6058,12 +6058,14 @@ if not st.session_state.authenticated:
                             if remember_login:
                                 st.session_state.pop("_force_password_login", None)
                                 _user_for_login["login_pin"] = _pin_hash(_new_pin)
-                            else:
-                                st.session_state["_force_password_login"] = True
                                 # Persist the PIN hash before issuing cookies/session.
                                 save_data(st.session_state.crm_store)
                                 # The auth_token cookie remembers this browser; no separate login cookie is needed.
                             else:
+                                # Не возвращаемся к PIN-экрану после обычного входа.
+                                # Старый cookie может удаляться асинхронно, поэтому
+                                # принудительно оставляем режим входа по паролю.
+                                st.session_state["_force_password_login"] = True
                                 try:
                                     cookie_manager.delete("remembered_user")
                                 except Exception:
