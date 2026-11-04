@@ -2004,7 +2004,7 @@ def _crm_workspace_tab_label(entry):
     # Statistics uses one shared dialog renderer, but each section is its own
     # workspace tab. Always show the section title rather than the generic dialog title.
     if name == "statistics_dialog":
-        return str(args[0] if args and args[0] else entry.get("title") or "Общая статистика")
+        return str(entry.get("title") or (args[0] if args and args[0] else "Общая статистика"))
     if name == "client_detail_dialog":
         return "Карточка клиента"
 
