@@ -6071,6 +6071,10 @@ if not st.session_state.authenticated:
                                 except Exception:
                                     pass
                             _create_browser_session(_user_for_login, remember=bool(remember_login))
+                            # Успешный вход по паролю должен сбрасывать устаревший флаг
+                            # истёкшей cookie в текущем прогоне, иначе ниже он тут же
+                            # отменяет только что созданную авторизованную сессию.
+                            _client_expired = False
                             time.sleep(0.3)
                             st.toast("Успешный вход", icon="🔓")
                             st.rerun()
