@@ -12290,9 +12290,9 @@ def statistics_dialog(section="Общая статистика"):
                 on_click=lambda value=_period_value: st.session_state.__setitem__("statistics_period_choice", value),
             )
     with _period_cols[8]:
-        _start = st.date_input("С даты", value=today.replace(day=1), key="statistics_date_from", label_visibility="collapsed")
+        _start = st.date_input("С даты", value=today.replace(day=1), format="DD.MM.YYYY", key="statistics_date_from", label_visibility="collapsed")
     with _period_cols[9]:
-        _end = st.date_input("По дату", value=today, key="statistics_date_to", label_visibility="collapsed")
+        _end = st.date_input("По дату", value=today, format="DD.MM.YYYY", key="statistics_date_to", label_visibility="collapsed")
 
     _period = st.session_state.get("statistics_period_choice", "Этот месяц")
     if _period == "Этот месяц":
@@ -12379,10 +12379,15 @@ def statistics_dialog(section="Общая статистика"):
             for row in deal_rows:
                 _status_counts[row["status"]] = _status_counts.get(row["status"], 0) + 1
             st.markdown("#### Сделки по статусам")
-            st.dataframe(
-                [{"Статус": key, "Количество": value} for key, value in sorted(_status_counts.items())],
-                use_container_width=True, hide_index=True,
-            )
+            _status_table_rows = [{"Статус": key, "Количество": value} for key, value in sorted(_status_counts.items())]
+            _status_left, _status_right = st.columns([1, 1], gap="small")
+            with _status_left:
+                st.dataframe(
+                    _status_table_rows,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=35 * (len(_status_table_rows) + 1) + 3,
+                )
             _dated_rows = [
                 (_stat_deal_date(row["deal"]), row["amount"])
                 for row in deal_rows if _stat_deal_date(row["deal"]) is not None
@@ -12472,6 +12477,74 @@ def statistics_dialog(section="Общая статистика"):
         _c4.metric("Оплачено полностью", _manager_paid)
         _c5.metric("Клиентов закреплено / создано за период", _manager_clients)
         if _manager_rows:
+            # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
+            _manager_dated_rows = [
+                (_stat_deal_date(row["deal"]), row["amount"])
+                for row in _manager_rows if _stat_deal_date(row["deal"]) is not None
+            ]
+            if _manager_dated_rows:
+                _manager_dates = [x[0] for x in _manager_dated_rows]
+                _manager_chart_start = _start or min(_manager_dates)
+                _manager_chart_end = _end or max(_manager_dates)
+                _manager_daily = (_manager_chart_end - _manager_chart_start).days <= 31
+                _manager_totals = {}
+                if _manager_daily:
+                    _manager_cursor = _manager_chart_start
+                    while _manager_cursor <= _manager_chart_end:
+                        _manager_totals[_manager_cursor] = 0.0
+                        _manager_cursor += timedelta(days=1)
+                    for _manager_date, _manager_value in _manager_dated_rows:
+                        if _manager_chart_start <= _manager_date <= _manager_chart_end:
+                            _manager_totals[_manager_date] = _manager_totals.get(_manager_date, 0.0) + _manager_value
+                    _manager_chart_title = "#### Динамика суммы сделок по дням"
+                    _manager_labels = [(d, d.strftime("%d.%m")) for d in sorted(_manager_totals)]
+                else:
+                    _manager_cursor = _manager_chart_start.replace(day=1)
+                    _manager_last_month = _manager_chart_end.replace(day=1)
+                    while _manager_cursor <= _manager_last_month:
+                        _manager_totals[_manager_cursor] = 0.0
+                        _manager_cursor = _manager_cursor.replace(year=_manager_cursor.year + 1, month=1) if _manager_cursor.month == 12 else _manager_cursor.replace(month=_manager_cursor.month + 1)
+                    for _manager_date, _manager_value in _manager_dated_rows:
+                        if _manager_chart_start <= _manager_date <= _manager_chart_end:
+                            _manager_key = _manager_date.replace(day=1)
+                            _manager_totals[_manager_key] = _manager_totals.get(_manager_key, 0.0) + _manager_value
+                    _manager_chart_title = "#### Динамика суммы сделок по месяцам"
+                    _manager_labels = [(d, d.strftime("%m.%Y")) for d in sorted(_manager_totals)]
+                st.markdown(_manager_chart_title)
+                _manager_points = [(d, _manager_totals[d]) for d in sorted(_manager_totals)]
+                _manager_w, _manager_h = 900, 300
+                _manager_left, _manager_right, _manager_top, _manager_bottom = 68, 22, 18, 55
+                _manager_plot_w, _manager_plot_h = _manager_w - _manager_left - _manager_right, _manager_h - _manager_top - _manager_bottom
+                _manager_max_val = max((v for _, v in _manager_points), default=0.0)
+                _manager_scale_max = _manager_max_val * 1.12 if _manager_max_val > 0 else 1.0
+                _manager_xy = [
+                    (_manager_left + (i * _manager_plot_w / max(1, len(_manager_points) - 1)),
+                     _manager_top + _manager_plot_h - (value / _manager_scale_max * _manager_plot_h))
+                    for i, (_, value) in enumerate(_manager_points)
+                ]
+                _manager_svg = [
+                    f'<svg viewBox="0 0 {_manager_w} {_manager_h}" width="100%" role="img" aria-label="Динамика суммы сделок менеджера" xmlns="http://www.w3.org/2000/svg">',
+                    '<rect width="100%" height="100%" fill="transparent"/>',
+                ]
+                for _manager_tick in range(5):
+                    _manager_y = _manager_top + _manager_plot_h - (_manager_tick * _manager_plot_h / 4)
+                    _manager_val = _manager_scale_max * _manager_tick / 4
+                    _manager_svg.append(f'<line x1="{_manager_left}" y1="{_manager_y:.1f}" x2="{_manager_w-_manager_right}" y2="{_manager_y:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
+                    _manager_svg.append(f'<text x="{_manager_left-9}" y="{_manager_y+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_manager_val:,.0f}</text>')
+                if len(_manager_xy) == 1:
+                    _manager_svg.append(f'<circle cx="{_manager_xy[0][0]:.1f}" cy="{_manager_xy[0][1]:.1f}" r="4" fill="#bc1661"/>')
+                else:
+                    _manager_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _manager_xy)
+                    _manager_svg.append(f'<polyline points="{_manager_polyline}" fill="none" stroke="#bc1661" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>')
+                    _manager_svg.extend(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="#bc1661"/>' for x, y in _manager_xy)
+                _manager_label_step = max(1, (len(_manager_labels) + 6) // 7)
+                for _manager_i in range(0, len(_manager_labels), _manager_label_step):
+                    _manager_x = _manager_left + (_manager_i * _manager_plot_w / max(1, len(_manager_points) - 1))
+                    _manager_svg.append(f'<text x="{_manager_x:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="middle">{_manager_labels[_manager_i][1]}</text>')
+                if _manager_labels and (len(_manager_labels)-1) % _manager_label_step != 0:
+                    _manager_svg.append(f'<text x="{_manager_left + _manager_plot_w:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_manager_labels[-1][1]}</text>')
+                _manager_svg.append('</svg>')
+                st.markdown("\\n".join(_manager_svg), unsafe_allow_html=True)
             st.dataframe([
                 {
                     "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
