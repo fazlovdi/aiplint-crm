@@ -12669,7 +12669,7 @@ def statistics_dialog(section="Общая статистика"):
                     "Продано": round(values["quantity"], 2),
                     "Заказов": len(values["orders"]),
                     "Средняя цена": round(values["revenue"] / values["quantity"], 2) if values["quantity"] else 0,
-                    "Сумма, ₽": round(_product_amount, 2),
+                    "Сумма, ₽": round(values["revenue"], 2),
                     "Доля в выручке": (format(_product_amount / _product_total_amount * 100, ".1f") + "%") if _product_total_amount else "0.0%",
                 })
 
