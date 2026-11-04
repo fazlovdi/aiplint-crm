@@ -12212,11 +12212,6 @@ def statistics_dialog(section="Общая статистика"):
             if str(d.get("manager") or "").strip()
         })
 
-    def _stat_divider():
-        st.markdown(
-            '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
-            unsafe_allow_html=True,
-        )
 
     def _stat_num(value):
         try:
@@ -12407,7 +12402,6 @@ def statistics_dialog(section="Общая статистика"):
             _status_counts = {}
             for row in deal_rows:
                 _status_counts[row["status"]] = _status_counts.get(row["status"], 0) + 1
-            _stat_divider()
             st.markdown("#### Сделки по статусам")
             _status_table_rows = [{"Статус": key, "Количество": value} for key, value in sorted(_status_counts.items())]
             _status_left, _status_right = st.columns([1, 1], gap="small")
@@ -12520,7 +12514,6 @@ def statistics_dialog(section="Общая статистика"):
                     "Сумма, ₽": round(_stat_amount(_archived_deal), 2),
                     "Причина / отчёт": _archive_reason,
                 })
-            _stat_divider()
             st.markdown("#### Потерянные продажи")
             _lost_amount = sum(x["Сумма, ₽"] for x in _lost_rows)
             _lost1, _lost2, _lost3 = st.columns(3, gap="small")
@@ -12529,7 +12522,6 @@ def statistics_dialog(section="Общая статистика"):
             _lost3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
             if _lost_rows:
                 st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
-                _stat_divider()
                 st.markdown("##### Причины / отчёты по архивным сделкам")
                 st.dataframe(
                     [{"Причина / отчёт": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)],
@@ -12598,7 +12590,6 @@ def statistics_dialog(section="Общая статистика"):
         _mc4.metric("Просрочено задач", _manager_overdue_tasks)
         _mc5.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
         if _manager_rows:
-            _stat_divider()
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
                 (_stat_deal_date(row["deal"]), row["amount"])
@@ -12667,7 +12658,6 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_svg.append(f'<text x="{_manager_left + _manager_plot_w:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_manager_labels[-1][1]}</text>')
                 _manager_svg.append('</svg>')
                 st.markdown("\n".join(_manager_svg), unsafe_allow_html=True)
-            _stat_divider()
             st.dataframe([
                 {
                     "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
@@ -12708,7 +12698,6 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
 
-        _stat_divider()
         st.markdown("#### Скорость работы")
         _active_rows = []
         _today = moscow_now().date()
@@ -12745,12 +12734,10 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет активных сделок за выбранный период.")
         st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
-        _stat_divider()
         st.markdown("#### Задачи за период")
         st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
 
     elif section == "Продажи":
-        _stat_divider()
         st.markdown("#### Повторные продажи")
         _client_deal_counts = {}
         _client_deal_amounts = {}
@@ -12787,8 +12774,11 @@ def statistics_dialog(section="Общая статистика"):
         st.caption("Повторным считается клиент, у которого за всё время в CRM более одной сделки. В таблице показаны его заказы и суммы именно за выбранный период. Сделки без привязки к карточке клиента не учитываются.")
 
 
-        _stat_divider()
 
+        st.markdown(
+            '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
+            unsafe_allow_html=True,
+        )
         st.markdown("#### Источники продаж")
         _clients_by_source = defaultdict(list)
         for _client in clients:
@@ -12822,7 +12812,6 @@ def statistics_dialog(section="Общая статистика"):
                 if x["Источник"] != "Не указан"
             )
             if _source_names_for_chart:
-                _stat_divider()
                 _source_options_for_chart = ["Все источники"] + _source_names_for_chart
                 _selected_source_chart = st.selectbox(
                     "Источник для графика",
@@ -12919,7 +12908,6 @@ def statistics_dialog(section="Общая статистика"):
 
 
     elif section == "План / факт":
-        _stat_divider()
         st.markdown("#### План продаж по метрам")
         _plan_metres = 3000.0
         # Факт: только полностью оплаченные и завершённые сделки текущего месяца.
@@ -12946,7 +12934,6 @@ def statistics_dialog(section="Общая статистика"):
         st.progress(min(1.0, max(0.0, _plan_percent / 100)))
         st.caption("План — 3 000 м на текущий месяц. Факт учитывает только полностью оплаченные и завершённые в этом месяце сделки.")
 
-        _stat_divider()
         st.markdown("#### Актуальные неоплаченные сделки")
         _pipeline_rows = []
         _pipeline_amount = 0.0
