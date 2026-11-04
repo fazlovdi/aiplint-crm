@@ -5375,6 +5375,14 @@ def _passkey_process_registration_result(result, pending, current_user):
 cookie_manager = stx.CookieManager()
 cookies = cookie_manager.get_all()
 
+# CookieManager может вернуть пустой снимок в самый первый момент после
+# полной перезагрузки страницы. Делаем один дополнительный проход до показа
+# формы входа, чтобы компонент успел передать существующие browser cookies.
+# Маркер хранится в session_state, поэтому бесконечного rerun не будет.
+if "_auth_cookie_initial_read_done" not in st.session_state:
+    st.session_state["_auth_cookie_initial_read_done"] = True
+    st.rerun()
+
 # Отслеживаем реальную активность в браузере без периодических Streamlit-rerun.
 # События записывают timestamp в cookie; обновление страницы само по себе активностью не считается.
 st.components.v1.html("""
