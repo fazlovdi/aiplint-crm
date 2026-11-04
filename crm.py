@@ -12375,10 +12375,11 @@ def statistics_dialog(section="Общая статистика"):
             "lines": lines,
         })
 
-    st.caption(
-        f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
-        "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
-    )
+    if section != "План / факт":
+        st.caption(
+            f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
+            "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
+        )
     if section != "План / факт":
         st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#DCE0E5;margin:12px 0 18px 0;"></div>', unsafe_allow_html=True)
     if section == "Общая статистика":
@@ -12404,6 +12405,7 @@ def statistics_dialog(section="Общая статистика"):
             _status_counts = {}
             for row in deal_rows:
                 _status_counts[row["status"]] = _status_counts.get(row["status"], 0) + 1
+            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
             st.markdown("#### Сделки по статусам")
             _status_table_rows = [{"Статус": key, "Количество": value} for key, value in sorted(_status_counts.items())]
             _status_left, _status_right = st.columns([1, 1], gap="small")
@@ -12483,6 +12485,7 @@ def statistics_dialog(section="Общая статистика"):
                     _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_labels[-1][1]}</text>')
                 _svg_parts.append('</svg>')
                 st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
+            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
             # Потерянные продажи: только сделки, перенесённые пользователем в раздел «Архив».
             _archived_deals = [
                 d for d in deals_all
@@ -13013,11 +13016,26 @@ def statistics_dialog(section="Общая статистика"):
                 })
 
             st.dataframe(_material_rows, use_container_width=True, hide_index=True)
-            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
-            st.bar_chart(
-                [{"Материал": x["Материал / товар"], "Продано": x["Продано"]} for x in _material_rows],
-                x="Материал", y="Продано", color="#bc1661",
-            )
+            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 18px 0;"></div>', unsafe_allow_html=True)
+            _material_chart_max = max((float(x["Продано"] or 0) for x in _material_rows), default=0.0)
+            _material_chart_html = [
+                '<div style="width:100%;display:flex;flex-direction:column;gap:13px;margin:4px 0 8px 0;">'
+            ]
+            for _chart_row in _material_rows:
+                _chart_name = html.escape(str(_chart_row["Материал / товар"] or "Без названия"))
+                _chart_quantity = float(_chart_row["Продано"] or 0)
+                _chart_width = (_chart_quantity / _material_chart_max * 100) if _material_chart_max > 0 else 0
+                _chart_quantity_label = f"{_chart_quantity:,.2f}".rstrip("0").rstrip(".").replace(",", " ")
+                _material_chart_html.append(
+                    '<div style="display:grid;grid-template-columns:minmax(180px, min(38%, 360px)) minmax(60px,1fr) 76px;align-items:center;gap:12px;width:100%;">'
+                    f'<div style="font-size:13px;line-height:1.35;white-space:normal;overflow-wrap:anywhere;">{_chart_name}</div>'
+                    '<div style="height:18px;background:rgba(128,128,128,.12);border-radius:3px;overflow:hidden;">'
+                    f'<div style="height:100%;width:{_chart_width:.2f}%;background:#bc1661;border-radius:3px;"></div></div>'
+                    f'<div style="font-size:13px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;">{_chart_quantity_label}</div>'
+                    '</div>'
+                )
+            _material_chart_html.append('</div>')
+            st.markdown("\\n".join(_material_chart_html), unsafe_allow_html=True)
         else:
             st.info("В расчётах за выбранный период нет товарных позиций. Проверьте, что позиции сохранены в расчётах сделок.")
 
