@@ -12697,6 +12697,46 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
 
+        st.markdown("#### Скорость работы")
+        _active_rows = []
+        _today = moscow_now().date()
+        for _row in deal_rows:
+            _status_lower = str(_row["status"] or "").strip().lower()
+            _is_lost = any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без"))
+            if _row["paid"] or _is_lost or _status_lower in ("завершено", "выполнено"):
+                continue
+            _created = _stat_deal_date(_row["deal"])
+            _age = max(0, (_today - _created).days) if _created else None
+            _active_rows.append({
+                "Сделка": str(_row["deal"].get("deal_number") or _row["deal"].get("title") or _row["deal"].get("id") or ""),
+                "Менеджер": _row["manager"], "Статус": _row["status"],
+                "Возраст, дней": _age if _age is not None else "—",
+            })
+        _ages = [x["Возраст, дней"] for x in _active_rows if isinstance(x["Возраст, дней"], int)]
+        _all_tasks = []
+        for _client in clients_all:
+            for _task in (_client.get("tasks", []) or []):
+                if not isinstance(_task, dict):
+                    continue
+                _created = _stat_date(_task.get("created_at") or _task.get("date_created"))
+                if _start is not None and _end is not None and not (_created and _start <= _created <= _end):
+                    continue
+                _all_tasks.append(_task)
+        _overdue_tasks = [task for task in _all_tasks if is_task_overdue(task)]
+        _s1, _s2, _s3, _s4 = st.columns(4, gap="small")
+        _s1.metric("Активных сделок", len(_active_rows))
+        _s2.metric("Средний возраст сделки", f"{(sum(_ages) / len(_ages)):.1f} дн." if _ages else "—")
+        _s3.metric("Сделок старше 7 дней", sum(1 for age in _ages if age > 7))
+        _s4.metric("Просроченных задач", len(_overdue_tasks))
+        if _active_rows:
+            st.dataframe(sorted(_active_rows, key=lambda x: x["Возраст, дней"] if isinstance(x["Возраст, дней"], int) else -1, reverse=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("Нет активных сделок за выбранный период.")
+        st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
+        if _all_tasks:
+            st.markdown("#### Задачи за период")
+            st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
+
     elif section == "Продажи":
         st.markdown("#### Повторные продажи")
         _client_deal_counts = {}
@@ -12783,48 +12823,6 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("За выбранный период клиентов пока нет.")
 
-
-
-
-        st.markdown("#### Скорость работы")
-        _active_rows = []
-        _today = moscow_now().date()
-        for _row in deal_rows:
-            _status_lower = str(_row["status"] or "").strip().lower()
-            _is_lost = any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без"))
-            if _row["paid"] or _is_lost or _status_lower in ("завершено", "выполнено"):
-                continue
-            _created = _stat_deal_date(_row["deal"])
-            _age = max(0, (_today - _created).days) if _created else None
-            _active_rows.append({
-                "Сделка": str(_row["deal"].get("deal_number") or _row["deal"].get("title") or _row["deal"].get("id") or ""),
-                "Менеджер": _row["manager"], "Статус": _row["status"],
-                "Возраст, дней": _age if _age is not None else "—",
-            })
-        _ages = [x["Возраст, дней"] for x in _active_rows if isinstance(x["Возраст, дней"], int)]
-        _all_tasks = []
-        for _client in clients_all:
-            for _task in (_client.get("tasks", []) or []):
-                if not isinstance(_task, dict):
-                    continue
-                _created = _stat_date(_task.get("created_at") or _task.get("date_created"))
-                if _start is not None and _end is not None and not (_created and _start <= _created <= _end):
-                    continue
-                _all_tasks.append(_task)
-        _overdue_tasks = [task for task in _all_tasks if is_task_overdue(task)]
-        _s1, _s2, _s3, _s4 = st.columns(4, gap="small")
-        _s1.metric("Активных сделок", len(_active_rows))
-        _s2.metric("Средний возраст сделки", f"{(sum(_ages) / len(_ages)):.1f} дн." if _ages else "—")
-        _s3.metric("Сделок старше 7 дней", sum(1 for age in _ages if age > 7))
-        _s4.metric("Просроченных задач", len(_overdue_tasks))
-        if _active_rows:
-            st.dataframe(sorted(_active_rows, key=lambda x: x["Возраст, дней"] if isinstance(x["Возраст, дней"], int) else -1, reverse=True), use_container_width=True, hide_index=True)
-        else:
-            st.info("Нет активных сделок за выбранный период.")
-        st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
-        if _all_tasks:
-            st.markdown("#### Задачи за период")
-            st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
 
 
 
