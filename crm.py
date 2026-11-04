@@ -6263,22 +6263,37 @@ with _header_right:
     """, height=48, scrolling=False)
 
 def _crm_open_statistics_window():
-    """Открывает единое окно статистики в общей панели окон CRM."""
+    """Открывает единое окно статистики с отдельными вкладками в панели CRM."""
     windows = st.session_state.setdefault("_crm_windows", [])
+    store = st.session_state.get("crm_store", {})
+    manager_names = sorted({
+        str(u.get("name") or u.get("login") or "").strip()
+        for u in (store.get("users", []) or [])
+        if u.get("role") != "admin" and str(u.get("name") or u.get("login") or "").strip()
+    })
+    if not manager_names:
+        manager_names = sorted({
+            str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
+            if str(d.get("manager") or "").strip()
+        })
+    section_names = ["Общая статистика"] + manager_names + ["Материалы"]
+    tabs = []
+    for section_name in section_names:
+        args = (section_name,)
+        tabs.append({
+            "name": "statistics_dialog",
+            "title": section_name,
+            "width": "large",
+            "args": args,
+            "kwargs": {},
+            "signature": (_crm_dialog_signature_value(args), _crm_dialog_signature_value({})),
+        })
     window = next(
         (w for w in reversed(windows)
          if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))),
         None,
     )
     if window is None:
-        entry = {
-            "name": "statistics_dialog",
-            "title": "Статистика",
-            "width": "large",
-            "args": (),
-            "kwargs": {},
-            "signature": ("statistics",),
-        }
         window_id = "cw_statistics"
         if any(str(w.get("id")) == window_id for w in windows):
             window_id = "cw_statistics_" + uuid.uuid4().hex[:8]
@@ -6286,7 +6301,7 @@ def _crm_open_statistics_window():
             "id": window_id,
             "client_id": None,
             "title": "Статистика",
-            "tabs": [entry],
+            "tabs": tabs,
             "active_tab": 0,
             "minimized": False,
         }
@@ -6294,14 +6309,10 @@ def _crm_open_statistics_window():
     else:
         window["minimized"] = False
         window["title"] = "Статистика"
-        idx = next((i for i, t in enumerate(window.get("tabs", []))
-                    if t.get("name") == "statistics_dialog"), 0)
-        window["active_tab"] = idx
-    tabs = window.get("tabs", [])
-    idx = max(0, min(int(window.get("active_tab", 0) or 0), len(tabs) - 1)) if tabs else -1
+        window["tabs"] = tabs
+        window["active_tab"] = 0
     st.session_state["_crm_active_window_id"] = window.get("id")
-    if idx >= 0:
-        st.session_state["_crm_active_dialog"] = tabs[idx]
+    st.session_state["_crm_active_dialog"] = tabs[0]
     st.session_state["_crm_sidebar_collapse_requested"] = True
     st.session_state["_crm_sidebar_collapse_script_emitted"] = False
     _crm_workspace_clear_legacy_dialog_markers()
@@ -12119,7 +12130,7 @@ def client_tasks_dialog(cl_id):
 
 
 @_crm_dialog("Статистика", width="large")
-def statistics_dialog():
+def statistics_dialog(section="Общая статистика"):
     """Статистика продаж, менеджеров и материалов по данным CRM."""
     import calendar
 
@@ -12281,11 +12292,7 @@ def statistics_dialog():
         f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
         "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
     )
-    _manager_tabs = manager_names
-    _tab_labels = ["Общая статистика"] + _manager_tabs + ["Материалы"]
-    _stat_tabs = st.tabs(_tab_labels)
-
-    with _stat_tabs[0]:
+    if section == "Общая статистика":
         _total_amount = sum(x["amount"] for x in deal_rows)
         _total_metres = sum(x["metres"] for x in deal_rows)
         _paid_count = sum(1 for x in deal_rows if x["paid"])
@@ -12321,8 +12328,9 @@ def statistics_dialog():
         else:
             st.info("За выбранный период сделок нет.")
 
-    for _manager_index, _manager_name in enumerate(_manager_tabs, start=1):
-        with _stat_tabs[_manager_index]:
+
+    elif section in manager_names:
+            _manager_name = section
             _manager_rows = [x for x in deal_rows if x["manager"] == _manager_name]
             _manager_amount = sum(x["amount"] for x in _manager_rows)
             _manager_metres = sum(x["metres"] for x in _manager_rows)
@@ -12352,7 +12360,8 @@ def statistics_dialog():
             else:
                 st.info("За выбранный период у менеджера нет сделок.")
 
-    with _stat_tabs[-1]:
+
+    elif section == "Материалы":
         _materials = {}
         for row in deal_rows:
             for line in row["lines"]:
@@ -12381,6 +12390,8 @@ def statistics_dialog():
             )
         else:
             st.info("В расчётах за выбранный период нет товарных позиций. Проверьте, что позиции сохранены в расчётах сделок.")
+
+
 
     # При первом открытии окна автоматически сворачиваем боковую панель.
     if st.session_state.get("_crm_sidebar_collapse_requested") and not st.session_state.get("_crm_sidebar_collapse_script_emitted"):
