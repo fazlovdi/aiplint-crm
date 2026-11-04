@@ -3769,7 +3769,9 @@ def _render_emergency_restore(load_error):
     st.caption(f"Диагностика: {str(load_error)[:350]}")
     _db_diag = _diagnose_database_readonly()
     st.markdown("### Проверка базы (только чтение)")
-    st.json(_db_diag)
+    # Не используем st.json: если фронтенд-модуль Json не загрузился,
+    # аварийная диагностика должна отображаться обычным текстом.
+    st.text("\\n".join(f"{_key}: {_value}" for _key, _value in _db_diag.items()))
     _raw_sqlite_bytes = None
     try:
         if os.path.isfile(SQLITE_FILE):
