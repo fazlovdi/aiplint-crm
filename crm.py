@@ -3627,12 +3627,48 @@ def _sqlite_connect():
     return conn
 
 def _load_valid_yandex_backup_for_initialization():
-    """Автоматическое чтение/восстановление базы с Яндекс Диска запрещено.
-
-    Резервные копии на Диске предназначены только для хранения.
-    Восстановление допускается исключительно через отдельное ручное действие
-    администратора в интерфейсе CRM.
-    """
+    """Безопасно загружает проверенную CRM_latest.json; при её отсутствии проверяет дневные копии."""
+    if not YANDEX_TOKEN:
+        return None
+    candidate_paths = ["disk:/CRM_NE_TROGAT/backups/CRM_latest.json"]
+    try:
+        listing = requests.get(
+            YANDEX_API_URL,
+            params={"path": "disk:/CRM_NE_TROGAT/backups", "limit": 100, "sort": "-name"},
+            headers=yandex_headers(), timeout=10,
+        )
+        if listing.status_code == 200:
+            items = listing.json().get("_embedded", {}).get("items", [])
+            daily_names = sorted(
+                [str(item.get("name", "")) for item in items
+                 if str(item.get("name", "")).startswith("CRM_daily_")
+                 and str(item.get("name", "")).endswith(".json")],
+                reverse=True,
+            )
+            candidate_paths.extend(f"disk:/CRM_NE_TROGAT/backups/{name}" for name in daily_names)
+    except Exception:
+        pass
+    for remote_path in candidate_paths:
+        try:
+            meta = requests.get(
+                f"{YANDEX_API_URL}/download", params={"path": remote_path},
+                headers=yandex_headers(), timeout=12,
+            )
+            if meta.status_code != 200:
+                continue
+            href = meta.json().get("href")
+            if not href:
+                continue
+            response = requests.get(href, timeout=25)
+            if response.status_code != 200:
+                continue
+            data = _validate_backup_snapshot(response.content.decode("utf-8-sig"))
+            return _sanitize_backup_data(data)
+        except Exception as exc:
+            try:
+                _crm_log("DATABASE_CLOUD_RESTORE_CANDIDATE_ERROR", {"path": remote_path}, exc=exc)
+            except Exception:
+                pass
     return None
 
 
@@ -3655,11 +3691,15 @@ def _ensure_sqlite_store():
                 if local_data is not None:
                     initial_data = local_data
                 else:
-                    raise RuntimeError(
-                        "Локальная база отсутствует или недоступна. "
-                        "Автоматическая загрузка с Яндекс Диска запрещена. "
-                        "Требуется ручное восстановление резервной копии администратором."
-                    )
+                    # Облако используем только когда локальной рабочей записи нет.
+                    cloud_data = _load_valid_yandex_backup_for_initialization()
+                    if cloud_data is None:
+                        raise RuntimeError(
+                            "Локальная база отсутствует или пуста, а проверенную резервную "
+                            "копию на Яндекс Диске загрузить не удалось. Проверьте YANDEX_DISK_TOKEN "
+                            "и наличие CRM_latest.json/дневных копий."
+                        )
+                    initial_data = cloud_data
                 initial_json = json.dumps(initial_data, ensure_ascii=False, separators=(",", ":"))
                 conn.execute("BEGIN IMMEDIATE")
                 try:
