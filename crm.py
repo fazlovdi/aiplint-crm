@@ -12465,12 +12465,12 @@ def statistics_dialog(section="Общая статистика"):
             1 for client in clients
             if str(client.get("manager") or client.get("responsible") or "") == _manager_name
         )
-        _c1, _c2, _c3, _c4 = st.columns(4)
+        _c1, _c2, _c3, _c4, _c5 = st.columns(5, gap="small")
         _c1.metric("Заказов / сделок", len(_manager_rows))
         _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
         _c3.metric("Сумма заказов", f"{_manager_amount:,.0f} ₽".replace(",", " "))
         _c4.metric("Оплачено полностью", _manager_paid)
-        st.metric("Клиентов закреплено / создано за период", _manager_clients)
+        _c5.metric("Клиентов закреплено / создано за период", _manager_clients)
         if _manager_rows:
             st.dataframe([
                 {
