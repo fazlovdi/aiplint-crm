@@ -1407,6 +1407,11 @@ def format_created_date(entity):
             return f'<div class="created-date">Создано: {dt.strftime("%d.%m.%Y")}{author_part}</div>'
         except: return ""
 
+def role_label(role):
+    """Человекочитаемое название роли пользователя."""
+    return {"manager": "Менеджер", "director": "Руководитель", "admin": "Администратор"}.get(role, str(role or ""))
+
+
 def get_managers_list():
     return [u.get("name", u["login"]) for u in st.session_state.crm_store.get("users", []) if u.get("role") != "admin"]
 
@@ -6157,7 +6162,7 @@ with st.sidebar:
             nul = st.text_input("Логин:", key="adm_nu_l")
             nup = st.text_input("Пароль:", key="adm_nu_p")
             nun = st.text_input("Имя / Должность:", key="adm_nu_n")
-            nur = st.selectbox("Роль:", ["manager", "admin"], key="adm_nu_r")
+            nur = st.selectbox("Роль:", ["manager", "director", "admin"], format_func=role_label, key="adm_nu_r")
             if st.button("Создать", use_container_width=True, type="primary"):
                 if nul and nup and nun:
                     if not any(u["login"] == nul.strip() for u in st.session_state.crm_store.get("users", [])):
@@ -6168,7 +6173,7 @@ with st.sidebar:
             st.markdown("---")
             for u in st.session_state.crm_store.get("users", []):
                 ucl, ucr = st.columns([3, 1])
-                with ucl: st.markdown(f"**{u.get('name', u['login'])}** ({u['role']})")
+                with ucl: st.markdown(f"**{u.get('name', u['login'])}** ({role_label(u.get('role'))})")
                 with ucr:
                     if u["login"] != st.session_state.user_login:
                         if st.button("X", key=f"del_u_{u['login']}"):
