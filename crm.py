@@ -5415,10 +5415,14 @@ st.components.v1.html("""
       doc.cookie = name + '=' + encodeURIComponent(value) + '; path=/; SameSite=Lax' + (window.parent.location.protocol === 'https:' ? '; Secure' : '');
     };
     const now = Date.now();
+    const hasAuthToken = () => Boolean(readCookie('auth_token'));
     const previous = Number(readCookie('crm_last_activity'));
-    // Если предыдущая активность уже старше 12 часов, не продлеваем сессию одним поздним кликом.
-    if (previous && now - previous >= 12 * 60 * 60 * 1000) {
+    // Idle expiry applies only to an authenticated remembered browser. A stale
+    // activity cookie must never reload/intercept the password-login form.
+    if (hasAuthToken() && previous && now - previous >= 12 * 60 * 60 * 1000) {
       writeCookie('crm_session_expired', '1');
+    } else if (!hasAuthToken()) {
+      writeCookie('crm_session_expired', '');
     }
     if (!window.parent.__crmActivityTrackerInstalled) {
       window.parent.__crmActivityTrackerInstalled = true;
@@ -5440,7 +5444,7 @@ st.components.v1.html("""
         const remaining = Math.max(0, IDLE_LIMIT - (Date.now() - last));
         idleTimer = win.setTimeout(() => {
           const latest = Number(readCookie('crm_last_activity')) || last;
-          if (Date.now() - latest >= IDLE_LIMIT) {
+          if (hasAuthToken() && Date.now() - latest >= IDLE_LIMIT) {
             expireAndReload();
           } else {
             scheduleIdleLogout();
@@ -5450,7 +5454,7 @@ st.components.v1.html("""
       const markActivity = () => {
         const current = Date.now();
         const old = Number(readCookie('crm_last_activity'));
-        if (old && current - old >= IDLE_LIMIT) {
+        if (hasAuthToken() && old && current - old >= IDLE_LIMIT) {
           expireAndReload();
           return;
         }
@@ -5465,7 +5469,7 @@ st.components.v1.html("""
       // If the tab was already idle for an hour before this page script ran,
       // expire immediately rather than treating the page load as activity.
       const initialActivity = Number(readCookie('crm_last_activity'));
-      if (initialActivity && Date.now() - initialActivity >= IDLE_LIMIT) {
+      if (hasAuthToken() && initialActivity && Date.now() - initialActivity >= IDLE_LIMIT) {
         expireAndReload();
         return;
       }
