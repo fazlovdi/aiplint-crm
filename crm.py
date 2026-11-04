@@ -6280,7 +6280,7 @@ def _crm_open_statistics_window():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы"]
+    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Воронка продаж", "Потерянные продажи", "Прогноз продаж", "Повторные продажи", "Скорость работы"]
     tabs = []
     for section_name in section_names:
         args = (section_name,)
@@ -12627,6 +12627,183 @@ def statistics_dialog(section="Общая статистика"):
             st.caption("Рейтинг отсортирован по сумме заказов за выбранный период. Конверсия — доля сделок со статусом полной оплаты среди всех сделок менеджера.")
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
+
+    elif section == "Воронка продаж":
+        st.markdown("#### Воронка продаж")
+        _funnel = {
+            "Новые": 0, "В работе": 0, "Ожидают оплаты": 0,
+            "Оплачено": 0, "Потерянные": 0, "Другие статусы": 0,
+        }
+        _funnel_amount = {key: 0.0 for key in _funnel}
+        _lost_tokens = ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без")
+        for _row in deal_rows:
+            _status_lower = str(_row["status"] or "").strip().lower()
+            if _row["paid"] or _status_lower in ("оплачено", "завершено", "выполнено"):
+                _stage = "Оплачено"
+            elif any(_token in _status_lower for _token in _lost_tokens):
+                _stage = "Потерянные"
+            elif _status_lower in ("ожидание оплаты", "на паузе") or str(_row["deal"].get("payment_status") or "") == "Оплачен частично":
+                _stage = "Ожидают оплаты"
+            elif _status_lower in ("новый", "новая", "новое", "не обработан", "входящий"):
+                _stage = "Новые"
+            elif _status_lower in ("в работе", "работа", "переговоры", "расчёт", "расчет"):
+                _stage = "В работе"
+            else:
+                _stage = "Другие статусы"
+            _funnel[_stage] += 1
+            _funnel_amount[_stage] += _row["amount"]
+        _funnel_total = len(deal_rows)
+        _funnel_rows = [
+            {"Этап": key, "Сделок": value, "Сумма заказов, ₽": round(_funnel_amount[key], 2),
+             "Доля сделок": f"{(value / _funnel_total * 100):.1f}%" if _funnel_total else "0.0%"}
+            for key, value in _funnel.items()
+        ]
+        _f1, _f2, _f3 = st.columns(3, gap="small")
+        _f1.metric("Всего сделок", _funnel_total)
+        _f2.metric("Оплачено полностью", _funnel["Оплачено"])
+        _f3.metric("Конверсия в оплату", f"{(_funnel['Оплачено'] / _funnel_total * 100):.1f}%" if _funnel_total else "0.0%")
+        st.dataframe(_funnel_rows, use_container_width=True, hide_index=True)
+        st.caption("Этап определяется по текущему статусу сделки. Неизвестные и нестандартные статусы вынесены отдельно, чтобы не терять записи.")
+
+    elif section == "Потерянные продажи":
+        st.markdown("#### Потерянные продажи")
+        _lost_rows = []
+        _lost_reason_counts = {}
+        for _row in deal_rows:
+            _deal = _row["deal"]
+            _status_lower = str(_row["status"] or "").strip().lower()
+            if not any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без")):
+                continue
+            _reason = next((
+                str(_deal.get(_key) or "").strip()
+                for _key in ("loss_reason", "lost_reason", "cancel_reason", " отказ_reason", "reason", " отказ_reason", " отказ_comment")
+                if str(_deal.get(_key) or "").strip()
+            ), "")
+            if not _reason:
+                _reason = "Причина не указана"
+            _lost_reason_counts[_reason] = _lost_reason_counts.get(_reason, 0) + 1
+            _client_name = next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(_deal.get("client_id"))), "—")
+            _lost_rows.append({
+                "Сделка": str(_deal.get("deal_number") or _deal.get("title") or _deal.get("id") or ""),
+                "Клиент": _client_name, "Менеджер": _row["manager"],
+                "Дата": _stat_deal_date(_deal).strftime("%d.%m.%Y") if _stat_deal_date(_deal) else "—",
+                "Статус": _row["status"], "Сумма, ₽": round(_row["amount"], 2),
+                "Причина": _reason,
+            })
+        _lost_amount = sum(x["Сумма, ₽"] for x in _lost_rows)
+        _l1, _l2, _l3 = st.columns(3, gap="small")
+        _l1.metric("Потерянных сделок", len(_lost_rows))
+        _l2.metric("Сумма потенциальных заказов", f"{_lost_amount:,.0f} ₽".replace(",", " "))
+        _l3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
+        if _lost_rows:
+            st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
+            st.markdown("#### Причины потери")
+            st.dataframe([{"Причина": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)], use_container_width=True, hide_index=True)
+        else:
+            st.info("За выбранный период потерянных сделок по текущим статусам не найдено.")
+        st.caption("Потерянными считаются сделки со статусами, содержащими «отказ», «потеря», «отмена», «не состоялась» или «закрыт без». Если причина отказа не сохранена в карточке, она отмечается как не указанная.")
+
+    elif section == "Прогноз продаж":
+        st.markdown("#### Прогноз продаж")
+        _pipeline_rows = []
+        _pipeline_amount = 0.0
+        _pipeline_metres = 0.0
+        _pipeline_paid_amount = 0.0
+        for _row in deal_rows:
+            _deal = _row["deal"]
+            _status_lower = str(_row["status"] or "").strip().lower()
+            _is_lost = any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без"))
+            if _row["paid"] or _is_lost or _status_lower in ("завершено", "выполнено"):
+                continue
+            _pipeline_amount += _row["amount"]
+            _pipeline_metres += _row["metres"]
+            _client_name = next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(_deal.get("client_id"))), "—")
+            _pipeline_rows.append({
+                "Сделка": str(_deal.get("deal_number") or _deal.get("title") or _deal.get("id") or ""),
+                "Клиент": _client_name, "Менеджер": _row["manager"], "Статус": _row["status"],
+                "Метры": round(_row["metres"], 1), "Сумма, ₽": round(_row["amount"], 2),
+            })
+        _pf1, _pf2, _pf3 = st.columns(3, gap="small")
+        _pf1.metric("Сделок в потенциальной воронке", len(_pipeline_rows))
+        _pf2.metric("Потенциальный метраж", f"{_pipeline_metres:,.1f} м".replace(",", " "))
+        _pf3.metric("Потенциальная сумма", f"{_pipeline_amount:,.0f} ₽".replace(",", " "))
+        if _pipeline_rows:
+            st.dataframe(sorted(_pipeline_rows, key=lambda x: x["Сумма, ₽"], reverse=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("Нет неоплаченных сделок в выбранном периоде.")
+        st.caption("Это сумма и метраж всех неоплаченных сделок, не прогноз с вероятностью закрытия. Для взвешенного прогноза позже можно добавить вероятность по этапам.")
+
+    elif section == "Повторные продажи":
+        st.markdown("#### Повторные продажи")
+        _client_deal_counts = {}
+        _client_deal_amounts = {}
+        for _row in deal_rows:
+            _client_id = str(_row["deal"].get("client_id") or "").strip()
+            if not _client_id:
+                continue
+            _client_deal_counts[_client_id] = _client_deal_counts.get(_client_id, 0) + 1
+            _client_deal_amounts[_client_id] = _client_deal_amounts.get(_client_id, 0.0) + _row["amount"]
+        _repeat_ids = {key for key, value in _client_deal_counts.items() if value > 1}
+        _repeat_amount = sum(_client_deal_amounts.get(key, 0.0) for key in _repeat_ids)
+        _repeat_clients = {str(c.get("id")): c for c in clients_all}
+        _repeat_rows = []
+        for _client_id in _repeat_ids:
+            _client = _repeat_clients.get(_client_id, {})
+            _repeat_rows.append({
+                "Клиент": str(_client.get("name") or "Клиент"),
+                "Заказов": _client_deal_counts[_client_id],
+                "Сумма заказов, ₽": round(_client_deal_amounts[_client_id], 2),
+            })
+        _r1, _r2, _r3 = st.columns(3, gap="small")
+        _r1.metric("Клиентов с повторными заказами", len(_repeat_ids))
+        _r2.metric("Заказов у постоянных клиентов", sum(_client_deal_counts.get(key, 0) for key in _repeat_ids))
+        _r3.metric("Сумма повторных клиентов", f"{_repeat_amount:,.0f} ₽".replace(",", " "))
+        if _repeat_rows:
+            st.dataframe(sorted(_repeat_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("За выбранный период нет клиентов с двумя и более сделками.")
+        st.caption("Повторным считается клиент, у которого в выбранном периоде создано более одной сделки. Сделки без привязки к карточке клиента не учитываются.")
+
+    elif section == "Скорость работы":
+        st.markdown("#### Скорость работы")
+        _active_rows = []
+        _today = moscow_now().date()
+        for _row in deal_rows:
+            _status_lower = str(_row["status"] or "").strip().lower()
+            _is_lost = any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без"))
+            if _row["paid"] or _is_lost or _status_lower in ("завершено", "выполнено"):
+                continue
+            _created = _stat_deal_date(_row["deal"])
+            _age = max(0, (_today - _created).days) if _created else None
+            _active_rows.append({
+                "Сделка": str(_row["deal"].get("deal_number") or _row["deal"].get("title") or _row["deal"].get("id") or ""),
+                "Менеджер": _row["manager"], "Статус": _row["status"],
+                "Возраст, дней": _age if _age is not None else "—",
+            })
+        _ages = [x["Возраст, дней"] for x in _active_rows if isinstance(x["Возраст, дней"], int)]
+        _all_tasks = []
+        for _client in clients_all:
+            for _task in (_client.get("tasks", []) or []):
+                if not isinstance(_task, dict):
+                    continue
+                _created = _stat_date(_task.get("created_at") or _task.get("date_created"))
+                if _start is not None and _end is not None and not (_created and _start <= _created <= _end):
+                    continue
+                _all_tasks.append(_task)
+        _overdue_tasks = [task for task in _all_tasks if is_task_overdue(task)]
+        _s1, _s2, _s3, _s4 = st.columns(4, gap="small")
+        _s1.metric("Активных сделок", len(_active_rows))
+        _s2.metric("Средний возраст сделки", f"{(sum(_ages) / len(_ages)):.1f} дн." if _ages else "—")
+        _s3.metric("Сделок старше 7 дней", sum(1 for age in _ages if age > 7))
+        _s4.metric("Просроченных задач", len(_overdue_tasks))
+        if _active_rows:
+            st.dataframe(sorted(_active_rows, key=lambda x: x["Возраст, дней"] if isinstance(x["Возраст, дней"], int) else -1, reverse=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("Нет активных сделок за выбранный период.")
+        st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
+        if _all_tasks:
+            st.markdown("#### Задачи за период")
+            st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
 
     elif section == "План / факт":
         st.markdown("#### План продаж по метрам")
