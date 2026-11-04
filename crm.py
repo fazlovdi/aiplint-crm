@@ -6108,7 +6108,7 @@ def _crm_statistics_window_tabs():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    _is_manager_user = st.session_state.get("user_role") != "admin"
+    _is_manager_user = st.session_state.get("user_role") == "manager"
     if _is_manager_user:
         _current_login = str(st.session_state.get("user_login") or "")
         _current_user = next(
@@ -12059,7 +12059,7 @@ def statistics_dialog(section="Общая статистика"):
             str(d.get("manager") or "").strip() for d in deals_all
             if str(d.get("manager") or "").strip()
         })
-    _is_manager_user = st.session_state.get("user_role") != "admin"
+    _is_manager_user = st.session_state.get("user_role") == "manager"
     _current_login = str(st.session_state.get("user_login") or "")
     _current_user = next(
         (u for u in users if str(u.get("login") or "") == _current_login),
