@@ -12461,6 +12461,7 @@ def statistics_dialog(section="Общая статистика"):
                     _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_labels[-1][1]}</text>')
                 _svg_parts.append('</svg>')
                 st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
+                st.divider()
 
             # Потерянные продажи: только сделки, перенесённые пользователем в раздел «Архив».
             _archived_deals = [
