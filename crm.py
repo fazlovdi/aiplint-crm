@@ -2274,13 +2274,43 @@ def _crm_workspace_queue_save():
                 return [_workspace_safe_value(v) for v in value]
             return value
 
+        # Dialog args often hold entire client/deal/task dictionaries with file
+        # histories, comments, calculations and nested tasks. Persist only stable
+        # entity IDs for those arguments: _crm_workspace_init() rehydrates them
+        # from the current CRM store on restore. This keeps each workspace save
+        # small and avoids repeatedly serializing large duplicate entity trees.
+        _workspace_store = st.session_state.get("crm_store", {})
+        _workspace_entity_ids = set()
+        if isinstance(_workspace_store, dict):
+            for _collection in ("clients", "deals", "users", "internal_tasks"):
+                for _entity in _workspace_store.get(_collection, []) or []:
+                    if isinstance(_entity, dict) and _entity.get("id") is not None:
+                        _workspace_entity_ids.add(str(_entity.get("id")))
+            for _collection in ("clients", "deals"):
+                for _parent in _workspace_store.get(_collection, []) or []:
+                    if not isinstance(_parent, dict):
+                        continue
+                    for _task in _parent.get("tasks", []) or []:
+                        if isinstance(_task, dict) and _task.get("id") is not None:
+                            _workspace_entity_ids.add(str(_task.get("id")))
+
+        def _workspace_compact_value(value):
+            if isinstance(value, dict):
+                _entity_id = value.get("id")
+                if _entity_id is not None and str(_entity_id) in _workspace_entity_ids:
+                    return {"id": _entity_id}
+                return {k: _workspace_compact_value(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [_workspace_compact_value(v) for v in value]
+            return value
+
         windows = st.session_state.get("_crm_windows", [])
         safe_windows = []
         for w in windows:
             safe_tabs = []
             for tab in w.get("tabs", []):
                 safe_tabs.append({
-                    k: _workspace_safe_value(tab.get(k))
+                    k: _workspace_compact_value(_workspace_safe_value(tab.get(k)))
                     for k in ("name", "title", "width", "args", "kwargs", "signature")
                 })
             safe_windows.append({
