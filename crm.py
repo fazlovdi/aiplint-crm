@@ -5289,6 +5289,7 @@ def _passkey_create_login_session(user):
     st.session_state.user_login = user.get("login")
     st.session_state.user_name = user.get("name", user.get("login", ""))
     st.session_state.remember_login = True
+    st.session_state.pop("_password_session_v2", None)
     st.session_state._auth_last_activity = moscow_now()
     cookie_manager.set(
         "auth_token", token,
@@ -5576,7 +5577,7 @@ if st.session_state.get("authenticated"):
     _last_activity = st.session_state.get("_auth_last_activity")
     if not isinstance(_last_activity, datetime):
         _last_activity = _client_activity or moscow_now()
-    if (_client_expired and bool(_auth_token)) or moscow_now() - _last_activity >= timedelta(hours=12):
+    if (_client_expired and bool(_auth_token) and not st.session_state.get("_password_session_v2")) or moscow_now() - _last_activity >= timedelta(hours=12):
         st.session_state.authenticated = False
         st.session_state.user_role = None
         st.session_state.user_login = None
@@ -5875,6 +5876,7 @@ if not st.session_state.authenticated:
                         st.session_state.user_name = user.get("name", user.get("login", ""))
                         st.session_state.remember_login = False
                         st.session_state["_auth_last_activity"] = moscow_now()
+                        st.session_state["_password_session_v2"] = True
                         st.session_state.pop("_auth_token_current", None)
                         st.session_state.pop("_passkey_login_pending", None)
                         st.session_state.pop("_force_password_login", None)
