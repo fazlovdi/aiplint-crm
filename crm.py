@@ -6059,12 +6059,11 @@ if not st.session_state.authenticated:
                         if remember_login and (not re.fullmatch(r"\d{4,8}", _new_pin or "") or _new_pin != _confirm_pin):
                             st.error("Для запоминания браузера задайте одинаковый PIN-код из 4–8 цифр.")
                         else:
-                            # Не возвращаемся к PIN-экрану после обычного входа.
-                            # Если браузер ранее был запомнен, его cookie может удаляться
-                            # асинхронно; флаг принудительного входа паролем перекрывает
-                            # устаревший remembered_user в текущей Streamlit-сессии.
+                            # Успешный вход по паролю должен сбросить временный флаг,
+                            # который блокирует восстановление авторизации из старых cookies.
+                            # Экран PIN теперь открывается только по явному нажатию кнопки.
+                            st.session_state.pop("_force_password_login", None)
                             if remember_login:
-                                st.session_state.pop("_force_password_login", None)
                                 _user_for_login["login_pin"] = _pin_hash(_new_pin)
                                 # Persist the PIN hash before issuing cookies/session.
                                 save_data(st.session_state.crm_store)
