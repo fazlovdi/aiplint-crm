@@ -5086,6 +5086,17 @@ def _create_browser_session(user, remember=True):
     st.session_state.remember_login = bool(remember)
     st.session_state._auth_token_current = token
     st.session_state._auth_last_activity = moscow_now()
+    # Обычный вход без «Запомнить меня» должен жить в текущей Streamlit-сессии.
+    # Не требуем записи cookie и принудительной перезагрузки: именно этот путь
+    # ломает вход в браузерах, которые блокируют/не успевают сохранить session-cookie.
+    if not remember:
+        try:
+            cookie_manager.delete("auth_token")
+            cookie_manager.delete("remembered_user")
+            cookie_manager.delete("crm_session_expired")
+        except Exception:
+            pass
+        return
     try:
         _activity_now_ms = str(int(time.time() * 1000))
         # CookieManager will write these values on the current browser response.
