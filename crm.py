@@ -12805,6 +12805,8 @@ def statistics_dialog(section="Общая статистика"):
             })
         _source_stats.sort(key=lambda x: (x["Сумма заказов, ₽"], x["Клиентов"]), reverse=True)
         if _source_stats:
+            st.dataframe(_source_stats, use_container_width=True, hide_index=True)
+        if _source_stats:
             _source_names_for_chart = sorted(
                 x["Источник"] for x in _source_stats
                 if x["Источник"] != "Не указан"
