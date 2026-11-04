@@ -12273,100 +12273,60 @@ def statistics_dialog(section="Общая статистика"):
         return sum(x["amount"] for x in _stat_lines(deal)) + max(0.0, _stat_num(calc.get("delivery_amount", 0)))
 
     today = moscow_now().date()
-    period_options = [
-        ("Этот месяц", "Этот месяц"),
-        ("Прошлый месяц", "Прошлый месяц"),
-        ("Последние 7 дней", "7 дней"),
-        ("Последние 30 дней", "30 дней"),
-        ("Этот квартал", "Квартал"),
-        ("Этот год", "Год"),
-        ("Всё время", "За все время"),
-        ("Произвольный период", "Свой период"),
-    ]
-    if "statistics_period_choice" not in st.session_state:
-        st.session_state["statistics_period_choice"] = "Этот месяц"
-
-    # Периоды и даты произвольного диапазона находятся в одной строке.
-    # Все восемь кнопок имеют одинаковую ширину и фиксированную высоту.
-    st.markdown(
-        """<style>
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) {
-            align-items: center !important;
-            gap: 6px !important;
-            column-gap: 6px !important;
-            row-gap: 0 !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="column"],
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="stColumn"] {
-            padding: 0 !important;
-            min-width: 0 !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stButton"] {
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) button[key^="statistics_period_btn_"] {
-            box-sizing: border-box !important;
-            width: 100% !important;
-            min-width: 0 !important;
-            min-height: 38px !important;
-            height: 38px !important;
-            max-height: 38px !important;
-            padding: 0 4px !important;
-            white-space: nowrap !important;
-            line-height: 1 !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] {
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] input {
-            min-height: 38px !important;
-            height: 38px !important;
-        }
-        </style>""",
-        unsafe_allow_html=True,
-    )
-    _period_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1.35, 1.35], gap="small")
-    for _idx, (_period_value, _period_label) in enumerate(period_options):
-        with _period_cols[_idx]:
-            st.button(
-                _period_label,
-                key=f"statistics_period_btn_{_idx}",
-                type="primary" if st.session_state.get("statistics_period_choice") == _period_value else "secondary",
-                use_container_width=True,
-                on_click=lambda value=_period_value: st.session_state.__setitem__("statistics_period_choice", value),
-            )
-    with _period_cols[8]:
-        _start = st.date_input("С даты", value=today.replace(day=1), format="DD.MM.YYYY", key="statistics_date_from", label_visibility="collapsed")
-    with _period_cols[9]:
-        _end = st.date_input("По дату", value=today, format="DD.MM.YYYY", key="statistics_date_to", label_visibility="collapsed")
-
-    _period = st.session_state.get("statistics_period_choice", "Этот месяц")
-    if _period == "Этот месяц":
+    # «План / факт» всегда показывает текущий месяц без фильтров периода.
+    if section == "План / факт":
         _start = today.replace(day=1)
         _end = today
-    elif _period == "Прошлый месяц":
-        _first_this = today.replace(day=1)
-        _end = _first_this - timedelta(days=1)
-        _start = _end.replace(day=1)
-    elif _period == "Последние 7 дней":
-        _start, _end = today - timedelta(days=6), today
-    elif _period == "Последние 30 дней":
-        _start, _end = today - timedelta(days=29), today
-    elif _period == "Этот квартал":
-        _start = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
-        _end = today
-    elif _period == "Этот год":
-        _start, _end = today.replace(month=1, day=1), today
-    elif _period == "Произвольный период":
-        _start = st.session_state.get("statistics_date_from", today.replace(day=1))
-        _end = st.session_state.get("statistics_date_to", today)
-        if _start > _end:
-            _start, _end = _end, _start
     else:
-        _start, _end = None, None
+        period_options = [
+            ("Этот месяц", "Этот месяц"), ("Прошлый месяц", "Прошлый месяц"),
+            ("Последние 7 дней", "7 дней"), ("Последние 30 дней", "30 дней"),
+            ("Этот квартал", "Квартал"), ("Этот год", "Год"),
+            ("Всё время", "За все время"), ("Произвольный период", "Свой период"),
+        ]
+        if "statistics_period_choice" not in st.session_state:
+            st.session_state["statistics_period_choice"] = "Этот месяц"
+        st.markdown("""<style>
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) { align-items:center!important; gap:6px!important; }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="column"],
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="stColumn"] { padding:0!important; min-width:0!important; }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stButton"] { margin:0!important; padding:0!important; width:100%!important; }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) button[key^="statistics_period_btn_"] { box-sizing:border-box!important; width:100%!important; min-width:0!important; min-height:38px!important; height:38px!important; max-height:38px!important; padding:0 4px!important; white-space:nowrap!important; line-height:1!important; }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] { margin:0!important; padding:0!important; }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] input { min-height:38px!important; height:38px!important; }
+        </style>""", unsafe_allow_html=True)
+        _period_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1.35, 1.35], gap="small")
+        for _idx, (_period_value, _period_label) in enumerate(period_options):
+            with _period_cols[_idx]:
+                st.button(_period_label, key=f"statistics_period_btn_{_idx}",
+                    type="primary" if st.session_state.get("statistics_period_choice") == _period_value else "secondary",
+                    use_container_width=True,
+                    on_click=lambda value=_period_value: st.session_state.__setitem__("statistics_period_choice", value))
+        with _period_cols[8]:
+            _start = st.date_input("С даты", value=today.replace(day=1), format="DD.MM.YYYY", key="statistics_date_from", label_visibility="collapsed")
+        with _period_cols[9]:
+            _end = st.date_input("По дату", value=today, format="DD.MM.YYYY", key="statistics_date_to", label_visibility="collapsed")
+        _period = st.session_state.get("statistics_period_choice", "Этот месяц")
+        if _period == "Этот месяц":
+            _start, _end = today.replace(day=1), today
+        elif _period == "Прошлый месяц":
+            _end = today.replace(day=1) - timedelta(days=1)
+            _start = _end.replace(day=1)
+        elif _period == "Последние 7 дней":
+            _start, _end = today - timedelta(days=6), today
+        elif _period == "Последние 30 дней":
+            _start, _end = today - timedelta(days=29), today
+        elif _period == "Этот квартал":
+            _start, _end = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1), today
+        elif _period == "Этот год":
+            _start, _end = today.replace(month=1, day=1), today
+        elif _period == "Произвольный период":
+            _start = st.session_state.get("statistics_date_from", today.replace(day=1))
+            _end = st.session_state.get("statistics_date_to", today)
+            if _start > _end:
+                _start, _end = _end, _start
+        else:
+            _start, _end = None, None
 
     def _in_period(deal):
         if _start is None or _end is None:
@@ -12374,7 +12334,7 @@ def statistics_dialog(section="Общая статистика"):
         date_value = _stat_deal_date(deal)
         return bool(date_value and _start <= date_value <= _end)
 
-    deals = [d for d in deals_all if _in_period(d)]
+    deals = list(deals_all) if section == "План / факт" else [d for d in deals_all if _in_period(d)]
     clients = []
     for client in clients_all:
         created = _stat_date(client.get("created_at") or client.get("last_modified"))
@@ -12806,25 +12766,20 @@ def statistics_dialog(section="Общая статистика"):
 
     elif section == "План / факт":
         st.markdown("#### План продаж по метрам")
-        _plan_monthly_metres = 3000.0
-        if _start and _end:
-            _plan_days = max(1, (_end - _start).days + 1)
-            _days_in_start_month = calendar.monthrange(_start.year, _start.month)[1]
-            _days_in_end_month = calendar.monthrange(_end.year, _end.month)[1]
-            if _start.year == _end.year and _start.month == _end.month:
-                _plan_metres = _plan_monthly_metres * _plan_days / _days_in_start_month
-            else:
-                _plan_metres = 0.0
-                _plan_cursor = _start.replace(day=1)
-                while _plan_cursor <= _end.replace(day=1):
-                    _month_start = max(_start, _plan_cursor)
-                    _month_end_date = calendar.monthrange(_plan_cursor.year, _plan_cursor.month)[1]
-                    _month_end = min(_end, _plan_cursor.replace(day=_month_end_date))
-                    _plan_metres += _plan_monthly_metres * ((_month_end - _month_start).days + 1) / _month_end_date
-                    _plan_cursor = _plan_cursor.replace(year=_plan_cursor.year + 1, month=1) if _plan_cursor.month == 12 else _plan_cursor.replace(month=_plan_cursor.month + 1)
-        else:
-            _plan_metres = _plan_monthly_metres
-        _fact_metres = sum(x["metres"] for x in deal_rows)
+        _plan_metres = 3000.0
+        # Факт: только полностью оплаченные и завершённые сделки текущего месяца.
+        _fact_rows = []
+        for _row in deal_rows:
+            _deal = _row["deal"]
+            _closed_date = _stat_date(_deal.get("closed_date"))
+            if (
+                _row["paid"]
+                and str(_row["status"] or "").strip().lower() == "сделка закрыта"
+                and _closed_date is not None
+                and _start <= _closed_date <= _end
+            ):
+                _fact_rows.append(_row)
+        _fact_metres = sum(x["metres"] for x in _fact_rows)
         _plan_percent = (_fact_metres / _plan_metres * 100) if _plan_metres else 0
         _plan_remaining = max(0.0, _plan_metres - _fact_metres)
         _p1, _p2, _p3, _p4 = st.columns(4, gap="small")
@@ -12834,34 +12789,34 @@ def statistics_dialog(section="Общая статистика"):
         _p4.metric("До плана, м", f"{_plan_remaining:,.1f}".replace(",", " "))
         st.markdown('<style>div[data-testid="stProgress"] [role="progressbar"] > div > div { background-color: #bc1661 !important; }</style>', unsafe_allow_html=True)
         st.progress(min(1.0, max(0.0, _plan_percent / 100)))
-        st.caption("План — 3 000 м в месяц. Для выбранного диапазона он рассчитывается пропорционально количеству календарных дней; факт считается по сделкам, созданным в этом периоде.")
+        st.caption("План — 3 000 м на текущий месяц. Факт учитывает только полностью оплаченные и завершённые в этом месяце сделки.")
 
-        st.markdown("#### Прогноз продаж")
+        st.markdown("#### Актуальные неоплаченные сделки")
         _pipeline_rows = []
         _pipeline_amount = 0.0
         _pipeline_metres = 0.0
         for _row in deal_rows:
             _deal = _row["deal"]
             _status_lower = str(_row["status"] or "").strip().lower()
-            if _row["paid"] or _status_lower in ("архив", "сделка закрыта", "завершено", "выполнено"):
+            if _row["paid"] or _status_lower in ("архив", "сделка закрыта"):
                 continue
             _pipeline_amount += _row["amount"]
             _pipeline_metres += _row["metres"]
-            _client_name = next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(_deal.get("client_id"))), "—")
+            _client_name = next((str(client.get("name") or "") for client in clients_all if str(client.get("id")) == str(_deal.get("client_id"))), "—")
             _pipeline_rows.append({
                 "Сделка": str(_deal.get("deal_number") or _deal.get("title") or _deal.get("id") or ""),
                 "Клиент": _client_name, "Менеджер": _row["manager"], "Статус": _row["status"],
                 "Метры": round(_row["metres"], 1), "Сумма, ₽": round(_row["amount"], 2),
             })
         _pf1, _pf2, _pf3 = st.columns(3, gap="small")
-        _pf1.metric("Сделок в потенциальной воронке", len(_pipeline_rows))
+        _pf1.metric("Актуальных неоплаченных сделок", len(_pipeline_rows))
         _pf2.metric("Потенциальный метраж", f"{_pipeline_metres:,.1f} м".replace(",", " "))
         _pf3.metric("Потенциальная сумма", f"{_pipeline_amount:,.0f} ₽".replace(",", " "))
         if _pipeline_rows:
             st.dataframe(sorted(_pipeline_rows, key=lambda x: x["Сумма, ₽"], reverse=True), use_container_width=True, hide_index=True)
         else:
-            st.info("Нет неоплаченных сделок, кроме архивных и закрытых, за выбранный период.")
-        st.caption("В прогноз включены неоплаченные сделки. Сделки со статусами «Архив» и «Сделка закрыта» исключены.")
+            st.info("Нет актуальных неоплаченных сделок.")
+        st.caption("В список включены все неоплаченные сделки, в том числе «На паузе». Оплаченные, завершённые и архивные сделки исключены.")
 
 
     elif section == "Материалы":
