@@ -12649,6 +12649,7 @@ def statistics_dialog(section="Общая статистика"):
                 _product_summary[_product_label]["metres"] += _material_value["quantity"]
                 _product_summary[_product_label]["amount"] += _material_value["revenue"]
             _product_total_amount = sum(v["amount"] for v in _product_summary.values())
+            _materials_total_amount = sum(float(v.get("revenue", 0) or 0) for v in _materials.values())
             _material_rows = []
             for (name, unit), values in sorted(_materials.items(), key=lambda x: x[0][0].lower()):
                 _material_name_lower = str(name or "").lower()
@@ -12670,7 +12671,7 @@ def statistics_dialog(section="Общая статистика"):
                     "Заказов": len(values["orders"]),
                     "Средняя цена": round(values["revenue"] / values["quantity"], 2) if values["quantity"] else 0,
                     "Сумма, ₽": round(values["revenue"], 2),
-                    "Доля в выручке": (format(_product_amount / _product_total_amount * 100, ".1f") + "%") if _product_total_amount else "0.0%",
+                    "Доля в выручке": (format(float(values["revenue"]) / _materials_total_amount * 100, ".1f") + "%") if _materials_total_amount else "0.0%",
                 })
 
             st.dataframe(_material_rows, use_container_width=True, hide_index=True)
