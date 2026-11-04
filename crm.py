@@ -12544,7 +12544,7 @@ def statistics_dialog(section="Общая статистика"):
                 if _manager_labels and (len(_manager_labels)-1) % _manager_label_step != 0:
                     _manager_svg.append(f'<text x="{_manager_left + _manager_plot_w:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_manager_labels[-1][1]}</text>')
                 _manager_svg.append('</svg>')
-                st.markdown("\\n".join(_manager_svg), unsafe_allow_html=True)
+                st.markdown("\n".join(_manager_svg), unsafe_allow_html=True)
             st.dataframe([
                 {
                     "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
