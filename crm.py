@@ -11701,6 +11701,7 @@ def client_detail_dialog(cl_id):
                     _ea_key = f"ea_{cl_id}"
                     _ed_key = f"ed_{cl_id}"
                     _ec_key = f"ec_{cl_id}"
+                    _source_key = f"client_source_edit_{cl_id}"
                     _em_key = f"em_{cl_id}"
                     if _en_key in st.session_state: cl['name'] = st.session_state[_en_key]
                     if _ep_key in st.session_state: cl['phone'] = format_phone(st.session_state[_ep_key])
@@ -11709,6 +11710,7 @@ def client_detail_dialog(cl_id):
                     if _ea_key in st.session_state: cl['address'] = st.session_state[_ea_key]
                     if _ed_key in st.session_state: cl['discount'] = int(st.session_state[_ed_key])
                     if _ec_key in st.session_state: cl['category'] = st.session_state[_ec_key]
+                    if _source_key in st.session_state: cl['source'] = st.session_state[_source_key]
                     _promo_key = f"promo_code_{cl_id}"
                     if _promo_key in st.session_state: cl['promo_code'] = str(st.session_state[_promo_key]).strip()
                     if _em_key in st.session_state: cl['manager'] = st.session_state[_em_key]
@@ -12418,10 +12420,10 @@ def statistics_dialog(section="Общая статистика"):
             if _source_chart_rows:
                 _source_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Клиентов"], reverse=True)
                 st.markdown("##### Количество привлечённых клиентов")
-                st.bar_chart({x["Источник"]: x["Клиентов"] for x in _source_chart_rows})
+                st.bar_chart(pd.DataFrame({"Источник": [x["Источник"] for x in _source_chart_rows], "Клиентов": [x["Клиентов"] for x in _source_chart_rows]}).set_index("Источник"))
                 _revenue_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True)
                 st.markdown("##### Сумма заказов по источникам")
-                st.bar_chart({x["Источник"]: x["Сумма заказов, ₽"] for x in _revenue_chart_rows})
+                st.bar_chart(pd.DataFrame({"Источник": [x["Источник"] for x in _revenue_chart_rows], "Сумма заказов, ₽": [x["Сумма заказов, ₽"] for x in _revenue_chart_rows]}).set_index("Источник"))
             st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
         else:
             st.info("За выбранный период клиентов пока нет.")
