@@ -12225,10 +12225,28 @@ def statistics_dialog(section="Общая статистика"):
 
     today = moscow_now().date()
     period_options = [
-        "Этот месяц", "Прошлый месяц", "Последние 7 дней", "Последние 30 дней",
-        "Этот квартал", "Этот год", "Всё время", "Произвольный период",
+        ("Этот месяц", "Месяц"),
+        ("Прошлый месяц", "Прошлый"),
+        ("Последние 7 дней", "7 дней"),
+        ("Последние 30 дней", "30 дней"),
+        ("Этот квартал", "Квартал"),
+        ("Этот год", "Год"),
+        ("Всё время", "Всё время"),
+        ("Произвольный период", "Свой период"),
     ]
-    _period = st.selectbox("Период статистики", period_options, index=0, key="statistics_period")
+    if "statistics_period_choice" not in st.session_state:
+        st.session_state["statistics_period_choice"] = "Этот месяц"
+    _period_cols = st.columns(len(period_options), gap="small")
+    for _idx, (_period_value, _period_label) in enumerate(period_options):
+        with _period_cols[_idx]:
+            st.button(
+                _period_label,
+                key=f"statistics_period_btn_{_idx}",
+                type="primary" if st.session_state.get("statistics_period_choice") == _period_value else "secondary",
+                use_container_width=True,
+                on_click=lambda value=_period_value: st.session_state.__setitem__("statistics_period_choice", value),
+            )
+    _period = st.session_state.get("statistics_period_choice", "Этот месяц")
     if _period == "Этот месяц":
         _start = today.replace(day=1)
         _end = today
@@ -12320,15 +12338,74 @@ def statistics_dialog(section="Общая статистика"):
                 [{"Статус": key, "Количество": value} for key, value in sorted(_status_counts.items())],
                 use_container_width=True, hide_index=True,
             )
-            _month_totals = {}
-            for row in deal_rows:
-                _date = _stat_deal_date(row["deal"])
-                if _date:
-                    _key = _date.strftime("%Y-%m")
-                    _month_totals[_key] = _month_totals.get(_key, 0) + row["amount"]
-            if _month_totals:
-                st.markdown("#### Динамика суммы заказов по месяцам")
-                st.bar_chart([{"Месяц": k, "Сумма, ₽": round(v, 2)} for k, v in sorted(_month_totals.items())], x="Месяц", y="Сумма, ₽")
+            _dated_rows = [
+                (_stat_deal_date(row["deal"]), row["amount"])
+                for row in deal_rows if _stat_deal_date(row["deal"]) is not None
+            ]
+            if _dated_rows:
+                _dates = [x[0] for x in _dated_rows]
+                _chart_start = _start or min(_dates)
+                _chart_end = _end or max(_dates)
+                _daily = (_chart_end - _chart_start).days <= 31
+                _totals = {}
+                if _daily:
+                    _cursor = _chart_start
+                    while _cursor <= _chart_end:
+                        _totals[_cursor] = 0.0
+                        _cursor += timedelta(days=1)
+                    for _date, _amount in _dated_rows:
+                        if _chart_start <= _date <= _chart_end:
+                            _totals[_date] = _totals.get(_date, 0.0) + _amount
+                    _chart_title = "#### Динамика суммы заказов по дням"
+                    _labels = [(d, d.strftime("%d.%m")) for d in sorted(_totals)]
+                else:
+                    _cursor = _chart_start.replace(day=1)
+                    _last_month = _chart_end.replace(day=1)
+                    while _cursor <= _last_month:
+                        _totals[_cursor] = 0.0
+                        _cursor = _cursor.replace(year=_cursor.year + 1, month=1) if _cursor.month == 12 else _cursor.replace(month=_cursor.month + 1)
+                    for _date, _amount in _dated_rows:
+                        if _chart_start <= _date <= _chart_end:
+                            _key = _date.replace(day=1)
+                            _totals[_key] = _totals.get(_key, 0.0) + _amount
+                    _chart_title = "#### Динамика суммы заказов по месяцам"
+                    _labels = [(d, d.strftime("%m.%Y")) for d in sorted(_totals)]
+                st.markdown(_chart_title)
+                _points = [(d, _totals[d]) for d in sorted(_totals)]
+                _w, _h = 900, 300
+                _left, _right, _top, _bottom = 68, 22, 18, 55
+                _plot_w, _plot_h = _w - _left - _right, _h - _top - _bottom
+                _max_val = max((v for _, v in _points), default=0.0)
+                _scale_max = _max_val * 1.12 if _max_val > 0 else 1.0
+                _xy = [
+                    (_left + (i * _plot_w / max(1, len(_points) - 1)),
+                     _top + _plot_h - (value / _scale_max * _plot_h))
+                    for i, (_, value) in enumerate(_points)
+                ]
+                _svg_parts = [
+                    f'<svg viewBox="0 0 {_w} {_h}" width="100%" role="img" aria-label="Динамика суммы заказов" xmlns="http://www.w3.org/2000/svg">',
+                    '<rect width="100%" height="100%" fill="transparent"/>',
+                ]
+                for _tick in range(5):
+                    _y = _top + _plot_h - (_tick * _plot_h / 4)
+                    _val = _scale_max * _tick / 4
+                    _svg_parts.append(f'<line x1="{_left}" y1="{_y:.1f}" x2="{_w-_right}" y2="{_y:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
+                    _svg_parts.append(f'<text x="{_left-9}" y="{_y+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_val:,.0f}</text>')
+                if len(_xy) == 1:
+                    _svg_parts.append(f'<circle cx="{_xy[0][0]:.1f}" cy="{_xy[0][1]:.1f}" r="4" fill="#bc1661"/>')
+                else:
+                    _polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _xy)
+                    _svg_parts.append(f'<polyline points="{_polyline}" fill="none" stroke="#bc1661" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>')
+                    _svg_parts.extend(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="#bc1661"/>' for x, y in _xy)
+                _label_step = max(1, (len(_labels) + 6) // 7)
+                for _i in range(0, len(_labels), _label_step):
+                    _x = _left + (_i * _plot_w / max(1, len(_points) - 1))
+                    _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="middle">{_labels[_i][1]}</text>')
+                if _labels and (len(_labels)-1) % _label_step != 0:
+                    _x = _left + _plot_w
+                    _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_labels[-1][1]}</text>')
+                _svg_parts.append('</svg>')
+                st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
         else:
             st.info("За выбранный период сделок нет.")
 
