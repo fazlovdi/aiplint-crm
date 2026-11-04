@@ -6608,10 +6608,11 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         st.session_state["_crm_active_dialog"] = _w_tabs[_w_index]
                     _crm_workspace_clear_legacy_dialog_markers()
                     _crm_workspace_queue_save()
-                    # Если окно закрыто из панели внутри фрагмента и другие окна
-                    # остаются, обновляем только рабочее пространство. Полный rerun
-                    # нужен при закрытии последнего окна или из главной панели.
-                    if in_workspace and _remaining_windows:
+                    # Переключение между окнами внутри рабочего пространства
+                    # всегда обновляет текущий fragment. Не проверяем здесь
+                    # _remaining_windows: эта переменная относится только к обработчику
+                    # закрытия окна и при переключении может быть не определена.
+                    if in_workspace:
                         try:
                             st.rerun(scope="fragment")
                         except (TypeError, ValueError):
