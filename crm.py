@@ -12392,49 +12392,6 @@ def statistics_dialog(section="Общая статистика"):
                     hide_index=True,
                     height=35 * (len(_status_table_rows) + 1) + 3,
                 )
-            # Потерянные продажи: только сделки, перенесённые пользователем в раздел «Архив».
-            _archived_deals = [
-                d for d in deals_all
-                if str(d.get("status") or "").strip() == "Архив" and _in_period(d)
-            ]
-            _lost_rows = []
-            _lost_reason_counts = {}
-            for _archived_deal in _archived_deals:
-                _archive_reason = str(
-                    _archived_deal.get("archive_report")
-                    or _archived_deal.get("loss_reason")
-                    or _archived_deal.get("lost_reason")
-                    or _archived_deal.get("cancel_reason")
-                    or "Причина не указана"
-                ).strip()
-                _lost_reason_counts[_archive_reason] = _lost_reason_counts.get(_archive_reason, 0) + 1
-                _archive_client = next(
-                    (c for c in clients_all if str(c.get("id")) == str(_archived_deal.get("client_id"))),
-                    {},
-                )
-                _lost_rows.append({
-                    "Сделка": str(_archived_deal.get("deal_number") or _archived_deal.get("title") or _archived_deal.get("id") or ""),
-                    "Клиент": str(_archive_client.get("name") or "—"),
-                    "Менеджер": str(_archived_deal.get("manager") or "Не назначен"),
-                    "Дата": _stat_deal_date(_archived_deal).strftime("%d.%m.%Y") if _stat_deal_date(_archived_deal) else "—",
-                    "Сумма, ₽": round(_stat_amount(_archived_deal), 2),
-                    "Причина / отчёт": _archive_reason,
-                })
-            st.markdown("#### Потерянные продажи")
-            _lost_amount = sum(x["Сумма, ₽"] for x in _lost_rows)
-            _lost1, _lost2, _lost3 = st.columns(3, gap="small")
-            _lost1.metric("Сделок в архиве", len(_lost_rows))
-            _lost2.metric("Сумма потерянных заказов", f"{_lost_amount:,.0f} ₽".replace(",", " "))
-            _lost3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
-            if _lost_rows:
-                st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
-                st.markdown("##### Причины / отчёты по архивным сделкам")
-                st.dataframe(
-                    [{"Причина / отчёт": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)],
-                    use_container_width=True, hide_index=True,
-                )
-            else:
-                st.info("В архиве нет сделок за выбранный период.")
 
             _dated_rows = [
                 (_stat_deal_date(row["deal"]), row["amount"])
@@ -12504,6 +12461,51 @@ def statistics_dialog(section="Общая статистика"):
                     _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_labels[-1][1]}</text>')
                 _svg_parts.append('</svg>')
                 st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
+
+            # Потерянные продажи: только сделки, перенесённые пользователем в раздел «Архив».
+            _archived_deals = [
+                d for d in deals_all
+                if str(d.get("status") or "").strip() == "Архив" and _in_period(d)
+            ]
+            _lost_rows = []
+            _lost_reason_counts = {}
+            for _archived_deal in _archived_deals:
+                _archive_reason = str(
+                    _archived_deal.get("archive_report")
+                    or _archived_deal.get("loss_reason")
+                    or _archived_deal.get("lost_reason")
+                    or _archived_deal.get("cancel_reason")
+                    or "Причина не указана"
+                ).strip()
+                _lost_reason_counts[_archive_reason] = _lost_reason_counts.get(_archive_reason, 0) + 1
+                _archive_client = next(
+                    (c for c in clients_all if str(c.get("id")) == str(_archived_deal.get("client_id"))),
+                    {},
+                )
+                _lost_rows.append({
+                    "Сделка": str(_archived_deal.get("deal_number") or _archived_deal.get("title") or _archived_deal.get("id") or ""),
+                    "Клиент": str(_archive_client.get("name") or "—"),
+                    "Менеджер": str(_archived_deal.get("manager") or "Не назначен"),
+                    "Дата": _stat_deal_date(_archived_deal).strftime("%d.%m.%Y") if _stat_deal_date(_archived_deal) else "—",
+                    "Сумма, ₽": round(_stat_amount(_archived_deal), 2),
+                    "Причина / отчёт": _archive_reason,
+                })
+            st.markdown("#### Потерянные продажи")
+            _lost_amount = sum(x["Сумма, ₽"] for x in _lost_rows)
+            _lost1, _lost2, _lost3 = st.columns(3, gap="small")
+            _lost1.metric("Сделок в архиве", len(_lost_rows))
+            _lost2.metric("Сумма потерянных заказов", f"{_lost_amount:,.0f} ₽".replace(",", " "))
+            _lost3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
+            if _lost_rows:
+                st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
+                st.markdown("##### Причины / отчёты по архивным сделкам")
+                st.dataframe(
+                    [{"Причина / отчёт": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)],
+                    use_container_width=True, hide_index=True,
+                )
+            else:
+                st.info("В архиве нет сделок за выбранный период.")
+
         else:
             st.info("За выбранный период сделок нет.")
 
