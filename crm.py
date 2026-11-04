@@ -14119,11 +14119,11 @@ def _crm_render_workspace_fragment():
         /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
         .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
         .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
-            display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
-            gap:5px !important; column-gap:5px !important; row-gap:5px !important;
+            display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+            gap:0 !important; column-gap:0 !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
-            border-bottom:0 !important; padding:0.15rem 104px 0.25rem 0 !important;
-            width:100% !important; overflow:visible !important;
+            border-bottom:0 !important; padding:0.15rem 0 0 !important;
+            width:100% !important; overflow-x:auto !important;
         }
         /* Each tab container must occupy only its own content width, not share
            the available row width with neighboring tabs. */
@@ -14187,12 +14187,12 @@ def _crm_render_workspace_fragment():
         .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button {
             padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
         }
-        .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button {
+        .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button {
             min-width:27px !important; width:27px !important; min-height:30px !important;
             height:30px !important; padding:0 !important; margin:0 !important;
             color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
         }
-        .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:last-child > button:hover {
+        .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button:hover {
             color:#BC1661 !important;
         }
         .st-key-crm_workspace_tabbar [class*="st-key-crm_workspace_tab_item_"]:has([data-testid="stBaseButton-primary"]) {
@@ -14222,7 +14222,7 @@ def _crm_render_workspace_fragment():
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
-            with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=True, gap=None, horizontal_alignment="left"):
+            with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                     with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
