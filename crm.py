@@ -12416,6 +12416,7 @@ def statistics_dialog(section="Общая статистика"):
                     hide_index=True,
                     height=35 * (len(_status_table_rows) + 1) + 3,
                 )
+            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
 
             _dated_rows = [
                 (_stat_deal_date(row["deal"]), row["amount"])
