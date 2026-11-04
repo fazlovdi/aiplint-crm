@@ -6654,74 +6654,68 @@ for _client_window in st.session_state.get("_crm_windows", []):
         _client_window["active_tab"] = max(0, min(_old_active - _removed_before_active, len(_client_window["tabs"]) - 1)) if _client_window["tabs"] else 0
         _client_window["title"] = "Новый клиент"
 
+def _crm_select_main_tab(tab_name):
+    """Select a main CRM section before Streamlit rerenders, keeping the active button in sync."""
+    st.session_state.active_tab = tab_name
+    st.session_state["_dialog_return_stack"] = []
+    st.session_state["_crm_modal_stack"] = []
+    st.session_state.expanded_task_key = None
+    for _key in ("dialog_task_key", "_open_created_task", "dialog_deal_key", "_open_created_deal"):
+        st.session_state.pop(_key, None)
+
+
 nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
-    if st.button("Клиенты", use_container_width=True, type="primary" if st.session_state.active_tab == "Клиенты" else "secondary"):
-        st.session_state.active_tab = "Клиенты"
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
-        st.session_state.expanded_task_key = None
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("_open_created_task", None)
-        st.session_state.pop("dialog_deal_key", None)
-        st.session_state.pop("_open_created_deal", None)
-        _crm_workspace_queue_save()
+    st.button(
+        "Клиенты",
+        use_container_width=True,
+        type="primary" if st.session_state.active_tab == "Клиенты" else "secondary",
+        on_click=_crm_select_main_tab,
+        args=("Клиенты",),
+    )
 with nc2:
     _deals_label = f"Сделки ({_new_deals_count})" if _new_deals_count > 0 else "Сделки"
-    if st.button(_deals_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
-        st.session_state.active_tab = "Сделки"
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
-        st.session_state.expanded_task_key = None
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("_open_created_task", None)
-        st.session_state.pop("dialog_deal_key", None)
-        st.session_state.pop("_open_created_deal", None)
-        _crm_workspace_queue_save()
+    st.button(
+        _deals_label,
+        use_container_width=True,
+        type="primary" if st.session_state.active_tab == "Сделки" else "secondary",
+        on_click=_crm_select_main_tab,
+        args=("Сделки",),
+    )
 with nc3:
     _tasks_label = f"Задачи ({_new_tasks_count})" if _new_tasks_count > 0 else "Задачи"
-    if st.button(_tasks_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
-        st.session_state.active_tab = "Задачи"
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
-        st.session_state.expanded_task_key = None
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("_open_created_task", None)
-        st.session_state.pop("dialog_deal_key", None)
-        st.session_state.pop("_open_created_deal", None)
-        _crm_workspace_queue_save()
+    st.button(
+        _tasks_label,
+        use_container_width=True,
+        type="primary" if st.session_state.active_tab == "Задачи" else "secondary",
+        on_click=_crm_select_main_tab,
+        args=("Задачи",),
+    )
 with nc4:
     _it_label = f"Внутренние ({_new_it_count})" if _new_it_count > 0 else "Внутренние"
-    if st.button(_it_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
-        st.session_state.active_tab = "Внутренние задачи"
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
-        st.session_state.expanded_task_key = None
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("_open_created_task", None)
-        st.session_state.pop("dialog_deal_key", None)
-        st.session_state.pop("_open_created_deal", None)
-        _crm_workspace_queue_save()
+    st.button(
+        _it_label,
+        use_container_width=True,
+        type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary",
+        on_click=_crm_select_main_tab,
+        args=("Внутренние задачи",),
+    )
 with nc5:
-    if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
-        st.session_state.active_tab = "Поставщики"
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
-        st.session_state.expanded_task_key = None
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("_open_created_task", None)
-        st.session_state.pop("dialog_deal_key", None)
-        st.session_state.pop("_open_created_deal", None)
-        _crm_workspace_queue_save()
+    st.button(
+        "Поставщики",
+        use_container_width=True,
+        type="primary" if st.session_state.active_tab == "Поставщики" else "secondary",
+        on_click=_crm_select_main_tab,
+        args=("Поставщики",),
+    )
 with nc6:
-    if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
-        st.session_state.active_tab = "Товары и прайс"
-        st.session_state["_dialog_return_stack"] = []
-        st.session_state["_crm_modal_stack"] = []
-        st.session_state.pop("dialog_task_key", None)
-        st.session_state.pop("dialog_deal_key", None)
-        st.session_state.pop("_open_created_deal", None)
-        _crm_workspace_queue_save()
+    st.button(
+        "Товары и прайс",
+        use_container_width=True,
+        type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary",
+        on_click=_crm_select_main_tab,
+        args=("Товары и прайс",),
+    )
 st.markdown("---")
 
 # На главном экране панель окон расположена сразу под навигацией CRM.
