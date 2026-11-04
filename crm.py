@@ -12213,7 +12213,10 @@ def statistics_dialog(section="Общая статистика"):
         })
 
     def _stat_divider():
-        _stat_divider()
+        st.markdown(
+            '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
+            unsafe_allow_html=True,
+        )
 
     def _stat_num(value):
         try:
