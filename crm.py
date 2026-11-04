@@ -12804,18 +12804,7 @@ def statistics_dialog(section="Общая статистика"):
                 "Продано, м": round(sum(x["metres"] for x in _source_deals), 1),
             })
         _source_stats.sort(key=lambda x: (x["Сумма заказов, ₽"], x["Клиентов"]), reverse=True)
-        _source_leads_total = sum(x["Клиентов"] for x in _source_stats)
-        _source_deals_total = sum(x["Сделок"] for x in _source_stats)
-        _source_paid_total = sum(x["Оплачено"] for x in _source_stats)
-        _source_revenue_total = sum(x["Сумма заказов, ₽"] for x in _source_stats)
-        _src1, _src2, _src3, _src4 = st.columns(4, gap="small")
-        _src1.metric("Клиентов", _source_leads_total)
-        _src2.metric("Сделок", _source_deals_total)
-        _src3.metric("Оплачено", _source_paid_total)
-        _src4.metric("Сумма заказов", f"{_source_revenue_total:,.0f} ₽".replace(",", " "))
         if _source_stats:
-            st.markdown("##### Сводка по источникам")
-            st.dataframe(_source_stats, use_container_width=True, hide_index=True)
             _source_names_for_chart = sorted(
                 x["Источник"] for x in _source_stats
                 if x["Источник"] != "Не указан"
