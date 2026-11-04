@@ -5870,7 +5870,7 @@ if not st.session_state.authenticated:
     # A remembered browser is identified by a non-secret login cookie, but must prove
     # knowledge of the PIN on every fresh page session.
     _remembered_user = get_user_by_login(_remembered_login) if _remembered_login else None
-    if _remembered_user and isinstance(_remembered_user.get("login_pin"), dict):
+    if _remembered_user and isinstance(_remembered_user.get("login_pin"), dict) and st.session_state.get("_show_pin_login", False):
         st.markdown("<h2 style='text-align: center; margin-top: 3rem;'>Айплинт CRM</h2>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #7F8C9A; margin-bottom: 2rem;'>Введите PIN-код для входа</p>", unsafe_allow_html=True)
         lc, mc, rc = st.columns([1, 2, 1])
@@ -5962,6 +5962,7 @@ if not st.session_state.authenticated:
                     except Exception:
                         pass
                     st.session_state["_force_password_login"] = True
+                    st.session_state["_show_pin_login"] = False
                     st.session_state.pop("remembered_pin_input", None)
                     st.rerun()
         # Keep Face ID / Passkey available even when this browser is remembered for PIN login.
@@ -6090,6 +6091,10 @@ if not st.session_state.authenticated:
                 except Exception as _login_exc:
                     st.error(f"Не удалось завершить вход. Ошибка: {type(_login_exc).__name__}: {str(_login_exc)[:240]}")
                     st.caption("Попробуйте ещё раз. Если ошибка повторится, пришлите этот текст — он поможет исправить причину.")
+    if _remembered_user and isinstance(_remembered_user.get("login_pin"), dict) and not st.session_state.get("_force_password_login"):
+        if st.button("Войти по PIN-коду", use_container_width=True, key="show_remembered_pin_login"):
+            st.session_state["_show_pin_login"] = True
+            st.rerun()
     st.markdown("---")
     st.markdown("**Или войдите без пароля**")
     if st.session_state.get("_passkey_login_message"):
