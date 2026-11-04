@@ -12656,7 +12656,7 @@ def statistics_dialog(section="Общая статистика"):
         _p2.metric("Факт, м", f"{_fact_metres:,.1f}".replace(",", " "))
         _p3.metric("Выполнение плана", f"{_plan_percent:.1f}%")
         _p4.metric("До плана, м", f"{_plan_remaining:,.1f}".replace(",", " "))
-        st.markdown('<style>div[data-testid="stProgress"] [role="progressbar"] > div { background-color: #bc1661 !important; }</style>', unsafe_allow_html=True)
+        st.markdown('<style>div[data-testid="stProgress"] [role="progressbar"] > div > div { background-color: #bc1661 !important; }</style>', unsafe_allow_html=True)
         st.progress(min(1.0, max(0.0, _plan_percent / 100)))
         st.caption("План — 3 000 м в месяц. Для выбранного диапазона он рассчитывается пропорционально количеству календарных дней; факт считается по сделкам, созданным в этом периоде.")
 
