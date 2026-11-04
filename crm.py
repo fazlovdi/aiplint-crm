@@ -4981,6 +4981,17 @@ if "active_tab" not in st.session_state: st.session_state.active_tab = "Зада
 if "client_form_version" not in st.session_state: st.session_state.client_form_version = 0
 if "authenticated" not in st.session_state: st.session_state.authenticated = False
 if "user_role" not in st.session_state: st.session_state.user_role = None
+
+# Панель служебного статуса Streamlit оставляем только администратору.
+if st.session_state.get("user_role") != "admin":
+    st.markdown("""<style>
+    [data-testid="stStatusWidget"],
+    [data-testid="stAppDeployButton"],
+    .stDeployButton {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    </style>""", unsafe_allow_html=True)
 if "user_login" not in st.session_state: st.session_state.user_login = None
 if "user_name" not in st.session_state: st.session_state.user_name = None
 _start_cloud_startup_worker()
