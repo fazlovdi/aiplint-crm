@@ -5121,69 +5121,13 @@ def _create_browser_session(user, remember=True):
         except Exception:
             pass
 
-    # CookieManager updates can be lost when the caller immediately triggers st.rerun().
-    # Write the bearer/session cookies synchronously in the browser, then reload only after
-    # the browser confirms the writes have been issued. This also makes the PIN screen
-    # survive a hard page refresh instead of falling back to username/password.
-    try:
-        _cookie_token_js = json.dumps(token)
-        _cookie_login_js = json.dumps(str(user.get("login", "")))
-        _cookie_remember_js = "true" if remember else "false"
-        components.html(f"""
-        <script>
-        (() => {{
-          const status = document.getElementById('auth-cookie-write-status');
-          try {{
-            const win = window.parent;
-            const doc = win.document;
-            const secure = win.location.protocol === 'https:' ? '; Secure' : '';
-            const base = '; path=/; SameSite=Lax' + secure;
-            const token = {_cookie_token_js};
-            const login = {_cookie_login_js};
-            const remember = {_cookie_remember_js};
-            const readCookie = (name) => {{
-              const prefix = name + '=';
-              const item = doc.cookie.split('; ').find(v => v.startsWith(prefix));
-              return item ? decodeURIComponent(item.slice(prefix.length)) : '';
-            }};
-            const persistence = remember ? '; max-age=315360000' : '';
-            doc.cookie = 'auth_token=' + encodeURIComponent(token) + base + persistence;
-            doc.cookie = 'crm_last_activity=' + encodeURIComponent(String(Date.now())) + base + persistence;
-            doc.cookie = 'crm_session_expired=' + base + '; max-age=0';
-            if (remember) {{
-              doc.cookie = 'remembered_user=' + encodeURIComponent(login) + base + '; max-age=315360000';
-            }} else {{
-              doc.cookie = 'remembered_user=' + base + '; max-age=0';
-            }}
-            // Never reload just because cookie assignment did not throw: browsers can silently
-            // reject a cookie. Confirm that the exact session token is readable first.
-            const deadline = Date.now() + 2500;
-            const confirmAndReload = () => {{
-              const tokenSaved = readCookie('auth_token') === token;
-              const loginSaved = !remember || readCookie('remembered_user') === login;
-              if (tokenSaved && loginSaved) {{
-                if (status) status.textContent = 'Сессия сохранена. Выполняется вход…';
-                win.setTimeout(() => win.location.reload(), 150);
-              }} else if (Date.now() < deadline) {{
-                win.setTimeout(confirmAndReload, 100);
-              }} else {{
-                if (status) status.textContent = 'Браузер не сохранил токен авторизации. Разрешите cookies для этого сайта и повторите вход. PIN-код сохранён.';
-              }}
-            }};
-            confirmAndReload();
-          }} catch (e) {{
-            if (status) status.textContent = 'Не удалось сохранить сессию в браузере. Разрешите cookies для этого сайта и повторите вход.';
-          }}
-        }})();
-        </script>
-        <div id="auth-cookie-write-status" style="font-size:12px;color:#b42318;padding:6px 0"></div>
-        """, height=42, width=500)
-        # Stop this run so the browser-side cookie write/reload, not an immediate Python
-        # rerun, completes the login transition.
-        st.stop()
-    except Exception:
-        # Keep the regular Streamlit cookie manager as a fallback on unusual deployments.
-        pass
+    # После успешной проверки пароля авторизация уже установлена в session_state.
+    # Не блокируем вход ожиданием JS-перезагрузки: в некоторых браузерах/встроенных
+    # окружениях iframe не может подтвердить cookie через document.cookie, из-за чего
+    # пользователь оставался на форме входа несмотря на корректный пароль.
+    # CookieManager выше по-прежнему получает команды set/delete для восстановления
+    # сессии после следующей полной загрузки страницы.
+
 
 
 def _passkey_b64url_encode(value):
