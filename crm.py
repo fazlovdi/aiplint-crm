@@ -12774,6 +12774,11 @@ def statistics_dialog(section="Общая статистика"):
         st.caption("Повторным считается клиент, у которого за всё время в CRM более одной сделки. В таблице показаны его заказы и суммы именно за выбранный период. Сделки без привязки к карточке клиента не учитываются.")
 
 
+        st.markdown(
+            '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
+            unsafe_allow_html=True,
+        )
+
         st.markdown("#### Источники продаж")
         _clients_by_source = defaultdict(list)
         for _client in clients:
@@ -12811,14 +12816,99 @@ def statistics_dialog(section="Общая статистика"):
         if _source_stats:
             st.markdown("##### Сводка по источникам")
             st.dataframe(_source_stats, use_container_width=True, hide_index=True)
-            _source_chart_rows = [x for x in _source_stats if x["Источник"] != "Не указан"]
-            if _source_chart_rows:
-                _source_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Клиентов"], reverse=True)
-                st.markdown("##### Количество привлечённых клиентов")
-                st.bar_chart(_source_chart_rows, x="Источник", y="Клиентов")
-                _revenue_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True)
-                st.markdown("##### Сумма заказов по источникам")
-                st.bar_chart(_revenue_chart_rows, x="Источник", y="Сумма заказов, ₽")
+            _source_names_for_chart = sorted(
+                x["Источник"] for x in _source_stats
+                if x["Источник"] != "Не указан"
+            )
+            if _source_names_for_chart:
+                _source_options_for_chart = ["Все источники"] + _source_names_for_chart
+                _selected_source_chart = st.selectbox(
+                    "Источник для графика",
+                    _source_options_for_chart,
+                    key="sales_source_chart_source",
+                )
+                _source_client_lookup = {
+                    str(_client.get("id", "")): str(_client.get("source") or "").strip() or "Не указан"
+                    for _client in clients
+                }
+                _dated_source_rows = []
+                for _row in deal_rows:
+                    _client_id_for_chart = str(_row["deal"].get("client_id", ""))
+                    _deal_source = _source_client_lookup.get(_client_id_for_chart, "Не указан")
+                    _deal_date_for_chart = _stat_deal_date(_row["deal"])
+                    if (
+                        _deal_date_for_chart is not None
+                        and (_selected_source_chart == "Все источники" or _deal_source == _selected_source_chart)
+                        and (_start is None or _deal_date_for_chart >= _start)
+                        and (_end is None or _deal_date_for_chart <= _end)
+                    ):
+                        _dated_source_rows.append((_deal_date_for_chart, _row["amount"]))
+                if _dated_source_rows:
+                    _source_dates = [x[0] for x in _dated_source_rows]
+                    _source_chart_start = _start or min(_source_dates)
+                    _source_chart_end = _end or max(_source_dates)
+                    _source_daily = (_source_chart_end - _source_chart_start).days <= 31
+                    _source_timeline = {}
+                    if _source_daily:
+                        _source_cursor = _source_chart_start
+                        while _source_cursor <= _source_chart_end:
+                            _source_timeline[_source_cursor] = 0.0
+                            _source_cursor += timedelta(days=1)
+                        for _date, _amount in _dated_source_rows:
+                            _source_timeline[_date] = _source_timeline.get(_date, 0.0) + _amount
+                        _source_labels = [(d, d.strftime("%d.%m")) for d in sorted(_source_timeline)]
+                        _source_chart_title = "##### Динамика суммы заказов по дням"
+                    else:
+                        _source_cursor = _source_chart_start.replace(day=1)
+                        _source_last_month = _source_chart_end.replace(day=1)
+                        while _source_cursor <= _source_last_month:
+                            _source_timeline[_source_cursor] = 0.0
+                            _source_cursor = (
+                                _source_cursor.replace(year=_source_cursor.year + 1, month=1)
+                                if _source_cursor.month == 12
+                                else _source_cursor.replace(month=_source_cursor.month + 1)
+                            )
+                        for _date, _amount in _dated_source_rows:
+                            _source_key = _date.replace(day=1)
+                            _source_timeline[_source_key] = _source_timeline.get(_source_key, 0.0) + _amount
+                        _source_labels = [(d, d.strftime("%m.%Y")) for d in sorted(_source_timeline)]
+                        _source_chart_title = "##### Динамика суммы заказов по месяцам"
+                    st.markdown(_source_chart_title)
+                    _source_points = [(d, _source_timeline[d]) for d in sorted(_source_timeline)]
+                    _sw, _sh = 900, 300
+                    _sleft, _sright, _stop, _sbottom = 68, 22, 18, 55
+                    _splot_w, _splot_h = _sw - _sleft - _sright, _sh - _stop - _sbottom
+                    _smax = max((v for _, v in _source_points), default=0.0)
+                    _sscale_max = _smax * 1.12 if _smax > 0 else 1.0
+                    _sxy = [
+                        (_sleft + (i * _splot_w / max(1, len(_source_points) - 1)),
+                         _stop + _splot_h - (value / _sscale_max * _splot_h))
+                        for i, (_, value) in enumerate(_source_points)
+                    ]
+                    _source_svg = [
+                        f'<svg viewBox="0 0 {_sw} {_sh}" width="100%" role="img" aria-label="Динамика суммы заказов по источнику" xmlns="http://www.w3.org/2000/svg">',
+                        '<rect width="100%" height="100%" fill="transparent"/>',
+                    ]
+                    for _tick in range(5):
+                        _sy = _stop + _splot_h - (_tick * _splot_h / 4)
+                        _sval = _sscale_max * _tick / 4
+                        _source_svg.append(f'<line x1="{_sleft}" y1="{_sy:.1f}" x2="{_sw-_sright}" y2="{_sy:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
+                        _source_svg.append(f'<text x="{_sleft-9}" y="{_sy+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_sval:,.0f}</text>')
+                    if len(_sxy) == 1:
+                        _source_svg.append(f'<circle cx="{_sxy[0][0]:.1f}" cy="{_sxy[0][1]:.1f}" r="3" fill="#bc1661"/>')
+                    else:
+                        _source_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _sxy)
+                        _source_svg.append(f'<polyline points="{_source_polyline}" fill="none" stroke="#bc1661" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>')
+                    _source_label_step = max(1, (len(_source_labels) + 6) // 7)
+                    for _i in range(0, len(_source_labels), _source_label_step):
+                        _sx = _sleft + (_i * _splot_w / max(1, len(_source_points) - 1))
+                        _source_svg.append(f'<text x="{_sx:.1f}" y="{_sh-27}" font-size="11" fill="currentColor" text-anchor="middle">{_source_labels[_i][1]}</text>')
+                    if _source_labels and (len(_source_labels)-1) % _source_label_step != 0:
+                        _source_svg.append(f'<text x="{_sw-_sright}" y="{_sh-27}" font-size="11" fill="currentColor" text-anchor="end">{_source_labels[-1][1]}</text>')
+                    _source_svg.append('</svg>')
+                    st.markdown("\\n".join(_source_svg), unsafe_allow_html=True)
+                else:
+                    st.info("За выбранный период нет сделок с датой для построения графика.")
             st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
         else:
             st.info("За выбранный период клиентов пока нет.")
