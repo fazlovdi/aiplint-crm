@@ -12330,35 +12330,35 @@ def statistics_dialog(section="Общая статистика"):
 
 
     elif section in manager_names:
-            _manager_name = section
-            _manager_rows = [x for x in deal_rows if x["manager"] == _manager_name]
-            _manager_amount = sum(x["amount"] for x in _manager_rows)
-            _manager_metres = sum(x["metres"] for x in _manager_rows)
-            _manager_paid = sum(1 for x in _manager_rows if x["paid"])
-            _manager_clients = sum(
-                1 for client in clients
-                if str(client.get("manager") or client.get("responsible") or "") == _manager_name
-            )
-            _c1, _c2, _c3, _c4 = st.columns(4)
-            _c1.metric("Заказов / сделок", len(_manager_rows))
-            _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
-            _c3.metric("Сумма заказов", f"{_manager_amount:,.0f} ₽".replace(",", " "))
-            _c4.metric("Оплачено полностью", _manager_paid)
-            st.metric("Клиентов закреплено / создано за период", _manager_clients)
-            if _manager_rows:
-                st.dataframe([
-                    {
-                        "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
-                        "Дата": (_stat_deal_date(x["deal"]).strftime("%d.%m.%Y") if _stat_deal_date(x["deal"]) else "—"),
-                        "Клиент": next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(x["deal"].get("client_id"))), "—"),
-                        "Статус": x["status"],
-                        "Метры": round(x["metres"], 2),
-                        "Сумма, ₽": round(x["amount"], 2),
-                    }
-                    for x in sorted(_manager_rows, key=lambda z: str(z["deal"].get("created_at") or ""), reverse=True)
-                ], use_container_width=True, hide_index=True)
-            else:
-                st.info("За выбранный период у менеджера нет сделок.")
+        _manager_name = section
+        _manager_rows = [x for x in deal_rows if x["manager"] == _manager_name]
+        _manager_amount = sum(x["amount"] for x in _manager_rows)
+        _manager_metres = sum(x["metres"] for x in _manager_rows)
+        _manager_paid = sum(1 for x in _manager_rows if x["paid"])
+        _manager_clients = sum(
+            1 for client in clients
+            if str(client.get("manager") or client.get("responsible") or "") == _manager_name
+        )
+        _c1, _c2, _c3, _c4 = st.columns(4)
+        _c1.metric("Заказов / сделок", len(_manager_rows))
+        _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
+        _c3.metric("Сумма заказов", f"{_manager_amount:,.0f} ₽".replace(",", " "))
+        _c4.metric("Оплачено полностью", _manager_paid)
+        st.metric("Клиентов закреплено / создано за период", _manager_clients)
+        if _manager_rows:
+            st.dataframe([
+                {
+                    "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
+                    "Дата": (_stat_deal_date(x["deal"]).strftime("%d.%m.%Y") if _stat_deal_date(x["deal"]) else "—"),
+                    "Клиент": next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(x["deal"].get("client_id"))), "—"),
+                    "Статус": x["status"],
+                    "Метры": round(x["metres"], 2),
+                    "Сумма, ₽": round(x["amount"], 2),
+                }
+                for x in sorted(_manager_rows, key=lambda z: str(z["deal"].get("created_at") or ""), reverse=True)
+            ], use_container_width=True, hide_index=True)
+        else:
+            st.info("За выбранный период у менеджера нет сделок.")
 
 
     elif section == "Материалы":
