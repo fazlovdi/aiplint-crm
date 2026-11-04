@@ -2563,7 +2563,13 @@ def _crm_dialog(title, width="large"):
                 return None
             _crm_workspace_open_dialog(entry, client_id=client_id, from_host=inside_host)
             if inside_host:
-                st.rerun()
+                # A nested card/deal/task opened from the workspace only needs
+                # the workspace fragment to rerender; restarting the whole CRM
+                # repeats navigation, counters, and other main-page work.
+                try:
+                    st.rerun(scope="fragment")
+                except (TypeError, ValueError):
+                    st.rerun()
             return None
         _request_dialog.__name__ = func.__name__
         _request_dialog.__doc__ = func.__doc__
