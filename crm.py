@@ -12711,7 +12711,7 @@ def statistics_dialog(section="Общая статистика"):
             st.dataframe(_material_rows, use_container_width=True, hide_index=True)
             st.bar_chart(
                 [{"Материал": x["Материал / товар"], "Продано": x["Продано"]} for x in _material_rows],
-                x="Материал", y="Продано",
+                x="Материал", y="Продано", color="#bc1661",
             )
         else:
             st.info("В расчётах за выбранный период нет товарных позиций. Проверьте, что позиции сохранены в расчётах сделок.")
