@@ -12420,10 +12420,10 @@ def statistics_dialog(section="Общая статистика"):
             if _source_chart_rows:
                 _source_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Клиентов"], reverse=True)
                 st.markdown("##### Количество привлечённых клиентов")
-                st.bar_chart(pd.DataFrame({"Источник": [x["Источник"] for x in _source_chart_rows], "Клиентов": [x["Клиентов"] for x in _source_chart_rows]}).set_index("Источник"))
+                st.bar_chart(_source_chart_rows, x="Источник", y="Клиентов")
                 _revenue_chart_rows = sorted(_source_chart_rows, key=lambda x: x["Сумма заказов, ₽"], reverse=True)
                 st.markdown("##### Сумма заказов по источникам")
-                st.bar_chart(pd.DataFrame({"Источник": [x["Источник"] for x in _revenue_chart_rows], "Сумма заказов, ₽": [x["Сумма заказов, ₽"] for x in _revenue_chart_rows]}).set_index("Источник"))
+                st.bar_chart(_revenue_chart_rows, x="Источник", y="Сумма заказов, ₽")
             st.caption("Конверсия = полностью оплаченные сделки / все сделки клиентов этого источника в выбранном периоде. Сумма заказов — стоимость сделок, а не фактически поступившие платежи.")
         else:
             st.info("За выбранный период клиентов пока нет.")
