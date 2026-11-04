@@ -3741,7 +3741,14 @@ def _render_emergency_restore(load_error):
         try:
             _emergency_text = _emergency_file.getvalue().decode("utf-8-sig")
             _emergency_data = _validate_backup_snapshot(_emergency_text)
-            _emergency_admin = next((u for u in _emergency_data.get("users", []) if isinstance(u, dict) and str(u.get("login", "")).strip() == _emergency_login.strip() and str(u.get("role", "")).lower() == "admin" and verify_password(_emergency_password, str(u.get("password", ""))), None)
+                        _emergency_admin = next(
+                (u for u in _emergency_data.get("users", [])
+                 if isinstance(u, dict)
+                 and str(u.get("login", "")).strip() == _emergency_login.strip()
+                 and str(u.get("role", "")).lower() == "admin"
+                 and verify_password(_emergency_password, str(u.get("password", "")))),
+                None,
+            )
             if not _emergency_admin:
                 raise ValueError("Не удалось подтвердить администратора. Проверьте логин и пароль именно для этой резервной копии.")
             _emergency_data = _sanitize_backup_data(_emergency_data)
