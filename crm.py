@@ -12742,10 +12742,9 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет активных сделок за выбранный период.")
         st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
-        if _all_tasks:
-            _stat_divider()
+        _stat_divider()
         st.markdown("#### Задачи за период")
-            st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
+        st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
 
     elif section == "Продажи":
         _stat_divider()
