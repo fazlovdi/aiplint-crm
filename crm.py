@@ -12236,30 +12236,50 @@ def statistics_dialog(section="Общая статистика"):
     ]
     if "statistics_period_choice" not in st.session_state:
         st.session_state["statistics_period_choice"] = "Этот месяц"
+
+    # Периоды и даты произвольного диапазона находятся в одной строке.
+    # Все восемь кнопок имеют одинаковую ширину и фиксированную высоту.
     st.markdown(
         """<style>
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) {
-            align-items: stretch;
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) {
+            align-items: center !important;
             gap: 6px !important;
+            column-gap: 6px !important;
+            row-gap: 0 !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="column"],
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) > [data-testid="stColumn"] {
             padding: 0 !important;
             min-width: 0 !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) div[data-testid="stButton"] {
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stButton"] {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) button[key^="statistics_period_btn_"] {
+            box-sizing: border-box !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            min-height: 38px !important;
+            height: 38px !important;
+            max-height: 38px !important;
+            padding: 0 4px !important;
+            white-space: nowrap !important;
+            line-height: 1 !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] {
             margin: 0 !important;
             padding: 0 !important;
         }
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stButton"] button[key^="statistics_period_btn_"]) button {
-            min-height: 38px;
-            height: 38px;
-            padding: 0 4px !important;
-            white-space: nowrap;
+        div[data-testid="stHorizontalBlock"]:has(button[key^="statistics_period_btn_"]) div[data-testid="stDateInput"] input {
+            min-height: 38px !important;
+            height: 38px !important;
         }
         </style>""",
         unsafe_allow_html=True,
     )
-    _period_cols = st.columns(len(period_options), gap=0)
+    _period_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 1.35, 1.35], gap="small")
     for _idx, (_period_value, _period_label) in enumerate(period_options):
         with _period_cols[_idx]:
             st.button(
@@ -12269,6 +12289,11 @@ def statistics_dialog(section="Общая статистика"):
                 use_container_width=True,
                 on_click=lambda value=_period_value: st.session_state.__setitem__("statistics_period_choice", value),
             )
+    with _period_cols[8]:
+        _start = st.date_input("С даты", value=today.replace(day=1), key="statistics_date_from", label_visibility="collapsed")
+    with _period_cols[9]:
+        _end = st.date_input("По дату", value=today, key="statistics_date_to", label_visibility="collapsed")
+
     _period = st.session_state.get("statistics_period_choice", "Этот месяц")
     if _period == "Этот месяц":
         _start = today.replace(day=1)
@@ -12287,11 +12312,8 @@ def statistics_dialog(section="Общая статистика"):
     elif _period == "Этот год":
         _start, _end = today.replace(month=1, day=1), today
     elif _period == "Произвольный период":
-        _date_left, _date_right = st.columns(2)
-        with _date_left:
-            _start = st.date_input("С даты", value=today.replace(day=1), key="statistics_date_from")
-        with _date_right:
-            _end = st.date_input("По дату", value=today, key="statistics_date_to")
+        _start = st.session_state.get("statistics_date_from", today.replace(day=1))
+        _end = st.session_state.get("statistics_date_to", today)
         if _start > _end:
             _start, _end = _end, _start
     else:
@@ -13933,7 +13955,7 @@ def _crm_render_workspace_fragment():
             display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
             gap:0 !important; column-gap:0 !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
-            border-bottom:1px solid #E3E8EF !important; padding:0.15rem 0 0 !important;
+            border-bottom:0 !important; padding:0.15rem 0 0 !important;
             width:100% !important; overflow-x:auto !important;
         }
         /* Each tab container must occupy only its own content width, not share
@@ -14022,24 +14044,7 @@ def _crm_render_workspace_fragment():
             white-space:nowrap !important;
         }
         .st-key-crm_workspace_window hr { display:none !important; }
-        .st-key-crm_workspace_window hr { display:none !important; }
         .st-key-crm_workspace_content [class*="st-key-close_row_"] { display:none !important; }
-        /* One center divider and a clear 16px gutter on each side. */
-        .st-key-crm_workspace_content { position:relative !important; }
-        .st-key-crm_workspace_content:before {
-            content:"" !important; position:absolute !important; z-index:5 !important;
-            pointer-events:none !important; top:0 !important; bottom:0 !important;
-            left:50% !important; width:0 !important;
-            border-left:1px solid #D5DCE5 !important;
-        }
-        .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child,
-        .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {
-            padding-right:16px !important; box-sizing:border-box !important;
-        }
-        .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child,
-        .st-key-crm_workspace_content [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
-            padding-left:16px !important; box-sizing:border-box !important;
-        }
         </style>""", unsafe_allow_html=True)
         with st.container(key="crm_workspace_backdrop"):
             st.write("")
@@ -14047,12 +14052,6 @@ def _crm_render_workspace_fragment():
             # Window switcher is placed at the top of the workspace, above its tabs.
             # The same panel is available on the Clients, Deals and Tasks main sections.
             _crm_workspace_render_bottom_panel(in_workspace=True)
-            st.markdown(
-                "<div class='crm-workspace-window-switcher-divider'></div>"
-                "<style>.crm-workspace-window-switcher-divider { border-top:1px solid #D9DEE7; "
-                "margin:2px 0 3px 0; padding:0; height:0; }</style>",
-                unsafe_allow_html=True,
-            )
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
