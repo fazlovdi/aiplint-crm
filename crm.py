@@ -12649,28 +12649,33 @@ def statistics_dialog(section="Общая статистика"):
                 _product_summary[_product_label]["metres"] += _material_value["quantity"]
                 _product_summary[_product_label]["amount"] += _material_value["revenue"]
             _product_total_amount = sum(v["amount"] for v in _product_summary.values())
-            st.markdown("#### Структура продаж по продуктам")
-            _product_rows = [
-                {
-                    "Продукт": name,
-                    "Метры": round(values["metres"], 1),
-                    "Сумма, ₽": round(values["amount"], 2),
-                    "Доля": (format(values["amount"] / _product_total_amount * 100, ".1f") + "%") if _product_total_amount else "0.0%",
-                }
-                for name, values in sorted(_product_summary.items(), key=lambda item: item[1]["amount"], reverse=True)
-            ]
-            st.dataframe(_product_rows, use_container_width=True, hide_index=True)
-            _material_rows = [
-                {
+            _material_rows = []
+            for (name, unit), values in sorted(_materials.items(), key=lambda x: x[0][0].lower()):
+                _material_name_lower = str(name or "").lower()
+                if "slim" in _material_name_lower or "слим" in _material_name_lower or "тонк" in _material_name_lower:
+                    _product_label = "Айплинт Slim"
+                elif "магнит" in _material_name_lower:
+                    _product_label = "Магнитный"
+                elif "встроен" in _material_name_lower:
+                    _product_label = "Комплект «Айплинт встроенный»"
+                else:
+                    _product_label = str(name or "Другие товары")
+                _product_values = _product_summary.get(_product_label, {})
+                _product_amount = float(_product_values.get("amount", 0) or 0)
+                _product_quantity = float(_product_values.get("metres", 0) or 0)
+                _material_rows.append({
                     "Материал / товар": name,
                     "Ед. изм.": unit,
                     "Продано": round(values["quantity"], 2),
                     "Выручка по позициям, ₽": round(values["revenue"], 2),
                     "Заказов": len(values["orders"]),
                     "Средняя цена": round(values["revenue"] / values["quantity"], 2) if values["quantity"] else 0,
-                }
-                for (name, unit), values in sorted(_materials.items(), key=lambda x: x[0][0].lower())
-            ]
+                    "Продукт": _product_label,
+                    "Всего продано по продукту": round(_product_quantity, 2),
+                    "Сумма по продукту, ₽": round(_product_amount, 2),
+                    "Доля в выручке": (format(_product_amount / _product_total_amount * 100, ".1f") + "%") if _product_total_amount else "0.0%",
+                })
+
             st.dataframe(_material_rows, use_container_width=True, hide_index=True)
             st.bar_chart(
                 [{"Материал": x["Материал / товар"], "Продано": x["Продано"]} for x in _material_rows],
@@ -14114,11 +14119,11 @@ def _crm_render_workspace_fragment():
         /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
         .st-key-crm_workspace_tabbar { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
         .st-key-crm_workspace_tabbar [data-testid="stHorizontalBlock"] {
-            display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
-            gap:0 !important; column-gap:0 !important; row-gap:0 !important;
+            display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
+            gap:5px !important; column-gap:5px !important; row-gap:5px !important;
             align-items:center !important; justify-content:flex-start !important;
-            border-bottom:0 !important; padding:0.15rem 0 0 !important;
-            width:100% !important; overflow-x:auto !important;
+            border-bottom:0 !important; padding:0.15rem 104px 0.25rem 0 !important;
+            width:100% !important; overflow:visible !important;
         }
         /* Each tab container must occupy only its own content width, not share
            the available row width with neighboring tabs. */
@@ -14217,7 +14222,7 @@ def _crm_render_workspace_fragment():
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
-            with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
+            with st.container(key="crm_workspace_tabbar", horizontal=True, wrap=True, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
                     with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
