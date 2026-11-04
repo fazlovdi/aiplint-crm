@@ -2000,6 +2000,10 @@ def _crm_workspace_tab_label(entry):
     name = str(entry.get("name", ""))
     args = entry.get("args", ()) or ()
     kwargs = entry.get("kwargs", {}) or {}
+    # Statistics uses one shared dialog renderer, but each section is its own
+    # workspace tab. Always show the section title rather than the generic dialog title.
+    if name == "statistics_dialog":
+        return str(args[0] if args and args[0] else entry.get("title") or "Общая статистика")
     if name == "client_detail_dialog":
         return "Карточка клиента"
 
@@ -13966,7 +13970,7 @@ def _crm_render_workspace_fragment():
                         )
                         # The client-card tab is closed through the window switcher above;
                         # do not render a second close control beside this tab.
-                        if str(_tab.get("name", "")) != "client_detail_dialog":
+                        if str(_tab.get("name", "")) not in ("client_detail_dialog", "statistics_dialog"):
                             st.button(
                                 "×",
                                 key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}",
