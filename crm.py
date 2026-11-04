@@ -3680,7 +3680,8 @@ def _ensure_sqlite_store():
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
-            if row is None:
+            if row is None or not isinstance(row[0], str) or not row[0].strip():
+                # Восстанавливаем не только отсутствующую строку, но и пустую запись SQLite.
                 # Сначала проверяем локальное JSON-зеркало; если его нет,
                 # используем валидную облачную резервную копию. Рабочая запись
                 # SQLite при этом уже проверена выше и не перезаписывается.
@@ -3703,7 +3704,7 @@ def _ensure_sqlite_store():
                 initial_json = json.dumps(initial_data, ensure_ascii=False, separators=(",", ":"))
                 conn.execute("BEGIN IMMEDIATE")
                 try:
-                    conn.execute("INSERT OR IGNORE INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, 1, ?)", (initial_json, now_str()))
+                    conn.execute("INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, 1, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at WHERE crm_state.data IS NULL OR trim(crm_state.data) = ''", (initial_json, now_str()))
                     conn.execute("COMMIT")
                 except Exception:
                     conn.execute("ROLLBACK")
