@@ -5870,39 +5870,22 @@ if not st.session_state.authenticated:
                 try:
                     user = next((u for u in st.session_state.crm_store.get("users", []) if str(u.get("login", "")).strip() == str(username or "").strip()), None)
                     if user and verify_password(password, user.get("password", "")):
-                        # Постоянная браузерная cookie с серверным токеном позволяет переживать F5.
-                        # Сам пароль нигде в cookie не сохраняется; токен проверяется по хэшу в CRM.
-                        _password_token = secrets.token_urlsafe(32)
-                        _password_sessions = user.setdefault("auth_sessions", [])
-                        if not isinstance(_password_sessions, list):
-                            _password_sessions = []
-                            user["auth_sessions"] = _password_sessions
-                        _password_sessions.append({
-                            "token_hash": hashlib.sha256(_password_token.encode("utf-8")).hexdigest(),
-                            "created_at": now_str(),
-                            "expires_at": (moscow_now() + timedelta(hours=12)).isoformat(timespec="seconds"),
-                        })
-                        user["auth_sessions"] = _password_sessions[-30:]
-                        user.pop("auth_token", None)
-                        save_data(st.session_state.crm_store)
-
                         st.session_state.authenticated = True
                         st.session_state.user_role = user.get("role")
                         st.session_state.user_login = user.get("login")
                         st.session_state.user_name = user.get("name", user.get("login", ""))
-                        st.session_state.remember_login = True
+                        st.session_state.remember_login = False
                         st.session_state["_auth_last_activity"] = moscow_now()
-                        st.session_state["_auth_token_current"] = _password_token
-                        st.session_state.pop("_password_session_v2", None)
+                        st.session_state["_password_session_v2"] = True
+                        st.session_state.pop("_auth_token_current", None)
                         st.session_state.pop("_passkey_login_pending", None)
                         st.session_state.pop("_force_password_login", None)
                         st.session_state.pop("_show_pin_login", None)
                         try:
-                            _cookie_expiry = moscow_now().replace(microsecond=0) + timedelta(days=3650)
-                            cookie_manager.set("auth_token", _password_token, expires_at=_cookie_expiry, key="set_password_auth_token_cookie")
-                            cookie_manager.set("remembered_user", str(user.get("login", "")), expires_at=_cookie_expiry, key="set_password_remembered_user_cookie")
-                            cookie_manager.set("crm_last_activity", str(int(time.time() * 1000)), expires_at=_cookie_expiry, key="set_password_last_activity_cookie")
+                            cookie_manager.delete("auth_token")
+                            cookie_manager.delete("remembered_user")
                             cookie_manager.delete("crm_session_expired")
+                            cookie_manager.delete("crm_last_activity")
                         except Exception:
                             pass
                         st.rerun()
