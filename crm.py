@@ -6262,12 +6262,59 @@ with _header_right:
     </script>
     """, height=48, scrolling=False)
 
+def _crm_open_statistics_window():
+    """Открывает единое окно статистики в общей панели окон CRM."""
+    windows = st.session_state.setdefault("_crm_windows", [])
+    window = next(
+        (w for w in reversed(windows)
+         if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))),
+        None,
+    )
+    if window is None:
+        entry = {
+            "name": "statistics_dialog",
+            "title": "Статистика",
+            "width": "large",
+            "args": (),
+            "kwargs": {},
+            "signature": ("statistics",),
+        }
+        window_id = "cw_statistics"
+        if any(str(w.get("id")) == window_id for w in windows):
+            window_id = "cw_statistics_" + uuid.uuid4().hex[:8]
+        window = {
+            "id": window_id,
+            "client_id": None,
+            "title": "Статистика",
+            "tabs": [entry],
+            "active_tab": 0,
+            "minimized": False,
+        }
+        windows.append(window)
+    else:
+        window["minimized"] = False
+        window["title"] = "Статистика"
+        idx = next((i for i, t in enumerate(window.get("tabs", []))
+                    if t.get("name") == "statistics_dialog"), 0)
+        window["active_tab"] = idx
+    tabs = window.get("tabs", [])
+    idx = max(0, min(int(window.get("active_tab", 0) or 0), len(tabs) - 1)) if tabs else -1
+    st.session_state["_crm_active_window_id"] = window.get("id")
+    if idx >= 0:
+        st.session_state["_crm_active_dialog"] = tabs[idx]
+    st.session_state["_crm_sidebar_collapse_requested"] = True
+    st.session_state["_crm_sidebar_collapse_script_emitted"] = False
+    _crm_workspace_clear_legacy_dialog_markers()
+    _crm_workspace_queue_save()
+
+
 with st.sidebar:
     if st.session_state.cloud_ok: st.success("Облако активно")
     else: st.warning("Облако недоступно (работа локально)")
     st.markdown("---")
     st.markdown(f"**{st.session_state.user_name}**")
     st.markdown(f"Роль: `{st.session_state.user_role}`")
+    st.button("📊 Статистика", key="crm_open_statistics_window", use_container_width=True, on_click=_crm_open_statistics_window)
     if not YANDEX_TOKEN:
         st.error("Резервное копирование отключено: не задан YANDEX_DISK_TOKEN в Secrets")
     elif _CRM_BG_STATE["cloud_last_ok"] is True:
@@ -12069,6 +12116,295 @@ def client_tasks_dialog(cl_id):
             st.rerun()
     else:
         st.caption("Нет сделок для создания задачи по сделке")
+
+
+@_crm_dialog("Статистика", width="large")
+def statistics_dialog():
+    """Статистика продаж, менеджеров и материалов по данным CRM."""
+    import calendar
+
+    store = st.session_state.get("crm_store", {})
+    deals_all = list(store.get("deals", []) or [])
+    clients_all = list(store.get("clients", []) or [])
+    users = list(store.get("users", []) or [])
+    manager_names = sorted({
+        str(u.get("name") or u.get("login") or "").strip()
+        for u in users
+        if u.get("role") != "admin" and str(u.get("name") or u.get("login") or "").strip()
+    })
+    if not manager_names:
+        manager_names = sorted({
+            str(d.get("manager") or "").strip() for d in deals_all
+            if str(d.get("manager") or "").strip()
+        })
+
+    def _stat_num(value):
+        try:
+            result = float(str(value or 0).replace(" ", "").replace(",", "."))
+            return result if result == result and abs(result) != float("inf") else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _stat_date(value):
+        if isinstance(value, datetime):
+            return value.date()
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except Exception:
+            for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y-%m-%d %H:%M:%S", "%d.%m.%Y %H:%M"):
+                try:
+                    return datetime.strptime(raw[:19], fmt).date()
+                except Exception:
+                    pass
+        return None
+
+    def _stat_deal_date(deal):
+        return _stat_date(deal.get("created_at") or deal.get("date_created") or deal.get("last_modified"))
+
+    def _stat_calc(deal):
+        calculations = [
+            c for c in (deal.get("calculations", []) or [])
+            if isinstance(c, dict) and not c.get("deleted")
+        ]
+        return calculations[-1] if calculations else {}
+
+    def _stat_lines(deal):
+        calc = _stat_calc(deal)
+        rows = []
+        for item in calc.get("items", []) or []:
+            if not isinstance(item, dict):
+                continue
+            quantity = max(0.0, _stat_num(item.get("quantity", 0)))
+            unit_price = max(0.0, _stat_num(item.get("unit_price", item.get("price", 0))))
+            discount = min(100.0, max(0.0, _stat_num(item.get("discount", 0))))
+            price_after_discount = unit_price * (1 - discount / 100.0)
+            product_id = str(item.get("product_id", "") or "")
+            catalog_item = next(
+                (p for p in store.get("products", []) or []
+                 if str(p.get("id", p.get("sku", ""))) == product_id),
+                {},
+            )
+            product_name = str(
+                item.get("product_name") or catalog_item.get("name")
+                or item.get("name") or catalog_item.get("sku") or "Товар без названия"
+            )
+            unit = str(item.get("unit") or catalog_item.get("unit") or "шт.")
+            rows.append({
+                "name": product_name,
+                "unit": unit,
+                "quantity": quantity,
+                "unit_price": price_after_discount,
+                "amount": quantity * price_after_discount,
+            })
+        return rows
+
+    def _stat_amount(deal):
+        budget = _stat_num(deal.get("budget", 0))
+        if budget > 0:
+            return budget
+        calc = _stat_calc(deal)
+        return sum(x["amount"] for x in _stat_lines(deal)) + max(0.0, _stat_num(calc.get("delivery_amount", 0)))
+
+    today = moscow_now().date()
+    period_options = [
+        "Этот месяц", "Прошлый месяц", "Последние 7 дней", "Последние 30 дней",
+        "Этот квартал", "Этот год", "Всё время", "Произвольный период",
+    ]
+    _period = st.selectbox("Период статистики", period_options, index=0, key="statistics_period")
+    if _period == "Этот месяц":
+        _start = today.replace(day=1)
+        _end = today
+    elif _period == "Прошлый месяц":
+        _first_this = today.replace(day=1)
+        _end = _first_this - timedelta(days=1)
+        _start = _end.replace(day=1)
+    elif _period == "Последние 7 дней":
+        _start, _end = today - timedelta(days=6), today
+    elif _period == "Последние 30 дней":
+        _start, _end = today - timedelta(days=29), today
+    elif _period == "Этот квартал":
+        _start = today.replace(month=((today.month - 1) // 3) * 3 + 1, day=1)
+        _end = today
+    elif _period == "Этот год":
+        _start, _end = today.replace(month=1, day=1), today
+    elif _period == "Произвольный период":
+        _date_left, _date_right = st.columns(2)
+        with _date_left:
+            _start = st.date_input("С даты", value=today.replace(day=1), key="statistics_date_from")
+        with _date_right:
+            _end = st.date_input("По дату", value=today, key="statistics_date_to")
+        if _start > _end:
+            _start, _end = _end, _start
+    else:
+        _start, _end = None, None
+
+    def _in_period(deal):
+        if _start is None or _end is None:
+            return True
+        date_value = _stat_deal_date(deal)
+        return bool(date_value and _start <= date_value <= _end)
+
+    deals = [d for d in deals_all if _in_period(d)]
+    clients = []
+    for client in clients_all:
+        created = _stat_date(client.get("created_at") or client.get("last_modified"))
+        if _start is None or _end is None or (created and _start <= created <= _end):
+            clients.append(client)
+
+    deal_rows = []
+    for deal in deals:
+        lines = _stat_lines(deal)
+        amount = _stat_amount(deal)
+        metres = sum(line["quantity"] for line in lines if line["unit"].strip().lower() in ("м", "м.", "метр", "метры", "пог. м", "п.м."))
+        if not metres:
+            metres = sum(
+                line["quantity"] for line in lines
+                if any(token in line["name"].lower() for token in ("плинтус", "slim", "айплинт", "iplinth", "магнит"))
+            )
+        status = str(deal.get("status") or "Новый")
+        payment_status = str(deal.get("payment_status") or "")
+        paid = payment_status == "Оплачено" or status == "Оплачено"
+        deal_rows.append({
+            "deal": deal,
+            "manager": str(deal.get("manager") or "Не назначен"),
+            "status": status,
+            "paid": paid,
+            "amount": amount,
+            "metres": metres,
+            "lines": lines,
+        })
+
+    st.caption(
+        f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
+        "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
+    )
+    _manager_tabs = manager_names
+    _tab_labels = ["Общая статистика"] + _manager_tabs + ["Материалы"]
+    _stat_tabs = st.tabs(_tab_labels)
+
+    with _stat_tabs[0]:
+        _total_amount = sum(x["amount"] for x in deal_rows)
+        _total_metres = sum(x["metres"] for x in deal_rows)
+        _paid_count = sum(1 for x in deal_rows if x["paid"])
+        _waiting_count = sum(1 for x in deal_rows if x["status"] in ("Ожидание оплаты", "На паузе") or str(x["deal"].get("payment_status") or "") == "Оплачен частично")
+        _avg_check = _total_amount / len(deal_rows) if deal_rows else 0
+        _m1, _m2, _m3, _m4 = st.columns(4)
+        _m1.metric("Заказов / сделок", f"{len(deal_rows):,}".replace(",", " "))
+        _m2.metric("Продано, м", f"{_total_metres:,.1f}".replace(",", " "))
+        _m3.metric("Сумма заказов", f"{_total_amount:,.0f} ₽".replace(",", " "))
+        _m4.metric("Средний заказ", f"{_avg_check:,.0f} ₽".replace(",", " "))
+        _m5, _m6, _m7 = st.columns(3)
+        _m5.metric("Оплачено полностью", _paid_count)
+        _m6.metric("Ожидают оплаты / на паузе", _waiting_count)
+        _m7.metric("Новые клиенты", len(clients))
+        if deal_rows:
+            _status_counts = {}
+            for row in deal_rows:
+                _status_counts[row["status"]] = _status_counts.get(row["status"], 0) + 1
+            st.markdown("#### Сделки по статусам")
+            st.dataframe(
+                [{"Статус": key, "Количество": value} for key, value in sorted(_status_counts.items())],
+                use_container_width=True, hide_index=True,
+            )
+            _month_totals = {}
+            for row in deal_rows:
+                _date = _stat_deal_date(row["deal"])
+                if _date:
+                    _key = _date.strftime("%Y-%m")
+                    _month_totals[_key] = _month_totals.get(_key, 0) + row["amount"]
+            if _month_totals:
+                st.markdown("#### Динамика суммы заказов по месяцам")
+                st.bar_chart([{"Месяц": k, "Сумма, ₽": round(v, 2)} for k, v in sorted(_month_totals.items())], x="Месяц", y="Сумма, ₽")
+        else:
+            st.info("За выбранный период сделок нет.")
+
+    for _manager_index, _manager_name in enumerate(_manager_tabs, start=1):
+        with _stat_tabs[_manager_index]:
+            _manager_rows = [x for x in deal_rows if x["manager"] == _manager_name]
+            _manager_amount = sum(x["amount"] for x in _manager_rows)
+            _manager_metres = sum(x["metres"] for x in _manager_rows)
+            _manager_paid = sum(1 for x in _manager_rows if x["paid"])
+            _manager_clients = sum(
+                1 for client in clients
+                if str(client.get("manager") or client.get("responsible") or "") == _manager_name
+            )
+            _c1, _c2, _c3, _c4 = st.columns(4)
+            _c1.metric("Заказов / сделок", len(_manager_rows))
+            _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
+            _c3.metric("Сумма заказов", f"{_manager_amount:,.0f} ₽".replace(",", " "))
+            _c4.metric("Оплачено полностью", _manager_paid)
+            st.metric("Клиентов закреплено / создано за период", _manager_clients)
+            if _manager_rows:
+                st.dataframe([
+                    {
+                        "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
+                        "Дата": (_stat_deal_date(x["deal"]).strftime("%d.%m.%Y") if _stat_deal_date(x["deal"]) else "—"),
+                        "Клиент": next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(x["deal"].get("client_id"))), "—"),
+                        "Статус": x["status"],
+                        "Метры": round(x["metres"], 2),
+                        "Сумма, ₽": round(x["amount"], 2),
+                    }
+                    for x in sorted(_manager_rows, key=lambda z: str(z["deal"].get("created_at") or ""), reverse=True)
+                ], use_container_width=True, hide_index=True)
+            else:
+                st.info("За выбранный период у менеджера нет сделок.")
+
+    with _stat_tabs[-1]:
+        _materials = {}
+        for row in deal_rows:
+            for line in row["lines"]:
+                _key = (line["name"], line["unit"])
+                if _key not in _materials:
+                    _materials[_key] = {"quantity": 0.0, "revenue": 0.0, "orders": set()}
+                _materials[_key]["quantity"] += line["quantity"]
+                _materials[_key]["revenue"] += line["amount"]
+                _materials[_key]["orders"].add(str(row["deal"].get("id") or row["deal"].get("deal_number") or ""))
+        if _materials:
+            _material_rows = [
+                {
+                    "Материал / товар": name,
+                    "Ед. изм.": unit,
+                    "Продано": round(values["quantity"], 2),
+                    "Выручка по позициям, ₽": round(values["revenue"], 2),
+                    "Заказов": len(values["orders"]),
+                    "Средняя цена": round(values["revenue"] / values["quantity"], 2) if values["quantity"] else 0,
+                }
+                for (name, unit), values in sorted(_materials.items(), key=lambda x: x[0][0].lower())
+            ]
+            st.dataframe(_material_rows, use_container_width=True, hide_index=True)
+            st.bar_chart(
+                [{"Материал": x["Материал / товар"], "Продано": x["Продано"]} for x in _material_rows],
+                x="Материал", y="Продано",
+            )
+        else:
+            st.info("В расчётах за выбранный период нет товарных позиций. Проверьте, что позиции сохранены в расчётах сделок.")
+
+    # При первом открытии окна автоматически сворачиваем боковую панель.
+    if st.session_state.get("_crm_sidebar_collapse_requested") and not st.session_state.get("_crm_sidebar_collapse_script_emitted"):
+        st.session_state["_crm_sidebar_collapse_script_emitted"] = True
+        st.components.v1.html("""<script>
+        (function () {
+          var w = window;
+          try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
+          var tries = 0;
+          function collapseSidebar() {
+            try {
+              var doc = w.document;
+              var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+              if (!sidebar || sidebar.getBoundingClientRect().width < 30) return;
+              var btn = doc.querySelector('button[data-testid="stSidebarCollapseButton"]')
+                || doc.querySelector('button[aria-label="Collapse sidebar"]')
+                || doc.querySelector('button[aria-label="Свернуть боковую панель"]');
+              if (btn) { btn.click(); return; }
+            } catch (e) {}
+            if (++tries < 15) w.setTimeout(collapseSidebar, 100);
+          }
+          collapseSidebar();
+        })();
+        </script>""", height=0)
 
 
 if st.session_state.active_tab == "Клиенты":
