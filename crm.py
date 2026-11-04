@@ -13035,7 +13035,7 @@ def statistics_dialog(section="Общая статистика"):
                     '</div>'
                 )
             _material_chart_html.append('</div>')
-            st.markdown("\\n".join(_material_chart_html), unsafe_allow_html=True)
+            st.markdown("\n".join(_material_chart_html), unsafe_allow_html=True)
         else:
             st.info("В расчётах за выбранный период нет товарных позиций. Проверьте, что позиции сохранены в расчётах сделок.")
 
