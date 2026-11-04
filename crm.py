@@ -3718,12 +3718,58 @@ def load_data():
         raise RuntimeError(message) from exc
     raise RuntimeError("SQLite не содержит рабочей записи базы данных; автоматическая загрузка JSON запрещена")
 
+def _diagnose_database_readonly():
+    """Проверяет файлы и SQLite только на чтение; ничего не создаёт и не меняет."""
+    result = {
+        "sqlite_path": os.path.abspath(SQLITE_FILE),
+        "sqlite_exists": os.path.isfile(SQLITE_FILE),
+        "sqlite_size": None,
+        "sqlite_open_readonly": False,
+        "table_exists": False,
+        "row_exists": False,
+        "data_nonempty": False,
+        "sqlite_error": "",
+        "json_path": os.path.abspath(FILE_NAME),
+        "json_exists": os.path.isfile(FILE_NAME),
+        "json_size": None,
+    }
+    try:
+        if result["sqlite_exists"]:
+            result["sqlite_size"] = os.path.getsize(SQLITE_FILE)
+            # mode=ro запрещает SQLite создавать файл или изменять базу.
+            _uri = "file:" + os.path.abspath(SQLITE_FILE).replace("\\", "/") + "?mode=ro"
+            _conn = sqlite3.connect(_uri, uri=True, timeout=3)
+            try:
+                result["sqlite_open_readonly"] = True
+                _tables = _conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='crm_state'"
+                ).fetchone()
+                result["table_exists"] = bool(_tables)
+                if result["table_exists"]:
+                    _row = _conn.execute("SELECT data FROM crm_state WHERE id=1").fetchone()
+                    result["row_exists"] = _row is not None
+                    result["data_nonempty"] = bool(_row and isinstance(_row[0], str) and _row[0].strip())
+            finally:
+                _conn.close()
+    except Exception as _diag_exc:
+        result["sqlite_error"] = str(_diag_exc)[:250]
+    try:
+        if result["json_exists"]:
+            result["json_size"] = os.path.getsize(FILE_NAME)
+    except Exception:
+        pass
+    return result
+
+
 def _render_emergency_restore(load_error):
     """Аварийный экран восстановления, доступный даже когда SQLite не загружается."""
     st.title("Восстановление базы Айплинт CRM")
     st.error("Основная база не загрузилась. CRM пока не открыта; данные не перезаписывались.")
     st.markdown("Загрузите резервную JSON-копию из Яндекс Диска. Перед восстановлением проверим структуру файла и пароль пользователя с ролью администратора из этой копии.")
     st.caption(f"Диагностика: {str(load_error)[:350]}")
+    _db_diag = _diagnose_database_readonly()
+    st.markdown("### Проверка базы (только чтение)")
+    st.json(_db_diag)
     _raw_sqlite_bytes = None
     try:
         if os.path.isfile(SQLITE_FILE):
