@@ -12339,6 +12339,8 @@ def statistics_dialog(section="Общая статистика"):
         else:
             _start, _end = None, None
 
+    st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#DCE0E5;margin:12px 0 18px 0;"></div>', unsafe_allow_html=True)
+
     def _in_period(deal):
         if _start is None or _end is None:
             return True
@@ -12482,7 +12484,7 @@ def statistics_dialog(section="Общая статистика"):
                 _svg_parts.append('</svg>')
                 st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
                 st.markdown(
-                    '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
+                    '<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -12658,6 +12660,7 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_svg.append(f'<text x="{_manager_left + _manager_plot_w:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_manager_labels[-1][1]}</text>')
                 _manager_svg.append('</svg>')
                 st.markdown("\n".join(_manager_svg), unsafe_allow_html=True)
+                st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
             st.dataframe([
                 {
                     "Сделка": str(x["deal"].get("deal_number") or x["deal"].get("title") or x["deal"].get("id") or ""),
@@ -12698,6 +12701,7 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
 
+        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
         st.markdown("#### Скорость работы")
         _active_rows = []
         _today = moscow_now().date()
@@ -12734,6 +12738,7 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет активных сделок за выбранный период.")
         st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
+        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
         st.markdown("#### Задачи за период")
         st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
 
@@ -12776,7 +12781,7 @@ def statistics_dialog(section="Общая статистика"):
 
 
         st.markdown(
-            '<div style="display:block;width:100%;height:3px;min-height:3px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
+            '<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
             unsafe_allow_html=True,
         )
         st.markdown("#### Источники продаж")
@@ -12897,6 +12902,7 @@ def statistics_dialog(section="Общая статистика"):
                     if _source_labels and (len(_source_labels)-1) % _source_label_step != 0:
                         _source_svg.append(f'<text x="{_sw-_sright}" y="{_sh-27}" font-size="11" fill="currentColor" text-anchor="end">{_source_labels[-1][1]}</text>')
                     _source_svg.append('</svg>')
+                    st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
                     st.markdown("\n".join(_source_svg), unsafe_allow_html=True)
                 else:
                     st.info("За выбранный период нет сделок с датой для построения графика.")
@@ -12933,6 +12939,7 @@ def statistics_dialog(section="Общая статистика"):
         st.markdown('<style>div[data-testid="stProgress"] [role="progressbar"] > div > div { background-color: #bc1661 !important; }</style>', unsafe_allow_html=True)
         st.progress(min(1.0, max(0.0, _plan_percent / 100)))
         st.caption("План — 3 000 м на текущий месяц. Факт учитывает только полностью оплаченные и завершённые в этом месяце сделки.")
+        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
 
         st.markdown("#### Актуальные неоплаченные сделки")
         _pipeline_rows = []
@@ -13012,6 +13019,7 @@ def statistics_dialog(section="Общая статистика"):
                 })
 
             st.dataframe(_material_rows, use_container_width=True, hide_index=True)
+            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
             st.bar_chart(
                 [{"Материал": x["Материал / товар"], "Продано": x["Продано"]} for x in _material_rows],
                 x="Материал", y="Продано", color="#bc1661",
