@@ -6280,7 +6280,7 @@ def _crm_open_statistics_window():
             str(d.get("manager") or "").strip() for d in (store.get("deals", []) or [])
             if str(d.get("manager") or "").strip()
         })
-    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Воронка продаж", "Потерянные продажи", "Прогноз продаж", "Повторные продажи", "Скорость работы"]
+    section_names = ["Общая статистика"] + manager_names + ["Рейтинг менеджеров", "План / факт", "Материалы", "Повторные продажи", "Скорость работы"]
     tabs = []
     for section_name in section_names:
         args = (section_name,)
@@ -12392,6 +12392,50 @@ def statistics_dialog(section="Общая статистика"):
                     hide_index=True,
                     height=35 * (len(_status_table_rows) + 1) + 3,
                 )
+            # Потерянные продажи: только сделки, перенесённые пользователем в раздел «Архив».
+            _archived_deals = [
+                d for d in deals_all
+                if str(d.get("status") or "").strip() == "Архив" and _in_period(d)
+            ]
+            _lost_rows = []
+            _lost_reason_counts = {}
+            for _archived_deal in _archived_deals:
+                _archive_reason = str(
+                    _archived_deal.get("archive_report")
+                    or _archived_deal.get("loss_reason")
+                    or _archived_deal.get("lost_reason")
+                    or _archived_deal.get("cancel_reason")
+                    or "Причина не указана"
+                ).strip()
+                _lost_reason_counts[_archive_reason] = _lost_reason_counts.get(_archive_reason, 0) + 1
+                _archive_client = next(
+                    (c for c in clients_all if str(c.get("id")) == str(_archived_deal.get("client_id"))),
+                    {},
+                )
+                _lost_rows.append({
+                    "Сделка": str(_archived_deal.get("deal_number") or _archived_deal.get("title") or _archived_deal.get("id") or ""),
+                    "Клиент": str(_archive_client.get("name") or "—"),
+                    "Менеджер": str(_archived_deal.get("manager") or "Не назначен"),
+                    "Дата": _stat_deal_date(_archived_deal).strftime("%d.%m.%Y") if _stat_deal_date(_archived_deal) else "—",
+                    "Сумма, ₽": round(_stat_amount(_archived_deal), 2),
+                    "Причина / отчёт": _archive_reason,
+                })
+            st.markdown("#### Потерянные продажи")
+            _lost_amount = sum(x["Сумма, ₽"] for x in _lost_rows)
+            _lost1, _lost2, _lost3 = st.columns(3, gap="small")
+            _lost1.metric("Сделок в архиве", len(_lost_rows))
+            _lost2.metric("Сумма потерянных заказов", f"{_lost_amount:,.0f} ₽".replace(",", " "))
+            _lost3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
+            if _lost_rows:
+                st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
+                st.markdown("##### Причины / отчёты по архивным сделкам")
+                st.dataframe(
+                    [{"Причина / отчёт": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)],
+                    use_container_width=True, hide_index=True,
+                )
+            else:
+                st.info("В архиве нет сделок за выбранный период.")
+
             _dated_rows = [
                 (_stat_deal_date(row["deal"]), row["amount"])
                 for row in deal_rows if _stat_deal_date(row["deal"]) is not None
@@ -12628,110 +12672,6 @@ def statistics_dialog(section="Общая статистика"):
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
 
-    elif section == "Воронка продаж":
-        st.markdown("#### Воронка продаж")
-        _funnel = {
-            "Новые": 0, "В работе": 0, "Ожидают оплаты": 0,
-            "Оплачено": 0, "Потерянные": 0, "Другие статусы": 0,
-        }
-        _funnel_amount = {key: 0.0 for key in _funnel}
-        _lost_tokens = ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без")
-        for _row in deal_rows:
-            _status_lower = str(_row["status"] or "").strip().lower()
-            if _row["paid"] or _status_lower in ("оплачено", "завершено", "выполнено"):
-                _stage = "Оплачено"
-            elif any(_token in _status_lower for _token in _lost_tokens):
-                _stage = "Потерянные"
-            elif _status_lower in ("ожидание оплаты", "на паузе") or str(_row["deal"].get("payment_status") or "") == "Оплачен частично":
-                _stage = "Ожидают оплаты"
-            elif _status_lower in ("новый", "новая", "новое", "не обработан", "входящий"):
-                _stage = "Новые"
-            elif _status_lower in ("в работе", "работа", "переговоры", "расчёт", "расчет"):
-                _stage = "В работе"
-            else:
-                _stage = "Другие статусы"
-            _funnel[_stage] += 1
-            _funnel_amount[_stage] += _row["amount"]
-        _funnel_total = len(deal_rows)
-        _funnel_rows = [
-            {"Этап": key, "Сделок": value, "Сумма заказов, ₽": round(_funnel_amount[key], 2),
-             "Доля сделок": f"{(value / _funnel_total * 100):.1f}%" if _funnel_total else "0.0%"}
-            for key, value in _funnel.items()
-        ]
-        _f1, _f2, _f3 = st.columns(3, gap="small")
-        _f1.metric("Всего сделок", _funnel_total)
-        _f2.metric("Оплачено полностью", _funnel["Оплачено"])
-        _f3.metric("Конверсия в оплату", f"{(_funnel['Оплачено'] / _funnel_total * 100):.1f}%" if _funnel_total else "0.0%")
-        st.dataframe(_funnel_rows, use_container_width=True, hide_index=True)
-        st.caption("Этап определяется по текущему статусу сделки. Неизвестные и нестандартные статусы вынесены отдельно, чтобы не терять записи.")
-
-    elif section == "Потерянные продажи":
-        st.markdown("#### Потерянные продажи")
-        _lost_rows = []
-        _lost_reason_counts = {}
-        for _row in deal_rows:
-            _deal = _row["deal"]
-            _status_lower = str(_row["status"] or "").strip().lower()
-            if not any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без")):
-                continue
-            _reason = next((
-                str(_deal.get(_key) or "").strip()
-                for _key in ("loss_reason", "lost_reason", "cancel_reason", "reason", "reason_lost", " отказ_reason")
-                if str(_deal.get(_key) or "").strip()
-            ), "")
-            if not _reason:
-                _reason = "Причина не указана"
-            _lost_reason_counts[_reason] = _lost_reason_counts.get(_reason, 0) + 1
-            _client_name = next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(_deal.get("client_id"))), "—")
-            _lost_rows.append({
-                "Сделка": str(_deal.get("deal_number") or _deal.get("title") or _deal.get("id") or ""),
-                "Клиент": _client_name, "Менеджер": _row["manager"],
-                "Дата": _stat_deal_date(_deal).strftime("%d.%m.%Y") if _stat_deal_date(_deal) else "—",
-                "Статус": _row["status"], "Сумма, ₽": round(_row["amount"], 2),
-                "Причина": _reason,
-            })
-        _lost_amount = sum(x["Сумма, ₽"] for x in _lost_rows)
-        _l1, _l2, _l3 = st.columns(3, gap="small")
-        _l1.metric("Потерянных сделок", len(_lost_rows))
-        _l2.metric("Сумма потенциальных заказов", f"{_lost_amount:,.0f} ₽".replace(",", " "))
-        _l3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
-        if _lost_rows:
-            st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
-            st.markdown("#### Причины потери")
-            st.dataframe([{"Причина": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)], use_container_width=True, hide_index=True)
-        else:
-            st.info("За выбранный период потерянных сделок по текущим статусам не найдено.")
-        st.caption("Потерянными считаются сделки со статусами, содержащими «отказ», «потеря», «отмена», «не состоялась» или «закрыт без». Если причина отказа не сохранена в карточке, она отмечается как не указанная.")
-
-    elif section == "Прогноз продаж":
-        st.markdown("#### Прогноз продаж")
-        _pipeline_rows = []
-        _pipeline_amount = 0.0
-        _pipeline_metres = 0.0
-        for _row in deal_rows:
-            _deal = _row["deal"]
-            _status_lower = str(_row["status"] or "").strip().lower()
-            _is_lost = any(_token in _status_lower for _token in ("отказ", "потер", "отмен", "не состоя", "не актуал", "закрыт без"))
-            if _row["paid"] or _is_lost or _status_lower in ("завершено", "выполнено"):
-                continue
-            _pipeline_amount += _row["amount"]
-            _pipeline_metres += _row["metres"]
-            _client_name = next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(_deal.get("client_id"))), "—")
-            _pipeline_rows.append({
-                "Сделка": str(_deal.get("deal_number") or _deal.get("title") or _deal.get("id") or ""),
-                "Клиент": _client_name, "Менеджер": _row["manager"], "Статус": _row["status"],
-                "Метры": round(_row["metres"], 1), "Сумма, ₽": round(_row["amount"], 2),
-            })
-        _pf1, _pf2, _pf3 = st.columns(3, gap="small")
-        _pf1.metric("Сделок в потенциальной воронке", len(_pipeline_rows))
-        _pf2.metric("Потенциальный метраж", f"{_pipeline_metres:,.1f} м".replace(",", " "))
-        _pf3.metric("Потенциальная сумма", f"{_pipeline_amount:,.0f} ₽".replace(",", " "))
-        if _pipeline_rows:
-            st.dataframe(sorted(_pipeline_rows, key=lambda x: x["Сумма, ₽"], reverse=True), use_container_width=True, hide_index=True)
-        else:
-            st.info("Нет неоплаченных сделок в выбранном периоде.")
-        st.caption("Это сумма и метраж всех неоплаченных сделок, не прогноз с вероятностью закрытия. Для взвешенного прогноза позже можно добавить вероятность по этапам.")
-
     elif section == "Повторные продажи":
         st.markdown("#### Повторные продажи")
         _client_deal_counts = {}
@@ -12840,6 +12780,34 @@ def statistics_dialog(section="Общая статистика"):
         st.markdown('<style>div[data-testid="stProgress"] [role="progressbar"] > div > div { background-color: #bc1661 !important; }</style>', unsafe_allow_html=True)
         st.progress(min(1.0, max(0.0, _plan_percent / 100)))
         st.caption("План — 3 000 м в месяц. Для выбранного диапазона он рассчитывается пропорционально количеству календарных дней; факт считается по сделкам, созданным в этом периоде.")
+
+        st.markdown("#### Прогноз продаж")
+        _pipeline_rows = []
+        _pipeline_amount = 0.0
+        _pipeline_metres = 0.0
+        for _row in deal_rows:
+            _deal = _row["deal"]
+            _status_lower = str(_row["status"] or "").strip().lower()
+            if _row["paid"] or _status_lower in ("архив", "сделка закрыта", "завершено", "выполнено"):
+                continue
+            _pipeline_amount += _row["amount"]
+            _pipeline_metres += _row["metres"]
+            _client_name = next((str(c.get("name") or "") for c in clients_all if str(c.get("id")) == str(_deal.get("client_id"))), "—")
+            _pipeline_rows.append({
+                "Сделка": str(_deal.get("deal_number") or _deal.get("title") or _deal.get("id") or ""),
+                "Клиент": _client_name, "Менеджер": _row["manager"], "Статус": _row["status"],
+                "Метры": round(_row["metres"], 1), "Сумма, ₽": round(_row["amount"], 2),
+            })
+        _pf1, _pf2, _pf3 = st.columns(3, gap="small")
+        _pf1.metric("Сделок в потенциальной воронке", len(_pipeline_rows))
+        _pf2.metric("Потенциальный метраж", f"{_pipeline_metres:,.1f} м".replace(",", " "))
+        _pf3.metric("Потенциальная сумма", f"{_pipeline_amount:,.0f} ₽".replace(",", " "))
+        if _pipeline_rows:
+            st.dataframe(sorted(_pipeline_rows, key=lambda x: x["Сумма, ₽"], reverse=True), use_container_width=True, hide_index=True)
+        else:
+            st.info("Нет неоплаченных сделок, кроме архивных и закрытых, за выбранный период.")
+        st.caption("В прогноз включены неоплаченные сделки. Сделки со статусами «Архив» и «Сделка закрыта» исключены.")
+
 
     elif section == "Материалы":
         _materials = {}
