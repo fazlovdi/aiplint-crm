@@ -12589,7 +12589,7 @@ def statistics_dialog(section="Общая статистика"):
             })
         _ranking_rows.sort(key=lambda item: (item["Сумма заказов, ₽"], item["Продано, м"]), reverse=True)
         if _ranking_rows:
-            st.dataframe(_ranking_rows, use_container_width=True, hide_index=True)
+            st.dataframe(_ranking_rows, use_container_width=True, hide_index=True, height="content")
             st.caption("Рейтинг отсортирован по сумме заказов за выбранный период. Конверсия — доля сделок со статусом полной оплаты среди всех сделок менеджера.")
         else:
             st.info("Нет данных по менеджерам за выбранный период.")
