@@ -6666,7 +6666,6 @@ with nc1:
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         _crm_workspace_queue_save()
-        st.rerun()
 with nc2:
     _deals_label = f"Сделки ({_new_deals_count})" if _new_deals_count > 0 else "Сделки"
     if st.button(_deals_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Сделки" else "secondary"):
@@ -6679,7 +6678,6 @@ with nc2:
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         _crm_workspace_queue_save()
-        st.rerun()
 with nc3:
     _tasks_label = f"Задачи ({_new_tasks_count})" if _new_tasks_count > 0 else "Задачи"
     if st.button(_tasks_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Задачи" else "secondary"):
@@ -6692,7 +6690,6 @@ with nc3:
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         _crm_workspace_queue_save()
-        st.rerun()
 with nc4:
     _it_label = f"Внутренние ({_new_it_count})" if _new_it_count > 0 else "Внутренние"
     if st.button(_it_label, use_container_width=True, type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary"):
@@ -6705,7 +6702,6 @@ with nc4:
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         _crm_workspace_queue_save()
-        st.rerun()
 with nc5:
     if st.button("Поставщики", use_container_width=True, type="primary" if st.session_state.active_tab == "Поставщики" else "secondary"):
         st.session_state.active_tab = "Поставщики"
@@ -6717,7 +6713,6 @@ with nc5:
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         _crm_workspace_queue_save()
-        st.rerun()
 with nc6:
     if st.button("Товары и прайс", use_container_width=True, type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary"):
         st.session_state.active_tab = "Товары и прайс"
@@ -6727,7 +6722,6 @@ with nc6:
         st.session_state.pop("dialog_deal_key", None)
         st.session_state.pop("_open_created_deal", None)
         _crm_workspace_queue_save()
-        st.rerun()
 st.markdown("---")
 
 # На главном экране панель окон расположена сразу под навигацией CRM.
