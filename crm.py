@@ -12473,10 +12473,36 @@ def statistics_dialog(section="Общая статистика"):
         _manager_conversion = (_manager_paid / len(_manager_rows) * 100) if _manager_rows else 0
         _manager_avg_check = _manager_amount / len(_manager_rows) if _manager_rows else 0
         _manager_avg_metres = _manager_metres / len(_manager_rows) if _manager_rows else 0
-        _manager_clients = sum(
-            1 for client in clients
-            if str(client.get("manager") or client.get("responsible") or "") == _manager_name
+        _manager_user = next(
+            (u for u in users if str(u.get("name") or u.get("login") or "").strip() == _manager_name),
+            {},
         )
+        _manager_login = str(_manager_user.get("login") or "")
+        _manager_added_clients = sum(
+            1 for client in clients
+            if (
+                str(client.get("created_by") or "") == _manager_login
+                or str(client.get("created_by") or "") == _manager_name
+            )
+        )
+        _manager_tasks = []
+        for _task_client in clients_all:
+            for _task in (_task_client.get("tasks", []) or []):
+                _task_owner = str(_task.get("manager") or "")
+                _task_delegate = str(_task.get("delegated_to") or "")
+                if _manager_name not in (_task_owner, _task_delegate):
+                    continue
+                _task_created = _stat_date(_task.get("created_at") or _task.get("last_modified"))
+                if _start is not None and _end is not None and not (
+                    _task_created and _start <= _task_created <= _end
+                ):
+                    continue
+                _manager_tasks.append(_task)
+        _manager_overdue_tasks = sum(1 for _task in _manager_tasks if is_task_overdue(_task))
+        _manager_overdue_percent = (
+            _manager_overdue_tasks / len(_manager_tasks) * 100 if _manager_tasks else 0
+        )
+        _manager_work_deals = sum(1 for row in _manager_rows if row["status"] == "В работе")
         _c1, _c2, _c3, _c4, _c5, _c6, _c7 = st.columns(7, gap="small")
         _c1.metric("Заказов / сделок", len(_manager_rows))
         _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
@@ -12485,6 +12511,12 @@ def statistics_dialog(section="Общая статистика"):
         _c5.metric("Конверсия в оплату", f"{_manager_conversion:.1f}%")
         _c6.metric("Средний заказ", f"{_manager_avg_check:,.0f} ₽".replace(",", " "))
         _c7.metric("Средний заказ, м", f"{_manager_avg_metres:,.1f}".replace(",", " "))
+        _mc1, _mc2, _mc3, _mc4, _mc5 = st.columns(5, gap="small")
+        _mc1.metric("Сделок в работе", _manager_work_deals)
+        _mc2.metric("Добавлено клиентов", _manager_added_clients)
+        _mc3.metric("Задач", len(_manager_tasks))
+        _mc4.metric("Просрочено задач", _manager_overdue_tasks)
+        _mc5.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
         if _manager_rows:
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
