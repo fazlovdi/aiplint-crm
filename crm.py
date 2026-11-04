@@ -726,6 +726,11 @@ def verify_password(pwd, stored):
 def yandex_headers():
     return {"Authorization": f"OAuth {YANDEX_TOKEN}", "Accept": "application/json"}
 
+# Сетевые проверки Яндекс Диска не должны блокировать открытие CRM.
+# Один фоновый worker на процесс; основная база и авторизация от него не зависят.
+_CRM_STARTUP_CLOUD_STATE = {"started": False, "checked": False, "ok": False}
+_CRM_STARTUP_CLOUD_LOCK = threading.Lock()
+
 def check_cloud_status():
     if not YANDEX_TOKEN: return False
     try:
@@ -737,6 +742,23 @@ def init_yandex_folders():
     for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups", "CRM_NE_TROGAT/logs"]:
         try: requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except: pass
+
+def _startup_cloud_worker():
+    try:
+        _CRM_STARTUP_CLOUD_STATE["ok"] = check_cloud_status()
+        _CRM_STARTUP_CLOUD_STATE["checked"] = True
+        # Создание папок выполняется в фоне и не задерживает авторизацию/главное окно.
+        init_yandex_folders()
+    except Exception:
+        _CRM_STARTUP_CLOUD_STATE["ok"] = False
+        _CRM_STARTUP_CLOUD_STATE["checked"] = True
+
+def _start_cloud_startup_worker():
+    with _CRM_STARTUP_CLOUD_LOCK:
+        if _CRM_STARTUP_CLOUD_STATE["started"]:
+            return
+        _CRM_STARTUP_CLOUD_STATE["started"] = True
+        threading.Thread(target=_startup_cloud_worker, name="crm-cloud-startup", daemon=True).start()
 
 def _collect_all_timestamps(data):
     """Собирает все last_modified из клиентов, сделок, задач и внутренних задач для точного сравнения."""
@@ -4919,11 +4941,13 @@ if "authenticated" not in st.session_state: st.session_state.authenticated = Fal
 if "user_role" not in st.session_state: st.session_state.user_role = None
 if "user_login" not in st.session_state: st.session_state.user_login = None
 if "user_name" not in st.session_state: st.session_state.user_name = None
-if "cloud_ok" not in st.session_state: st.session_state.cloud_ok = check_cloud_status()
+_start_cloud_startup_worker()
+if _CRM_STARTUP_CLOUD_STATE["checked"]:
+    st.session_state.cloud_ok = bool(_CRM_STARTUP_CLOUD_STATE["ok"])
+elif "cloud_ok" not in st.session_state:
+    st.session_state.cloud_ok = False
 if "open_deal_id" not in st.session_state: st.session_state.open_deal_id = None
-if "yandex_folders_ready" not in st.session_state:
-    init_yandex_folders()
-    st.session_state.yandex_folders_ready = True
+# Папки Яндекс Диска инициализируются фоновым worker выше.
 if "deal_file_uploader_ver" not in st.session_state: st.session_state.deal_file_uploader_ver = {}
 if "expanded_client_id" not in st.session_state: st.session_state.expanded_client_id = None
 if "expanded_deal_id" not in st.session_state: st.session_state.expanded_deal_id = None
