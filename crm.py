@@ -3718,6 +3718,65 @@ def load_data():
         raise RuntimeError(message) from exc
     raise RuntimeError("SQLite не содержит рабочей записи базы данных; автоматическая загрузка JSON запрещена")
 
+def _render_emergency_restore(load_error):
+    """Аварийный экран восстановления, доступный даже когда SQLite не загружается."""
+    st.set_page_config(page_title="Восстановление Айплинт CRM", layout="centered")
+    st.title("Восстановление базы Айплинт CRM")
+    st.error("Основная база не загрузилась. CRM пока не открыта; данные не перезаписывались.")
+    st.markdown("Загрузите резервную JSON-копию из Яндекс Диска. Перед восстановлением проверим структуру файла и пароль пользователя с ролью администратора из этой копии.")
+    st.caption(f"Диагностика: {str(load_error)[:350]}")
+    _raw_sqlite_bytes = None
+    try:
+        if os.path.isfile(SQLITE_FILE):
+            with open(SQLITE_FILE, "rb") as _raw_db_file:
+                _raw_sqlite_bytes = _raw_db_file.read()
+    except Exception:
+        _raw_sqlite_bytes = None
+    if _raw_sqlite_bytes:
+        st.download_button("Скачать текущий файл SQLite для сохранности", data=_raw_sqlite_bytes, file_name="crm_before_recovery.sqlite3", mime="application/octet-stream", key="emergency_download_sqlite")
+    _emergency_file = st.file_uploader("Резервная копия CRM (.json)", type=["json"], key="emergency_restore_json")
+    _emergency_login = st.text_input("Логин администратора из резервной копии", key="emergency_restore_login")
+    _emergency_password = st.text_input("Пароль администратора", type="password", key="emergency_restore_password")
+    _emergency_confirm = st.checkbox("Подтверждаю восстановление основной базы из выбранной резервной копии", key="emergency_restore_confirm")
+    if st.button("Проверить и восстановить базу", type="primary", use_container_width=True, disabled=not (_emergency_file and _emergency_login.strip() and _emergency_password and _emergency_confirm), key="emergency_restore_submit"):
+        try:
+            _emergency_text = _emergency_file.getvalue().decode("utf-8-sig")
+            _emergency_data = _validate_backup_snapshot(_emergency_text)
+            _emergency_admin = next((u for u in _emergency_data.get("users", []) if isinstance(u, dict) and str(u.get("login", "")).strip() == _emergency_login.strip() and str(u.get("role", "")).lower() == "admin" and verify_password(_emergency_password, str(u.get("password", ""))), None)
+            if not _emergency_admin:
+                raise ValueError("Не удалось подтвердить администратора. Проверьте логин и пароль именно для этой резервной копии.")
+            _emergency_data = _sanitize_backup_data(_emergency_data)
+            _emergency_compact = json.dumps(_emergency_data, ensure_ascii=False, separators=(",", ":"))
+            _validate_backup_snapshot(_emergency_compact)
+            # Не загружаем пустую SQLite в облако: при аварии нет проверяемой текущей записи для страховочной копии.
+            _emergency_conn = _sqlite_connect()
+            try:
+                _emergency_conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
+                _emergency_conn.execute("BEGIN IMMEDIATE")
+                try:
+                    _emergency_row = _emergency_conn.execute("SELECT revision FROM crm_state WHERE id = 1").fetchone()
+                    _emergency_revision = int(_emergency_row[0] if _emergency_row else 0) + 1
+                    _emergency_conn.execute("INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at", (_emergency_compact, _emergency_revision, now_str()))
+                    _emergency_conn.execute("COMMIT")
+                except Exception:
+                    _emergency_conn.execute("ROLLBACK")
+                    raise
+            finally:
+                _emergency_conn.close()
+            _emergency_tmp = FILE_NAME + ".tmp"
+            with open(_emergency_tmp, "w", encoding="utf-8") as _emergency_json_file:
+                _emergency_json_file.write(_emergency_compact)
+                _emergency_json_file.flush()
+                os.fsync(_emergency_json_file.fileno())
+            os.replace(_emergency_tmp, FILE_NAME)
+            st.session_state["crm_store"] = copy.deepcopy(_emergency_data)
+            _remember_session_base(_emergency_data, _emergency_revision)
+            st.success("База восстановлена. Клиентов: " + str(len(_emergency_data.get("clients", []))) + "; сделок: " + str(len(_emergency_data.get("deals", []))) + "; пользователей: " + str(len(_emergency_data.get("users", []))) + ". Открываем CRM…")
+            st.rerun()
+        except Exception as _emergency_exc:
+            st.error(f"Восстановление не выполнено: {str(_emergency_exc)[:350]}")
+            st.info("Проверка резервной копии или пароля не прошла — восстановление не выполнено.")
+
 _MISSING = object()
 
 def _stable_list_key(items):
@@ -4699,7 +4758,11 @@ def close_deal_dialog(deal_id):
 
 if "crm_store" not in st.session_state:
     with st.spinner("Загрузка данных..."):
-        st.session_state.crm_store = load_data()
+        try:
+            st.session_state.crm_store = load_data()
+        except Exception as _startup_load_error:
+            _render_emergency_restore(_startup_load_error)
+            st.stop()
 # Однократная миграция номеров задач в рабочей SQLite-базе и добавление поля способа доставки.
 _task_number_migration_changed = False
 _task_numbers_before = []
