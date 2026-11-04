@@ -12339,8 +12339,6 @@ def statistics_dialog(section="Общая статистика"):
         else:
             _start, _end = None, None
 
-    st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#DCE0E5;margin:12px 0 18px 0;"></div>', unsafe_allow_html=True)
-
     def _in_period(deal):
         if _start is None or _end is None:
             return True
@@ -12381,6 +12379,8 @@ def statistics_dialog(section="Общая статистика"):
         f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
         "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
     )
+    if section != "План / факт":
+        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#DCE0E5;margin:12px 0 18px 0;"></div>', unsafe_allow_html=True)
     if section == "Общая статистика":
         _total_amount = sum(x["amount"] for x in deal_rows)
         _total_metres = sum(x["metres"] for x in deal_rows)
@@ -12483,11 +12483,6 @@ def statistics_dialog(section="Общая статистика"):
                     _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_labels[-1][1]}</text>')
                 _svg_parts.append('</svg>')
                 st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
-                st.markdown(
-                    '<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>',
-                    unsafe_allow_html=True,
-                )
-
             # Потерянные продажи: только сделки, перенесённые пользователем в раздел «Архив».
             _archived_deals = [
                 d for d in deals_all
@@ -12524,6 +12519,7 @@ def statistics_dialog(section="Общая статистика"):
             _lost3.metric("Доля от всех сделок", f"{(len(_lost_rows) / len(deal_rows) * 100):.1f}%" if deal_rows else "0.0%")
             if _lost_rows:
                 st.dataframe(sorted(_lost_rows, key=lambda x: x["Дата"], reverse=True), use_container_width=True, hide_index=True)
+                st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
                 st.markdown("##### Причины / отчёты по архивным сделкам")
                 st.dataframe(
                     [{"Причина / отчёт": k, "Сделок": v} for k, v in sorted(_lost_reason_counts.items(), key=lambda x: x[1], reverse=True)],
@@ -12817,6 +12813,8 @@ def statistics_dialog(section="Общая статистика"):
                 if x["Источник"] != "Не указан"
             )
             if _source_names_for_chart:
+                st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
+                st.markdown("#### Динамика суммы заказов")
                 _source_options_for_chart = ["Все источники"] + _source_names_for_chart
                 _selected_source_chart = st.selectbox(
                     "Источник для графика",
@@ -12853,7 +12851,6 @@ def statistics_dialog(section="Общая статистика"):
                         for _date, _amount in _dated_source_rows:
                             _source_timeline[_date] = _source_timeline.get(_date, 0.0) + _amount
                         _source_labels = [(d, d.strftime("%d.%m")) for d in sorted(_source_timeline)]
-                        _source_chart_title = "##### Динамика суммы заказов по дням"
                     else:
                         _source_cursor = _source_chart_start.replace(day=1)
                         _source_last_month = _source_chart_end.replace(day=1)
@@ -12868,8 +12865,6 @@ def statistics_dialog(section="Общая статистика"):
                             _source_key = _date.replace(day=1)
                             _source_timeline[_source_key] = _source_timeline.get(_source_key, 0.0) + _amount
                         _source_labels = [(d, d.strftime("%m.%Y")) for d in sorted(_source_timeline)]
-                        _source_chart_title = "##### Динамика суммы заказов по месяцам"
-                    st.markdown(_source_chart_title)
                     _source_points = [(d, _source_timeline[d]) for d in sorted(_source_timeline)]
                     _sw, _sh = 900, 300
                     _sleft, _sright, _stop, _sbottom = 68, 22, 18, 55
@@ -12902,7 +12897,6 @@ def statistics_dialog(section="Общая статистика"):
                     if _source_labels and (len(_source_labels)-1) % _source_label_step != 0:
                         _source_svg.append(f'<text x="{_sw-_sright}" y="{_sh-27}" font-size="11" fill="currentColor" text-anchor="end">{_source_labels[-1][1]}</text>')
                     _source_svg.append('</svg>')
-                    st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
                     st.markdown("\n".join(_source_svg), unsafe_allow_html=True)
                 else:
                     st.info("За выбранный период нет сделок с датой для построения графика.")
