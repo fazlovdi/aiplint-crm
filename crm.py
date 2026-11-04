@@ -12470,6 +12470,7 @@ def statistics_dialog(section="Общая статистика"):
         _manager_amount = sum(x["amount"] for x in _manager_rows)
         _manager_metres = sum(x["metres"] for x in _manager_rows)
         _manager_paid = sum(1 for x in _manager_rows if x["paid"])
+        _manager_paid_amount = sum(x["amount"] for x in _manager_rows if x["paid"])
         _manager_conversion = (_manager_paid / len(_manager_rows) * 100) if _manager_rows else 0
         _manager_avg_check = _manager_amount / len(_manager_rows) if _manager_rows else 0
         _manager_avg_metres = _manager_metres / len(_manager_rows) if _manager_rows else 0
@@ -12503,14 +12504,15 @@ def statistics_dialog(section="Общая статистика"):
             _manager_overdue_tasks / len(_manager_tasks) * 100 if _manager_tasks else 0
         )
         _manager_work_deals = sum(1 for row in _manager_rows if row["status"] == "В работе")
-        _c1, _c2, _c3, _c4, _c5, _c6, _c7 = st.columns(7, gap="small")
+        _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8 = st.columns(8, gap="small")
         _c1.metric("Заказов / сделок", len(_manager_rows))
         _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
         _c3.metric("Сумма заказов", f"{_manager_amount:,.0f} ₽".replace(",", " "))
-        _c4.metric("Оплачено полностью", _manager_paid)
-        _c5.metric("Конверсия в оплату", f"{_manager_conversion:.1f}%")
-        _c6.metric("Средний заказ", f"{_manager_avg_check:,.0f} ₽".replace(",", " "))
-        _c7.metric("Средний заказ, м", f"{_manager_avg_metres:,.1f}".replace(",", " "))
+        _c4.metric("Сумма оплачено", f"{_manager_paid_amount:,.0f} ₽".replace(",", " "))
+        _c5.metric("ОПЛАЧЕНО", _manager_paid)
+        _c6.metric("Конверсия в оплату", f"{_manager_conversion:.1f}%")
+        _c7.metric("Средний заказ", f"{_manager_avg_check:,.0f} ₽".replace(",", " "))
+        _c8.metric("Средний заказ, м", f"{_manager_avg_metres:,.1f}".replace(",", " "))
         _mc1, _mc2, _mc3, _mc4, _mc5 = st.columns(5, gap="small")
         _mc1.metric("Сделок в работе", _manager_work_deals)
         _mc2.metric("Добавлено клиентов", _manager_added_clients)
