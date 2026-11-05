@@ -2938,7 +2938,11 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
     for _i, _item in enumerate(comments):
         if not isinstance(_item, dict):
             continue
-        _meta = " · ".join(str(_item.get(k, "")) for k in (time_key, author_key) if _item.get(k))
+        _author = _item.get(author_key) or _item.get("user") or _item.get("created_by") or ""
+        _meta_parts = [str(_item.get(time_key, ""))] if _item.get(time_key) else []
+        if _author:
+            _meta_parts.append(str(_author))
+        _meta = " · ".join(_meta_parts)
         _text = linkify_text(str(_item.get("text", "") or ""))
         _deleted = bool(_item.get("deleted"))
         _content, _action = st.columns([12, 1])
@@ -7163,8 +7167,6 @@ def render_deal_card_expanded(d, cl):
                 commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
             else: st.warning("Введите текст")
         st.markdown("---")
-        render_entity_chat(d, "deal", d["id"])
-        st.markdown("---")
         show_edit_deal = st.session_state.get(f"show_edit_deal_{d['id']}", False)
         if show_edit_deal:
             et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"et_{d['id']}")
@@ -10192,7 +10194,6 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.markdown(f"**Отчёт:** {d.get('archive_report')}")
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
-            render_entity_chat(d, "deal", deal_id)
             # Кнопки завершения и архивации доступны в любой колонке/статусе сделки.
             st.markdown("---")
             if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
@@ -10489,8 +10490,6 @@ def render_client_card_expanded(cl):
                             st.rerun()
             # Разделитель под кнопкой редактирования
             st.markdown("---")
-            # Чат в левом столбце под информацией
-            render_entity_chat(cl, "client", cl["id"])
             render_reminders("client", cl.get("id", ""), cl.get("name", "Клиент"), f"client_{cl.get('id')}")
         with _right_col:
             st.markdown("**Комментарии:**")
