@@ -12372,7 +12372,7 @@ def statistics_dialog(section="Общая статистика"):
             st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
             # Статистика по городам и образцам строится по задачам доставки.
             _city_client_counts = {}
-            for _city_client in clients_all:
+            for _city_client in clients:
                 _city_name = str(_city_client.get("city") or "").strip() or "Город не указан"
                 _city_type = str(_city_client.get("category") or "Не определён").strip() or "Не определён"
                 _city_key = (_city_type, _city_name)
@@ -12426,7 +12426,7 @@ def statistics_dialog(section="Общая статистика"):
                     "Задач «Отправить заказ»": _orders["Всего задач"],
                     "Заказов отправлено": _orders["Выполнено"],
                     "Задач «Отправить образцы»": _samples["Всего задач"],
-                    "Образцов отправлено": _samples["Выполнено"],
+                    "Отправок образцов": _samples["Выполнено"],
                 })
             st.markdown("**Заказы и образцы по городу**")
             if _city_delivery_rows:
@@ -12456,7 +12456,7 @@ def statistics_dialog(section="Общая статистика"):
                 if str(_deal.get("status") or "").strip().lower() == "сделка закрыта"
             ]
             _sample1, _sample2, _sample3, _sample4 = st.columns(4, gap="small")
-            _sample1.metric("Образцов отправлено (задач)", len(_sample_sent_tasks))
+            _sample1.metric("Отправок образцов", len(_sample_sent_tasks))
             _sample2.metric("Клиентов получили образцы", len(_sample_sent_clients))
             _sample3.metric("Завершённых сделок у получателей", len(_sample_closed_deals))
             _sample4.metric("Клиентов с завершёнными сделками", len({
@@ -12483,7 +12483,7 @@ def statistics_dialog(section="Общая статистика"):
                 _sample_client_rows.append({
                     "Клиент": str(_sample_client.get("name") or "Клиент"),
                     "Город": str(_items[0]["city"] or "Город не указан"),
-                    "Образцов отправлено": sum(1 for _item in _items if _item["sent"]),
+                    "Отправок образцов": sum(1 for _item in _items if _item["sent"]),
                     "Задач по образцам": len(_items),
                     "Сделок в работе": _in_work,
                     "Завершённых сделок": _closed,
@@ -12494,7 +12494,7 @@ def statistics_dialog(section="Общая статистика"):
             st.markdown("**Клиенты, которым отправляли образцы, и последующие сделки**")
             if _sample_client_rows:
                 st.dataframe(
-                    sorted(_sample_client_rows, key=lambda x: (x["Образцов отправлено"], x["Завершённых сделок"], x["Всего сделок"]), reverse=True),
+                    sorted(_sample_client_rows, key=lambda x: (x["Отправок образцов"], x["Завершённых сделок"], x["Всего сделок"]), reverse=True),
                     use_container_width=True, hide_index=True,
                 )
             else:
