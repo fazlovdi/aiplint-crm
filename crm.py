@@ -12378,8 +12378,8 @@ def statistics_dialog(section="Общая статистика"):
             _city_key = (_city_type, _city_name)
             _city_client_counts[_city_key] = _city_client_counts.get(_city_key, 0) + 1
         _city_client_rows = [
-            {"Тип клиента": _kind, "Город": _city, "Клиентов": _count}
-            for (_kind, _city), _count in sorted(_city_client_counts.items(), key=lambda x: (x[0][0].lower(), x[0][1].lower()))
+            {"Город": _city, "Тип клиента": _kind, "Клиентов": _count}
+            for (_kind, _city), _count in sorted(_city_client_counts.items(), key=lambda x: (x[0][1].lower(), x[0][0].lower()))
         ]
 
         _city_order_tasks = {}
@@ -12409,7 +12409,6 @@ def statistics_dialog(section="Общая статистика"):
                         "sent": bool(_task.get("done")),
                     })
 
-        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
         st.markdown("#### Статистика по городам")
         st.markdown("**Клиенты по типу и городу**")
         if _city_client_rows:
@@ -12423,10 +12422,8 @@ def statistics_dialog(section="Общая статистика"):
             _samples = _city_sample_tasks.get(_city, {"Всего задач": 0, "Выполнено": 0})
             _city_delivery_rows.append({
                 "Город": _city,
-                "Задач «Отправить заказ»": _orders["Всего задач"],
-                "Заказов отправлено": _orders["Выполнено"],
-                "Задач «Отправить образцы»": _samples["Всего задач"],
                 "Отправок образцов": _samples["Выполнено"],
+                "Заказов отправлено": _orders["Выполнено"],
             })
         st.markdown("**Заказы и образцы по городу**")
         if _city_delivery_rows:
