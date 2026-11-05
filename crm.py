@@ -12370,136 +12370,136 @@ def statistics_dialog(section="Общая статистика"):
                 _svg_parts.append('</svg>')
                 st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
             st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
-            # Статистика по городам и образцам строится по задачам доставки.
-            _city_client_counts = {}
-            for _city_client in clients:
-                _city_name = str(_city_client.get("city") or "").strip() or "Город не указан"
-                _city_type = str(_city_client.get("category") or "Не определён").strip() or "Не определён"
-                _city_key = (_city_type, _city_name)
-                _city_client_counts[_city_key] = _city_client_counts.get(_city_key, 0) + 1
-            _city_client_rows = [
-                {"Тип клиента": _kind, "Город": _city, "Клиентов": _count}
-                for (_kind, _city), _count in sorted(_city_client_counts.items(), key=lambda x: (x[0][0].lower(), x[0][1].lower()))
-            ]
+        # Статистика по городам и образцам строится по задачам доставки.
+        _city_client_counts = {}
+        for _city_client in clients:
+            _city_name = str(_city_client.get("city") or "").strip() or "Город не указан"
+            _city_type = str(_city_client.get("category") or "Не определён").strip() or "Не определён"
+            _city_key = (_city_type, _city_name)
+            _city_client_counts[_city_key] = _city_client_counts.get(_city_key, 0) + 1
+        _city_client_rows = [
+            {"Тип клиента": _kind, "Город": _city, "Клиентов": _count}
+            for (_kind, _city), _count in sorted(_city_client_counts.items(), key=lambda x: (x[0][0].lower(), x[0][1].lower()))
+        ]
 
-            _city_order_tasks = {}
-            _city_sample_tasks = {}
-            _sample_tasks_by_client = {}
-            for _task_client in clients_all:
-                _task_client_id = str(_task_client.get("id") or "")
-                for _task in (_task_client.get("tasks", []) or []):
-                    if not isinstance(_task, dict):
-                        continue
-                    _task_type = str(_task.get("type") or _task.get("text") or "").strip().lower()
-                    if _task_type not in ("отправить заказ", "отправить образцы"):
-                        continue
-                    _task_date = _stat_date(_task.get("created_at") or _task.get("date_created") or _task.get("last_modified"))
-                    if _start is not None and _end is not None and not (_task_date and _start <= _task_date <= _end):
-                        continue
-                    _task_city = str(_task.get("ship_city") or _task_client.get("city") or "").strip() or "Город не указан"
-                    _target = _city_order_tasks if _task_type == "отправить заказ" else _city_sample_tasks
-                    if _task_city not in _target:
-                        _target[_task_city] = {"Всего задач": 0, "Выполнено": 0}
-                    _target[_task_city]["Всего задач"] += 1
-                    if _task.get("done"):
-                        _target[_task_city]["Выполнено"] += 1
-                    if _task_type == "отправить образцы":
-                        _sample_tasks_by_client.setdefault(_task_client_id, []).append({
-                            "task": _task, "client": _task_client, "city": _task_city,
-                            "sent": bool(_task.get("done")),
-                        })
+        _city_order_tasks = {}
+        _city_sample_tasks = {}
+        _sample_tasks_by_client = {}
+        for _task_client in clients_all:
+            _task_client_id = str(_task_client.get("id") or "")
+            for _task in (_task_client.get("tasks", []) or []):
+                if not isinstance(_task, dict):
+                    continue
+                _task_type = str(_task.get("type") or _task.get("text") or "").strip().lower()
+                if _task_type not in ("отправить заказ", "отправить образцы"):
+                    continue
+                _task_date = _stat_date(_task.get("created_at") or _task.get("date_created") or _task.get("last_modified"))
+                if _start is not None and _end is not None and not (_task_date and _start <= _task_date <= _end):
+                    continue
+                _task_city = str(_task.get("ship_city") or _task_client.get("city") or "").strip() or "Город не указан"
+                _target = _city_order_tasks if _task_type == "отправить заказ" else _city_sample_tasks
+                if _task_city not in _target:
+                    _target[_task_city] = {"Всего задач": 0, "Выполнено": 0}
+                _target[_task_city]["Всего задач"] += 1
+                if _task.get("done"):
+                    _target[_task_city]["Выполнено"] += 1
+                if _task_type == "отправить образцы":
+                    _sample_tasks_by_client.setdefault(_task_client_id, []).append({
+                        "task": _task, "client": _task_client, "city": _task_city,
+                        "sent": bool(_task.get("done")),
+                    })
 
-            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
-            st.markdown("#### Статистика по городам")
-            st.markdown("**Клиенты по типу и городу**")
-            if _city_client_rows:
-                st.dataframe(_city_client_rows, use_container_width=True, hide_index=True)
-            else:
-                st.info("Нет клиентов для статистики по городам.")
+        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
+        st.markdown("#### Статистика по городам")
+        st.markdown("**Клиенты по типу и городу**")
+        if _city_client_rows:
+            st.dataframe(_city_client_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("Нет клиентов для статистики по городам.")
 
-            _city_delivery_rows = []
-            for _city in sorted(set(_city_order_tasks) | set(_city_sample_tasks), key=str.lower):
-                _orders = _city_order_tasks.get(_city, {"Всего задач": 0, "Выполнено": 0})
-                _samples = _city_sample_tasks.get(_city, {"Всего задач": 0, "Выполнено": 0})
-                _city_delivery_rows.append({
-                    "Город": _city,
-                    "Задач «Отправить заказ»": _orders["Всего задач"],
-                    "Заказов отправлено": _orders["Выполнено"],
-                    "Задач «Отправить образцы»": _samples["Всего задач"],
-                    "Отправок образцов": _samples["Выполнено"],
-                })
-            st.markdown("**Заказы и образцы по городу**")
-            if _city_delivery_rows:
-                st.dataframe(_city_delivery_rows, use_container_width=True, hide_index=True)
-            else:
-                st.info("В выбранном периоде нет задач на отправку заказов или образцов.")
-            st.caption("Заказ/образец считается отправленным, когда соответствующая задача отмечена выполненной. Город берётся из задачи доставки, а если он не заполнен — из карточки клиента.")
+        _city_delivery_rows = []
+        for _city in sorted(set(_city_order_tasks) | set(_city_sample_tasks), key=str.lower):
+            _orders = _city_order_tasks.get(_city, {"Всего задач": 0, "Выполнено": 0})
+            _samples = _city_sample_tasks.get(_city, {"Всего задач": 0, "Выполнено": 0})
+            _city_delivery_rows.append({
+                "Город": _city,
+                "Задач «Отправить заказ»": _orders["Всего задач"],
+                "Заказов отправлено": _orders["Выполнено"],
+                "Задач «Отправить образцы»": _samples["Всего задач"],
+                "Отправок образцов": _samples["Выполнено"],
+            })
+        st.markdown("**Заказы и образцы по городу**")
+        if _city_delivery_rows:
+            st.dataframe(_city_delivery_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("В выбранном периоде нет задач на отправку заказов или образцов.")
+        st.caption("Заказ/образец считается отправленным, когда соответствующая задача отмечена выполненной. Город берётся из задачи доставки, а если он не заполнен — из карточки клиента.")
 
-            st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
-            st.markdown("#### Статистика по образцам")
-            _sample_client_ids = set(_sample_tasks_by_client)
-            _sample_sent_tasks = [
-                item for items in _sample_tasks_by_client.values() for item in items if item["sent"]
-            ]
-            _sample_sent_clients = {
-                client_id for client_id, items in _sample_tasks_by_client.items()
-                if any(item["sent"] for item in items)
-            }
-            _sample_client_deals = {}
-            for _sample_deal in deals_all:
-                _sample_deal_client_id = str(_sample_deal.get("client_id") or "")
-                if _sample_deal_client_id in _sample_client_ids:
-                    _sample_client_deals.setdefault(_sample_deal_client_id, []).append(_sample_deal)
-            _sample_closed_deals = [
-                _deal for _client_id in _sample_sent_clients
-                for _deal in _sample_client_deals.get(_client_id, [])
+        st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 12px 0;"></div>', unsafe_allow_html=True)
+        st.markdown("#### Статистика по образцам")
+        _sample_client_ids = set(_sample_tasks_by_client)
+        _sample_sent_tasks = [
+            item for items in _sample_tasks_by_client.values() for item in items if item["sent"]
+        ]
+        _sample_sent_clients = {
+            client_id for client_id, items in _sample_tasks_by_client.items()
+            if any(item["sent"] for item in items)
+        }
+        _sample_client_deals = {}
+        for _sample_deal in deals_all:
+            _sample_deal_client_id = str(_sample_deal.get("client_id") or "")
+            if _sample_deal_client_id in _sample_client_ids:
+                _sample_client_deals.setdefault(_sample_deal_client_id, []).append(_sample_deal)
+        _sample_closed_deals = [
+            _deal for _client_id in _sample_sent_clients
+            for _deal in _sample_client_deals.get(_client_id, [])
+            if str(_deal.get("status") or "").strip().lower() == "сделка закрыта"
+        ]
+        _sample1, _sample2, _sample3, _sample4 = st.columns(4, gap="small")
+        _sample1.metric("Отправок образцов", len(_sample_sent_tasks))
+        _sample2.metric("Клиентов получили образцы", len(_sample_sent_clients))
+        _sample3.metric("Завершённых сделок у получателей", len(_sample_closed_deals))
+        _sample4.metric("Клиентов с завершёнными сделками", len({
+            str(_deal.get("client_id") or "") for _deal in _sample_closed_deals
+        }))
+        _sample_client_rows = []
+        for _sample_client_id, _items in _sample_tasks_by_client.items():
+            _sample_client = _items[0]["client"]
+            _client_sample_deals = _sample_client_deals.get(_sample_client_id, [])
+            _in_work = sum(
+                1 for _deal in _client_sample_deals
+                if str(_deal.get("status") or "").strip().lower() not in (
+                    "сделка закрыта", "архив", "отказ", "отменено", "завершено", "выполнено"
+                )
+            )
+            _closed = sum(
+                1 for _deal in _client_sample_deals
                 if str(_deal.get("status") or "").strip().lower() == "сделка закрыта"
-            ]
-            _sample1, _sample2, _sample3, _sample4 = st.columns(4, gap="small")
-            _sample1.metric("Отправок образцов", len(_sample_sent_tasks))
-            _sample2.metric("Клиентов получили образцы", len(_sample_sent_clients))
-            _sample3.metric("Завершённых сделок у получателей", len(_sample_closed_deals))
-            _sample4.metric("Клиентов с завершёнными сделками", len({
-                str(_deal.get("client_id") or "") for _deal in _sample_closed_deals
-            }))
-            _sample_client_rows = []
-            for _sample_client_id, _items in _sample_tasks_by_client.items():
-                _sample_client = _items[0]["client"]
-                _client_sample_deals = _sample_client_deals.get(_sample_client_id, [])
-                _in_work = sum(
-                    1 for _deal in _client_sample_deals
-                    if str(_deal.get("status") or "").strip().lower() not in (
-                        "сделка закрыта", "архив", "отказ", "отменено", "завершено", "выполнено"
-                    )
-                )
-                _closed = sum(
-                    1 for _deal in _client_sample_deals
-                    if str(_deal.get("status") or "").strip().lower() == "сделка закрыта"
-                )
-                _archived = sum(
-                    1 for _deal in _client_sample_deals
-                    if str(_deal.get("status") or "").strip().lower() == "архив"
-                )
-                _sample_client_rows.append({
-                    "Клиент": str(_sample_client.get("name") or "Клиент"),
-                    "Город": str(_items[0]["city"] or "Город не указан"),
-                    "Отправок образцов": sum(1 for _item in _items if _item["sent"]),
-                    "Задач по образцам": len(_items),
-                    "Сделок в работе": _in_work,
-                    "Завершённых сделок": _closed,
-                    "В архиве": _archived,
-                    "Всего сделок": len(_client_sample_deals),
-                    "Статус образцов": "Отправлены" if any(_item["sent"] for _item in _items) else "Задача не завершена",
-                })
-            st.markdown("**Клиенты, которым отправляли образцы, и последующие сделки**")
-            if _sample_client_rows:
-                st.dataframe(
-                    sorted(_sample_client_rows, key=lambda x: (x["Отправок образцов"], x["Завершённых сделок"], x["Всего сделок"]), reverse=True),
-                    use_container_width=True, hide_index=True,
-                )
-            else:
-                st.info("В выбранном периоде нет задач «Отправить образцы».")
-            st.caption("Таблица включает клиентов с задачами на образцы за выбранный период. Статусы сделок у этих клиентов показаны за всё время, чтобы видеть последующую конверсию образцов в заказы.")
+            )
+            _archived = sum(
+                1 for _deal in _client_sample_deals
+                if str(_deal.get("status") or "").strip().lower() == "архив"
+            )
+            _sample_client_rows.append({
+                "Клиент": str(_sample_client.get("name") or "Клиент"),
+                "Город": str(_items[0]["city"] or "Город не указан"),
+                "Отправок образцов": sum(1 for _item in _items if _item["sent"]),
+                "Задач по образцам": len(_items),
+                "Сделок в работе": _in_work,
+                "Завершённых сделок": _closed,
+                "В архиве": _archived,
+                "Всего сделок": len(_client_sample_deals),
+                "Статус образцов": "Отправлены" if any(_item["sent"] for _item in _items) else "Задача не завершена",
+            })
+        st.markdown("**Клиенты, которым отправляли образцы, и последующие сделки**")
+        if _sample_client_rows:
+            st.dataframe(
+                sorted(_sample_client_rows, key=lambda x: (x["Отправок образцов"], x["Завершённых сделок"], x["Всего сделок"]), reverse=True),
+                use_container_width=True, hide_index=True,
+            )
+        else:
+            st.info("В выбранном периоде нет задач «Отправить образцы».")
+        st.caption("Таблица включает клиентов с задачами на образцы за выбранный период. Статусы сделок у этих клиентов показаны за всё время, чтобы видеть последующую конверсию образцов в заказы.")
 
 
 
