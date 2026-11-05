@@ -7094,19 +7094,7 @@ def render_deal_card_expanded(d, cl):
         st.markdown(f"**{d.get('deal_number', d.get('title', ''))}**")
         st.markdown(format_created_date(d), unsafe_allow_html=True)
         st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
-        _real_date_card_current = parse_optional_date(d.get("real_date", ""))
-        _real_date_card_selected = st.date_input(
-            "Реальная дата сделки:",
-            value=_real_date_card_current,
-            format="DD.MM.YYYY",
-            key=f"deal_real_date_card_{d['id']}",
-        )
-        _real_date_card_stored = _real_date_card_selected.isoformat() if _real_date_card_selected else ""
-        if _real_date_card_stored != str(d.get("real_date") or ""):
-            d["real_date"] = _real_date_card_stored
-            d["last_modified"] = now_str()
-            d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Реальная дата сделки"})
-            commit_and_rerun(st.session_state.crm_store, "Реальная дата сделки обновлена")
+        st.markdown(f"**Реальная дата сделки:** {format_date(d.get('real_date', '')) or '—'}")
         ps = d.get("payment_status", "Не оплачено")
         inject_payment_container_css(d["id"], ps)
         with st.container(key=f"ps_wrap_{d['id']}"):
