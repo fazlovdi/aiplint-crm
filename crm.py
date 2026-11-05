@@ -1775,7 +1775,7 @@ def _torg12_print_section(task, copies=2):
     pages = _torg12_print_pages_html(task, copies=copies)
     if not pages:
         return ""
-    return "<h2 class='torg12-heading'>Торг-12 — два экземпляра</h2>" + pages
+    return pages
 
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -14063,7 +14063,7 @@ elif st.session_state.active_tab == "Задачи":
                         th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
                         td.notes {{ height: 28px; }}
                         @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
-                        .torg12-print {{ page-break-before: always; break-before: page; }} .torg12-print iframe {{ width:100%;height:95vh;border:0; }}
+                        .torg12-page {{ page-break-before: always; break-before: page; page: torg12; width:100%; }} .torg12-page img {{ display:block; width:100%; height:auto; max-height:185mm; object-fit:contain; }} .torg12-page iframe {{ width:100%;height:95vh;border:0; }} @page torg12 {{ size:A4 landscape; margin:5mm; }}
                         </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
                         <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
                         <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
