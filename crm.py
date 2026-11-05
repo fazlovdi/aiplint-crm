@@ -1372,6 +1372,18 @@ def parse_deadline(ds):
         try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").date()
         except: return moscow_now().date()
 
+def parse_optional_date(ds):
+    """Parse an optional date without substituting today when the value is empty."""
+    if not ds:
+        return None
+    try:
+        return datetime.strptime(str(ds)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        try:
+            return datetime.strptime(str(ds)[:10], "%d.%m.%Y").date()
+        except (TypeError, ValueError):
+            return None
+
 def is_task_overdue(task):
     if task.get("done"): return False
     dl = task.get("deadline", "")
@@ -3585,6 +3597,7 @@ def migrate_data(data):
         if "deal_chat" not in d: d["deal_chat"] = []
         if "deal_number" not in d: d["deal_number"] = ""
         if "created_at" not in d: d["created_at"] = ""
+        if "real_date" not in d: d["real_date"] = ""
         if d.get("status") == "New": d["status"] = "Новый"
         if d.get("status") == "На согласовании": d["status"] = "В работе"
         if d.get("title", "").startswith("Заказ"): d["title"] = d.get("deal_number", d["title"])
@@ -7081,6 +7094,20 @@ def render_deal_card_expanded(d, cl):
         st.markdown(f"**{d.get('deal_number', d.get('title', ''))}**")
         st.markdown(format_created_date(d), unsafe_allow_html=True)
         st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+        _real_date_card_current = parse_optional_date(d.get("real_date", ""))
+        _real_date_card_selected = st.date_input(
+            "Реальная дата сделки:",
+            value=_real_date_card_current,
+            format="DD.MM.YYYY",
+            clearable=True,
+            key=f"deal_real_date_card_{d['id']}",
+        )
+        _real_date_card_stored = _real_date_card_selected.isoformat() if _real_date_card_selected else ""
+        if _real_date_card_stored != str(d.get("real_date") or ""):
+            d["real_date"] = _real_date_card_stored
+            d["last_modified"] = now_str()
+            d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Реальная дата сделки"})
+            commit_and_rerun(st.session_state.crm_store, "Реальная дата сделки обновлена")
         ps = d.get("payment_status", "Не оплачено")
         inject_payment_container_css(d["id"], ps)
         with st.container(key=f"ps_wrap_{d['id']}"):
@@ -10080,11 +10107,25 @@ def render_deal_detail(d, cl, cu, key_prefix):
             if d.get("deal_title"):
                 head += f" — {d['deal_title']}"
             st.markdown(f"<div style='font-size:1.35rem;font-weight:750;margin-top:0.8rem;margin-bottom:0.7rem;'>{num}</div>", unsafe_allow_html=True)
+            st.markdown(format_created_date(d), unsafe_allow_html=True)
             if d.get("deal_title"):
                 st.markdown(f"**Тема:** {d['deal_title']}")
-            st.markdown(format_created_date(d), unsafe_allow_html=True)
             st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
             st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+            _real_date_current = parse_optional_date(d.get("real_date", ""))
+            _real_date_selected = st.date_input(
+                "Реальная дата сделки:",
+                value=_real_date_current,
+                format="DD.MM.YYYY",
+                clearable=True,
+                key=f"deal_real_date_detail_{deal_id}",
+            )
+            _real_date_stored = _real_date_selected.isoformat() if _real_date_selected else ""
+            if _real_date_stored != str(d.get("real_date") or ""):
+                d["real_date"] = _real_date_stored
+                d["last_modified"] = now_str()
+                d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Реальная дата сделки"})
+                commit_and_rerun(st.session_state.crm_store, "Реальная дата сделки обновлена")
             ps = d.get("payment_status", "Не оплачено")
             mgr_options_dd = get_managers_list()
             current_mgr_dd = d.get("manager", "")
@@ -10767,6 +10808,7 @@ def render_client_in_tree(cl):
         if st.session_state.get(show_cd_key, False):
             with st.container(border=True):
                 cd_title = st.text_input("Тема:", key=f"cd_title_{cl['id']}")
+                cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", clearable=True, key=f"cd_real_date_{cl['id']}")
                 cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
                 cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cd_ps_{cl['id']}")
@@ -10774,7 +10816,7 @@ def render_client_in_tree(cl):
                     deals = st.session_state.crm_store.get("deals", [])
                     did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
                     dn = generate_deal_number()
-                    new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr or "", "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "change_log": [], "deal_chat": []}
+                    new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr or "", "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "real_date": cd_real_date.isoformat() if cd_real_date else "", "change_log": [], "deal_chat": []}
                     st.session_state.crm_store.setdefault("deals", []).append(new_deal)
                     cl["last_modified"] = now_str()
                     st.session_state[show_cd_key] = False
@@ -11662,7 +11704,8 @@ def create_deal_dialog(cl_id):
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
     _has_unsaved = (
         st.session_state.get(f"cdlg_title_{cl_id}", "").strip() or
-        st.session_state.get(f"cdlg_budget_{cl_id}", "").strip()
+        st.session_state.get(f"cdlg_budget_{cl_id}", "").strip() or
+        st.session_state.get(f"cdlg_real_date_{cl_id}") is not None
     )
     _close_css_key = f"close_row_{_key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
@@ -11708,6 +11751,7 @@ def create_deal_dialog(cl_id):
     _deal_create_left, _deal_create_right = st.columns(2)
     with _deal_create_left:
         cd_title = st.text_input("Тема:", key=f"cdlg_title_{cl_id}")
+        cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", clearable=True, key=f"cdlg_real_date_{cl_id}")
         cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
         cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cdlg_budget_{cl_id}", placeholder="Введите сумму")
         cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
@@ -11724,7 +11768,7 @@ def create_deal_dialog(cl_id):
                     "status": "В работе", "manager": cd_mgr or "", "payment_status": cd_ps,
                         "deal_comments": ([{"time": now_str(), "text": cd_comment.strip()}] if cd_comment.strip() else []), "deal_files": (normalize_file_list(save_uploaded_files(cd_files, cl_id, "deal_file")) if cd_files else []), "close_files": [], "archive_files": [],
                         "last_modified": now_str(), "created_at": now_str(),
-                        "created_by": st.session_state.get("user_login", ""), "change_log": [], "deal_chat": []}
+                        "created_by": st.session_state.get("user_login", ""), "real_date": cd_real_date.isoformat() if cd_real_date else "", "change_log": [], "deal_chat": []}
         st.session_state.crm_store.setdefault("deals", []).append(new_deal)
         _cl["last_modified"] = now_str()
         save_data(st.session_state.crm_store)
@@ -12098,7 +12142,8 @@ def statistics_dialog(section="Общая статистика"):
         return None
 
     def _stat_deal_date(deal):
-        return _stat_date(deal.get("created_at") or deal.get("date_created") or deal.get("last_modified"))
+        # Prefer the real deal date; use the creation date only when it is empty.
+        return _stat_date(deal.get("real_date") or deal.get("created_at") or deal.get("date_created") or deal.get("last_modified"))
 
     def _stat_calc(deal):
         calculations = [
@@ -12261,7 +12306,7 @@ def statistics_dialog(section="Общая статистика"):
     if section != "План / факт":
         st.caption(
             f"Период: {_start.strftime('%d.%m.%Y') + ' — ' + _end.strftime('%d.%m.%Y') if _start and _end else 'всё время'}. "
-            "Заказы и материалы учитываются по дате создания сделки; сумма заказа не равна сумме фактически поступивших оплат."
+            "Заказы и материалы учитываются по реальной дате сделки, если она указана, иначе по дате создания; сумма заказа не равна сумме фактически поступивших оплат."
         )
     if section != "План / факт":
         st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#DCE0E5;margin:12px 0 18px 0;"></div>', unsafe_allow_html=True)
