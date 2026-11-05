@@ -1718,8 +1718,8 @@ def render_task_products_editor(deal, key_prefix, existing_products="", existing
                 st.rerun()
     return str(selected_id), str(st.session_state.get(products_key, "") or "")
 
-def _task_torg12_print_b64(task, copies=2):
-    """Возвращает PDF Торг-12 из файлов задачи, повторённый нужное число раз."""
+def _torg12_print_pages_html(task, copies=2):
+    """Подготавливает страницы ТОРГ-12 как изображения для надёжной печати в браузерах."""
     candidates = []
     for item in (task.get("task_files", []) or []):
         if not isinstance(item, dict):
@@ -1731,33 +1731,51 @@ def _task_torg12_print_b64(task, copies=2):
         if os.path.splitext(filename)[1].lower() != ".pdf":
             continue
         raw = get_file_bytes(item.get("file_path") or item.get("path"))
-        if raw:
+        if raw and raw[:4] == b"%PDF":
             candidates.append(raw)
     if not candidates:
         return ""
     try:
-        from pypdf import PdfReader, PdfWriter
-        writer = PdfWriter()
+        import fitz
+        pages_html = []
         for raw in candidates:
-            reader = PdfReader(io.BytesIO(raw))
-            for _ in range(max(1, int(copies or 1))):
-                for page in reader.pages:
-                    writer.add_page(page)
-        output = io.BytesIO()
-        writer.write(output)
-        return base64.b64encode(output.getvalue()).decode("ascii")
+            with fitz.open(stream=raw, filetype="pdf") as pdf:
+                for _ in range(max(1, int(copies or 1))):
+                    for page in pdf:
+                        pix = page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False)
+                        png_b64 = base64.b64encode(pix.tobytes("png")).decode("ascii")
+                        pages_html.append(
+                            "<div class='torg12-page'>"
+                            f"<img alt='Торг-12' src='data:image/png;base64,{png_b64}'>"
+                            "</div>"
+                        )
+        return "".join(pages_html)
     except Exception as exc:
-        print(f"TORG12 print preparation failed: {type(exc).__name__}: {str(exc)[:200]}")
-        return ""
+        print(f"TORG12 image print preparation failed: {type(exc).__name__}: {str(exc)[:200]}")
+        # Совместимый запасной вариант, если преобразование PDF в изображение недоступно.
+        try:
+            from pypdf import PdfReader, PdfWriter
+            writer = PdfWriter()
+            for raw in candidates:
+                reader = PdfReader(io.BytesIO(raw))
+                for _ in range(max(1, int(copies or 1))):
+                    for page in reader.pages:
+                        writer.add_page(page)
+            buf = io.BytesIO()
+            writer.write(buf)
+            payload = base64.b64encode(buf.getvalue()).decode("ascii")
+            return ("<div class='torg12-page'><iframe title='Торг-12' "
+                    f"src='data:application/pdf;base64,{payload}'></iframe></div>")
+        except Exception as fallback_exc:
+            print(f"TORG12 PDF fallback failed: {type(fallback_exc).__name__}: {str(fallback_exc)[:200]}")
+            return ""
 
 
 def _torg12_print_section(task, copies=2):
-    payload = _task_torg12_print_b64(task, copies=copies)
-    if not payload:
+    pages = _torg12_print_pages_html(task, copies=copies)
+    if not pages:
         return ""
-    return ("<div class='torg12-print'><h2>Торг-12 — два экземпляра</h2>"
-            f"<iframe title='Торг-12' src='data:application/pdf;base64,{payload}'></iframe></div>")
-
+    return "<h2 class='torg12-heading'>Торг-12 — два экземпляра</h2>" + pages
 
 def build_print_html(task, cl, tp, fd):
     def esc(s): return str(s if s else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -1767,7 +1785,7 @@ def build_print_html(task, cl, tp, fd):
     file_reminder = "<div style='color:#D65757;font-weight:bold;margin:14px 0;border:2px solid #D65757;padding:8px;border-radius:8px;'>&#9888; Не забудь распечатать вложенные файлы!</div>" if task.get("task_files") else ""
     lb = get_logo_base64()
     logo_html = f"<img src='data:image/png;base64,{lb}' width='180' style='float:left;margin-right:20px;'/>" if lb else "<div style='font-size:24px;font-weight:bold;float:left;margin-right:20px;'>АЙПЛИНТ</div>"
-    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }} .torg12-print {{ page-break-before:always; break-before:page; }} .torg12-print iframe {{ width:100%;height:95vh;border:0; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Способ доставки:</b> {esc(task.get('ship_method', 'Не выбрано') or 'Не выбрано')}</div><div class="row"><b>Трек/комментарий:</b> {esc(task.get('tk_num', ''))}</div><div class="row"><b>Описание:</b> {esc(task.get('task_comment', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div>{_torg12_print_section(task, copies=2)}</body></html>"""
+    return f"""<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Бланк задачи</title><style>body {{ font-family: Arial, sans-serif; margin: 40px; color: #222; }} .header {{ text-align: center; border-bottom: 2px solid #333; padding: 10px; }} .row {{ margin: 8px 0; }} hr {{ border: none; border-top: 1px solid #ccc; margin: 14px 0; }} .sig {{ margin-top: 30px; }} .sig p {{ margin: 12px 0; }} .torg12-page {{ page-break-before:always; break-before:page; page:torg12; width:100%; }} .torg12-page img {{ display:block; width:100%; height:auto; max-height:185mm; object-fit:contain; }} .torg12-page iframe {{ width:100%;height:95vh;border:0; }} .torg12-heading {{ page-break-before:always; break-before:page; }} @page torg12 {{ size:A4 landscape; margin:5mm; }}</style></head><body><div>{logo_html}</div><div class="header"><h2>БЛАНК ЗАДАЧИ</h2><p>{moscow_now().strftime('%d.%m.%Y')}</p></div><div class="row"><b>Задача:</b> №{esc(task.get('task_number', ''))}</div><div class="row"><b>Клиент:</b> {esc(cl['name'])} ({esc(cl['phone'])})</div><div class="row"><b>Тип:</b> {esc(tp)}</div>{'' if tp in ("Отправить заказ", "Отправить образцы") else f'<div class="row"><b>Тема:</b> {esc(task.get("text", ""))}</div>'}<div class="row"><b>Срок:</b> {esc(fd)}</div><div class="row"><b>Ответственный:</b> {esc(task.get('manager', ''))}</div><hr><div class="row"><b>Товары:</b><br>{products_html}</div><div class="row"><b>Город:</b> {esc(task.get('ship_city', ''))}</div><div class="row"><b>Адрес:</b> {esc(task.get('ship_addr', ''))}</div><div class="row"><b>Получатель:</b> {esc(task.get('receiver', ''))} ({esc(task.get('receiver_phone', ''))})</div><div class="row"><b>Оплата:</b> {esc(task.get('ship_pay', ''))}</div><div class="row"><b>Способ доставки:</b> {esc(task.get('ship_method', 'Не выбрано') or 'Не выбрано')}</div><div class="row"><b>Трек/комментарий:</b> {esc(task.get('tk_num', ''))}</div><div class="row"><b>Описание:</b> {esc(task.get('task_comment', ''))}</div>{cost_html}{file_reminder}<div class="sig"><p>Отпустил: _____________</p><p>Получил: _____________</p></div>{_torg12_print_section(task, copies=2)}</body></html>"""
 
 def render_print_button(task, cl, tp, fd, key_suffix):
     html_content = build_print_html(task, cl, tp, fd)
