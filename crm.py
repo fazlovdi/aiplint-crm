@@ -14513,23 +14513,4 @@ def _crm_render_workspace_fragment():
 
     # Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
 
-
-# Панель служебного статуса Streamlit оставляем только администратору.
-# Условие проверяется после восстановления авторизации и определения роли.
-if st.session_state.get("user_role") != "admin":
-    st.markdown("""<style>
-    /* Streamlit Cloud status/deploy control and legacy Hosted with Streamlit badge. */
-    [data-testid="stStatusWidget"],
-    [data-testid="stAppDeployButton"],
-    .stDeployButton,
-    .viewerBadge_container__1QSob,
-    [class*="viewerBadge_container"],
-    [class*="viewerBadge_link"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-    </style>""", unsafe_allow_html=True)
-
 _crm_render_workspace_fragment()
