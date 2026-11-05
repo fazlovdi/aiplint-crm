@@ -5629,8 +5629,8 @@ def _render_it_edit(it):
                     commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
 
 def _render_it_delete(it):
-    """Delete button for internal task (admin only)."""
-    if st.session_state.user_role == "admin":
+    """Delete button for internal task (admin and director only)."""
+    if st.session_state.user_role in ("admin", "director"):
         st.markdown("---")
         if st.button("Удалить задачу", key=f"it_del_{it['id']}", use_container_width=True):
             st.session_state.crm_store["internal_tasks"] = [x for x in st.session_state.crm_store.get("internal_tasks", []) if x.get("id") != it.get("id")]
@@ -5836,7 +5836,7 @@ def internal_task_detail_dialog(it_id):
         else:
             st.info("Ожидает проверки автором задачи")
         st.markdown("---")
-    if _is_admin:
+    if st.session_state.user_role in ("admin", "director"):
         if st.button("Удалить задачу", key=f"itdlg_del_{it['id']}", use_container_width=True):
             st.session_state.crm_store["internal_tasks"] = [x for x in st.session_state.crm_store.get("internal_tasks", []) if _safe_id(x.get("id", 0)) != it_id]
             st.session_state.pop("dialog_it_key", None)
@@ -7224,7 +7224,7 @@ def render_deal_card_expanded(d, cl):
                 d["status"] = "Сделка закрыта"
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Сделка в закрытых")
-        if st.session_state.user_role == "admin":
+        if st.session_state.user_role in ("admin", "director"):
             st.markdown("---")
             if st.button("Удалить сделку", key=f"deal_del_{d['id']}", use_container_width=True):
                 st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != d["id"]]
@@ -10176,7 +10176,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _push_dialog_return()
                 st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
                 st.rerun()
-            if st.session_state.user_role == "admin":
+            if st.session_state.user_role in ("admin", "director"):
                 st.markdown("---")
                 if st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True):
                     st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
@@ -10396,7 +10396,7 @@ def render_client_card_expanded(cl):
                     if st.button("Отменить", key=f"ec_cancel_{cl['id']}", use_container_width=True):
                         st.session_state[f"show_edit_{cl['id']}"] = False
                         st.rerun()
-                if st.session_state.user_role == "admin":
+                if st.session_state.user_role in ("admin", "director"):
                     st.markdown("---")
                     cdl = st.checkbox("Подтверждаю удаление клиента", key=f"cdl_{cl['id']}")
                     if cdl and st.button("Удалить клиента", key=f"del_cli_{cl['id']}", use_container_width=True, type="primary"):
