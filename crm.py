@@ -12679,7 +12679,7 @@ def statistics_dialog(section="Общая статистика"):
                     "Метры": round(x["metres"], 2),
                     "Сумма, ₽": round(x["amount"], 2),
                 }
-                for x in sorted(_manager_rows, key=lambda z: str(z["deal"].get("created_at") or ""), reverse=True)
+                for x in sorted(_manager_rows, key=lambda z: _stat_deal_date(z["deal"]) or datetime.min.date(), reverse=True)
             ], use_container_width=True, hide_index=True)
         else:
             st.info("За выбранный период у менеджера нет сделок.")
@@ -12746,7 +12746,7 @@ def statistics_dialog(section="Общая статистика"):
             st.dataframe(sorted(_active_rows, key=lambda x: x["Возраст, дней"] if isinstance(x["Возраст, дней"], int) else -1, reverse=True), use_container_width=True, hide_index=True)
         else:
             st.info("Нет активных сделок за выбранный период.")
-        st.caption("Возраст сделки считается от даты её создания до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
+        st.caption("Возраст сделки считается от реальной даты сделки, если она указана, иначе от даты создания, до сегодняшнего дня. Это показатель длительности работы со сделкой, а не времени первого ответа. CRM пока не фиксирует отдельное событие первого контакта.")
         st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
         st.markdown("#### Задачи за период")
         st.caption(f"Всего задач: {len(_all_tasks)} · Просрочено: {len(_overdue_tasks)}")
@@ -12971,7 +12971,7 @@ def statistics_dialog(section="Общая статистика"):
         _fact_rows = []
         for _row in deal_rows:
             _deal = _row["deal"]
-            _closed_date = _stat_date(_deal.get("closed_date"))
+            _closed_date = _stat_deal_date(_deal)
             if (
                 _row["paid"]
                 and str(_row["status"] or "").strip().lower() == "сделка закрыта"
