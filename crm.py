@@ -7099,7 +7099,6 @@ def render_deal_card_expanded(d, cl):
             "Реальная дата сделки:",
             value=_real_date_card_current,
             format="DD.MM.YYYY",
-            clearable=True,
             key=f"deal_real_date_card_{d['id']}",
         )
         _real_date_card_stored = _real_date_card_selected.isoformat() if _real_date_card_selected else ""
@@ -10117,7 +10116,6 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 "Реальная дата сделки:",
                 value=_real_date_current,
                 format="DD.MM.YYYY",
-                clearable=True,
                 key=f"deal_real_date_detail_{deal_id}",
             )
             _real_date_stored = _real_date_selected.isoformat() if _real_date_selected else ""
@@ -10808,7 +10806,7 @@ def render_client_in_tree(cl):
         if st.session_state.get(show_cd_key, False):
             with st.container(border=True):
                 cd_title = st.text_input("Тема:", key=f"cd_title_{cl['id']}")
-                cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", clearable=True, key=f"cd_real_date_{cl['id']}")
+                cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", key=f"cd_real_date_{cl['id']}")
                 cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cd_mgr_{cl['id']}", placeholder=MGR_PLACEHOLDER)
                 cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cd_budget_{cl['id']}", placeholder="Введите сумму")
                 cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cd_ps_{cl['id']}")
@@ -11751,7 +11749,7 @@ def create_deal_dialog(cl_id):
     _deal_create_left, _deal_create_right = st.columns(2)
     with _deal_create_left:
         cd_title = st.text_input("Тема:", key=f"cdlg_title_{cl_id}")
-        cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", clearable=True, key=f"cdlg_real_date_{cl_id}")
+        cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", key=f"cdlg_real_date_{cl_id}")
         cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
         cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cdlg_budget_{cl_id}", placeholder="Введите сумму")
         cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
