@@ -15224,6 +15224,17 @@ def _crm_live_change_notice_fragment():
                                     _fresh_deal = _fresh_deals_by_id.get(_workspace_deal_id)
                                     if _fresh_deal is not None:
                                         _workspace_args[0] = _fresh_deal
+                                        # Синхронизируем состояния виджетов, которые сразу сохраняют изменения,
+                                        # иначе после обновления они могут показывать старые данные сделки.
+                                        _deal_id_for_widgets = str(_fresh_deal.get("id", ""))
+                                        _real_date_value = parse_optional_date(_fresh_deal.get("real_date", ""))
+                                        st.session_state[f"deal_real_date_detail_{_deal_id_for_widgets}"] = _real_date_value
+                                        _payment_status_value = str(_fresh_deal.get("payment_status", "Не оплачено") or "Не оплачено")
+                                        if _payment_status_value in ("Не оплачено", "Оплачен частично", "Оплачено"):
+                                            st.session_state[f"dls_ps_{_deal_id_for_widgets}"] = _payment_status_value
+                                        _manager_value = str(_fresh_deal.get("manager", "") or "")
+                                        if _manager_value in get_managers_list():
+                                            st.session_state[f"deal_mgr_inline_{_deal_id_for_widgets}"] = _manager_value
                                     # Задачи по сделке хранятся в tasks клиента, а не в объекте сделки.
                                     # Обновляем также объект клиента в аргументах окна сделки,
                                     # иначе счётчик и список задач остаются старыми после обновления уведомления.
@@ -15242,6 +15253,13 @@ def _crm_live_change_notice_fragment():
                                     if _fresh_task_pair is not None:
                                         _fresh_task, _fresh_task_client = _fresh_task_pair
                                         _workspace_args[0] = _fresh_task
+                                        # Поле ответственного сохраняет изменения сразу; сбрасываем
+                                        # его состояние к свежему значению после обновления вкладки.
+                                        if len(_workspace_args) > 3 and _workspace_args[3] is not None:
+                                            _task_mgr_key = f"task_mgr_inline_{_workspace_args[3]}"
+                                            _task_mgr_value = str(_fresh_task.get("manager", "") or "")
+                                            if _task_mgr_value in get_managers_list():
+                                                st.session_state[_task_mgr_key] = _task_mgr_value
                                         if len(_workspace_args) > 1:
                                             _workspace_args[1] = _fresh_task_client
                                         if len(_workspace_args) > 2 and isinstance(_workspace_args[2], dict):
