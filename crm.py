@@ -14987,6 +14987,27 @@ def _crm_live_change_notice_fragment():
         if not isinstance(_pending, dict):
             return
 
+        # Если затронута именно открытая вкладка и пользователь не редактирует форму,
+        # сразу перечитываем общую базу и перерисовываем рабочее пространство.
+        # Так новые сделки/задачи/реквизиты видны без ручного обновления и без закрытия окна.
+        _editing = any(
+            bool(_value) for _key, _value in st.session_state.items()
+            if str(_key).startswith(("show_edit_", "dls_show_edit_", "show_edit_task_", "show_edit_dl_"))
+        )
+        if not _editing:
+            _loaded = load_data()
+            st.session_state["crm_store"] = _loaded
+            _fresh_client = next(
+                (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id"))),
+                None,
+            )
+            if _fresh_client is not None:
+                st.session_state[f"cm_{_pending.get('client_id')}"] = _fresh_client.get("contact_method", "") or ""
+            _notices.pop(_tab_key, None)
+            st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
+            st.rerun(scope="app")
+            return
+
         st.markdown(
             "<style>.st-key-crm_live_change_notice{position:fixed!important;top:12px!important;right:18px!important;"
             "z-index:100200!important;width:min(520px,calc(100vw - 36px))!important;background:#fff!important;"
