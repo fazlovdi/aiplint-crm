@@ -4465,10 +4465,21 @@ def save_data(data):
                     _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
                     _owner = _deal.get("client_id") or _deal.get("cl_id")
                     if _old_deal != _new_deal and _owner is not None:
-                        # Создание/удаление сделки относится к списку сделок клиента;
-                        # изменение существующей сделки — к её собственной вкладке.
-                        if str(_did) not in _old_deals or str(_did) not in _new_deals:
+                        # Создание/удаление сделки относится к списку сделок клиента.
+                        # Изменение только расчётов относится к вкладке конкретной сделки,
+                        # где расположен список расчётов, и не должно уведомлять карточку клиента.
+                        _is_new_or_deleted_deal = str(_did) not in _old_deals or str(_did) not in _new_deals
+                        _old_calcs = _old_deal.pop("calculations", [])
+                        _new_calcs = _new_deal.pop("calculations", [])
+                        _old_deal.pop("budget", None)
+                        _new_deal.pop("budget", None)
+                        _old_deal.pop("change_log", None)
+                        _new_deal.pop("change_log", None)
+                        _calcs_changed = _old_calcs != _new_calcs
+                        if _is_new_or_deleted_deal:
                             _change_targets.add("client_deals:" + str(_owner))
+                        elif _calcs_changed and _old_deal == _new_deal:
+                            _change_targets.add("deal_calculations:" + str(_owner))
                         else:
                             _change_targets.add("deal:" + str(_owner))
                         _changed_client_ids.add(str(_owner))
@@ -14959,7 +14970,10 @@ def _crm_live_change_notice_fragment():
                     elif _name == "client_deals_dialog":
                         _target = "client_deals:" + _cid
                     elif _name == "deal_detail_dialog":
-                        _target = "deal:" + _cid
+                        _target = next(
+                            (_prefix + _cid for _prefix in ("deal_calculations:", "deal:") if _prefix + _cid in _targets),
+                            "deal:" + _cid,
+                        )
                     elif _name == "task_detail_dialog":
                         _args = _tab.get("args", ()) or ()
                         _deal_obj = _args[2] if len(_args) > 2 and isinstance(_args[2], dict) else None
