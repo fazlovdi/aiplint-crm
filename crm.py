@@ -5840,7 +5840,7 @@ def create_internal_task_dialog():
             with _wc2:
                 if st.button("Отмена", key=f"cdlg_warn_cancel_{_key_prefix}", use_container_width=True):
                     st.session_state[_close_warning_key] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     internal_tasks = st.session_state.crm_store.setdefault("internal_tasks", [])
     _cu = st.session_state.user_name
     _cu_login = st.session_state.get("user_login", "")
@@ -11101,7 +11101,7 @@ def add_client_dialog(fv):
             with _wcol2:
                 if st.button("Отмена", key=f"add_warn_cancel_{fv}", use_container_width=True):
                     st.session_state[_add_close_warning_key] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     acl, acr = st.columns(2)
     with acl:
         cn = st.text_input("ФИО / Компания", key=f"cn_{fv}", on_change=_add_client_save_draft, args=(fv, "name", f"cn_{fv}"))
@@ -11908,7 +11908,7 @@ def create_deal_dialog(cl_id):
             with _wcol2:
                 if st.button("Отмена", key=f"cdlg_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     _cl = get_client_by_id(cl_id)
     if not _cl:
         st.error("Клиент не найден")
@@ -12016,7 +12016,7 @@ def deal_create_task_dialog(deal_id, client_id):
             with _wcol2:
                 if st.button("Отмена", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     _task_form_lifecycle_key = f"nt_form_initialized_cdt_{deal_id}"
     if not st.session_state.get(_task_form_lifecycle_key):
         st.session_state[f"nt_order_calc_cdt_{deal_id}"] = ""
@@ -12097,7 +12097,7 @@ def client_create_task_dialog(cl_id):
             with _wcol2:
                 if st.button("Отмена", key=f"cct_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     _created_task = render_task_form(None, cl_id, f"cct_{cl_id}")
     if _created_task:
         save_data(st.session_state.crm_store)
@@ -12149,7 +12149,7 @@ def client_create_deal_task_dialog(cl_id):
             with _wcol2:
                 if st.button("Отмена", key=f"ccdt_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.rerun()
+                    _crm_workspace_rerun()
     deal_options = {d["id"]: d.get("deal_number", d.get("title", "")) for d in cl_deals}
     selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"ccdt_deal_sel_{cl_id}")
     _created_task = None
@@ -14927,8 +14927,8 @@ def _crm_live_change_notice_fragment():
                     if _editing:
                         st.warning("Сначала сохраните или завершите редактирование. CRM не будет перезагружать карточку, пока это может привести к потере ваших данных.")
                     else:
-                        # Загружаем свежий снимок и базовую ревизию, затем перерисовываем
-                        # всё приложение: повторный запуск только этого фрагмента не обновляет карточку в рабочем пространстве.
+                        # Загружаем свежие данные и повторно отрисовываем только рабочее пространство.
+                        # Основная навигация и остальные вкладки CRM не перезапускаются.
                         _loaded = load_data()
                         st.session_state["crm_store"] = _loaded
                         _fresh_client = next(
@@ -14939,12 +14939,7 @@ def _crm_live_change_notice_fragment():
                             st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "") or ""
                         st.session_state.pop("_crm_live_change_notice", None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
-                        st.session_state["_crm_pending_workspace_restore"] = {
-                            "windows": copy.deepcopy(st.session_state.get("_crm_windows", [])),
-                            "active_window_id": copy.deepcopy(st.session_state.get("_crm_active_window_id")),
-                            "active_dialog": copy.deepcopy(st.session_state.get("_crm_active_dialog")),
-                        }
-                        st.rerun(scope="app")
+                        _crm_workspace_rerun()
             with _b2:
                 if st.button("Позже", key="crm_live_notice_later", use_container_width=True):
                     st.session_state.pop("_crm_live_change_notice", None)
