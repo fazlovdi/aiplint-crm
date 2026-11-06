@@ -3847,7 +3847,7 @@ def load_data():
                 _validate_backup_snapshot(row[0])
                 _remember_session_base(data, row[1])
                 if not st.session_state.get("_crm_load_logged_this_session"):
-                    _crm_log("DATABASE_LOAD_OK", {"source": "SQLite", "revision": row[1], "clients": len(data.get("clients", [])), "deals": len(data.get("deals", []))})
+                    _crm_log("DATABASE_LOAD_OK", {"source": "SQLite", "revision": row[1], "clients": len(data.get("clients", [])), "deals": len(data.get("deals", [])), "sqlite_path": os.path.abspath(SQLITE_FILE), "cwd": os.getcwd(), "pid": os.getpid(), "instance": os.environ.get("HOSTNAME", "unknown")})
                     st.session_state["_crm_load_logged_this_session"] = True
                 return data
         finally:
@@ -4361,6 +4361,21 @@ def save_data(data):
             conn.close()
             conn = None
             _save_succeeded = True
+
+            # Диагностика общей базы: по логам можно сравнить ревизии и
+            # фактический путь SQLite между разными сессиями/экземплярами.
+            _crm_log("DATABASE_SAVE_OK", {
+                "source": "SQLite",
+                "revision_before": revision,
+                "revision_after": new_revision,
+                "clients": len(merged_data.get("clients", [])),
+                "deals": len(merged_data.get("deals", [])),
+                "sqlite_path": os.path.abspath(SQLITE_FILE),
+                "cwd": os.getcwd(),
+                "pid": os.getpid(),
+                "instance": os.environ.get("HOSTNAME", "unknown"),
+                "conflicts": len(conflicts),
+            })
 
             # После commit обновляем рабочую сессию и её базу сравнения.
             try:
