@@ -4407,7 +4407,15 @@ def save_data(data):
                 _old_clients = {str(x.get("id")): x for x in (latest_data.get("clients", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_clients = {str(x.get("id")): x for x in (merged_data.get("clients", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _cid in set(_old_clients) | set(_new_clients):
-                    if _old_clients.get(_cid) != _new_clients.get(_cid):
+                    _old_client_event = copy.deepcopy(_old_clients.get(_cid))
+                    _new_client_event = copy.deepcopy(_new_clients.get(_cid))
+                    # Флаг viewed — служебное состояние открытия карточки, а не правка пользователя.
+                    # Не создаём событие обновления, когда изменился только этот флаг.
+                    if isinstance(_old_client_event, dict):
+                        _old_client_event.pop("viewed", None)
+                    if isinstance(_new_client_event, dict):
+                        _new_client_event.pop("viewed", None)
+                    if _old_client_event != _new_client_event:
                         _changed_client_ids.add(_cid)
                 _old_deals = {str(x.get("id")): x for x in (latest_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_deals = {str(x.get("id")): x for x in (merged_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
