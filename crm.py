@@ -15038,6 +15038,26 @@ def _crm_live_change_notice_fragment():
                     else:
                         _loaded = load_data()
                         st.session_state["crm_store"] = _loaded
+                        # Окна рабочего пространства хранят собственные ссылки на объекты,
+                        # поэтому одной перезагрузки crm_store недостаточно: список расчётов
+                        # в открытой сделке иначе продолжает показывать старый объект сделки.
+                        _fresh_deals_by_id = {
+                            str(_deal.get("id")): _deal
+                            for _deal in (_loaded.get("deals", []) or [])
+                            if _deal.get("id") is not None
+                        }
+                        for _workspace_window in (st.session_state.get("_crm_windows", []) or []):
+                            for _workspace_tab in (_workspace_window.get("tabs", []) or []):
+                                if _workspace_tab.get("name") != "deal_detail_dialog":
+                                    continue
+                                _workspace_args = list(_workspace_tab.get("args", ()) or ())
+                                if not _workspace_args or not isinstance(_workspace_args[0], dict):
+                                    continue
+                                _workspace_deal_id = str(_workspace_args[0].get("id", ""))
+                                _fresh_deal = _fresh_deals_by_id.get(_workspace_deal_id)
+                                if _fresh_deal is not None:
+                                    _workspace_args[0] = _fresh_deal
+                                    _workspace_tab["args"] = tuple(_workspace_args)
                         _fresh_client = next(
                             (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id"))),
                             None,
