@@ -2338,11 +2338,7 @@ def _crm_workspace_load_from_sqlite(login):
 
 
 def _crm_workspace_queue_save():
-    """Сохраняет рабочее пространство пользователя в основную SQLite-базу.
-
-    save_data() после транзакции SQLite автоматически ставит тот же снимок
-    в очередь резервного копирования Яндекс Диска и обновления JSON-зеркала.
-    """
+    """Сохраняет только состояние окон в отдельной SQLite-таблице."""
     try:
         login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
         if not login:
@@ -2435,14 +2431,8 @@ def _crm_workspace_queue_save():
         workspace = {**workspace_state, "updated_at": now_str()}
         payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":"))
 
-        store = st.session_state.get("crm_store")
-        if not isinstance(store, dict):
+        if not isinstance(st.session_state.get("crm_store"), dict):
             return
-        workspaces = store.setdefault("_workspaces", {})
-        if not isinstance(workspaces, dict):
-            workspaces = {}
-            store["_workspaces"] = workspaces
-        workspaces[login] = workspace
         st.session_state["_crm_workspace_active_tab_dirty"] = False
 
         # Окна храним отдельно: навигация не должна сериализовать всю CRM-базу,
