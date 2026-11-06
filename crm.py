@@ -15190,6 +15190,15 @@ def _crm_live_change_notice_fragment():
                         bool(_value) for _key, _value in st.session_state.items()
                         if str(_key).startswith(("show_edit_", "dls_show_edit_", "show_edit_task_", "show_edit_dl_"))
                     )
+                    # Окно расчёта использует отдельный dirty-флаг, а не show_edit_*.
+                    # Не разрешаем обновлять его поверх несохранённых изменений.
+                    _active_refresh_tab = _active_tab if isinstance(_active_tab, dict) else {}
+                    if _active_refresh_tab.get("name") == "deal_calculation_dialog":
+                        _active_calc_args = _active_refresh_tab.get("args", ()) or ()
+                        if len(_active_calc_args) > 1:
+                            _active_calc_dirty_key = f"calc_{_active_calc_args[0]}_{_active_calc_args[1]}_dirty"
+                            if st.session_state.get(_active_calc_dirty_key, False):
+                                _editing = True
                     if _editing:
                         st.warning("Сначала сохраните или завершите редактирование. CRM не будет перезагружать данные, пока это может привести к потере ваших правок.")
                     else:
@@ -15246,6 +15255,35 @@ def _crm_live_change_notice_fragment():
                                         _workspace_args[1] = _fresh_client_for_deal
                                     if _fresh_deal is not None or _fresh_client_for_deal is not None:
                                         _workspace_tab["args"] = tuple(_workspace_args)
+                                elif _workspace_tab.get("name") == "deal_calculation_dialog" and len(_workspace_args) > 1:
+                                    # Если расчёт не редактировался, синхронизируем его виджеты
+                                    # с актуальными данными, чтобы старое состояние Streamlit
+                                    # не отображалось и не попало в следующее сохранение.
+                                    _calc_deal_id = str(_workspace_args[0])
+                                    _calc_id_refresh = str(_workspace_args[1])
+                                    _fresh_calc_deal = _fresh_deals_by_id.get(_calc_deal_id)
+                                    _fresh_calc = next(
+                                        (x for x in (_fresh_calc_deal or {}).get("calculations", []) or []
+                                         if str(x.get("id")) == _calc_id_refresh),
+                                        None,
+                                    )
+                                    _calc_state_prefix = f"calc_{_calc_deal_id}_{_calc_id_refresh}"
+                                    if _fresh_calc is not None and not st.session_state.get(f"{_calc_state_prefix}_dirty", False):
+                                        st.session_state[f"{_calc_state_prefix}_name"] = _fresh_calc.get("name") or _calculation_display_name(_fresh_calc_deal, _fresh_calc)
+                                        st.session_state[f"{_calc_state_prefix}_discount_type"] = _fresh_calc.get("discount_type", "Без скидки")
+                                        st.session_state[f"{_calc_state_prefix}_delivery"] = float(_fresh_calc.get("delivery_amount", 0) or 0)
+                                        st.session_state[f"{_calc_state_prefix}_individual_discount"] = float(_fresh_calc.get("individual_discount", 0) or 0)
+                                        st.session_state[f"{_calc_state_prefix}_vat_rate"] = str(_fresh_calc.get("vat_rate", "Без НДС") or "Без НДС")
+                                        for _fresh_item in (_fresh_calc.get("items", []) or []):
+                                            _fresh_row_id = _fresh_item.get("row_id")
+                                            if not _fresh_row_id:
+                                                continue
+                                            st.session_state[f"{_calc_state_prefix}_{_fresh_row_id}_product"] = str(_fresh_item.get("product_id", ""))
+                                            st.session_state[f"{_calc_state_prefix}_{_fresh_row_id}_color"] = _fresh_item.get("color_ral", "") or ""
+                                            st.session_state[f"{_calc_state_prefix}_{_fresh_row_id}_qty"] = float(_fresh_item.get("quantity", 1) or 0)
+                                            st.session_state[f"{_calc_state_prefix}_{_fresh_row_id}_discount"] = float(_fresh_item.get("discount", 0) or 0)
+                                        st.session_state[f"{_calc_state_prefix}_original_snapshot"] = copy.deepcopy(_fresh_calc)
+                                        st.session_state[f"{_calc_state_prefix}_dirty"] = False
                                 elif _workspace_tab.get("name") == "task_detail_dialog" and _workspace_args:
                                     _workspace_task = _workspace_args[0] if isinstance(_workspace_args[0], dict) else {}
                                     _workspace_task_identity = _workspace_task.get("id") or _workspace_task.get("task_number")
