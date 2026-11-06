@@ -14995,7 +14995,7 @@ def _crm_live_change_notice_fragment():
                         _loaded = load_data()
                         st.session_state["crm_store"] = _loaded
                         _fresh_client = next(
-                            (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id")),
+                            (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id"))),
                             None,
                         )
                         if _fresh_client is not None:
