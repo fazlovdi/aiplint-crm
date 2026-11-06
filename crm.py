@@ -3824,7 +3824,7 @@ def _ensure_sqlite_store():
             # Безопасная миграция уже существующей базы: старые события остаются читаемыми.
             _event_columns = {row[1] for row in conn.execute("PRAGMA table_info(crm_change_events)").fetchall()}
             if "change_targets" not in _event_columns:
-                conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_targets TEXT NOT NULL DEFAULT '[]')")
+                conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_targets TEXT NOT NULL DEFAULT '[]'")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None or not isinstance(row[0], str) or not row[0].strip():
                 # Восстанавливаем не только отсутствующую строку, но и пустую запись SQLite.
