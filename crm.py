@@ -4460,6 +4460,24 @@ def save_data(data):
                     if _old_client_task_ids != _new_client_task_ids:
                         _change_targets.add("client_tasks:" + _cid)
                         _changed_client_ids.add(_cid)
+                    # Задачи по сделке хранятся в списке задач клиента, но уведомлять
+                    # должны только вкладку соответствующей сделки.
+                    _old_tasks_by_deal = {}
+                    _new_tasks_by_deal = {}
+                    for _task_item in (_old_client_tasks or []):
+                        if isinstance(_task_item, dict) and _task_item.get("deal_id") is not None:
+                            _old_tasks_by_deal.setdefault(str(_task_item.get("deal_id")), set()).add(
+                                str(_task_item.get("id") or _task_item.get("task_number") or "")
+                            )
+                    for _task_item in (_new_client_tasks or []):
+                        if isinstance(_task_item, dict) and _task_item.get("deal_id") is not None:
+                            _new_tasks_by_deal.setdefault(str(_task_item.get("deal_id")), set()).add(
+                                str(_task_item.get("id") or _task_item.get("task_number") or "")
+                            )
+                    for _task_deal_id in set(_old_tasks_by_deal) | set(_new_tasks_by_deal):
+                        if _old_tasks_by_deal.get(_task_deal_id, set()) != _new_tasks_by_deal.get(_task_deal_id, set()):
+                            _change_targets.add("deal_tasks:" + _task_deal_id)
+                            _changed_client_ids.add(_cid)
 
                 _old_deals = {str(x.get("id")): x for x in (latest_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_deals = {str(x.get("id")): x for x in (merged_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
