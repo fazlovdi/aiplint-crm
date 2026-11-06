@@ -4518,19 +4518,28 @@ def save_data(data):
                     # Счета, сформированные для конкретного расчёта, обновляют только окно расчёта.
                     _old_generated_docs = _old_deal.pop("generated_documents", []) or []
                     _new_generated_docs = _new_deal.pop("generated_documents", []) or []
+                    _old_deal_files = _old_deal.pop("deal_files", []) or []
+                    _new_deal_files = _new_deal.pop("deal_files", []) or []
                     def _is_invoice_doc(_doc):
-                        _kind = str((_doc or {}).get("kind", (_doc or {}).get("document_type", ""))).casefold()
+                        _kind = str((_doc or {}).get("kind", (_doc or {}).get("document_type", (_doc or {}).get("description", "")))).casefold()
                         return "счёт" in _kind or "счет" in _kind or "invoice" in _kind
                     _old_invoice_docs = {str(x.get("id") or x.get("file_hash") or x.get("file_name")): x for x in _old_generated_docs if isinstance(x, dict) and _is_invoice_doc(x)}
                     _new_invoice_docs = {str(x.get("id") or x.get("file_hash") or x.get("file_name")): x for x in _new_generated_docs if isinstance(x, dict) and _is_invoice_doc(x)}
+                    _old_invoice_files = {str(x.get("id") or x.get("file_hash") or x.get("file_name")): x for x in _old_deal_files if isinstance(x, dict) and _is_invoice_doc(x)}
+                    _new_invoice_files = {str(x.get("id") or x.get("file_hash") or x.get("file_name")): x for x in _new_deal_files if isinstance(x, dict) and _is_invoice_doc(x)}
                     _changed_invoice_calc_ids = {
-                        str(((_new_invoice_docs.get(_k) or _old_invoice_docs.get(_k) or {}).get("calculation_id")) or "")
-                        for _k in (set(_old_invoice_docs) | set(_new_invoice_docs))
-                        if _old_invoice_docs.get(_k) != _new_invoice_docs.get(_k)
-                        and ((_new_invoice_docs.get(_k) or _old_invoice_docs.get(_k) or {}).get("calculation_id") is not None)
+                        str(((_new_invoice_docs.get(_k) or _old_invoice_docs.get(_k) or _new_invoice_files.get(_k) or _old_invoice_files.get(_k) or {}).get("calculation_id")) or "")
+                        for _k in (set(_old_invoice_docs) | set(_new_invoice_docs) | set(_old_invoice_files) | set(_new_invoice_files))
+                        if (
+                            _old_invoice_docs.get(_k) != _new_invoice_docs.get(_k)
+                            or _old_invoice_files.get(_k) != _new_invoice_files.get(_k)
+                        )
+                        and ((_new_invoice_docs.get(_k) or _old_invoice_docs.get(_k) or _new_invoice_files.get(_k) or _old_invoice_files.get(_k) or {}).get("calculation_id") is not None)
                     }
                     _old_deal["generated_documents"] = [x for x in _old_generated_docs if not isinstance(x, dict) or not _is_invoice_doc(x)]
                     _new_deal["generated_documents"] = [x for x in _new_generated_docs if not isinstance(x, dict) or not _is_invoice_doc(x)]
+                    _old_deal["deal_files"] = [x for x in _old_deal_files if not isinstance(x, dict) or not _is_invoice_doc(x)]
+                    _new_deal["deal_files"] = [x for x in _new_deal_files if not isinstance(x, dict) or not _is_invoice_doc(x)]
                     # Изменение задачи по сделке также обновляет last_modified сделки.
                     _old_deal.pop("last_modified", None)
                     _new_deal.pop("last_modified", None)
