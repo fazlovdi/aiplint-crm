@@ -4465,7 +4465,12 @@ def save_data(data):
                     _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
                     _owner = _deal.get("client_id") or _deal.get("cl_id")
                     if _old_deal != _new_deal and _owner is not None:
-                        _change_targets.add("deal:" + str(_owner))
+                        # Создание/удаление сделки относится к списку сделок клиента;
+                        # изменение существующей сделки — к её собственной вкладке.
+                        if str(_did) not in _old_deals or str(_did) not in _new_deals:
+                            _change_targets.add("client_deals:" + str(_owner))
+                        else:
+                            _change_targets.add("deal:" + str(_owner))
                         _changed_client_ids.add(str(_owner))
                     if _old_deal_tasks != _new_deal_tasks and _owner is not None:
                         _change_targets.add("deal_tasks:" + str(_owner))
@@ -14937,6 +14942,10 @@ def _crm_live_change_notice_fragment():
                         _target = "client:" + _cid
                     elif _name == "client_tasks_dialog":
                         _target = "client_tasks:" + _cid
+                    elif _name == "client_deals_dialog":
+                        _target = "client_deals:" + _cid
+                    elif _name == "deal_detail_dialog":
+                        _target = "deal:" + _cid
                     elif _name == "task_detail_dialog":
                         _args = _tab.get("args", ()) or ()
                         _deal_obj = _args[2] if len(_args) > 2 and isinstance(_args[2], dict) else None
