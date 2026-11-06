@@ -4515,6 +4515,22 @@ def save_data(data):
                     _new_deal = copy.deepcopy(_new_deals.get(_did) or {})
                     _old_deal_tasks = _old_deal.pop("tasks", [])
                     _new_deal_tasks = _new_deal.pop("tasks", [])
+                    # Счета, сформированные для конкретного расчёта, обновляют только окно расчёта.
+                    _old_generated_docs = _old_deal.pop("generated_documents", []) or []
+                    _new_generated_docs = _new_deal.pop("generated_documents", []) or []
+                    def _is_invoice_doc(_doc):
+                        _kind = str((_doc or {}).get("kind", (_doc or {}).get("document_type", ""))).casefold()
+                        return "счёт" in _kind or "счет" in _kind or "invoice" in _kind
+                    _old_invoice_docs = {str(x.get("id") or x.get("file_hash") or x.get("file_name")): x for x in _old_generated_docs if isinstance(x, dict) and _is_invoice_doc(x)}
+                    _new_invoice_docs = {str(x.get("id") or x.get("file_hash") or x.get("file_name")): x for x in _new_generated_docs if isinstance(x, dict) and _is_invoice_doc(x)}
+                    _changed_invoice_calc_ids = {
+                        str(((_new_invoice_docs.get(_k) or _old_invoice_docs.get(_k) or {}).get("calculation_id")) or "")
+                        for _k in (set(_old_invoice_docs) | set(_new_invoice_docs))
+                        if _old_invoice_docs.get(_k) != _new_invoice_docs.get(_k)
+                        and ((_new_invoice_docs.get(_k) or _old_invoice_docs.get(_k) or {}).get("calculation_id") is not None)
+                    }
+                    _old_deal["generated_documents"] = [x for x in _old_generated_docs if not isinstance(x, dict) or not _is_invoice_doc(x)]
+                    _new_deal["generated_documents"] = [x for x in _new_generated_docs if not isinstance(x, dict) or not _is_invoice_doc(x)]
                     # Изменение задачи по сделке также обновляет last_modified сделки.
                     _old_deal.pop("last_modified", None)
                     _new_deal.pop("last_modified", None)
@@ -4544,9 +4560,14 @@ def save_data(data):
                         for _calc_id in set(_old_calc_map) & set(_new_calc_map):
                             _old_calc_detail = copy.deepcopy(_old_calc_map[_calc_id])
                             _new_calc_detail = copy.deepcopy(_new_calc_map[_calc_id])
-                            # Платёжные документы и служебные даты меняются при работе со счётом,
-                            # а не при редактировании самого расчёта.
-                            for _calc_meta in ("tochka_documents", "updated_at"):
+                            # Создание/изменение счёта или платёжного документа относится к окну расчёта,
+                            # а не к редактору расчёта или окну сделки.
+                            for _doc_field in ("tochka_documents", "ozon_documents"):
+                                if _old_calc_detail.get(_doc_field, []) != _new_calc_detail.get(_doc_field, []):
+                                    _changed_invoice_calc_ids.add(_calc_id)
+                                _old_calc_detail.pop(_doc_field, None)
+                                _new_calc_detail.pop(_doc_field, None)
+                            for _calc_meta in ("updated_at",):
                                 _old_calc_detail.pop(_calc_meta, None)
                                 _new_calc_detail.pop(_calc_meta, None)
                             if _old_calc_detail != _new_calc_detail:
@@ -4559,6 +4580,12 @@ def save_data(data):
                         elif _old_deal == _new_deal and len(_changed_calc_ids) == 1:
                             # Изменение существующего расчёта уведомляет только его собственную вкладку.
                             _change_targets.add("calculation_record:" + _changed_calc_ids[0])
+                        elif _old_deal == _new_deal and len(_changed_invoice_calc_ids) == 1:
+                            # Создание/изменение счёта уведомляет только окно соответствующего расчёта.
+                            _change_targets.add("calculation_record:" + next(iter(_changed_invoice_calc_ids)))
+                        elif _old_deal == _new_deal and len(_changed_invoice_calc_ids) > 1:
+                            for _invoice_calc_id in _changed_invoice_calc_ids:
+                                _change_targets.add("calculation_record:" + _invoice_calc_id)
                         else:
                             # Все остальные изменения сделки (включая счёт, отчёт и завершение)
                             # уведомляют только вкладку этой сделки.
