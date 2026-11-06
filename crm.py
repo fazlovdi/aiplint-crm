@@ -4525,19 +4525,43 @@ def save_data(data):
                         # Изменение только расчётов относится к вкладке конкретной сделки,
                         # где расположен список расчётов, и не должно уведомлять карточку клиента.
                         _is_new_or_deleted_deal = str(_did) not in _old_deals or str(_did) not in _new_deals
-                        _old_calcs = _old_deal.pop("calculations", [])
-                        _new_calcs = _new_deal.pop("calculations", [])
+                        _old_calcs = _old_deal.pop("calculations", []) or []
+                        _new_calcs = _new_deal.pop("calculations", []) or []
                         _old_deal.pop("budget", None)
                         _new_deal.pop("budget", None)
                         _old_deal.pop("change_log", None)
                         _new_deal.pop("change_log", None)
-                        _calcs_changed = _old_calcs != _new_calcs
+                        _old_calc_map = {
+                            str(c.get("id")): copy.deepcopy(c)
+                            for c in _old_calcs if isinstance(c, dict) and c.get("id") is not None
+                        }
+                        _new_calc_map = {
+                            str(c.get("id")): copy.deepcopy(c)
+                            for c in _new_calcs if isinstance(c, dict) and c.get("id") is not None
+                        }
+                        _calc_ids_changed = set(_old_calc_map) != set(_new_calc_map)
+                        _changed_calc_ids = []
+                        for _calc_id in set(_old_calc_map) & set(_new_calc_map):
+                            _old_calc_detail = copy.deepcopy(_old_calc_map[_calc_id])
+                            _new_calc_detail = copy.deepcopy(_new_calc_map[_calc_id])
+                            # Платёжные документы и служебные даты меняются при работе со счётом,
+                            # а не при редактировании самого расчёта.
+                            for _calc_meta in ("tochka_documents", "updated_at"):
+                                _old_calc_detail.pop(_calc_meta, None)
+                                _new_calc_detail.pop(_calc_meta, None)
+                            if _old_calc_detail != _new_calc_detail:
+                                _changed_calc_ids.append(_calc_id)
                         if _is_new_or_deleted_deal:
                             _change_targets.add("client_deals:" + str(_owner))
-                        elif _calcs_changed and _old_deal == _new_deal:
+                        elif _calc_ids_changed:
+                            # Создание/удаление расчёта уведомляет только вкладку сделки.
                             _change_targets.add("deal_calculations:" + str(_did))
+                        elif _old_deal == _new_deal and len(_changed_calc_ids) == 1:
+                            # Изменение существующего расчёта уведомляет только его собственную вкладку.
+                            _change_targets.add("calculation_record:" + _changed_calc_ids[0])
                         else:
-                            # Редактирование сделки относится только к вкладке этой сделки, не к карточке клиента.
+                            # Все остальные изменения сделки (включая счёт, отчёт и завершение)
+                            # уведомляют только вкладку этой сделки.
                             _change_targets.add("deal_record:" + str(_did))
                         _changed_client_ids.add(str(_owner))
                     # Задачи по сделке уведомляют только конкретную сделку и только при создании/удалении.
@@ -15051,8 +15075,14 @@ def _crm_live_change_notice_fragment():
                             _target = _task_record_target
                         else:
                             _target = ("deal_tasks:" + _deal_id) if _deal_obj and _deal_id else "client_tasks:" + _cid
-                    elif _name in ("deal_calculation_dialog", "invoice_document_dialog", "deal_report_dialog", "close_deal_dialog"):
-                        _target = "deal:" + _cid
+                    elif _name == "deal_calculation_dialog":
+                        _args = _tab.get("args", ()) or ()
+                        _calc_id = str(_args[1]) if len(_args) > 1 and _args[1] is not None else ""
+                        _target = "calculation_record:" + _calc_id if _calc_id else ""
+                    elif _name in ("invoice_document_dialog", "deal_report_dialog", "close_deal_dialog"):
+                        _args = _tab.get("args", ()) or ()
+                        _deal_id = str(_args[0]) if _args and _args[0] is not None else ""
+                        _target = "deal_record:" + _deal_id if _deal_id else ""
                     elif _name in ("internal_tasks_dialog", "internal_task_detail_dialog"):
                         _target = "internal_tasks:" + _cid
                     else:
