@@ -14921,27 +14921,33 @@ def _crm_live_change_notice_fragment():
                     _dirty = False
                     if isinstance(_current, dict) and isinstance(_base, dict):
                         try:
-                            _dirty = json.dumps(_current, ensure_ascii=False, sort_keys=True, separators=(",", ":")) != json.dumps(_base, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                            # Открытие карточки меняет только служебный флаг viewed.
+                            # Он не является пользовательской правкой и не должен блокировать обновление.
+                            _current_check = copy.deepcopy(_current)
+                            _base_check = copy.deepcopy(_base)
+                            for _snapshot in (_current_check, _base_check):
+                                for _client in _snapshot.get("clients", []) or []:
+                                    if isinstance(_client, dict):
+                                        _client.pop("viewed", None)
+                            _dirty = json.dumps(_current_check, ensure_ascii=False, sort_keys=True, separators=(",", ":")) != json.dumps(_base_check, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
                         except Exception:
                             _dirty = True
                     if _editing or _dirty:
                         st.warning("Сначала сохраните или завершите редактирование. CRM не будет перезагружать карточку, пока это может привести к потере ваших данных.")
                     else:
+                        # Загружаем свежий снимок и базовую ревизию, затем перерисовываем
+                        # всё приложение: повторный запуск только этого фрагмента не обновляет карточку в рабочем пространстве.
                         _loaded = load_data()
                         st.session_state["crm_store"] = _loaded
-                        # Сбрасываем кеш selectbox способа связи в режиме просмотра.
-                        # Иначе Streamlit может оставить старое значение виджета после
-                        # загрузки свежей базы, а карточка тут же сохранит его обратно.
                         _fresh_client = next(
                             (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_client_id)),
                             None,
                         )
                         if _fresh_client is not None:
-                            # Явно синхронизируем значение виджета с серверной версией.
-                            st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "")
+                            st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "") or ""
                         st.session_state.pop("_crm_live_change_notice", None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
-                        st.rerun()
+                        st.rerun(scope="app")
             with _b2:
                 if st.button("Позже", key="crm_live_notice_later", use_container_width=True):
                     st.session_state.pop("_crm_live_change_notice", None)
