@@ -6738,11 +6738,20 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 
                     _crm_workspace_clear_legacy_dialog_markers()
                     _crm_workspace_queue_save()
-                    # Главная панель находится вне fragment, поэтому явно обновляем всё приложение.
-                    try:
-                        st.rerun(scope="app")
-                    except (TypeError, ValueError):
-                        st.rerun()
+                    # Если закрываем окно внутри рабочего пространства и другое окно
+                    # осталось активным, достаточно перерисовать fragment. Полный rerun
+                    # нужен только при возврате на главный экран — иначе вся CRM
+                    # повторно загружает верхние разделы и создаёт лишнее мигание.
+                    if in_workspace and _next_window is not None:
+                        try:
+                            st.rerun(scope="fragment")
+                        except Exception:
+                            st.rerun()
+                    else:
+                        try:
+                            st.rerun(scope="app")
+                        except (TypeError, ValueError):
+                            st.rerun()
         if not in_workspace and any(w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) for w in st.session_state.get("_crm_windows", [])):
             with st.container(key="crm_workspace_main_expand_wrap"):
                 if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
