@@ -4448,7 +4448,14 @@ def save_data(data):
                     if _old_client_event != _new_client_event:
                         _change_targets.add("client:" + _cid)
                         _changed_client_ids.add(_cid)
-                    if _old_client_tasks != _new_client_tasks:
+                    # Задача по клиенту уведомляет карточку клиента только при создании или удалении.
+                    _old_client_task_ids = {
+                        str(t.get("id") or t.get("task_number") or "") for t in (_old_client_tasks or []) if isinstance(t, dict)
+                    }
+                    _new_client_task_ids = {
+                        str(t.get("id") or t.get("task_number") or "") for t in (_new_client_tasks or []) if isinstance(t, dict)
+                    }
+                    if _old_client_task_ids != _new_client_task_ids:
                         _change_targets.add("client_tasks:" + _cid)
                         _changed_client_ids.add(_cid)
 
@@ -4481,10 +4488,18 @@ def save_data(data):
                         elif _calcs_changed and _old_deal == _new_deal:
                             _change_targets.add("deal_calculations:" + str(_did))
                         else:
-                            _change_targets.add("deal:" + str(_owner))
+                            # Редактирование сделки относится только к вкладке этой сделки, не к карточке клиента.
+                            _change_targets.add("deal_record:" + str(_did))
                         _changed_client_ids.add(str(_owner))
-                    if _old_deal_tasks != _new_deal_tasks and _owner is not None:
-                        _change_targets.add("deal_tasks:" + str(_owner))
+                    # Задачи по сделке уведомляют только конкретную сделку и только при создании/удалении.
+                    _old_deal_task_ids = {
+                        str(t.get("id") or t.get("task_number") or "") for t in (_old_deal_tasks or []) if isinstance(t, dict)
+                    }
+                    _new_deal_task_ids = {
+                        str(t.get("id") or t.get("task_number") or "") for t in (_new_deal_tasks or []) if isinstance(t, dict)
+                    }
+                    if _old_deal_task_ids != _new_deal_task_ids and _owner is not None:
+                        _change_targets.add("deal_tasks:" + str(_did))
                         _changed_client_ids.add(str(_owner))
 
                 _old_tasks = {str(x.get("id")): x for x in (latest_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
@@ -14957,10 +14972,9 @@ def _crm_live_change_notice_fragment():
                     if _name == "client_detail_dialog":
                         # Карточка клиента содержит сводные списки/данные клиента,
                         # поэтому должна обновляться при изменении любой связанной сущности.
-                        _client_targets = (
-                            "client:", "client_tasks:", "client_deals:",
-                            "deal:", "deal_tasks:", "internal_tasks:",
-                        )
+                        # В карточку клиента приходят только изменения самого клиента,
+                        # создание/удаление задач клиента и создание/удаление сделок.
+                        _client_targets = ("client:", "client_tasks:", "client_deals:")
                         _target = next(
                             (_prefix + _cid for _prefix in _client_targets if _prefix + _cid in _targets),
                             "client:" + _cid,
@@ -14974,11 +14988,14 @@ def _crm_live_change_notice_fragment():
                         _deal_obj = _args[0] if _args and isinstance(_args[0], dict) else None
                         _deal_id = str((_deal_obj or {}).get("id", ""))
                         _calc_target = "deal_calculations:" + _deal_id if _deal_id else ""
-                        _target = _calc_target if _calc_target and _calc_target in _targets else "deal:" + _cid
+                        _record_target = "deal_record:" + _deal_id if _deal_id else ""
+                        _tasks_target = "deal_tasks:" + _deal_id if _deal_id else ""
+                        _target = next((t for t in (_calc_target, _record_target, _tasks_target) if t and t in _targets), "deal_record:" + _deal_id)
                     elif _name == "task_detail_dialog":
                         _args = _tab.get("args", ()) or ()
                         _deal_obj = _args[2] if len(_args) > 2 and isinstance(_args[2], dict) else None
-                        _target = ("deal_tasks:" if _deal_obj else "client_tasks:") + _cid
+                        _deal_id = str((_deal_obj or {}).get("id", ""))
+                        _target = ("deal_tasks:" + _deal_id) if _deal_obj and _deal_id else "client_tasks:" + _cid
                     elif _name in ("deal_calculation_dialog", "invoice_document_dialog", "deal_report_dialog", "close_deal_dialog"):
                         _target = "deal:" + _cid
                     elif _name in ("internal_tasks_dialog", "internal_task_detail_dialog"):
