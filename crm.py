@@ -15118,18 +15118,42 @@ def _crm_live_change_notice_fragment():
                             for _deal in (_loaded.get("deals", []) or [])
                             if _deal.get("id") is not None
                         }
+                        _fresh_tasks_by_id = {}
+                        _fresh_clients_by_id = {}
+                        for _client_item in (_loaded.get("clients", []) or []):
+                            if _client_item.get("id") is not None:
+                                _fresh_clients_by_id[str(_client_item.get("id"))] = _client_item
+                            for _task_item in (_client_item.get("tasks", []) or []):
+                                if not isinstance(_task_item, dict):
+                                    continue
+                                _task_identity = _task_item.get("id") or _task_item.get("task_number")
+                                if _task_identity is not None:
+                                    _fresh_tasks_by_id[str(_task_identity)] = (_task_item, _client_item)
                         for _workspace_window in (st.session_state.get("_crm_windows", []) or []):
                             for _workspace_tab in (_workspace_window.get("tabs", []) or []):
-                                if _workspace_tab.get("name") != "deal_detail_dialog":
-                                    continue
                                 _workspace_args = list(_workspace_tab.get("args", ()) or ())
-                                if not _workspace_args or not isinstance(_workspace_args[0], dict):
-                                    continue
-                                _workspace_deal_id = str(_workspace_args[0].get("id", ""))
-                                _fresh_deal = _fresh_deals_by_id.get(_workspace_deal_id)
-                                if _fresh_deal is not None:
-                                    _workspace_args[0] = _fresh_deal
-                                    _workspace_tab["args"] = tuple(_workspace_args)
+                                if _workspace_tab.get("name") == "deal_detail_dialog":
+                                    if not _workspace_args or not isinstance(_workspace_args[0], dict):
+                                        continue
+                                    _workspace_deal_id = str(_workspace_args[0].get("id", ""))
+                                    _fresh_deal = _fresh_deals_by_id.get(_workspace_deal_id)
+                                    if _fresh_deal is not None:
+                                        _workspace_args[0] = _fresh_deal
+                                        _workspace_tab["args"] = tuple(_workspace_args)
+                                elif _workspace_tab.get("name") == "task_detail_dialog" and _workspace_args:
+                                    _workspace_task = _workspace_args[0] if isinstance(_workspace_args[0], dict) else {}
+                                    _workspace_task_identity = _workspace_task.get("id") or _workspace_task.get("task_number")
+                                    _fresh_task_pair = _fresh_tasks_by_id.get(str(_workspace_task_identity)) if _workspace_task_identity is not None else None
+                                    if _fresh_task_pair is not None:
+                                        _fresh_task, _fresh_task_client = _fresh_task_pair
+                                        _workspace_args[0] = _fresh_task
+                                        if len(_workspace_args) > 1:
+                                            _workspace_args[1] = _fresh_task_client
+                                        if len(_workspace_args) > 2 and isinstance(_workspace_args[2], dict):
+                                            _fresh_task_deal = _fresh_deals_by_id.get(str(_fresh_task.get("deal_id", "")))
+                                            if _fresh_task_deal is not None:
+                                                _workspace_args[2] = _fresh_task_deal
+                                        _workspace_tab["args"] = tuple(_workspace_args)
                         _fresh_client = next(
                             (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id"))),
                             None,
