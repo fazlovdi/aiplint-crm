@@ -6565,6 +6565,58 @@ def _crm_workspace_clear_legacy_dialog_markers():
             st.session_state.pop(_key, None)
     st.session_state["_crm_dialog_requested_this_run"] = True
 
+def _crm_workspace_activate_window_callback(window_id, in_workspace=False):
+    """Активирует окно до обычного rerun виджета, без второго принудительного rerun."""
+    _crm_refresh_store_if_clean()
+    _windows = st.session_state.get("_crm_windows", [])
+    _window = next((w for w in _windows if str(w.get("id")) == str(window_id)), None)
+    if _window is None:
+        return
+    _window["minimized"] = False
+    st.session_state["_crm_active_window_id"] = _window.get("id")
+    _tabs = _window.get("tabs", [])
+    _index = max(0, min(int(_window.get("active_tab", 0) or 0), len(_tabs) - 1)) if _tabs else -1
+    if _index >= 0:
+        st.session_state["_crm_active_dialog"] = _tabs[_index]
+    _crm_workspace_clear_legacy_dialog_markers()
+    _crm_workspace_queue_save()
+
+
+def _crm_workspace_minimize_window_callback(window_id):
+    """Сворачивает окно и запрашивает один полный rerun, чтобы показать главную панель."""
+    _window = next(
+        (w for w in st.session_state.get("_crm_windows", []) if str(w.get("id")) == str(window_id)),
+        None,
+    )
+    if _window is None:
+        return
+    _window["minimized"] = True
+    st.session_state["_crm_active_window_id"] = None
+    _crm_workspace_queue_save()
+    try:
+        st.rerun(scope="app")
+    except Exception:
+        st.rerun()
+
+
+def _crm_workspace_restore_last_window_callback():
+    """Разворачивает последнее свёрнутое окно до обычного rerun главной страницы."""
+    _window = next(
+        (w for w in reversed(st.session_state.get("_crm_windows", []))
+         if w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))),
+        None,
+    )
+    if _window is None:
+        return
+    _window["minimized"] = False
+    st.session_state["_crm_active_window_id"] = _window.get("id")
+    _tabs = _window.get("tabs", [])
+    _index = max(0, min(int(_window.get("active_tab", 0) or 0), len(_tabs) - 1)) if _tabs else -1
+    if _index >= 0:
+        st.session_state["_crm_active_dialog"] = _tabs[_index]
+    _crm_workspace_queue_save()
+
+
 def _crm_workspace_render_bottom_panel(in_workspace=False):
     _all_bottom_windows = st.session_state.get("_crm_windows", [])
     # На главном экране показываем только свёрнутые окна и постоянную кнопку статистики.
@@ -6632,32 +6684,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 _label = ("▣ " if _w.get("minimized") else "● ") + _label
             with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
-                if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
-                    _crm_refresh_store_if_clean()
-                    # A window switch is an explicit navigation action. Clear any
-                    # legacy one-shot dialog request left by the previously rendered
-                    # tab so it cannot steal focus again during this rerun.
-                    _w["minimized"] = False
-                    st.session_state["_crm_active_window_id"] = _w.get("id")
-                    _w_tabs = _w.get("tabs", [])
-                    _w_index = max(0, min(int(_w.get("active_tab", 0) or 0), len(_w_tabs) - 1)) if _w_tabs else -1
-                    if _w_index >= 0:
-                        st.session_state["_crm_active_dialog"] = _w_tabs[_w_index]
-                    _crm_workspace_clear_legacy_dialog_markers()
-                    _crm_workspace_queue_save()
-                    # Переключение между окнами внутри рабочего пространства
-                    # всегда обновляет текущий fragment. Не проверяем здесь
-                    # _remaining_windows: эта переменная относится только к обработчику
-                    # закрытия окна и при переключении может быть не определена.
-                    if in_workspace:
-                        try:
-                            st.rerun(scope="fragment")
-                        except Exception:
-                            # Если Streamlit вызван вне контекста fragment-rerun,
-                            # безопасно перезапускаем приложение целиком вместо падения.
-                            st.rerun()
-                    else:
-                        st.rerun()
+                st.button(
+                    _label,
+                    key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}",
+                    type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary",
+                    on_click=_crm_workspace_activate_window_callback,
+                    args=(_w.get("id"), in_workspace),
+                )
                 if (in_workspace or not _is_statistics_window) and st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
                     if any(_tab.get("name") == "notifications_dialog" for _tab in _w.get("tabs", [])):
                         st.session_state["show_notifications_dialog"] = False
@@ -6754,17 +6787,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             st.rerun()
         if not in_workspace and any(w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) for w in st.session_state.get("_crm_windows", [])):
             with st.container(key="crm_workspace_main_expand_wrap"):
-                if st.button("Развернуть", key="crm_workspace_main_expand", type="tertiary", help="Вернуть последнее окно клиентов"):
-                    _restore_window = next((w for w in reversed(st.session_state.get("_crm_windows", [])) if w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))), None)
-                    if _restore_window:
-                        _restore_window["minimized"] = False
-                        st.session_state["_crm_active_window_id"] = _restore_window.get("id")
-                        _restore_tabs = _restore_window.get("tabs", [])
-                        _restore_index = max(0, min(int(_restore_window.get("active_tab", 0) or 0), len(_restore_tabs)-1)) if _restore_tabs else -1
-                        if _restore_index >= 0:
-                            st.session_state["_crm_active_dialog"] = _restore_tabs[_restore_index]
-                    _crm_workspace_queue_save()
-                    st.rerun()
+                st.button(
+                    "Развернуть",
+                    key="crm_workspace_main_expand",
+                    type="tertiary",
+                    help="Вернуть последнее окно клиентов",
+                    on_click=_crm_workspace_restore_last_window_callback,
+                )
 
 # Восстанавливаем персональное рабочее пространство до первого рендеринга
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
@@ -14728,17 +14757,13 @@ def _crm_render_workspace_fragment():
                                 args=(_crm_active_window.get("id"), _i),
                             )
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
-                    if st.button("Свернуть", key=f"crm_workspace_minimize_{_crm_active_window['id']}", help="Свернуть окно"):
-                        _crm_active_window["minimized"] = True
-                        st.session_state["_crm_active_window_id"] = None
-                        _crm_workspace_queue_save()
-                        # Полный rerun обновляет главную панель окон вне fragment.
-                        try:
-                            st.rerun(scope="app")
-                        except Exception:
-                            # Если Streamlit вызван вне контекста fragment-rerun,
-                            # безопасно перезапускаем приложение целиком вместо падения.
-                            st.rerun()
+                    st.button(
+                        "Свернуть",
+                        key=f"crm_workspace_minimize_{_crm_active_window['id']}",
+                        help="Свернуть окно",
+                        on_click=_crm_workspace_minimize_window_callback,
+                        args=(_crm_active_window["id"],),
+                    )
 
             with st.container(key="crm_workspace_content"):
                 # Preserve original CRM button sizes, spacing and layout in window contents.
