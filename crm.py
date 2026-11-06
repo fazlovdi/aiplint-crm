@@ -6600,7 +6600,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     if in_workspace:
                         try:
                             st.rerun(scope="fragment")
-                        except (TypeError, ValueError):
+                        except Exception:
+                            # Если Streamlit вызван вне контекста fragment-rerun,
+                            # безопасно перезапускаем приложение целиком вместо падения.
                             st.rerun()
                     else:
                         st.rerun()
@@ -14672,7 +14674,9 @@ def _crm_render_workspace_fragment():
                         # Полный rerun обновляет главную панель окон вне fragment.
                         try:
                             st.rerun(scope="app")
-                        except (TypeError, ValueError):
+                        except Exception:
+                            # Если Streamlit вызван вне контекста fragment-rerun,
+                            # безопасно перезапускаем приложение целиком вместо падения.
                             st.rerun()
 
             with st.container(key="crm_workspace_content"):
