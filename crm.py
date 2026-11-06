@@ -14916,23 +14916,7 @@ def _crm_live_change_notice_fragment():
                         bool(_value) for _key, _value in st.session_state.items()
                         if str(_key).startswith(("show_edit_", "dls_show_edit_", "show_edit_task_", "show_edit_dl_"))
                     )
-                    _current = st.session_state.get("crm_store")
-                    _base = st.session_state.get("crm_base_snapshot")
-                    _dirty = False
-                    if isinstance(_current, dict) and isinstance(_base, dict):
-                        try:
-                            # Открытие карточки меняет только служебный флаг viewed.
-                            # Он не является пользовательской правкой и не должен блокировать обновление.
-                            _current_check = copy.deepcopy(_current)
-                            _base_check = copy.deepcopy(_base)
-                            for _snapshot in (_current_check, _base_check):
-                                for _client in _snapshot.get("clients", []) or []:
-                                    if isinstance(_client, dict):
-                                        _client.pop("viewed", None)
-                            _dirty = json.dumps(_current_check, ensure_ascii=False, sort_keys=True, separators=(",", ":")) != json.dumps(_base_check, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                        except Exception:
-                            _dirty = True
-                    if _editing or _dirty:
+                    if _editing:
                         st.warning("Сначала сохраните или завершите редактирование. CRM не будет перезагружать карточку, пока это может привести к потере ваших данных.")
                     else:
                         # Загружаем свежий снимок и базовую ревизию, затем перерисовываем
@@ -14947,6 +14931,11 @@ def _crm_live_change_notice_fragment():
                             st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "") or ""
                         st.session_state.pop("_crm_live_change_notice", None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
+                        st.session_state["_crm_pending_workspace_restore"] = {
+                            "windows": copy.deepcopy(st.session_state.get("_crm_windows", [])),
+                            "active_window_id": copy.deepcopy(st.session_state.get("_crm_active_window_id")),
+                            "active_dialog": copy.deepcopy(st.session_state.get("_crm_active_dialog")),
+                        }
                         st.rerun(scope="app")
             with _b2:
                 if st.button("Позже", key="crm_live_notice_later", use_container_width=True):
@@ -14957,5 +14946,16 @@ def _crm_live_change_notice_fragment():
 
 
 _crm_live_change_notice_fragment()
+
+
+_pending_workspace_restore = st.session_state.pop("_crm_pending_workspace_restore", None)
+if isinstance(_pending_workspace_restore, dict):
+    st.session_state["_crm_windows"] = _pending_workspace_restore.get("windows", [])
+    st.session_state["_crm_active_window_id"] = _pending_workspace_restore.get("active_window_id")
+    _pending_active_dialog = _pending_workspace_restore.get("active_dialog")
+    if _pending_active_dialog is None:
+        st.session_state.pop("_crm_active_dialog", None)
+    else:
+        st.session_state["_crm_active_dialog"] = _pending_active_dialog
 
 _crm_render_workspace_fragment()
