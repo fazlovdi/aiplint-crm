@@ -4479,7 +4479,7 @@ def save_data(data):
                         if _is_new_or_deleted_deal:
                             _change_targets.add("client_deals:" + str(_owner))
                         elif _calcs_changed and _old_deal == _new_deal:
-                            _change_targets.add("deal_calculations:" + str(_owner))
+                            _change_targets.add("deal_calculations:" + str(_did))
                         else:
                             _change_targets.add("deal:" + str(_owner))
                         _changed_client_ids.add(str(_owner))
@@ -14970,10 +14970,11 @@ def _crm_live_change_notice_fragment():
                     elif _name == "client_deals_dialog":
                         _target = "client_deals:" + _cid
                     elif _name == "deal_detail_dialog":
-                        _target = next(
-                            (_prefix + _cid for _prefix in ("deal_calculations:", "deal:") if _prefix + _cid in _targets),
-                            "deal:" + _cid,
-                        )
+                        _args = _tab.get("args", ()) or ()
+                        _deal_obj = _args[0] if _args and isinstance(_args[0], dict) else None
+                        _deal_id = str((_deal_obj or {}).get("id", ""))
+                        _calc_target = "deal_calculations:" + _deal_id if _deal_id else ""
+                        _target = _calc_target if _calc_target and _calc_target in _targets else "deal:" + _cid
                     elif _name == "task_detail_dialog":
                         _args = _tab.get("args", ()) or ()
                         _deal_obj = _args[2] if len(_args) > 2 and isinstance(_args[2], dict) else None
