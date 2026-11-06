@@ -2115,6 +2115,7 @@ def _crm_workspace_tab_key(entry):
 
 def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     """Add a dialog as a tab in the current client workspace, or create one."""
+    _crm_refresh_store_if_clean()
     windows = st.session_state.setdefault("_crm_windows", [])
     active_id = st.session_state.get("_crm_active_window_id")
     window = next((w for w in windows if w.get("id") == active_id), None)
@@ -3865,6 +3866,39 @@ def load_data():
             pass
         raise RuntimeError(message) from exc
     raise RuntimeError("SQLite не содержит рабочей записи базы данных; автоматическая загрузка JSON запрещена")
+
+
+def _crm_refresh_store_if_clean():
+    """Подтягивает свежую ревизию SQLite при навигации, не затирая несохранённые правки формы."""
+    try:
+        current = st.session_state.get("crm_store")
+        base = st.session_state.get("crm_base_snapshot")
+        if not isinstance(current, dict) or not isinstance(base, dict):
+            return False
+        # Если текущая сессия содержит незаписанные изменения, ничего не перезаписываем.
+        current_text = json.dumps(current, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        base_text = json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if current_text != base_text:
+            return False
+        conn = _sqlite_connect()
+        try:
+            row = conn.execute("SELECT revision FROM crm_state WHERE id = 1").fetchone()
+            latest_revision = int(row[0]) if row else 0
+        finally:
+            conn.close()
+        base_revision = int(st.session_state.get("crm_base_revision", 0) or 0)
+        if latest_revision <= base_revision:
+            return False
+        st.session_state.crm_store = load_data()
+        _crm_log("DATABASE_REFRESH_ON_NAVIGATION", {
+            "revision_before": base_revision,
+            "revision_after": st.session_state.get("crm_base_revision", 0),
+            "reason": "workspace navigation",
+        })
+        return True
+    except Exception as exc:
+        _crm_log("DATABASE_REFRESH_ON_NAVIGATION_ERROR", {"reason": "workspace navigation"}, exc=exc)
+        return False
 
 def _diagnose_database_readonly():
     """Проверяет файлы и SQLite только на чтение; ничего не создаёт и не меняет."""
@@ -6597,6 +6631,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
                 if st.button(_label, key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}", type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary"):
+                    _crm_refresh_store_if_clean()
                     # A window switch is an explicit navigation action. Clear any
                     # legacy one-shot dialog request left by the previously rendered
                     # tab so it cannot steal focus again during this rerun.
