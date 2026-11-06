@@ -3820,7 +3820,11 @@ def _ensure_sqlite_store():
         conn = _sqlite_connect()
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
-            conn.execute("CREATE TABLE IF NOT EXISTS crm_change_events (revision INTEGER PRIMARY KEY, user_login TEXT NOT NULL, user_name TEXT NOT NULL, client_ids TEXT NOT NULL, created_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS crm_change_events (revision INTEGER PRIMARY KEY, user_login TEXT NOT NULL, user_name TEXT NOT NULL, client_ids TEXT NOT NULL, created_at TEXT NOT NULL, change_targets TEXT NOT NULL DEFAULT '[]')")
+            # Безопасная миграция уже существующей базы: старые события остаются читаемыми.
+            _event_columns = {row[1] for row in conn.execute("PRAGMA table_info(crm_change_events)").fetchall()}
+            if "change_targets" not in _event_columns:
+                conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_targets TEXT NOT NULL DEFAULT '[]')
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None or not isinstance(row[0], str) or not row[0].strip():
                 # Восстанавливаем не только отсутствующую строку, но и пустую запись SQLite.
@@ -4424,31 +4428,43 @@ def save_data(data):
             snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
             new_revision = revision + 1
 
-            # Журналируем только карточки клиентов, реально затронутые этой записью.
-            # Он нужен для лёгкого оповещения открытых сессий; сама база не опрашивается целиком.
+            # Журнал изменений хранит тип затронутой вкладки, чтобы обновление задачи
+            # не уведомляло пользователя, пока у него открыта другая вкладка того же клиента.
             try:
                 _changed_client_ids = set()
+                _change_targets = set()
                 _old_clients = {str(x.get("id")): x for x in (latest_data.get("clients", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_clients = {str(x.get("id")): x for x in (merged_data.get("clients", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _cid in set(_old_clients) | set(_new_clients):
-                    _old_client_event = copy.deepcopy(_old_clients.get(_cid))
-                    _new_client_event = copy.deepcopy(_new_clients.get(_cid))
-                    # Флаг viewed — служебное состояние открытия карточки, а не правка пользователя.
-                    # Не создаём событие обновления, когда изменился только этот флаг.
-                    if isinstance(_old_client_event, dict):
-                        _old_client_event.pop("viewed", None)
-                    if isinstance(_new_client_event, dict):
-                        _new_client_event.pop("viewed", None)
+                    _old_client_event = copy.deepcopy(_old_clients.get(_cid) or {})
+                    _new_client_event = copy.deepcopy(_new_clients.get(_cid) or {})
+                    _old_client_tasks = _old_client_event.pop("tasks", [])
+                    _new_client_tasks = _new_client_event.pop("tasks", [])
+                    _old_client_event.pop("viewed", None)
+                    _new_client_event.pop("viewed", None)
                     if _old_client_event != _new_client_event:
+                        _change_targets.add("client:" + _cid)
                         _changed_client_ids.add(_cid)
+                    if _old_client_tasks != _new_client_tasks:
+                        _change_targets.add("client_tasks:" + _cid)
+                        _changed_client_ids.add(_cid)
+
                 _old_deals = {str(x.get("id")): x for x in (latest_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_deals = {str(x.get("id")): x for x in (merged_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _did in set(_old_deals) | set(_new_deals):
-                    if _old_deals.get(_did) != _new_deals.get(_did):
-                        _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
-                        _owner = _deal.get("client_id") or _deal.get("cl_id")
-                        if _owner is not None:
-                            _changed_client_ids.add(str(_owner))
+                    _old_deal = copy.deepcopy(_old_deals.get(_did) or {})
+                    _new_deal = copy.deepcopy(_new_deals.get(_did) or {})
+                    _old_deal_tasks = _old_deal.pop("tasks", [])
+                    _new_deal_tasks = _new_deal.pop("tasks", [])
+                    _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
+                    _owner = _deal.get("client_id") or _deal.get("cl_id")
+                    if _old_deal != _new_deal and _owner is not None:
+                        _change_targets.add("deal:" + str(_owner))
+                        _changed_client_ids.add(str(_owner))
+                    if _old_deal_tasks != _new_deal_tasks and _owner is not None:
+                        _change_targets.add("deal_tasks:" + str(_owner))
+                        _changed_client_ids.add(str(_owner))
+
                 _old_tasks = {str(x.get("id")): x for x in (latest_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_tasks = {str(x.get("id")): x for x in (merged_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _tid in set(_old_tasks) | set(_new_tasks):
@@ -4462,6 +4478,8 @@ def save_data(data):
                                 _owner = _task_deal.get("client_id") or _task_deal.get("cl_id")
                         if _owner is not None:
                             _changed_client_ids.add(str(_owner))
+                            _change_targets.add("internal_tasks:" + str(_owner))
+
                 _event_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "system")
                 _event_name = _event_login
                 for _u in merged_data.get("users", []) or []:
@@ -4470,10 +4488,10 @@ def save_data(data):
                     if str(_u.get("login", "")) == _event_login or str(_u.get("name", "")) == _event_login:
                         _event_name = str(_u.get("name") or _u.get("login") or _event_login)
                         break
-                if _changed_client_ids:
+                if _change_targets:
                     conn.execute(
-                        "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at) VALUES (?, ?, ?, ?, ?)",
-                        (new_revision, _event_login, _event_name, json.dumps(sorted(_changed_client_ids)), now_str()),
+                        "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at, change_targets) VALUES (?, ?, ?, ?, ?, ?)",
+                        (new_revision, _event_login, _event_name, json.dumps(sorted(_changed_client_ids)), now_str(), json.dumps(sorted(_change_targets))),
                     )
                     conn.execute("DELETE FROM crm_change_events WHERE revision < ?", (max(0, new_revision - 500),))
             except Exception as _event_exc:
@@ -14861,14 +14879,11 @@ def _crm_render_workspace_fragment():
 
 @st.fragment(run_every="3s")
 def _crm_live_change_notice_fragment():
-    """Проверяет журнал изменений и уведомляет, если коллега изменил открытую карточку."""
+    """Собирает уведомления отдельно для каждой открытой вкладки рабочего пространства."""
     try:
         _login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
         _windows = st.session_state.get("_crm_windows", []) or []
-        _active_id = st.session_state.get("_crm_active_window_id")
-        _window = next((w for w in _windows if str(w.get("id")) == str(_active_id) and not w.get("minimized")), None)
-        _client_id = _window.get("client_id") if isinstance(_window, dict) else None
-        if not _login or _client_id is None:
+        if not _login:
             return
 
         _seen = st.session_state.get("_crm_live_notice_seen_revision")
@@ -14879,8 +14894,8 @@ def _crm_live_change_notice_fragment():
         _conn = _sqlite_connect()
         try:
             _rows = _conn.execute(
-                "SELECT revision, user_login, user_name, client_ids, created_at "
-                "FROM crm_change_events WHERE revision > ? ORDER BY revision DESC LIMIT 30",
+                "SELECT revision, user_login, user_name, client_ids, created_at, change_targets "
+                "FROM crm_change_events WHERE revision > ? ORDER BY revision ASC LIMIT 500",
                 (int(_seen),),
             ).fetchall()
             _latest_row = _conn.execute("SELECT revision FROM crm_state WHERE id = 1").fetchone()
@@ -14888,31 +14903,73 @@ def _crm_live_change_notice_fragment():
         finally:
             _conn.close()
 
-        # Сдвигаем курсор даже для чужих карточек, чтобы не перечитывать старые события.
-        st.session_state["_crm_live_notice_seen_revision"] = max(int(_seen), _latest_rev)
-        _matching = None
+        _notices = st.session_state.setdefault("_crm_live_change_notices_by_tab", {})
         for _row in _rows:
-            _rev, _author_login, _author_name, _client_ids_json, _created_at = _row
+            _rev, _author_login, _author_name, _client_ids_json, _created_at, _targets_json = _row
             if str(_author_login) == _login:
                 continue
             try:
-                _ids = json.loads(_client_ids_json or "[]")
+                _targets = {str(x) for x in json.loads(_targets_json or "[]")}
             except Exception:
-                _ids = []
-            if str(_client_id) in {str(x) for x in _ids}:
-                _matching = {
-                    "revision": int(_rev),
-                    "author": str(_author_name or _author_login or "Другой пользователь"),
-                    "created_at": str(_created_at or ""),
-                    "client_id": str(_client_id),
-                }
-                break
+                _targets = set()
+            try:
+                _ids = {str(x) for x in json.loads(_client_ids_json or "[]")}
+            except Exception:
+                _ids = set()
+            if not _targets:
+                # Старые события без типов трактуем консервативно: только как изменение клиента.
+                _targets = {"client:" + _cid for _cid in _ids}
 
-        _pending = st.session_state.get("_crm_live_change_notice")
-        if _matching and (not isinstance(_pending, dict) or int(_matching["revision"]) > int(_pending.get("revision", 0))):
-            st.session_state["_crm_live_change_notice"] = _matching
-            _pending = _matching
-        if not isinstance(_pending, dict) or str(_pending.get("client_id")) != str(_client_id):
+            for _win in _windows:
+                _cid = _win.get("client_id") if isinstance(_win, dict) else None
+                if _cid is None:
+                    continue
+                _cid = str(_cid)
+                for _tab in (_win.get("tabs", []) or []):
+                    _name = str(_tab.get("name", ""))
+                    if _name == "client_detail_dialog":
+                        _target = "client:" + _cid
+                    elif _name == "client_tasks_dialog":
+                        _target = "client_tasks:" + _cid
+                    elif _name == "task_detail_dialog":
+                        _args = _tab.get("args", ()) or ()
+                        _deal_obj = _args[2] if len(_args) > 2 and isinstance(_args[2], dict) else None
+                        _target = ("deal_tasks:" if _deal_obj else "client_tasks:") + _cid
+                    elif _name in ("deal_calculation_dialog", "invoice_document_dialog", "deal_report_dialog", "close_deal_dialog"):
+                        _target = "deal:" + _cid
+                    elif _name in ("internal_tasks_dialog", "internal_task_detail_dialog"):
+                        _target = "internal_tasks:" + _cid
+                    else:
+                        continue
+                    if _target not in _targets:
+                        continue
+                    _tab_key = str(_win.get("id", "")) + "|" + str(_crm_workspace_tab_key(_tab))
+                    _existing = _notices.get(_tab_key)
+                    if not isinstance(_existing, dict) or int(_rev) > int(_existing.get("revision", 0)):
+                        _notices[_tab_key] = {
+                            "revision": int(_rev),
+                            "author": str(_author_name or _author_login or "Другой пользователь"),
+                            "created_at": str(_created_at or ""),
+                            "client_id": _cid,
+                            "target": _target,
+                            "tab_name": _name,
+                            "window_id": str(_win.get("id", "")),
+                        }
+
+        st.session_state["_crm_live_notice_seen_revision"] = max(int(_seen), _latest_rev)
+
+        _active_id = st.session_state.get("_crm_active_window_id")
+        _window = next((w for w in _windows if str(w.get("id")) == str(_active_id) and not w.get("minimized")), None)
+        if not isinstance(_window, dict):
+            return
+        _tabs = _window.get("tabs", []) or []
+        _active_index = max(0, min(int(_window.get("active_tab", 0) or 0), len(_tabs) - 1)) if _tabs else -1
+        if _active_index < 0:
+            return
+        _active_tab = _tabs[_active_index]
+        _tab_key = str(_window.get("id", "")) + "|" + str(_crm_workspace_tab_key(_active_tab))
+        _pending = _notices.get(_tab_key)
+        if not isinstance(_pending, dict):
             return
 
         st.markdown(
@@ -14923,37 +14980,32 @@ def _crm_live_change_notice_fragment():
             unsafe_allow_html=True,
         )
         with st.container(key="crm_live_change_notice"):
-            st.markdown(f"**{_pending.get('author', 'Другой пользователь')} внес(ла) изменения в эту карточку.**")
+            st.markdown(f"**{_pending.get('author', 'Другой пользователь')} внес(ла) изменения во вкладку.**")
             st.caption("Обновление не выполняется автоматически, чтобы не затереть ваши правки.")
             _b1, _b2 = st.columns(2)
             with _b1:
-                if st.button("Обновить карточку", key="crm_live_notice_refresh", type="primary", use_container_width=True):
+                if st.button("Обновить вкладку", key="crm_live_notice_refresh", type="primary", use_container_width=True):
                     _editing = any(
                         bool(_value) for _key, _value in st.session_state.items()
                         if str(_key).startswith(("show_edit_", "dls_show_edit_", "show_edit_task_", "show_edit_dl_"))
                     )
                     if _editing:
-                        st.warning("Сначала сохраните или завершите редактирование. CRM не будет перезагружать карточку, пока это может привести к потере ваших данных.")
+                        st.warning("Сначала сохраните или завершите редактирование. CRM не будет перезагружать данные, пока это может привести к потере ваших правок.")
                     else:
-                        # Загружаем свежие данные и повторно отрисовываем только рабочее пространство.
-                        # Основная навигация и остальные вкладки CRM не перезапускаются.
                         _loaded = load_data()
                         st.session_state["crm_store"] = _loaded
                         _fresh_client = next(
-                            (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_client_id)),
+                            (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id"))),
                             None,
                         )
                         if _fresh_client is not None:
-                            st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "") or ""
-                        st.session_state.pop("_crm_live_change_notice", None)
+                            st.session_state[f"cm_{_pending.get('client_id')}"] = _fresh_client.get("contact_method", "") or ""
+                        _notices.pop(_tab_key, None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
-                        # Кнопка находится в отдельном fragment уведомления.
-                        # Streamlit не умеет из него адресно перезапустить другой fragment,
-                        # поэтому здесь нужен app rerun, чтобы рабочая карточка получила свежие данные.
                         st.rerun(scope="app")
             with _b2:
                 if st.button("Позже", key="crm_live_notice_later", use_container_width=True):
-                    st.session_state.pop("_crm_live_change_notice", None)
+                    _notices.pop(_tab_key, None)
                     st.rerun()
     except Exception as _notice_exc:
         _crm_log("DATABASE_LIVE_NOTICE_ERROR", {}, exc=_notice_exc, remote=False)
