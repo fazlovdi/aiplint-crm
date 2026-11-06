@@ -14939,7 +14939,16 @@ def _crm_live_change_notice_fragment():
                 for _tab in (_win.get("tabs", []) or []):
                     _name = str(_tab.get("name", ""))
                     if _name == "client_detail_dialog":
-                        _target = "client:" + _cid
+                        # Карточка клиента содержит сводные списки/данные клиента,
+                        # поэтому должна обновляться при изменении любой связанной сущности.
+                        _client_targets = (
+                            "client:", "client_tasks:", "client_deals:",
+                            "deal:", "deal_tasks:", "internal_tasks:",
+                        )
+                        _target = next(
+                            (_prefix + _cid for _prefix in _client_targets if _prefix + _cid in _targets),
+                            "client:" + _cid,
+                        )
                     elif _name == "client_tasks_dialog":
                         _target = "client_tasks:" + _cid
                     elif _name == "client_deals_dialog":
