@@ -2970,26 +2970,22 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
         st.toast("Статус и дата отправки применены", icon="✅")
         return True
 
-    _status_col, _date_col, _apply_col = st.columns([1, 1, 0.72], vertical_alignment="bottom")
-    with _status_col:
-        st.selectbox(
-            "Статус",
-            options=statuses,
-            index=statuses.index(current_status) if current_status in statuses else None,
-            placeholder="Выберите статус",
-            key=status_key,
-        )
-    with _date_col:
-        st.date_input(
-            "Ориентировочная дата отправки",
-            value=current_date,
-            format="DD.MM.YYYY",
-            key=date_key,
-        )
-    with _apply_col:
-        if st.button("Применить", key=f"apply_shipping_fields_{key_prefix}", type="primary", use_container_width=True):
-            if _persist_shipping_fields():
-                st.rerun()
+    st.selectbox(
+        "Статус",
+        options=statuses,
+        index=statuses.index(current_status) if current_status in statuses else None,
+        placeholder="Выберите статус",
+        key=status_key,
+    )
+    st.date_input(
+        "Ориентировочная дата отправки",
+        value=current_date,
+        format="DD.MM.YYYY",
+        key=date_key,
+    )
+    if st.button("Применить", key=f"apply_shipping_fields_{key_prefix}", type="primary", use_container_width=True):
+        if _persist_shipping_fields():
+            st.rerun()
 
 
 def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user"):
