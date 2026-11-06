@@ -1360,19 +1360,35 @@ def get_client_by_id(c_id):
             return c
     return None
 
-def _save_client_contact_method(client_id):
-    """Сохраняет способ связи только по явному действию пользователя в selectbox."""
+def _confirm_client_contact_method(client_id):
+    """Сохраняет выбранный способ связи только после нажатия кнопки подтверждения."""
     try:
         _key = f"cm_{client_id}"
-        _value = st.session_state.get(_key, "")
-        _client = get_client_by_id(client_id)
-        if not _client or _client.get("contact_method", "") == _value:
+        _value = st.session_state.get(_key, "") or ""
+        # Перед изменением читаем актуальную запись, чтобы не сохранять поверх
+        # устаревшей копии карточки, открытой на другом устройстве.
+        _fresh_data = load_data()
+        st.session_state["crm_store"] = _fresh_data
+        _client = next(
+            (c for c in (_fresh_data.get("clients", []) or []) if str(c.get("id")) == str(client_id)),
+            None,
+        )
+        if not _client:
+            st.warning("Клиент не найден в актуальной базе. Обнови карточку и повтори.")
+            return
+        if (_client.get("contact_method", "") or "") == _value:
+            st.toast("Способ связи уже сохранён", icon="✅")
             return
         _client["contact_method"] = _value
         _client["last_modified"] = now_str()
-        save_data(st.session_state.crm_store)
+        if save_data(st.session_state["crm_store"]):
+            st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
+            st.toast("Способ связи сохранён", icon="✅")
+        else:
+            st.error("Не удалось сохранить способ связи. Попробуй ещё раз.")
     except Exception as _contact_exc:
         _crm_log("CLIENT_CONTACT_METHOD_SAVE_ERROR", {"client_id": str(client_id)}, exc=_contact_exc, remote=False)
+        st.error("Не удалось сохранить способ связи. Попробуй ещё раз.")
 
 
 def get_deal_by_id(d_id):
@@ -10631,16 +10647,25 @@ def render_client_card_expanded(cl):
                     # Перед отрисовкой карточки синхронизируем его с текущей записью CRM,
                     # чтобы старое значение сессии не показывалось и не перезаписывало новое.
                     _cm_widget_key = f"cm_{cl['id']}"
-                    st.session_state[_cm_widget_key] = cl.get('contact_method', '') or ''
-                    _cm_left, _cm_right = st.columns(2)
+                    if _cm_widget_key not in st.session_state:
+                        st.session_state[_cm_widget_key] = cl.get('contact_method', '') or ''
+                    st.markdown("**Предпочтительный способ связи:**")
+                    _cm_left, _cm_right = st.columns([4, 1])
                     with _cm_left:
                         st.selectbox(
-                            "Предпочтительный способ связи:",
+                            "Предпочтительный способ связи",
                             CONTACT_METHODS,
                             index=cm_idx,
-                            key=f"cm_{cl['id']}",
+                            key=_cm_widget_key,
                             placeholder="Выбери вариант...",
-                            on_change=_save_client_contact_method,
+                            label_visibility="collapsed",
+                        )
+                    with _cm_right:
+                        st.button(
+                            "Подтвердить",
+                            key=f"cm_confirm_{cl['id']}",
+                            use_container_width=True,
+                            on_click=_confirm_client_contact_method,
                             args=(cl["id"],),
                         )
                     st.markdown(f"Email: **{cl.get('email','')}**")
