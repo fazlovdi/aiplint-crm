@@ -2915,6 +2915,20 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
     status_key = f"task_shipping_status_{key_prefix}"
     date_key = f"task_estimated_ship_date_{key_prefix}"
 
+    # После обновления вкладки сбрасываем сохранённое состояние виджетов
+    # до их создания, иначе Streamlit продолжает показывать старые значения.
+    _pending_shipping_refresh = st.session_state.get("_crm_shipping_fields_refresh_pending", {})
+    if key_prefix in _pending_shipping_refresh:
+        _fresh_shipping_values = _pending_shipping_refresh.pop(key_prefix)
+        st.session_state[status_key] = _fresh_shipping_values.get("shipping_status", "") or ""
+        _fresh_date_raw = _fresh_shipping_values.get("estimated_ship_date", "") or ""
+        try:
+            st.session_state[date_key] = datetime.strptime(str(_fresh_date_raw)[:10], "%Y-%m-%d").date() if _fresh_date_raw else None
+        except (TypeError, ValueError):
+            st.session_state[date_key] = None
+        if not _pending_shipping_refresh:
+            st.session_state.pop("_crm_shipping_fields_refresh_pending", None)
+
     task_number = str(task.get("task_number", ""))
     client_id = str((client or {}).get("id", task.get("client_id", "")) or "")
     deal_id = str((deal or {}).get("id", task.get("deal_id", "")) or "")
@@ -15234,6 +15248,14 @@ def _crm_live_change_notice_fragment():
                                             _fresh_task_deal = _fresh_deals_by_id.get(str(_fresh_task.get("deal_id", "")))
                                             if _fresh_task_deal is not None:
                                                 _workspace_args[2] = _fresh_task_deal
+                                        # Запоминаем свежие значения полей отправки для применения
+                                        # в начале следующего рендера, до создания виджетов.
+                                        if len(_workspace_args) > 3 and _workspace_args[3] is not None:
+                                            _shipping_key_prefix = str(_workspace_args[3])
+                                            st.session_state.setdefault("_crm_shipping_fields_refresh_pending", {})[_shipping_key_prefix] = {
+                                                "shipping_status": _fresh_task.get("shipping_status", "") or "",
+                                                "estimated_ship_date": _fresh_task.get("estimated_ship_date", "") or "",
+                                            }
                                         _workspace_tab["args"] = tuple(_workspace_args)
                         _fresh_client = next(
                             (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_pending.get("client_id"))),
