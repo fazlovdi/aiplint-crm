@@ -4450,10 +4450,12 @@ def save_data(data):
                         _changed_client_ids.add(_cid)
                     # Задача по клиенту уведомляет карточку клиента только при создании или удалении.
                     _old_client_task_ids = {
-                        str(t.get("id") or t.get("task_number") or "") for t in (_old_client_tasks or []) if isinstance(t, dict)
+                        str(t.get("id") or t.get("task_number") or "") for t in (_old_client_tasks or [])
+                        if isinstance(t, dict) and not t.get("deal_id")
                     }
                     _new_client_task_ids = {
-                        str(t.get("id") or t.get("task_number") or "") for t in (_new_client_tasks or []) if isinstance(t, dict)
+                        str(t.get("id") or t.get("task_number") or "") for t in (_new_client_tasks or [])
+                        if isinstance(t, dict) and not t.get("deal_id")
                     }
                     if _old_client_task_ids != _new_client_task_ids:
                         _change_targets.add("client_tasks:" + _cid)
