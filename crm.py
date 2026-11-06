@@ -6617,6 +6617,84 @@ def _crm_workspace_restore_last_window_callback():
     _crm_workspace_queue_save()
 
 
+def _crm_workspace_close_window_callback(window_id, in_workspace=False):
+    """Закрывает окно в callback, чтобы избежать второго принудительного rerun."""
+    windows = st.session_state.get("_crm_windows", [])
+    window = next((w for w in windows if str(w.get("id")) == str(window_id)), None)
+    if window is None:
+        return
+    is_statistics = any(t.get("name") == "statistics_dialog" for t in window.get("tabs", []))
+    if any(t.get("name") == "notifications_dialog" for t in window.get("tabs", [])):
+        st.session_state["show_notifications_dialog"] = False
+
+    if is_statistics:
+        window["minimized"] = True
+        if str(st.session_state.get("_crm_active_window_id")) == str(window.get("id")):
+            next_visible = next(
+                (candidate for candidate in windows
+                 if str(candidate.get("id")) != str(window.get("id")) and not candidate.get("minimized")),
+                None,
+            )
+            if next_visible:
+                st.session_state["_crm_active_window_id"] = next_visible.get("id")
+                next_tabs = next_visible.get("tabs", [])
+                next_index = max(0, min(int(next_visible.get("active_tab", 0) or 0), len(next_tabs) - 1)) if next_tabs else -1
+                if next_index >= 0:
+                    st.session_state["_crm_active_dialog"] = next_tabs[next_index]
+                else:
+                    st.session_state.pop("_crm_active_dialog", None)
+            else:
+                st.session_state["_crm_active_window_id"] = None
+                st.session_state.pop("_crm_active_dialog", None)
+        _crm_workspace_clear_legacy_dialog_markers()
+        _crm_workspace_queue_save()
+        return
+
+    for closing_tab in window.get("tabs", []):
+        if closing_tab.get("name") == "add_client_dialog":
+            closing_args = closing_tab.get("args", ()) or ()
+            if closing_args:
+                st.session_state[f"show_add_client_dialog_{closing_args[0]}"] = False
+
+    st.session_state["_crm_windows"] = [
+        item for item in windows if str(item.get("id")) != str(window.get("id"))
+    ]
+    remaining = st.session_state["_crm_windows"]
+    return_window_id = window.get("return_to_window_id")
+    next_window = next(
+        (item for item in remaining if return_window_id and str(item.get("id")) == str(return_window_id)),
+        None,
+    )
+    if next_window is None:
+        next_window = next((item for item in reversed(remaining) if not item.get("minimized")), None)
+    if next_window is None and remaining:
+        next_window = remaining[-1]
+        next_window["minimized"] = False
+
+    if next_window:
+        st.session_state["_crm_active_window_id"] = next_window.get("id")
+        next_tabs = next_window.get("tabs", [])
+        next_index = max(0, min(int(next_window.get("active_tab", 0) or 0), len(next_tabs) - 1)) if next_tabs else -1
+        if next_index >= 0:
+            next_window["active_tab"] = next_index
+            st.session_state["_crm_active_dialog"] = next_tabs[next_index]
+        else:
+            st.session_state.pop("_crm_active_dialog", None)
+    else:
+        st.session_state["_crm_active_window_id"] = None
+        st.session_state.pop("_crm_active_dialog", None)
+
+    _crm_workspace_clear_legacy_dialog_markers()
+    _crm_workspace_queue_save()
+    # При закрытии последнего окна из fragment нужно обновить главную страницу.
+    # В остальных случаях достаточно обычного rerun, инициированного кнопкой.
+    if in_workspace and next_window is None:
+        try:
+            st.rerun(scope="app")
+        except Exception:
+            st.rerun()
+
+
 def _crm_workspace_render_bottom_panel(in_workspace=False):
     _all_bottom_windows = st.session_state.get("_crm_windows", [])
     # На главном экране показываем только свёрнутые окна и постоянную кнопку статистики.
@@ -6691,100 +6769,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     on_click=_crm_workspace_activate_window_callback,
                     args=(_w.get("id"), in_workspace),
                 )
-                if (in_workspace or not _is_statistics_window) and st.button("×", key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}"):
-                    if any(_tab.get("name") == "notifications_dialog" for _tab in _w.get("tabs", [])):
-                        st.session_state["show_notifications_dialog"] = False
-                    if _is_statistics_window:
-                        _w["minimized"] = True
-                        if str(st.session_state.get("_crm_active_window_id")) == str(_w.get("id")):
-                            _next_visible = next(
-                                (candidate for candidate in st.session_state.get("_crm_windows", [])
-                                 if str(candidate.get("id")) != str(_w.get("id")) and not candidate.get("minimized")),
-                                None,
-                            )
-                            if _next_visible:
-                                st.session_state["_crm_active_window_id"] = _next_visible.get("id")
-                                _next_tabs = _next_visible.get("tabs", [])
-                                _next_index = max(0, min(int(_next_visible.get("active_tab", 0) or 0), len(_next_tabs) - 1)) if _next_tabs else -1
-                                if _next_index >= 0:
-                                    st.session_state["_crm_active_dialog"] = _next_tabs[_next_index]
-                                else:
-                                    st.session_state.pop("_crm_active_dialog", None)
-                            else:
-                                st.session_state["_crm_active_window_id"] = None
-                                st.session_state.pop("_crm_active_dialog", None)
-                        _crm_workspace_clear_legacy_dialog_markers()
-                        _crm_workspace_queue_save()
-                        if in_workspace:
-                            try:
-                                st.rerun(scope="fragment")
-                            except (TypeError, ValueError):
-                                st.rerun()
-                        else:
-                            st.rerun()
-                    # При закрытии окна отключаем все формы создания клиента в нём,
-                    # иначе legacy-рендерер откроет их снова на следующем rerun.
-                    for _closing_tab in _w.get("tabs", []):
-                        if _closing_tab.get("name") == "add_client_dialog":
-                            _closing_args = _closing_tab.get("args", ()) or ()
-                            if _closing_args:
-                                st.session_state[f"show_add_client_dialog_{_closing_args[0]}"] = False
-                    # Закрываем только выбранное окно клиента.
-                    st.session_state["_crm_windows"] = [
-                        w for w in st.session_state.get("_crm_windows", [])
-                        if w.get("id") != _w.get("id")
-                    ]
-                    _remaining_windows = st.session_state.get("_crm_windows", [])
-
-                    # Пока остаётся хотя бы одно окно клиента, рабочее пространство
-                    # не закрываем: переключаемся на другое доступное окно.
-                    _return_window_id = _w.get("return_to_window_id")
-                    _next_window = next(
-                        (w for w in _remaining_windows if _return_window_id and str(w.get("id")) == str(_return_window_id)),
-                        None
+                if in_workspace or not _is_statistics_window:
+                    st.button(
+                        "×",
+                        key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}",
+                        on_click=_crm_workspace_close_window_callback,
+                        args=(_w.get("id"), in_workspace),
                     )
-                    if _next_window is None:
-                        _next_window = next(
-                            (w for w in reversed(_remaining_windows) if not w.get("minimized")),
-                            None
-                        )
-                    if _next_window is None and _remaining_windows:
-                        # Если все оставшиеся окна свёрнуты, разворачиваем последнее.
-                        _next_window = _remaining_windows[-1]
-                        _next_window["minimized"] = False
-
-                    if _next_window:
-                        st.session_state["_crm_active_window_id"] = _next_window.get("id")
-                        _next_tabs = _next_window.get("tabs", [])
-                        _next_index = max(
-                            0, min(int(_next_window.get("active_tab", 0) or 0), len(_next_tabs) - 1)
-                        ) if _next_tabs else -1
-                        if _next_index >= 0:
-                            _next_window["active_tab"] = _next_index
-                            st.session_state["_crm_active_dialog"] = _next_tabs[_next_index]
-                        else:
-                            st.session_state.pop("_crm_active_dialog", None)
-                    else:
-                        # На главную возвращаемся только после закрытия последнего окна.
-                        st.session_state["_crm_active_window_id"] = None
-                        st.session_state.pop("_crm_active_dialog", None)
-
-                    _crm_workspace_clear_legacy_dialog_markers()
-                    _crm_workspace_queue_save()
-                    # Если закрываем окно внутри рабочего пространства и другое окно
-                    # осталось активным, достаточно перерисовать fragment. Полный rerun
-                    # нужен только при возврате на главный экран — иначе вся CRM
-                    # повторно загружает верхние разделы и создаёт лишнее мигание.
-                    if in_workspace and _next_window is not None:
-                        try:
-                            st.rerun(scope="fragment")
-                        except Exception:
-                            st.rerun()
-                    else:
-                        try:
-                            st.rerun(scope="app")
-                        except (TypeError, ValueError):
-                            st.rerun()
         if not in_workspace and any(w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) for w in st.session_state.get("_crm_windows", [])):
             with st.container(key="crm_workspace_main_expand_wrap"):
                 st.button(
