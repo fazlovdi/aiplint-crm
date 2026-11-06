@@ -1360,10 +1360,16 @@ def get_client_by_id(c_id):
             return c
     return None
 
+def _enable_client_contact_method_edit(client_id):
+    """Разрешает редактирование способа связи в карточке клиента."""
+    st.session_state[f"cm_edit_{client_id}"] = True
+
+
 def _confirm_client_contact_method(client_id):
     """Сохраняет выбранный способ связи только после нажатия кнопки подтверждения."""
     try:
         _key = f"cm_{client_id}"
+        _edit_key = f"cm_edit_{client_id}"
         _value = st.session_state.get(_key, "") or ""
         # Перед изменением читаем актуальную запись, чтобы не сохранять поверх
         # устаревшей копии карточки, открытой на другом устройстве.
@@ -1377,12 +1383,14 @@ def _confirm_client_contact_method(client_id):
             st.warning("Клиент не найден в актуальной базе. Обнови карточку и повтори.")
             return
         if (_client.get("contact_method", "") or "") == _value:
+            st.session_state[_edit_key] = False
             st.toast("Способ связи уже сохранён", icon="✅")
             return
         _client["contact_method"] = _value
         _client["last_modified"] = now_str()
         if save_data(st.session_state["crm_store"]):
             st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
+            st.session_state[_edit_key] = False
             st.toast("Способ связи сохранён", icon="✅")
         else:
             st.error("Не удалось сохранить способ связи. Попробуй ещё раз.")
@@ -10647,8 +10655,11 @@ def render_client_card_expanded(cl):
                     # Перед отрисовкой карточки синхронизируем его с текущей записью CRM,
                     # чтобы старое значение сессии не показывалось и не перезаписывало новое.
                     _cm_widget_key = f"cm_{cl['id']}"
+                    _cm_edit_key = f"cm_edit_{cl['id']}"
                     if _cm_widget_key not in st.session_state:
                         st.session_state[_cm_widget_key] = cl.get('contact_method', '') or ''
+                    if _cm_edit_key not in st.session_state:
+                        st.session_state[_cm_edit_key] = False
                     st.markdown("**Предпочтительный способ связи:**")
                     _cm_left, _cm_right = st.columns([4, 1])
                     with _cm_left:
@@ -10659,15 +10670,25 @@ def render_client_card_expanded(cl):
                             key=_cm_widget_key,
                             placeholder="Выбери вариант...",
                             label_visibility="collapsed",
+                            disabled=not st.session_state[_cm_edit_key],
                         )
                     with _cm_right:
-                        st.button(
-                            "Подтвердить",
-                            key=f"cm_confirm_{cl['id']}",
-                            use_container_width=True,
-                            on_click=_confirm_client_contact_method,
-                            args=(cl["id"],),
-                        )
+                        if st.session_state[_cm_edit_key]:
+                            st.button(
+                                "Подтвердить",
+                                key=f"cm_confirm_{cl['id']}",
+                                use_container_width=True,
+                                on_click=_confirm_client_contact_method,
+                                args=(cl["id"],),
+                            )
+                        else:
+                            st.button(
+                                "Изменить",
+                                key=f"cm_edit_button_{cl['id']}",
+                                use_container_width=True,
+                                on_click=_enable_client_contact_method_edit,
+                                args=(cl["id"],),
+                            )
                     st.markdown(f"Email: **{cl.get('email','')}**")
                     st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
                     st.markdown(f"Основной адрес: **{cl.get('address','')}**")
