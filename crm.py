@@ -14905,6 +14905,10 @@ def _crm_live_change_notice_fragment():
                     else:
                         _loaded = load_data()
                         st.session_state["crm_store"] = _loaded
+                        # Сбрасываем кеш selectbox способа связи в режиме просмотра.
+                        # Иначе Streamlit может оставить старое значение виджета после
+                        # загрузки свежей базы, а карточка тут же сохранит его обратно.
+                        st.session_state.pop(f"cm_{_client_id}", None)
                         st.session_state.pop("_crm_live_change_notice", None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
                         st.rerun()
