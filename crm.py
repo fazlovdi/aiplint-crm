@@ -3875,19 +3875,21 @@ def _crm_refresh_store_if_clean():
         base = st.session_state.get("crm_base_snapshot")
         if not isinstance(current, dict) or not isinstance(base, dict):
             return False
-        # Если текущая сессия содержит незаписанные изменения, ничего не перезаписываем.
-        current_text = json.dumps(current, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        base_text = json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        if current_text != base_text:
-            return False
+        # Сначала дешёвая проверка ревизии: при отсутствии новых данных
+        # не сериализуем целиком большую CRM-базу при каждом переходе.
+        base_revision = int(st.session_state.get("crm_base_revision", 0) or 0)
         conn = _sqlite_connect()
         try:
             row = conn.execute("SELECT revision FROM crm_state WHERE id = 1").fetchone()
             latest_revision = int(row[0]) if row else 0
         finally:
             conn.close()
-        base_revision = int(st.session_state.get("crm_base_revision", 0) or 0)
         if latest_revision <= base_revision:
+            return False
+        # При новой ревизии не перезаписываем локальные несохранённые изменения.
+        current_text = json.dumps(current, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        base_text = json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        if current_text != base_text:
             return False
         st.session_state.crm_store = load_data()
         _crm_log("DATABASE_REFRESH_ON_NAVIGATION", {
@@ -10660,8 +10662,8 @@ def render_client_card_expanded(cl):
                                     st.session_state["_crm_active_window_id"] = _target_window.get("id")
                                     st.session_state["_crm_active_dialog"] = _target_window["tabs"][_target_index]
                             _crm_workspace_clear_legacy_dialog_markers()
-                            _crm_workspace_queue_save()
-                            st.rerun()
+                            # _crm_workspace_open_dialog() уже сохранил структуру окна.
+                            _crm_workspace_rerun()
             else:
                 st.caption("Задач по клиенту пока нет.")
             if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
@@ -10718,8 +10720,8 @@ def render_client_card_expanded(cl):
                                     st.session_state["_crm_active_window_id"] = _target_window.get("id")
                                     st.session_state["_crm_active_dialog"] = _target_window["tabs"][_target_index]
                             _crm_workspace_clear_legacy_dialog_markers()
-                            _crm_workspace_queue_save()
-                            st.rerun()
+                            # _crm_workspace_open_dialog() уже сохранил структуру окна.
+                            _crm_workspace_rerun()
             else:
                 st.caption("Сделок пока нет.")
             if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
