@@ -4442,6 +4442,9 @@ def save_data(data):
                     _new_client_tasks = _new_client_event.pop("tasks", [])
                     _old_client_event.pop("viewed", None)
                     _new_client_event.pop("viewed", None)
+                    # Изменение задачи обновляет last_modified клиента; это не изменение вкладки «Клиент».
+                    _old_client_event.pop("last_modified", None)
+                    _new_client_event.pop("last_modified", None)
                     if _old_client_event != _new_client_event:
                         _change_targets.add("client:" + _cid)
                         _changed_client_ids.add(_cid)
@@ -4456,6 +4459,9 @@ def save_data(data):
                     _new_deal = copy.deepcopy(_new_deals.get(_did) or {})
                     _old_deal_tasks = _old_deal.pop("tasks", [])
                     _new_deal_tasks = _new_deal.pop("tasks", [])
+                    # Изменение задачи по сделке также обновляет last_modified сделки.
+                    _old_deal.pop("last_modified", None)
+                    _new_deal.pop("last_modified", None)
                     _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
                     _owner = _deal.get("client_id") or _deal.get("cl_id")
                     if _old_deal != _new_deal and _owner is not None:
