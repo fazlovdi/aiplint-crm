@@ -10619,6 +10619,11 @@ def render_client_card_expanded(cl):
                     st.markdown("**Информация о клиенте:**")
                     st.markdown(f"Телефон: **{cl.get('phone', '')}**")
                     cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
+                    # Ключ Streamlit сохраняет старое значение виджета между rerun.
+                    # Перед отрисовкой карточки синхронизируем его с текущей записью CRM,
+                    # чтобы старое значение сессии не показывалось и не перезаписывало новое.
+                    _cm_widget_key = f"cm_{cl['id']}"
+                    st.session_state[_cm_widget_key] = cl.get('contact_method', '') or ''
                     _cm_left, _cm_right = st.columns(2)
                     with _cm_left:
                         st.selectbox(
