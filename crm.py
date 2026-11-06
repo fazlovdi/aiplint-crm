@@ -9797,6 +9797,10 @@ def render_deal_products_block(d, key_prefix):
         calc.setdefault("deleted", False)
         calc.setdefault("name", f"Расчёт {idx + 1}")
         calc.setdefault("total", _deal_calc_total(calc))
+        # Черновик доступен только в открытом редакторе и не показывается
+        # в общем списке, пока пользователь явно не сохранит расчёт.
+        if calc.get("_draft"):
+            continue
         if calc.get("deleted"):
             deleted_col, restore_col = st.columns([3.2, 1.0])
             with deleted_col:
@@ -9876,8 +9880,9 @@ def render_deal_products_block(d, key_prefix):
             calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(_current_deal, {"id": "__new__"}, len(_current_calculations)), "items": [],
                     "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
                     "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
+            # Создаём черновик только в текущей сессии. Не сохраняем общую базу
+            # и не отправляем уведомления другим устройствам до сохранения расчёта.
             _current_calculations.append(calc)
-            save_data(st.session_state.crm_store)
             # Открываем расчёт через реестр вкладок рабочего пространства.
             deal_calculation_dialog(str(_current_deal["id"]), str(calc["id"]))
 
