@@ -15205,6 +15205,16 @@ def _crm_live_change_notice_fragment():
                                     _fresh_deal = _fresh_deals_by_id.get(_workspace_deal_id)
                                     if _fresh_deal is not None:
                                         _workspace_args[0] = _fresh_deal
+                                    # Задачи по сделке хранятся в tasks клиента, а не в объекте сделки.
+                                    # Обновляем также объект клиента в аргументах окна сделки,
+                                    # иначе счётчик и список задач остаются старыми после обновления уведомления.
+                                    _workspace_client_id = _fresh_deal.get("client_id", _fresh_deal.get("cl_id")) if _fresh_deal is not None else None
+                                    if _workspace_client_id is None and len(_workspace_args) > 1 and isinstance(_workspace_args[1], dict):
+                                        _workspace_client_id = _workspace_args[1].get("id")
+                                    _fresh_client_for_deal = _fresh_clients_by_id.get(str(_workspace_client_id)) if _workspace_client_id is not None else None
+                                    if _fresh_client_for_deal is not None and len(_workspace_args) > 1:
+                                        _workspace_args[1] = _fresh_client_for_deal
+                                    if _fresh_deal is not None or _fresh_client_for_deal is not None:
                                         _workspace_tab["args"] = tuple(_workspace_args)
                                 elif _workspace_tab.get("name") == "task_detail_dialog" and _workspace_args:
                                     _workspace_task = _workspace_args[0] if isinstance(_workspace_args[0], dict) else {}
