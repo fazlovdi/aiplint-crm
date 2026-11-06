@@ -3820,7 +3820,11 @@ def _ensure_sqlite_store():
         conn = _sqlite_connect()
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
-            conn.execute("CREATE TABLE IF NOT EXISTS crm_change_events (revision INTEGER PRIMARY KEY, user_login TEXT NOT NULL, user_name TEXT NOT NULL, client_ids TEXT NOT NULL, created_at TEXT NOT NULL)")
+            conn.execute("CREATE TABLE IF NOT EXISTS crm_change_events (revision INTEGER PRIMARY KEY, user_login TEXT NOT NULL, user_name TEXT NOT NULL, client_ids TEXT NOT NULL, created_at TEXT NOT NULL, change_targets TEXT NOT NULL DEFAULT '[]')")
+            # Безопасная миграция уже существующей базы: старые события остаются читаемыми.
+            _event_columns = {row[1] for row in conn.execute("PRAGMA table_info(crm_change_events)").fetchall()}
+            if "change_targets" not in _event_columns:
+                conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_targets TEXT NOT NULL DEFAULT '[]')
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None or not isinstance(row[0], str) or not row[0].strip():
                 # Восстанавливаем не только отсутствующую строку, но и пустую запись SQLite.
@@ -4424,31 +4428,43 @@ def save_data(data):
             snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
             new_revision = revision + 1
 
-            # Журналируем только карточки клиентов, реально затронутые этой записью.
-            # Он нужен для лёгкого оповещения открытых сессий; сама база не опрашивается целиком.
+            # Журнал изменений хранит тип затронутой вкладки, чтобы обновление задачи
+            # не уведомляло пользователя, пока у него открыта другая вкладка того же клиента.
             try:
                 _changed_client_ids = set()
+                _change_targets = set()
                 _old_clients = {str(x.get("id")): x for x in (latest_data.get("clients", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_clients = {str(x.get("id")): x for x in (merged_data.get("clients", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _cid in set(_old_clients) | set(_new_clients):
-                    _old_client_event = copy.deepcopy(_old_clients.get(_cid))
-                    _new_client_event = copy.deepcopy(_new_clients.get(_cid))
-                    # Флаг viewed — служебное состояние открытия карточки, а не правка пользователя.
-                    # Не создаём событие обновления, когда изменился только этот флаг.
-                    if isinstance(_old_client_event, dict):
-                        _old_client_event.pop("viewed", None)
-                    if isinstance(_new_client_event, dict):
-                        _new_client_event.pop("viewed", None)
+                    _old_client_event = copy.deepcopy(_old_clients.get(_cid) or {})
+                    _new_client_event = copy.deepcopy(_new_clients.get(_cid) or {})
+                    _old_client_tasks = _old_client_event.pop("tasks", [])
+                    _new_client_tasks = _new_client_event.pop("tasks", [])
+                    _old_client_event.pop("viewed", None)
+                    _new_client_event.pop("viewed", None)
                     if _old_client_event != _new_client_event:
+                        _change_targets.add("client:" + _cid)
                         _changed_client_ids.add(_cid)
+                    if _old_client_tasks != _new_client_tasks:
+                        _change_targets.add("client_tasks:" + _cid)
+                        _changed_client_ids.add(_cid)
+
                 _old_deals = {str(x.get("id")): x for x in (latest_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_deals = {str(x.get("id")): x for x in (merged_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _did in set(_old_deals) | set(_new_deals):
-                    if _old_deals.get(_did) != _new_deals.get(_did):
-                        _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
-                        _owner = _deal.get("client_id") or _deal.get("cl_id")
-                        if _owner is not None:
-                            _changed_client_ids.add(str(_owner))
+                    _old_deal = copy.deepcopy(_old_deals.get(_did) or {})
+                    _new_deal = copy.deepcopy(_new_deals.get(_did) or {})
+                    _old_deal_tasks = _old_deal.pop("tasks", [])
+                    _new_deal_tasks = _new_deal.pop("tasks", [])
+                    _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
+                    _owner = _deal.get("client_id") or _deal.get("cl_id")
+                    if _old_deal != _new_deal and _owner is not None:
+                        _change_targets.add("deal:" + str(_owner))
+                        _changed_client_ids.add(str(_owner))
+                    if _old_deal_tasks != _new_deal_tasks and _owner is not None:
+                        _change_targets.add("deal_tasks:" + str(_owner))
+                        _changed_client_ids.add(str(_owner))
+
                 _old_tasks = {str(x.get("id")): x for x in (latest_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_tasks = {str(x.get("id")): x for x in (merged_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 for _tid in set(_old_tasks) | set(_new_tasks):
@@ -4462,6 +4478,8 @@ def save_data(data):
                                 _owner = _task_deal.get("client_id") or _task_deal.get("cl_id")
                         if _owner is not None:
                             _changed_client_ids.add(str(_owner))
+                            _change_targets.add("internal_tasks:" + str(_owner))
+
                 _event_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "system")
                 _event_name = _event_login
                 for _u in merged_data.get("users", []) or []:
@@ -4470,10 +4488,10 @@ def save_data(data):
                     if str(_u.get("login", "")) == _event_login or str(_u.get("name", "")) == _event_login:
                         _event_name = str(_u.get("name") or _u.get("login") or _event_login)
                         break
-                if _changed_client_ids:
+                if _change_targets:
                     conn.execute(
-                        "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at) VALUES (?, ?, ?, ?, ?)",
-                        (new_revision, _event_login, _event_name, json.dumps(sorted(_changed_client_ids)), now_str()),
+                        "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at, change_targets) VALUES (?, ?, ?, ?, ?, ?)",
+                        (new_revision, _event_login, _event_name, json.dumps(sorted(_changed_client_ids)), now_str(), json.dumps(sorted(_change_targets))),
                     )
                     conn.execute("DELETE FROM crm_change_events WHERE revision < ?", (max(0, new_revision - 500),))
             except Exception as _event_exc:
