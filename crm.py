@@ -4402,6 +4402,19 @@ def save_data(data):
                         _owner = _deal.get("client_id") or _deal.get("cl_id")
                         if _owner is not None:
                             _changed_client_ids.add(str(_owner))
+                _old_tasks = {str(x.get("id")): x for x in (latest_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
+                _new_tasks = {str(x.get("id")): x for x in (merged_data.get("internal_tasks", []) or []) if isinstance(x, dict) and x.get("id") is not None}
+                for _tid in set(_old_tasks) | set(_new_tasks):
+                    if _old_tasks.get(_tid) != _new_tasks.get(_tid):
+                        _task = _new_tasks.get(_tid) or _old_tasks.get(_tid) or {}
+                        _owner = _task.get("client_id") or _task.get("cl_id")
+                        if _owner is None:
+                            _task_deal_id = _task.get("deal_id")
+                            if _task_deal_id is not None:
+                                _task_deal = _new_deals.get(str(_task_deal_id)) or _old_deals.get(str(_task_deal_id)) or {}
+                                _owner = _task_deal.get("client_id") or _task_deal.get("cl_id")
+                        if _owner is not None:
+                            _changed_client_ids.add(str(_owner))
                 _event_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "system")
                 _event_name = _event_login
                 for _u in merged_data.get("users", []) or []:
