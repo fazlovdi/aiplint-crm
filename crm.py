@@ -1360,6 +1360,21 @@ def get_client_by_id(c_id):
             return c
     return None
 
+def _save_client_contact_method(client_id):
+    """Сохраняет способ связи только по явному действию пользователя в selectbox."""
+    try:
+        _key = f"cm_{client_id}"
+        _value = st.session_state.get(_key, "")
+        _client = get_client_by_id(client_id)
+        if not _client or _client.get("contact_method", "") == _value:
+            return
+        _client["contact_method"] = _value
+        _client["last_modified"] = now_str()
+        save_data(st.session_state.crm_store)
+    except Exception as _contact_exc:
+        _crm_log("CLIENT_CONTACT_METHOD_SAVE_ERROR", {"client_id": str(client_id)}, exc=_contact_exc, remote=False)
+
+
 def get_deal_by_id(d_id):
     for d in st.session_state.crm_store.get("deals", []):
         if d["id"] == d_id: return d
@@ -10606,11 +10621,15 @@ def render_client_card_expanded(cl):
                     cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
                     _cm_left, _cm_right = st.columns(2)
                     with _cm_left:
-                        cm = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_idx, key=f"cm_{cl['id']}", placeholder="Выбери вариант...")
-                    if cm != cl.get('contact_method', ''):
-                        cl['contact_method'] = cm
-                        cl["last_modified"] = now_str()
-                        save_data(st.session_state.crm_store)
+                        st.selectbox(
+                            "Предпочтительный способ связи:",
+                            CONTACT_METHODS,
+                            index=cm_idx,
+                            key=f"cm_{cl['id']}",
+                            placeholder="Выбери вариант...",
+                            on_change=_save_client_contact_method,
+                            args=(cl["id"],),
+                        )
                     st.markdown(f"Email: **{cl.get('email','')}**")
                     st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
                     st.markdown(f"Основной адрес: **{cl.get('address','')}**")
@@ -14908,7 +14927,13 @@ def _crm_live_change_notice_fragment():
                         # Сбрасываем кеш selectbox способа связи в режиме просмотра.
                         # Иначе Streamlit может оставить старое значение виджета после
                         # загрузки свежей базы, а карточка тут же сохранит его обратно.
-                        st.session_state.pop(f"cm_{_client_id}", None)
+                        _fresh_client = next(
+                            (c for c in (_loaded.get("clients", []) or []) if str(c.get("id")) == str(_client_id)),
+                            None,
+                        )
+                        if _fresh_client is not None:
+                            # Явно синхронизируем значение виджета с серверной версией.
+                            st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "")
                         st.session_state.pop("_crm_live_change_notice", None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
                         st.rerun()
