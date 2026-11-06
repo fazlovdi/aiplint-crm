@@ -2910,7 +2910,7 @@ def process_due_reminders():
 DELIVERY_METHOD_OPTIONS = ["Не выбрано", "Деловые Линии", "СДЭК", "ПЭК", "КИТ", "Энергия", "Байкал Сервис", "ЖелДорЭкспедиция", "Самовывоз", "Доставка по г. Казань", "Доставка клиента"]
 
 def _render_task_shipping_fields(task, client, deal, key_prefix):
-    """Поля отправки: изменение даты/статуса сохраняется по устойчивым ID записи."""
+    """Статус и дата отправки применяются только после явного подтверждения."""
     statuses = ["Собирается", "Закупается материал", "Готово к отправке"]
     status_key = f"task_shipping_status_{key_prefix}"
     date_key = f"task_estimated_ship_date_{key_prefix}"
@@ -2919,40 +2919,6 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
     client_id = str((client or {}).get("id", task.get("client_id", "")) or "")
     deal_id = str((deal or {}).get("id", task.get("deal_id", "")) or "")
     task_type = str(task.get("type", "") or "")
-
-    def _persist_shipping_fields():
-        store = st.session_state.get("crm_store", {})
-        found_client = next((x for x in store.get("clients", [])
-                             if str(x.get("id", "")) == client_id), None)
-        # Support the application's legacy client lookup/storage layout.
-        if found_client is None:
-            try:
-                found_client = get_client_by_id(client_id)
-            except Exception:
-                found_client = None
-        if not found_client:
-            return
-        found_task = next((x for x in found_client.get("tasks", [])
-                           if str(x.get("task_number", "")) == task_number
-                           and str(x.get("deal_id", "") or "") == deal_id
-                           and str(x.get("type", "") or "") == task_type), None)
-        if not found_task:
-            return
-        status_value = st.session_state.get(status_key, found_task.get("shipping_status", "")) or ""
-        date_value = st.session_state.get(date_key)
-        date_iso = date_value.isoformat() if date_value else ""
-        found_task["shipping_status"] = status_value
-        found_task["estimated_ship_date"] = date_iso
-        found_task["last_modified"] = now_str()
-        found_client["last_modified"] = now_str()
-        if deal_id:
-            found_deal = next((x for x in store.get("deals", [])
-                               if str(x.get("id", "")) == deal_id), None)
-            if found_deal:
-                found_deal["last_modified"] = now_str()
-        # Pass a copy so save_data does not replace the live store object while
-        # the current dialog is rendering and leave its references stale.
-        save_data(copy.deepcopy(store))
 
     current_status = task.get("shipping_status", "") or ""
     current_date_raw = task.get("estimated_ship_date", "") or ""
@@ -2966,21 +2932,64 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
     if date_key not in st.session_state:
         st.session_state[date_key] = current_date
 
-    st.selectbox(
-        "Статус",
-        options=statuses,
-        index=statuses.index(current_status) if current_status in statuses else None,
-        placeholder="Выберите статус",
-        key=status_key,
-        on_change=_persist_shipping_fields,
-    )
-    st.date_input(
-        "Ориентировочная дата отправки",
-        value=current_date,
-        format="DD.MM.YYYY",
-        key=date_key,
-        on_change=_persist_shipping_fields,
-    )
+    def _persist_shipping_fields():
+        store = st.session_state.get("crm_store", {})
+        found_client = next((x for x in store.get("clients", [])
+                             if str(x.get("id", "")) == client_id), None)
+        # Support the application's legacy client lookup/storage layout.
+        if found_client is None:
+            try:
+                found_client = get_client_by_id(client_id)
+            except Exception:
+                found_client = None
+        if not found_client:
+            st.error("Не удалось применить изменения: клиент не найден. Обнови вкладку и повтори.")
+            return False
+        found_task = next((x for x in found_client.get("tasks", [])
+                           if str(x.get("task_number", "")) == task_number
+                           and str(x.get("deal_id", "") or "") == deal_id
+                           and str(x.get("type", "") or "") == task_type), None)
+        if not found_task:
+            st.error("Не удалось применить изменения: задача не найдена. Обнови вкладку и повтори.")
+            return False
+        status_value = st.session_state.get(status_key, found_task.get("shipping_status", "")) or ""
+        date_value = st.session_state.get(date_key)
+        date_iso = date_value.isoformat() if date_value else ""
+        now = now_str()
+        found_task["shipping_status"] = status_value
+        found_task["estimated_ship_date"] = date_iso
+        found_task["last_modified"] = now
+        found_client["last_modified"] = now
+        if deal_id:
+            found_deal = next((x for x in store.get("deals", [])
+                               if str(x.get("id", "")) == deal_id), None)
+            if found_deal:
+                found_deal["last_modified"] = now
+        # Persist a copy to avoid replacing live references used by the open workspace.
+        save_data(copy.deepcopy(store))
+        st.toast("Статус и дата отправки применены", icon="✅")
+        return True
+
+    _status_col, _date_col, _apply_col = st.columns([1, 1, 0.72], vertical_alignment="bottom")
+    with _status_col:
+        st.selectbox(
+            "Статус",
+            options=statuses,
+            index=statuses.index(current_status) if current_status in statuses else None,
+            placeholder="Выберите статус",
+            key=status_key,
+        )
+    with _date_col:
+        st.date_input(
+            "Ориентировочная дата отправки",
+            value=current_date,
+            format="DD.MM.YYYY",
+            key=date_key,
+        )
+    with _apply_col:
+        if st.button("Применить", key=f"apply_shipping_fields_{key_prefix}", type="primary", use_container_width=True):
+            if _persist_shipping_fields():
+                st.rerun()
 
 
 def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user"):
