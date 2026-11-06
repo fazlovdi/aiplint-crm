@@ -10650,45 +10650,7 @@ def render_client_card_expanded(cl):
                     st.markdown("---")
                     st.markdown("**Информация о клиенте:**")
                     st.markdown(f"Телефон: **{cl.get('phone', '')}**")
-                    cm_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
-                    # Ключ Streamlit сохраняет старое значение виджета между rerun.
-                    # Перед отрисовкой карточки синхронизируем его с текущей записью CRM,
-                    # чтобы старое значение сессии не показывалось и не перезаписывало новое.
-                    _cm_widget_key = f"cm_{cl['id']}"
-                    _cm_edit_key = f"cm_edit_{cl['id']}"
-                    if _cm_widget_key not in st.session_state:
-                        st.session_state[_cm_widget_key] = cl.get('contact_method', '') or ''
-                    if _cm_edit_key not in st.session_state:
-                        st.session_state[_cm_edit_key] = False
-                    st.markdown("**Предпочтительный способ связи:**")
-                    _cm_left, _cm_right = st.columns([4, 1])
-                    with _cm_left:
-                        st.selectbox(
-                            "Предпочтительный способ связи",
-                            CONTACT_METHODS,
-                            index=cm_idx,
-                            key=_cm_widget_key,
-                            placeholder="Выбери вариант...",
-                            label_visibility="collapsed",
-                            disabled=not st.session_state[_cm_edit_key],
-                        )
-                    with _cm_right:
-                        if st.session_state[_cm_edit_key]:
-                            st.button(
-                                "Подтвердить",
-                                key=f"cm_confirm_{cl['id']}",
-                                use_container_width=True,
-                                on_click=_confirm_client_contact_method,
-                                args=(cl["id"],),
-                            )
-                        else:
-                            st.button(
-                                "Изменить",
-                                key=f"cm_edit_button_{cl['id']}",
-                                use_container_width=True,
-                                on_click=_enable_client_contact_method_edit,
-                                args=(cl["id"],),
-                            )
+                    st.markdown(f"Предпочтительный способ связи: **{cl.get('contact_method') or '—'}**")
                     st.markdown(f"Email: **{cl.get('email','')}**")
                     st.markdown(f"Город: **{cl.get('city','—') or '—'}**")
                     st.markdown(f"Основной адрес: **{cl.get('address','')}**")
