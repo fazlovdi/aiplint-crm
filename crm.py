@@ -14939,7 +14939,10 @@ def _crm_live_change_notice_fragment():
                             st.session_state[f"cm_{_client_id}"] = _fresh_client.get("contact_method", "") or ""
                         st.session_state.pop("_crm_live_change_notice", None)
                         st.session_state["_crm_live_notice_seen_revision"] = int(st.session_state.get("crm_base_revision", 0) or 0)
-                        _crm_workspace_rerun()
+                        # Кнопка находится в отдельном fragment уведомления.
+                        # Streamlit не умеет из него адресно перезапустить другой fragment,
+                        # поэтому здесь нужен app rerun, чтобы рабочая карточка получила свежие данные.
+                        st.rerun(scope="app")
             with _b2:
                 if st.button("Позже", key="crm_live_notice_later", use_container_width=True):
                     st.session_state.pop("_crm_live_change_notice", None)
