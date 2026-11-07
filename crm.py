@@ -7663,7 +7663,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 _receiver_row, _picker_row = st.columns([4, 1.5])
                 with _receiver_row:
                     nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
-    _crm_mark_widget_changed(f"nt_recv_{key_suffix}", bool(str(nreceiver or "").strip()))
+                    _crm_mark_widget_changed(f"nt_recv_{key_suffix}", bool(str(nreceiver or "").strip()))
                 with _picker_row:
                     st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
                     if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
