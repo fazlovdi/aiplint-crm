@@ -4530,6 +4530,9 @@ def save_data(data):
 
                 _old_deals = {str(x.get("id")): x for x in (latest_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
                 _new_deals = {str(x.get("id")): x for x in (merged_data.get("deals", []) or []) if isinstance(x, dict) and x.get("id") is not None}
+                # Инициализируем маркеры автооплаты до сравнения сделок: иначе
+                # любая правка сделки может прервать создание события уведомления.
+
                 for _did in set(_old_deals) | set(_new_deals):
                     _old_deal = copy.deepcopy(_old_deals.get(_did) or {})
                     _new_deal = copy.deepcopy(_new_deals.get(_did) or {})
