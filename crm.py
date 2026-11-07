@@ -15576,10 +15576,10 @@ def _crm_render_workspace_fragment():
             with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
-                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'active' if _i == _active_index else 'inactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                         st.button(
                             _tab_title,
-                            key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}",
+                            key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}_{'active' if _i == _active_index else 'inactive'}",
                             type="primary" if _i == _active_index else "secondary",
                             help=_tab_title,
                             on_click=_crm_workspace_activate_tab,
