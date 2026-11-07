@@ -2314,6 +2314,12 @@ def _crm_mark_widget_changed(widget_key, changed):
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "-", str(widget_key))
     st.markdown(
         f"<style>.st-key-{safe_key} input, .st-key-{safe_key} textarea, "
+        f".st-key-{safe_key} [data-testid='stTextInput'] > div, "
+        f".st-key-{safe_key} [data-testid='stTextArea'] > div, "
+        f".st-key-{safe_key} [data-testid='stNumberInput'] > div, "
+        f".st-key-{safe_key} [data-testid='stDateInput'] > div, "
+        f".st-key-{safe_key} [data-testid='stTimeInput'] > div, "
+        f".st-key-{safe_key} [data-testid='stSelectbox'] [data-baseweb='select'] > div, "
         f".st-key-{safe_key} [data-baseweb='select'] > div, "
         f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'], "
         f".st-key-{safe_key} [data-testid='stFileUploader'] section, "
@@ -2412,7 +2418,10 @@ def _crm_workspace_tab_has_unsaved(tab):
         if _payment_widget_key in state and str(state.get(_payment_widget_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
             return True
         _manager_key = f"deal_mgr_inline_{deal_id}"
-        if _manager_key in state and str(state.get(_manager_key) or "") != str(deal.get("manager") or ""):
+        _manager_options = get_managers_list()
+        _saved_manager = str(deal.get("manager") or "")
+        # Ignore stale legacy values that are not valid in the current selector.
+        if _manager_key in state and _saved_manager in _manager_options and str(state.get(_manager_key) or "") != _saved_manager:
             return True
         if any(state.get(str(_k)) for _k in state.keys() if str(_k).startswith(f"dls_up_{deal_id}_")):
             return True
@@ -12193,11 +12202,15 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
+                    # Clear the unsaved quick comment before opening a child dialog;
+                    # otherwise the dirty-check reopens the same warning on the next rerun.
+                    st.session_state[f"tc_input_{key_prefix}"] = ""
+                    st.session_state[f"clr_tc_{key_prefix}"] = False
                     if st.session_state.get("_crm_pending_child_open"):
                         _crm_finish_pending_child_open()
                         _crm_workspace_rerun()
                         return
-                    if st.session_state.get("_crm_pending_close") or st.session_state.get("_crm_pending_child_open"):
+                    if st.session_state.get("_crm_pending_close"):
                         st.session_state[f"tc_input_{key_prefix}"] = ""
                         st.session_state[f"clr_tc_{key_prefix}"] = False
                     _crm_workspace_finish_pending_close()
@@ -12493,7 +12506,7 @@ def _crm_deal_responsible_fragment(d, deal_id):
         key=widget_key,
         placeholder=MGR_PLACEHOLDER,
     )
-    _crm_mark_widget_changed(widget_key, str(new_mgr or "") != str(current_mgr or ""))
+    _crm_mark_widget_changed(widget_key, str(new_mgr or "") != str(current_mgr or "") if current_mgr in mgr_options else False)
     if st.button("Делегировать", key=f"deal_mgr_delegate_{deal_id}", type="primary", use_container_width=True):
         if new_mgr and new_mgr != current_mgr:
             d["manager"] = new_mgr
