@@ -12169,7 +12169,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if (st.session_state.get("_crm_pending_child_open") or st.session_state.get("_crm_pending_close", {}).get("mode") == "switch") else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
@@ -12541,7 +12541,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if (st.session_state.get("_crm_pending_child_open") or st.session_state.get("_crm_pending_close", {}).get("mode") == "switch") else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     _saved_deal_for_discard = next(
                         (x for x in st.session_state.get("crm_store", {}).get("deals", [])
@@ -12604,7 +12604,7 @@ def client_detail_dialog(cl_id):
             st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{_key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if (st.session_state.get("_crm_pending_child_open") or st.session_state.get("_crm_pending_close", {}).get("mode") == "switch") else "Не сохранять и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     st.session_state.pop(f"_client_extra_draft_{cl_id}", None)
