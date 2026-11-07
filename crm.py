@@ -2309,8 +2309,6 @@ def _crm_workspace_save_remote(login, workspace):
 
 # Workspace snapshots are uploaded off the UI thread; SQLite remains the immediate local save.
 _CRM_WORKSPACE_REMOTE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-workspace-sync")
-_CRM_WORKSPACE_REMOTE_LOCK = threading.Lock()
-_CRM_WORKSPACE_REMOTE_LAST_SUBMITTED = {}
 
 # Drafts are stored separately from the primary CRM data and per workspace tab.
 _CRM_DRAFT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-drafts-sync")
@@ -2815,10 +2813,7 @@ def _crm_workspace_queue_save():
         st.session_state["_crm_last_queued_workspace_payload"] = payload
         # SQLite is saved immediately; Yandex Disk sync must never block opening,
         # closing, or switching workspace tabs.
-        with _CRM_WORKSPACE_REMOTE_LOCK:
-            if _CRM_WORKSPACE_REMOTE_LAST_SUBMITTED.get(login) != payload:
-                _CRM_WORKSPACE_REMOTE_LAST_SUBMITTED[login] = payload
-                _CRM_WORKSPACE_REMOTE_EXECUTOR.submit(_crm_workspace_save_remote, login, workspace)
+        _CRM_WORKSPACE_REMOTE_EXECUTOR.submit(_crm_workspace_save_remote, login, workspace)
     except Exception as exc:
         _crm_log("WORKSPACE_SAVE_ERROR", {"stage": "SQLite workspace save"}, exc=exc)
 
