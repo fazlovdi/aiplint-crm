@@ -4568,6 +4568,7 @@ def save_data(data):
                     if _old_deal != _new_deal and _owner is not None:
                         if str(_did) in _auto_payment_ids and str((_old_deals.get(_did) or {}).get("payment_status", "")) != str((_new_deals.get(_did) or {}).get("payment_status", "")):
                             _event_name = "__AUTO_PAYMENT_STATUS_UPDATED__"
+                            _auto_payment_status_event = True
                             _auto_payment_ids.discard(str(_did))
                         # Создание/удаление сделки относится к списку сделок клиента.
                         # Изменение только расчётов относится к вкладке конкретной сделки,
@@ -4660,6 +4661,11 @@ def save_data(data):
                     if str(_u.get("login", "")) == _event_login or str(_u.get("name", "")) == _event_login:
                         _event_name = str(_u.get("name") or _u.get("login") or _event_login)
                         break
+                # Автооплата должна уведомлять и другие устройства того же пользователя.
+                # Отдельный системный login не даст фильтру собственных изменений скрыть событие.
+                if locals().get("_auto_payment_status_event", False):
+                    _event_login = "__AUTO_PAYMENT_STATUS__"
+                    _event_name = "__AUTO_PAYMENT_STATUS_UPDATED__"
                 if _change_targets:
                     conn.execute(
                         "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at, change_targets) VALUES (?, ?, ?, ?, ?, ?)",
