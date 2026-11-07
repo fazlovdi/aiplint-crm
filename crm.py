@@ -2314,8 +2314,12 @@ def _crm_mark_widget_changed(widget_key, changed):
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "-", str(widget_key))
     st.markdown(
         f"<style>.st-key-{safe_key} input, .st-key-{safe_key} textarea, "
-        f".st-key-{safe_key} [data-baseweb='select'] > div "
-        f"{{border:2px solid #F59E0B!important;box-shadow:0 0 0 1px rgba(245,158,11,.12)!important;}}</style>",
+        f".st-key-{safe_key} [data-baseweb='select'] > div, "
+        f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'], "
+        f".st-key-{safe_key} [data-testid='stFileUploader'] section, "
+        f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'] button "
+        f"{{border:2px solid #F59E0B!important;box-shadow:0 0 0 1px rgba(245,158,11,.12)!important;}}"
+        f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'] {{border-radius:10px!important;}}</style>",
         unsafe_allow_html=True,
     )
 
@@ -2975,6 +2979,36 @@ def _crm_finish_pending_child_open():
     return True
 
 
+def _crm_queue_child_open_if_parent_dirty(name, args=(), kwargs=None):
+    """Сначала показывает предупреждение родителя, затем разрешает дочернее действие."""
+    active = st.session_state.get("_crm_active_dialog") or {}
+    if not active or not _crm_workspace_tab_has_unsaved(active):
+        return False
+    parent_name = str(active.get("name", ""))
+    parent_args = active.get("args", ()) or ()
+    warning_key = None
+    if parent_name == "client_detail_dialog" and parent_args:
+        warning_key = f"_show_close_warning_client_{parent_args[0]}"
+    elif parent_name == "deal_detail_dialog" and parent_args:
+        parent_deal = parent_args[0] if isinstance(parent_args[0], dict) else {}
+        parent_prefix = str(parent_args[3]) if len(parent_args) > 3 else f"deal_{parent_deal.get('id', '')}"
+        warning_key = f"_show_close_warning_{parent_prefix}"
+    elif parent_name == "task_detail_dialog" and len(parent_args) >= 4:
+        warning_key = f"_show_close_warning_{parent_args[3]}"
+    if not warning_key:
+        return False
+    st.session_state["_crm_pending_child_open"] = {
+        "name": name, "args": tuple(args or ()), "kwargs": dict(kwargs or {}),
+        "parent_name": parent_name, "parent_args": parent_args,
+    }
+    st.session_state[warning_key] = True
+    try:
+        st.rerun(scope="fragment")
+    except (TypeError, ValueError):
+        st.rerun()
+    return True
+
+
 def _crm_dialog(title, width="large"):
     def _decorate(func):
         _CRM_DIALOG_REGISTRY[func.__name__] = {"func": func, "title": title, "width": width}
@@ -3287,9 +3321,12 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
     _send_spacer, _send_col, _send_spacer2 = st.columns([1, 2, 1])
     with _send_col:
         if st.button("Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
+            _reminder_args = (str(entity_type), str(entity_id), str(entity_label))
+            if _crm_queue_child_open_if_parent_dirty("create_reminder_dialog", _reminder_args):
+                return
             # The decorated dialog routes into the current workspace when invoked
             # from a client/deal/task tab; it becomes a regular tab, not a separate modal.
-            create_reminder_dialog(str(entity_type), str(entity_id), str(entity_label))
+            create_reminder_dialog(*_reminder_args)
 
 def process_due_reminders():
     """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
@@ -3867,6 +3904,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             st.markdown("**Добавить файлы в задачу:**")
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
             ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
             _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
             _task_file_upload_col, _task_file_pick_col = st.columns(2)
             with _task_file_upload_col:
@@ -8093,6 +8131,7 @@ def render_deal_card_expanded(d, cl):
             st.markdown("**Загрузить файлы:**")
             df_ver = st.session_state.deal_file_uploader_ver.get(d["id"], 0)
             udf = st.file_uploader("Выберите файлы:", key=f"df_up_{d['id']}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"df_up_{d['id']}_{df_ver}", bool(udf))
             if st.button("Загрузить", key=f"df_btn_{d['id']}", use_container_width=True):
                 if udf:
                     with st.spinner("Загрузка файлов..."):
@@ -11597,43 +11636,20 @@ def render_client_card_expanded(cl):
                         st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
-                            # Явно активируем вкладку задачи в том же окне клиента.
-                            # Не используем временный вызов decorated-функции: он
-                            # мог быть пропущен общим диспетчером при совпадении
-                            # активной сигнатуры/устаревших маркеров.
                             _task_deal = next((x for x in st.session_state.crm_store.get("deals", [])
                                                if str(x.get("id", "")) == str(_task.get("deal_id", ""))), None)
-                            _task_entry = {
-                                "name": "task_detail_dialog",
-                                "title": f"Задача №{_task.get('task_number', '')}",
-                                "width": "large",
-                                "args": (_task, cl, _task_deal, f"client_task_{cl['id']}_{_task.get('task_number', '')}"),
-                                "kwargs": {},
-                            }
-                            _task_entry["signature"] = (
-                                _crm_dialog_signature_value(_task_entry["args"]),
-                                _crm_dialog_signature_value(_task_entry["kwargs"]),
-                            )
-                            _target_window = _crm_workspace_open_dialog(
-                                _task_entry, client_id=cl.get("id"), from_host=True
-                            )
-                            if _target_window is not None:
-                                _target_window["minimized"] = False
-                                _target_key = _crm_workspace_tab_key(_task_entry)
-                                _target_index = next((i for i, tab in enumerate(_target_window.get("tabs", []))
-                                                      if _crm_workspace_tab_key(tab) == _target_key), None)
-                                if _target_index is not None:
-                                    _target_window["active_tab"] = _target_index
-                                    st.session_state["_crm_active_window_id"] = _target_window.get("id")
-                                    st.session_state["_crm_active_dialog"] = _target_window["tabs"][_target_index]
-                            _crm_workspace_clear_legacy_dialog_markers()
-                            # _crm_workspace_open_dialog() уже сохранил структуру окна.
-                            _crm_workspace_rerun()
+                            _task_args = (_task, cl, _task_deal, f"client_task_{cl['id']}_{_task.get('task_number', '')}")
+                            if _crm_queue_child_open_if_parent_dirty("task_detail_dialog", _task_args):
+                                return
+                            task_detail_dialog(*_task_args)
             else:
                 st.caption("Задач по клиенту пока нет.")
             if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
+                _task_args = (str(cl["id"]),)
+                if _crm_queue_child_open_if_parent_dirty("client_create_task_dialog", _task_args):
+                    return
                 # Create the client task in the current workspace as a normal tab.
-                client_create_task_dialog(str(cl["id"]))
+                client_create_task_dialog(*_task_args)
 
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
 
@@ -11659,39 +11675,18 @@ def render_client_card_expanded(cl):
                         st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
                     with _open_col:
                         if st.button("Открыть", key=f"client_deal_open_{cl['id']}_{_di}", use_container_width=True):
-                            # Открываем сделку непосредственно в текущем окне клиента,
-                            # минуя legacy dialog_deal_key и общий диспетчер.
-                            _deal_entry = {
-                                "name": "deal_detail_dialog",
-                                "title": f"Сделка {_deal.get('deal_number', _deal.get('title', ''))}",
-                                "width": "large",
-                                "args": (_deal, cl, st.session_state.get("current_user"), f"deal_{_deal.get('id')}"),
-                                "kwargs": {},
-                            }
-                            _deal_entry["signature"] = (
-                                _crm_dialog_signature_value(_deal_entry["args"]),
-                                _crm_dialog_signature_value(_deal_entry["kwargs"]),
-                            )
-                            _target_window = _crm_workspace_open_dialog(
-                                _deal_entry, client_id=cl.get("id"), from_host=True
-                            )
-                            if _target_window is not None:
-                                _target_window["minimized"] = False
-                                _target_key = _crm_workspace_tab_key(_deal_entry)
-                                _target_index = next((i for i, tab in enumerate(_target_window.get("tabs", []))
-                                                      if _crm_workspace_tab_key(tab) == _target_key), None)
-                                if _target_index is not None:
-                                    _target_window["active_tab"] = _target_index
-                                    st.session_state["_crm_active_window_id"] = _target_window.get("id")
-                                    st.session_state["_crm_active_dialog"] = _target_window["tabs"][_target_index]
-                            _crm_workspace_clear_legacy_dialog_markers()
-                            # _crm_workspace_open_dialog() уже сохранил структуру окна.
-                            _crm_workspace_rerun()
+                            _deal_args = (_deal, cl, st.session_state.get("current_user"), f"deal_{_deal.get('id')}")
+                            if _crm_queue_child_open_if_parent_dirty("deal_detail_dialog", _deal_args):
+                                return
+                            deal_detail_dialog(*_deal_args)
             else:
                 st.caption("Сделок пока нет.")
             if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
+                _deal_args = (str(cl["id"]),)
+                if _crm_queue_child_open_if_parent_dirty("create_deal_dialog", _deal_args):
+                    return
                 # Create the deal in the current client workspace as a normal tab.
-                create_deal_dialog(str(cl["id"]))
+                create_deal_dialog(*_deal_args)
 
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
             # Реквизиты для документов — между действиями и историей изменений.
@@ -11710,12 +11705,10 @@ def render_client_card_expanded(cl):
                         st.markdown(f"<div style='padding:0.35rem 0;font-weight:500'>{html.escape(_req_name)}</div>", unsafe_allow_html=True)
                 with _req_cols[1]:
                     if not _req.get("deleted") and st.button("Открыть", key=f"client_req_open_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
-                        _push_dialog_return()
-                        # «Открыть» показывает сохранённую запись в отдельном окне просмотра.
-                        # Значения читаются непосредственно из актуального объекта клиента,
-                        # без ключей виджетов редактора, которые могли содержать пустое состояние.
-                        st.session_state["dialog_client_requisites_view"] = {"client_id": cl["id"], "return_to_invoice": False, "requisite_id": _req.get("id")}
-                        st.rerun()
+                        _req_args = (cl["id"], False, _req.get("id"))
+                        if _crm_queue_child_open_if_parent_dirty("client_requisites_view_dialog", _req_args):
+                            return
+                        client_requisites_view_dialog(*_req_args)
                 with _req_cols[2]:
                     _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
                     if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
@@ -11739,10 +11732,10 @@ def render_client_card_expanded(cl):
                             st.session_state.pop(_req_confirm_key, None)
                             st.rerun()
             if st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_client_requisites_client_id"] = cl["id"]
-                st.session_state["dialog_client_requisites_return_to_invoice"] = False
-                client_requisites_dialog(cl["id"], False)
+                _req_args = (cl["id"], False)
+                if _crm_queue_child_open_if_parent_dirty("client_requisites_dialog", _req_args):
+                    return
+                client_requisites_dialog(*_req_args)
             # История изменений — после реквизитов
             st.markdown("---")
             st.markdown("**Внесённые изменения**")
@@ -12551,11 +12544,19 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             with _wcol1:
                 if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    _saved_deal_for_discard = next(
+                        (x for x in st.session_state.get("crm_store", {}).get("deals", [])
+                         if str(x.get("id", "")) == str(deal_id)),
+                        d,
+                    )
+                    _saved_payment_for_discard = str(_saved_deal_for_discard.get("payment_status", "Не оплачено") or "Не оплачено")
+                    _saved_manager_for_discard = str(_saved_deal_for_discard.get("manager", "") or "")
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
-                    st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
-                    st.session_state[f"ps_{deal_id}"] = d.get("payment_status", "Не оплачено") or "Не оплачено"
-                    st.session_state[f"deal_mgr_inline_{deal_id}"] = d.get("manager", "") or ""
-                    st.session_state[f"_deal_mgr_last_model_{deal_id}"] = d.get("manager", "") or ""
+                    st.session_state[f"dls_ps_{deal_id}"] = _saved_payment_for_discard
+                    st.session_state[f"ps_{deal_id}"] = _saved_payment_for_discard
+                    st.session_state[f"_dls_ps_last_model_{deal_id}"] = _saved_payment_for_discard
+                    st.session_state[f"deal_mgr_inline_{deal_id}"] = _saved_manager_for_discard
+                    st.session_state[f"_deal_mgr_last_model_{deal_id}"] = _saved_manager_for_discard
                     for _draft_widget_key in (f"dls_et_{deal_id}", f"dls_eb_{deal_id}", f"dls_em_{deal_id}"):
                         st.session_state.pop(_draft_widget_key, None)
                     st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
