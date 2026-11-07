@@ -2634,8 +2634,17 @@ def _crm_workspace_activate_tab(window_id, tab_index):
     tabs = window.get("tabs", [])
     if not tabs:
         return
-    # Snapshot current widget values before changing active_tab: the following
-    # fragment render unmounts the previous tab's widgets.
+    # Snapshot the current tab into session-local memory before its widgets are
+    # unmounted. Remote draft persistence remains asynchronous.
+    try:
+        _old_index = max(0, min(int(window.get("active_tab", 0) or 0), len(tabs) - 1))
+        _old_tab = tabs[_old_index]
+        _old_key = _crm_workspace_tab_key(_old_tab)
+        _old_values = _crm_draft_widget_values(_old_tab)
+        _local_drafts = st.session_state.setdefault("_crm_drafts_local_values", {})
+        _local_drafts[_old_key] = _old_values
+    except Exception:
+        pass
     _crm_drafts_persist_open_tabs(force=True)
     try:
         index = max(0, min(int(tab_index), len(tabs) - 1))
@@ -15619,6 +15628,13 @@ def _crm_render_workspace_fragment():
                     if _active_spec:
                         _draft_login = str(st.session_state.get("_crm_drafts_login") or st.session_state.get("user_login") or st.session_state.get("user_name") or "")
                         _draft_tab_key = _crm_workspace_tab_key(_active_entry)
+                        # Restore the in-session snapshot on every return to a tab.
+                        # Streamlit clears widget state for widgets that are not rendered.
+                        _local_drafts = st.session_state.get("_crm_drafts_local_values", {})
+                        _local_values = _local_drafts.get(_draft_tab_key, {}) if isinstance(_local_drafts, dict) else {}
+                        for _local_key, _local_value in _local_values.items():
+                            if _local_key not in st.session_state:
+                                st.session_state[_local_key] = _crm_draft_decode(_local_value)
                         _draft_restored = st.session_state.get("_crm_drafts_restored_tabs", set())
                         if _draft_login and _draft_tab_key not in _draft_restored:
                             _crm_draft_restore_tab(_draft_login, _active_entry)
