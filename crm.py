@@ -12272,7 +12272,6 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
-                    _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
 
     if _show_close_warning:
@@ -12332,9 +12331,14 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                 if st.button("Отменить и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
+                    st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
+                    st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
+                    st.session_state[f"dls_dc_input_{deal_id}"] = ""
+                    st.session_state[f"dls_pause_reason_{deal_id}"] = ""
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
+                    _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
             with _wcol3:
                 if st.button("Редактировать", key=f"warn_cancel_{key_prefix}", use_container_width=True):
