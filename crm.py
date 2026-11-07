@@ -12527,6 +12527,23 @@ def _crm_deal_responsible_fragment(d, deal_id):
 @_crm_dialog("Подробности сделки", width="large")
 def deal_detail_dialog(d, cl, cu, key_prefix):
     st.session_state["_in_dialog"] = True
+
+    # Workspace tabs can retain an old deal object in their args. Resolve the
+    # deal by ID against the current CRM store on every render so the manager,
+    # payment status and other saved fields always use the same source of truth.
+    # Unsaved widget selections remain in session_state and are not overwritten
+    # unless the saved model value actually changes in the responsible fragment.
+    if isinstance(d, dict) and d.get("id") is not None:
+        _canonical_deal = next(
+            (
+                _item for _item in st.session_state.get("crm_store", {}).get("deals", []) or []
+                if isinstance(_item, dict) and str(_item.get("id")) == str(d.get("id"))
+            ),
+            None,
+        )
+        if _canonical_deal is not None:
+            d = _canonical_deal
+
     deal_id = d["id"]
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
     _is_editing = st.session_state.get(f"dls_show_edit_{deal_id}", False)
