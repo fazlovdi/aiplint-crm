@@ -2445,12 +2445,26 @@ def _crm_workspace_tab_has_unsaved(tab):
         _suffix = (f"cdt_{args[0]}" if name == "deal_create_task_dialog" and args else
                    f"cct_{args[0]}" if name == "client_create_task_dialog" and args else
                    f"ccdt_{args[0]}" if args else "")
-        _dirty_prefixes = tuple(f"{k}_{_suffix}" for k in (
-            "nt_topic", "nt_mgr", "nt_city", "nt_addr", "nt_recv", "nt_rphone",
-            "nt_pay", "nt_amount", "nt_method", "nt_tk", "nt_c", "nt_prod",
-            "nt_order_calc", "nt_type"
+        _text_keys = tuple(f"{k}_{_suffix}" for k in (
+            "nt_topic", "nt_city", "nt_addr", "nt_recv", "nt_rphone",
+            "nt_amount", "nt_tk", "nt_c", "nt_prod"
         ))
-        if any(str(state.get(k, "") or "").strip() for k in _dirty_prefixes if k in state):
+        if any(str(state.get(k, "") or "").strip() for k in _text_keys):
+            return True
+        _mgr_key = f"nt_mgr_{_suffix}"
+        if state.get(_mgr_key) not in (None, ""):
+            return True
+        _type_key = f"nt_type_{_suffix}"
+        if state.get(_type_key) not in (None, "", "Связаться"):
+            return True
+        _pay_key = f"nt_pay_{_suffix}"
+        if state.get(_pay_key) not in (None, "", "Не выбрано"):
+            return True
+        _method_key = f"nt_method_{_suffix}"
+        if state.get(_method_key) not in (None, "", "Не выбрано"):
+            return True
+        _calc_key = f"nt_order_calc_{_suffix}"
+        if state.get(_calc_key) not in (None, ""):
             return True
         return any(state.get(str(k)) for k in state.keys()
                    if str(k).startswith(f"nt_file_{_suffix}_"))
@@ -2969,6 +2983,14 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     time_key = f"rem_time_{key_suffix}"
     recipient_key = f"rem_recipient_{key_suffix}"
     warning_key = f"rem_close_warning_{key_suffix}"
+    _rem_initial_key = f"_rem_initial_values_{key_suffix}"
+    if _rem_initial_key not in st.session_state:
+        st.session_state[_rem_initial_key] = {
+            "text": "",
+            "date": None,
+            "time": moscow_now().time().replace(second=0, microsecond=0),
+            "recipient": "",
+        }
 
     if not users:
         st.error("В CRM нет пользователей, которым можно назначить напоминание.")
@@ -3033,11 +3055,12 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
             if st.button("✕", key=f"rem_close_btn_{key_suffix}", use_container_width=True):
-                _has_unsaved = bool(
-                    str(st.session_state.get(text_key, "") or "").strip()
-                    or st.session_state.get(date_key) is not None
-                    or st.session_state.get(time_key) is not None
-                    or st.session_state.get(recipient_key) not in (None, "")
+                _rem_initial = st.session_state.get(_rem_initial_key, {})
+                _has_unsaved = (
+                    str(st.session_state.get(text_key, "") or "") != str(_rem_initial.get("text", "") or "")
+                    or st.session_state.get(date_key) != _rem_initial.get("date")
+                    or st.session_state.get(time_key, _rem_initial.get("time")) != _rem_initial.get("time")
+                    or st.session_state.get(recipient_key, "") != _rem_initial.get("recipient", "")
                 )
                 if _has_unsaved and not st.session_state.get(warning_key, False):
                     st.session_state[warning_key] = True
@@ -3058,6 +3081,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
             with _w1:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"rem_discard_{key_suffix}", use_container_width=True):
                     st.session_state.pop(warning_key, None)
+                    st.session_state.pop(_rem_initial_key, None)
                     for _k in (text_key, date_key, time_key, recipient_key):
                         st.session_state.pop(_k, None)
                     if st.session_state.get("_crm_pending_close"):
@@ -12460,6 +12484,7 @@ def client_detail_dialog(cl_id):
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
+                    st.session_state.pop(f"_client_extra_draft_{cl_id}", None)
                     _client_edit_prefixes = (
                         f"en_{cl_id}", f"ep_{cl_id}", f"cm_edit_{cl_id}", f"ee_{cl_id}",
                         f"ea_{cl_id}", f"ed_{cl_id}", f"ec_{cl_id}", f"client_source_edit_{cl_id}",
@@ -12536,10 +12561,14 @@ def create_deal_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cdlg_{cl_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
-    _has_unsaved = (
-        st.session_state.get(f"cdlg_title_{cl_id}", "").strip() or
-        st.session_state.get(f"cdlg_budget_{cl_id}", "").strip() or
-        st.session_state.get(f"cdlg_real_date_{cl_id}") is not None
+    _has_unsaved = bool(
+        str(st.session_state.get(f"cdlg_title_{cl_id}", "") or "").strip()
+        or str(st.session_state.get(f"cdlg_budget_{cl_id}", "") or "").strip()
+        or st.session_state.get(f"cdlg_real_date_{cl_id}") is not None
+        or st.session_state.get(f"cdlg_mgr_{cl_id}") not in (None, "")
+        or str(st.session_state.get(f"cdlg_comment_{cl_id}", "") or "").strip()
+        or st.session_state.get(f"cdlg_files_{cl_id}")
+        or st.session_state.get(f"cdlg_ps_{cl_id}") not in (None, "", "Не оплачено")
     )
     _close_css_key = f"close_row_{_key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
@@ -12650,10 +12679,7 @@ def deal_create_task_dialog(deal_id, client_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cdt_{deal_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
-    _has_unsaved = (
-        st.session_state.get(f"nt_topic_cdt_{deal_id}", "").strip() or
-        st.session_state.get(f"nt_c_cdt_{deal_id}", "").strip()
-    )
+    _has_unsaved = _crm_workspace_tab_has_unsaved({"name": "deal_create_task_dialog", "args": (deal_id, client_id)})
     _close_css_key = f"close_row_{_key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
@@ -12751,10 +12777,7 @@ def client_create_task_dialog(cl_id):
     st.session_state["_in_dialog"] = True
     _key_prefix = f"cct_{cl_id}"
     _show_close_warning = st.session_state.get(f"_show_close_warning_{_key_prefix}", False)
-    _has_unsaved = (
-        st.session_state.get(f"nt_topic_cct_{cl_id}", "").strip() or
-        st.session_state.get(f"nt_c_cct_{cl_id}", "").strip()
-    )
+    _has_unsaved = _crm_workspace_tab_has_unsaved({"name": "client_create_task_dialog", "args": (cl_id,)})
     _close_css_key = f"close_row_{_key_prefix}"
     st.markdown(f'<style>.st-key-{_close_css_key} .stButton > button {{ width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;font-size:1.1rem!important;line-height:1!important;background:#FFFFFF!important;border:1px solid #DCE0E5!important;border-radius:6px!important;color:#5A6B7D!important;display:flex!important;align-items:center!important;justify-content:center!important;margin:0!important; }} .st-key-{_close_css_key} .stButton > button:hover {{ background:#EEF0F3!important;border-color:#C9CFD7!important; }} .st-key-{_close_css_key} > div {{ gap:0!important; }}</style>', unsafe_allow_html=True)
     with st.container(key=_close_css_key):
