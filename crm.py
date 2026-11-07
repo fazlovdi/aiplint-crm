@@ -2308,10 +2308,14 @@ def _crm_workspace_save_remote(login, workspace):
 _CRM_WORKSPACE_REMOTE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-workspace-sync")
 
 def _crm_mark_widget_changed(widget_key, changed):
-    """Подсвечивает поле, если текущее значение отличается от сохранённого."""
-    if not changed:
-        return
+    """Подсвечивает только реально изменённое поле и снимает старую подсветку после сброса."""
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "-", str(widget_key))
+    if changed:
+        border_css = "border:2px solid #F59E0B!important;box-shadow:0 0 0 1px rgba(245,158,11,.12)!important;"
+    else:
+        # This rule is deliberately emitted on every rerun: otherwise CSS from an
+        # earlier changed state remains active even after the widget is reset.
+        border_css = "border:1px solid #DCE0E5!important;box-shadow:none!important;"
     st.markdown(
         f"<style>.st-key-{safe_key} input, .st-key-{safe_key} textarea, "
         f".st-key-{safe_key} [data-testid='stTextInput'] > div, "
@@ -2324,7 +2328,7 @@ def _crm_mark_widget_changed(widget_key, changed):
         f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'], "
         f".st-key-{safe_key} [data-testid='stFileUploader'] section, "
         f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'] button "
-        f"{{border:2px solid #F59E0B!important;box-shadow:0 0 0 1px rgba(245,158,11,.12)!important;}}"
+        f"{{{border_css}}}"
         f".st-key-{safe_key} [data-testid='stFileUploaderDropzone'] {{border-radius:10px!important;}}</style>",
         unsafe_allow_html=True,
     )
