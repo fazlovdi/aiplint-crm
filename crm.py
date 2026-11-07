@@ -9180,13 +9180,13 @@ def _ozon_signature(*parts):
     return hashlib.sha256(("".join("" if part is None else str(part) for part in parts) + secret).encode("utf-8")).hexdigest()
 
 
-def _ozon_request(path, payload):
+def _ozon_request(path, payload, timeout=30):
     cfg = _ozon_config()
     if not cfg.get("access_key") or not cfg.get("secret_key"):
         raise RuntimeError("Не настроены access_key и secret_key Ozon Pay в Streamlit Secrets.")
     url = cfg.get("base_url", "https://payapi.ozon.ru").rstrip("/") + "/" + path.lstrip("/")
     try:
-        response = requests.post(url, json=payload, headers={"Content-Type": "application/json", "Accept": "application/json"}, timeout=30)
+        response = requests.post(url, json=payload, headers={"Content-Type": "application/json", "Accept": "application/json"}, timeout=timeout)
     except requests.RequestException as exc:
         raise RuntimeError(f"Не удалось связаться с Ozon Pay: {exc}") from exc
     try:
@@ -9249,7 +9249,7 @@ def _ozon_create_payment(deal, calc):
     }
 
 
-def _ozon_refresh_status(record):
+def _ozon_refresh_status(record, timeout=30):
     cfg = _ozon_config()
     payment_id = str(record.get("payment_id") or "").strip()
     if not payment_id:
@@ -9257,7 +9257,7 @@ def _ozon_refresh_status(record):
     sign = _ozon_signature(payment_id, cfg.get("access_key", ""))
     response = _ozon_request("/v1/getPaymentDetails", {
         "accessKey": cfg["access_key"], "id": payment_id, "requestSign": sign,
-    })
+    }, timeout=timeout)
     data = response.get("data", response) if isinstance(response, dict) else {}
     items = data.get("items") or []
     statuses = [str(item.get("status", "")).upper() for item in items if isinstance(item, dict) and item.get("status")]
@@ -9318,7 +9318,7 @@ def _tochka_missing_config(required):
     return [key for key in required if not cfg.get(key)]
 
 
-def _tochka_request(method, path, payload=None, expect_pdf=False):
+def _tochka_request(method, path, payload=None, expect_pdf=False, timeout=30):
     cfg = _tochka_config()
     if not cfg.get("token"):
         raise RuntimeError("Не настроен токен Точка.API. Добавьте [tochka].token в Streamlit Secrets.")
@@ -9359,7 +9359,7 @@ def _tochka_request(method, path, payload=None, expect_pdf=False):
         _verify_bundle = str(_bundle_path)
     try:
         response = requests.request(
-            method, url, headers=headers, json=payload, timeout=30,
+            method, url, headers=headers, json=payload, timeout=timeout,
             verify=_verify_bundle,
         )
     except requests.RequestException as exc:
@@ -9607,16 +9607,16 @@ def _tochka_create_payment_link(deal, calc, requisites):
     }
 
 
-def _tochka_refresh_status(record):
+def _tochka_refresh_status(record, timeout=30):
     customer_code = urllib.parse.quote(str(record.get("customer_code") or _tochka_config().get("customer_code", "")), safe="")
     if record.get("kind") == "invoice":
         document_id = urllib.parse.quote(str(record.get("document_id", "")), safe="")
-        response = _tochka_request("GET", f"/invoice/v1.0/bills/{customer_code}/{document_id}/payment-status")
+        response = _tochka_request("GET", f"/invoice/v1.0/bills/{customer_code}/{document_id}/payment-status", timeout=timeout)
         data = _tochka_data(response)
         status = data.get("status") or data.get("paymentStatus") or data.get("payment_status")
     else:
         operation_id = urllib.parse.quote(str(record.get("operation_id", "")), safe="")
-        response = _tochka_request("GET", f"/acquiring/v1.0/payments/{operation_id}")
+        response = _tochka_request("GET", f"/acquiring/v1.0/payments/{operation_id}", timeout=timeout)
         data = _tochka_data(response)
         operations = data.get("Operation") or data.get("operation") or []
         if isinstance(operations, list) and operations:
@@ -9749,6 +9749,7 @@ def _tochka_auto_refresh_payment_status(deal, calc):
     """Проверяет неоплаченные документы не чаще раза в минуту, не блокируя повторную навигацию при сбое API."""
     changed = False
     _attempts = st.session_state.setdefault("_crm_payment_status_attempts", {})
+    _deal_attempts = st.session_state.setdefault("_crm_payment_status_deal_attempts", {})
     _now_ts = moscow_now().timestamp()
     for record in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []):
         if record.get("deleted"):
@@ -9779,14 +9780,23 @@ def _tochka_auto_refresh_payment_status(deal, calc):
             _last_attempt = 0
         if _now_ts - _last_attempt < 60:
             continue
+        try:
+            _last_deal_attempt = float(_deal_attempts.get(str(deal.get("id")), 0) or 0)
+        except (TypeError, ValueError):
+            _last_deal_attempt = 0
+        if _now_ts - _last_deal_attempt < 60:
+            continue
+        # One bounded network request per deal per minute; tab switching must not
+        # serially wait on every invoice/payment document in the same deal.
         _attempts[_attempt_key] = _now_ts
+        _deal_attempts[str(deal.get("id"))] = _now_ts
 
         try:
             old_status = str(record.get("status", ""))
             if record.get("bank") == "Ozon Pay":
-                _ozon_refresh_status(record)
+                _ozon_refresh_status(record, timeout=5)
             else:
-                _tochka_refresh_status(record)
+                _tochka_refresh_status(record, timeout=5)
             if str(record.get("status", "")) != old_status:
                 changed = True
             if _tochka_apply_paid_status(deal, record):
