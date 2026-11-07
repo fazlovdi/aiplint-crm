@@ -2460,6 +2460,13 @@ def _crm_workspace_tab_has_unsaved(tab):
         ))
         if any(str(state.get(k, "") or "").strip() for k in _text_keys):
             return True
+        _date_key = f"nt_d_{_suffix}"
+        _date_baseline_key = f"_nt_d_initial_{_suffix}"
+        if _date_key in state and _date_baseline_key in state:
+            _date_value = state.get(_date_key)
+            _date_value = _date_value.isoformat() if hasattr(_date_value, "isoformat") and _date_value else ""
+            if str(_date_value) != str(state.get(_date_baseline_key) or ""):
+                return True
         _mgr_key = f"nt_mgr_{_suffix}"
         if state.get(_mgr_key) not in (None, ""):
             return True
@@ -7709,7 +7716,10 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
             _crm_mark_widget_changed(f"nt_mgr_{key_suffix}", bool(ntm))
             ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
-            _crm_mark_widget_changed(f"nt_d_{key_suffix}", ntd is not None)
+            _nt_date_baseline_key = f"_nt_d_initial_{key_suffix}"
+            if _nt_date_baseline_key not in st.session_state:
+                st.session_state[_nt_date_baseline_key] = ntd.isoformat() if ntd else ""
+            _crm_mark_widget_changed(f"nt_d_{key_suffix}", (ntd.isoformat() if ntd else "") != str(st.session_state.get(_nt_date_baseline_key, "") or ""))
             _selected_calc_id_new = ""
             if ntype in ("Отправить заказ", "Отправить образцы"):
                 _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
@@ -12734,7 +12744,7 @@ def deal_create_task_dialog(deal_id, client_id):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     if st.session_state.get("_crm_pending_close"):
                         for _wk in list(st.session_state.keys()):
-                            if str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk):
+                            if (str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk)) or str(_wk) == f"_nt_d_initial_{_key_prefix}":
                                 st.session_state.pop(_wk, None)
                         for _wk in (f"nt_form_initialized_{_key_prefix}", f"nt_order_calc_{_key_prefix}", f"nt_last_products_calc_{_key_prefix}", f"nt_prod_{_key_prefix}"):
                             st.session_state.pop(_wk, None)
