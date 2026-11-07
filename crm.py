@@ -2470,6 +2470,11 @@ def _crm_workspace_tab_has_unsaved(tab):
         _mgr_key = f"nt_mgr_{_suffix}"
         if state.get(_mgr_key) not in (None, ""):
             return True
+        if name == "client_create_deal_task_dialog":
+            _deal_sel_key = f"ccdt_deal_sel_{args[0]}"
+            _deal_initial_key = f"_ccdt_deal_initial_{args[0]}"
+            if _deal_sel_key in state and _deal_initial_key in state and state.get(_deal_sel_key) != state.get(_deal_initial_key):
+                return True
         _type_key = f"nt_type_{_suffix}"
         if state.get(_type_key) not in (None, "", "Связаться"):
             return True
@@ -12640,6 +12645,9 @@ def create_deal_dialog(cl_id):
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
+                        for _wk in list(st.session_state.keys()):
+                            if str(_wk).startswith("cdlg_") and str(cl_id) in str(_wk):
+                                st.session_state.pop(_wk, None)
                         _pop_dialog_return()
                         st.session_state.pop("dialog_create_deal_from_client", None)
                         st.session_state["_in_dialog"] = False
@@ -12760,6 +12768,9 @@ def deal_create_task_dialog(deal_id, client_id):
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
+                        for _wk in list(st.session_state.keys()):
+                            if (str(_wk).startswith("nt_") and f"_cdt_{deal_id}" in str(_wk)) or str(_wk) == f"_nt_d_initial_cdt_{deal_id}":
+                                st.session_state.pop(_wk, None)
                         _pop_dialog_return()
                         st.session_state.pop("dialog_create_deal_task_deal_id", None)
                         st.session_state.pop("dialog_create_deal_task_client_id", None)
@@ -12853,6 +12864,9 @@ def client_create_task_dialog(cl_id):
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
+                        for _wk in list(st.session_state.keys()):
+                            if (str(_wk).startswith("nt_") and f"_cct_{cl_id}" in str(_wk)) or str(_wk) == f"_nt_d_initial_cct_{cl_id}":
+                                st.session_state.pop(_wk, None)
                         _pop_dialog_return()
                         st.session_state.pop("dialog_create_client_task_client_id", None)
                         st.session_state["_in_dialog"] = False
@@ -12919,12 +12933,19 @@ def client_create_deal_task_dialog(cl_id):
                             if (str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk)) or str(_wk) == f"_nt_d_initial_{_key_prefix}":
                                 st.session_state.pop(_wk, None)
                         st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                        st.session_state.pop(f"ccdt_deal_sel_{cl_id}", None)
+                        st.session_state.pop(f"_ccdt_deal_initial_{cl_id}", None)
                         st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
+                        for _wk in list(st.session_state.keys()):
+                            if (str(_wk).startswith("nt_") and f"_ccdt_{cl_id}" in str(_wk)) or str(_wk) == f"_nt_d_initial_ccdt_{cl_id}":
+                                st.session_state.pop(_wk, None)
                         _pop_dialog_return()
                         st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                        st.session_state.pop(f"ccdt_deal_sel_{cl_id}", None)
+                        st.session_state.pop(f"_ccdt_deal_initial_{cl_id}", None)
                         st.session_state["_in_dialog"] = False
                         st.rerun()
             with _wcol2:
@@ -12934,6 +12955,10 @@ def client_create_deal_task_dialog(cl_id):
                     _crm_workspace_rerun()
     deal_options = {d["id"]: d.get("deal_number", d.get("title", "")) for d in cl_deals}
     selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"ccdt_deal_sel_{cl_id}")
+    _ccdt_deal_baseline_key = f"_ccdt_deal_initial_{cl_id}"
+    if _ccdt_deal_baseline_key not in st.session_state:
+        st.session_state[_ccdt_deal_baseline_key] = selected_deal_id
+    _crm_mark_widget_changed(f"ccdt_deal_sel_{cl_id}", selected_deal_id != st.session_state.get(_ccdt_deal_baseline_key))
     _created_task = None
     if selected_deal_id:
         _created_task = render_task_form(selected_deal_id, cl_id, f"ccdt_{cl_id}")
