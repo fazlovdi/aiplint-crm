@@ -2384,9 +2384,26 @@ def _crm_workspace_tab_has_unsaved(tab):
         deal_id = str(deal.get("id", ""))
         prefix = str(args[3]) if len(args) > 3 else f"deal_{deal_id}"
         if state.get(f"dls_show_edit_{deal_id}"):
-            return True
+            _title_key = f"dls_et_{deal_id}"
+            _budget_key = f"dls_eb_{deal_id}"
+            _real_date_key = f"deal_real_date_detail_{deal_id}"
+            _saved_budget = str(deal.get("budget", 0)) if deal.get("budget", 0) > 0 else ""
+            if _title_key in state and str(state.get(_title_key) or "") != str(deal.get("deal_title", "") or ""):
+                return True
+            if _budget_key in state and str(state.get(_budget_key) or "") != _saved_budget:
+                return True
+            if _real_date_key in state:
+                _rd = state.get(_real_date_key)
+                _rd = _rd.isoformat() if hasattr(_rd, "isoformat") and _rd else ""
+                if str(_rd) != str(deal.get("real_date") or ""):
+                    return True
         payment_key = f"ps_{deal_id}"
         if payment_key in state and str(state.get(payment_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
+            return True
+        _manager_key = f"deal_mgr_inline_{deal_id}"
+        if _manager_key in state and str(state.get(_manager_key) or "") != str(deal.get("manager") or ""):
+            return True
+        if any(state.get(str(_k)) for _k in state.keys() if str(_k).startswith(f"dls_up_{deal_id}_")):
             return True
         return bool(str(state.get(f"dls_dc_input_{deal_id}", "") or "").strip()
                     or str(state.get(f"dls_pause_reason_{deal_id}", "") or "").strip()
@@ -2400,7 +2417,12 @@ def _crm_workspace_tab_has_unsaved(tab):
         calc = next((x for x in (deal or {}).get("calculations", []) if str(x.get("id")) == calc_id), None)
         return bool(calc and calc.get("_draft"))
     if name == "client_detail_dialog" and args:
-        return bool(state.get(f"show_edit_{args[0]}"))
+        _cid = str(args[0])
+        if state.get(f"show_edit_{_cid}"):
+            return True
+        if str(state.get(f"new_cc_input_{_cid}", "") or "").strip() or state.get(f"cf_up_{_cid}"):
+            return True
+        return False
     return False
 
 def _crm_workspace_prompt_close(window, tab_index, mode):
@@ -3006,10 +3028,12 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     logins = [u["login"] for u in users]
     names = {u["login"]: u.get("name") or u["login"] for u in users}
-    st.text_area("О чём напомнить?", key=text_key, height=68, label_visibility="visible")
+    _rem_text_value = st.text_area("О чём напомнить?", key=text_key, height=68, label_visibility="visible")
+    _crm_mark_widget_changed(text_key, bool(str(_rem_text_value or "").strip()))
     c1, c2 = st.columns(2)
     with c1:
         due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key, help=None)
+        _crm_mark_widget_changed(date_key, st.session_state.get(date_key) is not None)
         st.caption("Выберите дату: день, месяц и год")
     with c2:
         due_time = st.time_input("Время", value=moscow_now().time().replace(second=0, microsecond=0), key=time_key, help=None)
@@ -3018,6 +3042,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
     recipient = st.selectbox("Получатель", recipient_options, index=0,
         format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
         key=recipient_key, placeholder="Выберите получателя")
+    _crm_mark_widget_changed(recipient_key, bool(recipient))
 
     if st.button("Создать напоминание", key=f"rem_save_{key_suffix}", type="primary", use_container_width=True):
         errors = []
@@ -3206,19 +3231,21 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
 
     if str(st.session_state.get(status_key, current_status) or "") != str(current_status or ""):
         st.markdown(f"<style>.st-key-{status_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
-    st.selectbox(
+    new_status = st.selectbox(
         "Статус",
         options=statuses,
         index=statuses.index(current_status) if current_status in statuses else None,
         placeholder="Выберите статус",
         key=status_key,
     )
-    st.date_input(
+    _crm_mark_widget_changed(status_key, str(new_status or "") != str(current_status or ""))
+    new_date = st.date_input(
         "Ориентировочная дата отправки",
         value=current_date,
         format="DD.MM.YYYY",
         key=date_key,
     )
+    _crm_mark_widget_changed(date_key, (new_date.isoformat() if new_date else "") != str(current_date_raw or ""))
     if st.button("Применить", key=f"apply_shipping_fields_{key_prefix}", type="primary", use_container_width=True):
         if _persist_shipping_fields():
             st.rerun()
@@ -3322,15 +3349,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.subheader(_task_header)
                     if t.get("needs_rework") and not t.get("done"):
                         st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
-                    if st.button(f"{_deal_num}", key=_deal_link_key, type="secondary"):
-                        # Сохраняем окно задачи, чтобы кнопка закрытия сделки вернула пользователя к задаче.
-                        _push_dialog_return()
-                        st.session_state.active_tab = "Сделки"
-                        st.session_state["dialog_deal_key"] = _deal_id
-                        st.session_state.pop("dialog_task_key", None)
-                        st.session_state.pop("_open_created_task", None)
-                        st.session_state["_in_dialog"] = False
-                        st.rerun()
                     st.markdown(format_created_date(t), unsafe_allow_html=True)
                     if not show_edit_task:
                         if _tp not in ("Отправить заказ", "Отправить образцы"):
@@ -3377,6 +3395,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     _selected_calc_id_edit, et_products = render_task_products_editor(
                         d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
                     )
+                    _crm_mark_widget_changed(f"edit_order_calc_{key_prefix}", str(_selected_calc_id_edit or "") != str(t.get("calculation_id", "") or ""))
+                    _crm_mark_widget_changed(f"edit_prod_{key_prefix}", str(et_products or "") != str(t.get("products", "") or ""))
                     et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
                     _crm_mark_widget_changed(f"edit_city_{key_prefix}", str(et_city) != str(t.get("ship_city", "")))
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
@@ -3386,12 +3406,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
                     _crm_mark_widget_changed(f"edit_rphone_{key_prefix}", str(et_rphone) != str(t.get("receiver_phone", "")))
                     et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
+                    _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
                     _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
                     _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
                     _amount_key_edit = f"edit_amount_{key_prefix}"
                     if _auto_amount_edit > 0:
                         st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
                     et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
+                    _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != (f"{float(t.get('order_amount', 0) or 0):g}" if t.get("order_amount", 0) else ""))
                 else:
                     et_products = t.get("products", "")
                     et_city = t.get("ship_city", "")
@@ -3403,8 +3425,10 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 _edit_delivery_col, _edit_track_col = st.columns([1, 1])
                 with _edit_delivery_col:
                     et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
                 with _edit_track_col:
                     et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
                 _save_col, _cancel_col = st.columns(2)
                 with _save_col:
                     if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
@@ -3658,6 +3682,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 st.session_state[f"tc_input_{key_prefix}"] = ""
                 st.session_state[tc_clr_key] = False
             ntc = st.text_input("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"tc_input_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439...")
+            _crm_mark_widget_changed(f"tc_input_{key_prefix}", bool(str(ntc or "").strip()))
             if st.button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", key=f"tc_btn_{key_prefix}", use_container_width=True):
                 if ntc.strip():
                     t.setdefault("task_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
@@ -3673,6 +3698,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             st.markdown("**Добавить файлы в задачу:**")
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
             ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
             _task_file_upload_col, _task_file_pick_col = st.columns(2)
             with _task_file_upload_col:
                 if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
@@ -7637,6 +7663,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 _receiver_row, _picker_row = st.columns([4, 1.5])
                 with _receiver_row:
                     nreceiver = st.text_input("Получатель:", key=f"nt_recv_{key_suffix}")
+    _crm_mark_widget_changed(f"nt_recv_{key_suffix}", bool(str(nreceiver or "").strip()))
                 with _picker_row:
                     st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
                     if st.button("Выбрать клиента", key=f"nt_choose_client_{key_suffix}", use_container_width=True):
@@ -7651,6 +7678,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 if _auto_amount_new > 0:
                     st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
                 norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
+    _crm_mark_widget_changed(_amount_key_new, bool(str(norder_amount or "").strip()))
             else:
                 nproducts = ""
                 nship_city = ""
@@ -7670,6 +7698,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             st.markdown("**Добавление файлов**")
             _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
             ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
+    _crm_mark_widget_changed(f"nt_file_{key_suffix}_{_nt_file_ver}", bool(ntf))
             if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
                 if ntf:
                     _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
@@ -10871,19 +10900,18 @@ def render_deal_detail(d, cl, cu, key_prefix):
             st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
             st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
             _real_date_current = parse_optional_date(d.get("real_date", ""))
-            _real_date_selected = st.date_input(
-                "Реальная дата сделки:",
-                value=_real_date_current,
-                format="DD.MM.YYYY",
-                key=f"deal_real_date_detail_{deal_id}",
-            )
-            _crm_mark_widget_changed(f"deal_real_date_detail_{deal_id}", (_real_date_selected.isoformat() if _real_date_selected else "") != str(d.get("real_date") or ""))
-            _real_date_stored = _real_date_selected.isoformat() if _real_date_selected else ""
-            if _real_date_stored != str(d.get("real_date") or ""):
-                d["real_date"] = _real_date_stored
-                d["last_modified"] = now_str()
-                d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Реальная дата сделки"})
-                commit_and_rerun(st.session_state.crm_store, "Реальная дата сделки обновлена")
+            show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
+            if show_edit_deal:
+                _real_date_selected = st.date_input(
+                    "Реальная дата сделки:",
+                    value=_real_date_current,
+                    format="DD.MM.YYYY",
+                    key=f"deal_real_date_detail_{deal_id}",
+                )
+                _crm_mark_widget_changed(f"deal_real_date_detail_{deal_id}", (_real_date_selected.isoformat() if _real_date_selected else "") != str(d.get("real_date") or ""))
+            else:
+                st.markdown(f"**Реальная дата сделки:** {format_date(d.get('real_date', '')) or '—'}")
+                _real_date_selected = _real_date_current
             ps = d.get("payment_status", "Не оплачено")
             _ps_widget_key_dd = f"dls_ps_{deal_id}"
             _ps_model_key_dd = f"_dls_ps_last_model_{deal_id}"
@@ -10924,6 +10952,8 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
                         d["deal_title"] = et
                         d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
+                        _real_date_save = st.session_state.get(f"deal_real_date_detail_{deal_id}", parse_optional_date(d.get("real_date", "")))
+                        d["real_date"] = _real_date_save.isoformat() if _real_date_save else ""
                         d["last_modified"] = now_str()
                         d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Тема, бюджет"})
                         st.session_state[f"dls_show_edit_{deal_id}"] = False
@@ -10994,6 +11024,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.session_state[f"dls_dc_input_{deal_id}"] = ""
                 st.session_state[dc_clr_key] = False
             nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"dls_dc_input_{deal_id}", bool(str(nc or "").strip()))
             _dcc1, _dcc_btn, _dcc2 = st.columns([1, 2, 1])
             with _dcc_btn:
                 _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
@@ -11012,6 +11043,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             st.markdown("**Загрузить файлы:**")
             df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
             udf = st.file_uploader("Выберите файлы:", key=f"dls_up_{deal_id}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"dls_up_{deal_id}_{df_ver}", bool(udf))
             _du1, _du_btn, _du2 = st.columns([1, 2, 1])
             with _du_btn:
                 _du_clicked = st.button("Загрузить", key=f"dls_upbtn_{deal_id}", use_container_width=True)
@@ -11079,6 +11111,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
                 if _stage_now != "На паузе":
                     _pause_reason = st.text_area("Причина:", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы")
+                    _crm_mark_widget_changed(f"dls_pause_reason_{deal_id}", bool(str(_pause_reason or "").strip()))
                 else:
                     _pause_reason = ""
                 _pause_spacer1, _pause_btn_col, _pause_spacer2 = st.columns([1, 2, 1])
@@ -11135,48 +11168,72 @@ def render_client_card_expanded(cl):
                 with _cat_col:
                     ec_idx = CATEGORIES.index(cl.get('category', 'Не определён')) if cl.get('category', 'Не определён') in CATEGORIES else 0
                     ec = st.selectbox("Категория", CATEGORIES, index=ec_idx, key=f"ec_{cl['id']}")
+                    _crm_mark_widget_changed(f"ec_{cl['id']}", str(ec) != str(cl.get("category", "Не определён")))
                 with _promo_col:
                     promo_code = st.text_input("Промокод", value=cl.get('promo_code', ''), key=f"promo_code_{cl['id']}")
+                    _crm_mark_widget_changed(f"promo_code_{cl['id']}", str(promo_code or "") != str(cl.get("promo_code", "") or ""))
                 _source_current = cl.get("source", "")
                 _source_idx = CLIENT_SOURCE_OPTIONS.index(_source_current) + 1 if _source_current in CLIENT_SOURCE_OPTIONS else 0
                 source_edit = st.selectbox("Источник:", [""] + CLIENT_SOURCE_OPTIONS, index=_source_idx, key=f"client_source_edit_{cl['id']}", placeholder="Выберите источник")
+                _crm_mark_widget_changed(f"client_source_edit_{cl['id']}", str(source_edit or "") != str(cl.get("source", "") or ""))
                 em = st.selectbox("Ответственный:", get_managers_list(), index=0 if cl.get('manager', '') not in get_managers_list() else (get_managers_list()).index(cl.get('manager', '')), key=f"em_{cl['id']}", placeholder=MGR_PLACEHOLDER)
+                _crm_mark_widget_changed(f"em_{cl['id']}", str(em or "") != str(cl.get("manager", "") or ""))
                 st.markdown("---")
-                # Доп. телефоны, Email, адреса — те же, что в окне создания клиента
+                # Дополнительные контакты редактируются в черновике и применяются только по кнопке «Сохранить».
+                _extra_draft_key = f"_client_extra_draft_{cl['id']}"
+                if _extra_draft_key not in st.session_state:
+                    st.session_state[_extra_draft_key] = json.loads(json.dumps({
+                        "extra_phones": cl.get("extra_phones", []),
+                        "extra_emails": cl.get("extra_emails", []),
+                        "extra_addresses": cl.get("extra_addresses", []),
+                    }, ensure_ascii=False))
+                _extra_draft = st.session_state[_extra_draft_key]
                 _eph, _eem, _ead = st.columns(3)
                 with _eph:
                     st.markdown("**Доп. телефоны**")
-                    _ep_list = cl.get('extra_phones', [])
+                    _ep_list = _extra_draft.get('extra_phones', [])
                     for i, p in enumerate(_ep_list):
-                        p['phone'] = st.text_input(f"Телефон #{i+1}", value=p.get('phone', ''), key=f"ep_phone_{cl['id']}_{i}")
-                        p['name'] = st.text_input(f"ФИО #{i+1}", value=p.get('name', ''), key=f"ep_name_{cl['id']}_{i}")
-                        p['role'] = st.text_input(f"Должность #{i+1}", value=p.get('role', ''), key=f"ep_role_{cl['id']}_{i}")
+                        p_phone = st.text_input(f"Телефон #{i+1}", value=p.get('phone', ''), key=f"ep_phone_{cl['id']}_{i}")
+                        _crm_mark_widget_changed(f"ep_phone_{cl['id']}_{i}", str(p_phone or "") != str(p.get("phone", "") or ""))
+                        p_name = st.text_input(f"ФИО #{i+1}", value=p.get('name', ''), key=f"ep_name_{cl['id']}_{i}")
+                        _crm_mark_widget_changed(f"ep_name_{cl['id']}_{i}", str(p_name or "") != str(p.get("name", "") or ""))
+                        p_role = st.text_input(f"Должность #{i+1}", value=p.get('role', ''), key=f"ep_role_{cl['id']}_{i}")
+                        _crm_mark_widget_changed(f"ep_role_{cl['id']}_{i}", str(p_role or "") != str(p.get("role", "") or ""))
                     _add_ep_key = f"add_ep_btn_{cl['id']}"
                     if st.button("Добавить телефон", key=_add_ep_key):
-                        cl.setdefault('extra_phones', []).append({"phone": "", "name": "", "role": ""})
+                        _extra_draft.setdefault("extra_phones", []).append({"phone": "", "name": "", "role": ""})
+                        st.session_state[_extra_draft_key] = _extra_draft
                         st.rerun()
                 with _eem:
                     st.markdown("**Доп. Email**")
-                    _ee_list = cl.get('extra_emails', [])
+                    _ee_list = _extra_draft.get('extra_emails', [])
                     for i, e in enumerate(_ee_list):
-                        cl['extra_emails'][i] = st.text_input(f"Email #{i+1}", value=e, key=f"ee_val_{cl['id']}_{i}")
+                        _ee_value = st.text_input(f"Email #{i+1}", value=e, key=f"ee_val_{cl['id']}_{i}")
+                        _crm_mark_widget_changed(f"ee_val_{cl['id']}_{i}", str(_ee_value or "") != str(e or ""))
                     _add_ee_key = f"add_ee_btn_{cl['id']}"
                     if st.button("Добавить Email", key=_add_ee_key):
-                        cl.setdefault('extra_emails', []).append("")
+                        _extra_draft.setdefault('extra_emails', []).append("")
+                        st.session_state[_extra_draft_key] = _extra_draft
                         st.rerun()
                 with _ead:
                     st.markdown("**Доп. адреса**")
-                    _ea_list = cl.get('extra_addresses', [])
+                    _ea_list = _extra_draft.get('extra_addresses', [])
                     for i, a in enumerate(_ea_list):
                         if isinstance(a, dict):
-                            a['address'] = st.text_input(f"Адрес #{i+1}", value=a.get('address', ''), key=f"ea_addr_{cl['id']}_{i}")
-                            a['resp_name'] = st.text_input(f"Ответственный #{i+1}", value=a.get('resp_name', ''), key=f"ea_rn_{cl['id']}_{i}")
-                            a['resp_role'] = st.text_input(f"Должность #{i+1}", value=a.get('resp_role', ''), key=f"ea_rr_{cl['id']}_{i}")
-                            a['resp_phone'] = st.text_input(f"Телефон #{i+1}", value=a.get('resp_phone', ''), key=f"ea_rp_{cl['id']}_{i}")
-                            a['resp_email'] = st.text_input(f"Email #{i+1}", value=a.get('resp_email', ''), key=f"ea_re_{cl['id']}_{i}")
+                            a_addr = st.text_input(f"Адрес #{i+1}", value=a.get('address', ''), key=f"ea_addr_{cl['id']}_{i}")
+                            _crm_mark_widget_changed(f"ea_addr_{cl['id']}_{i}", str(a_addr or "") != str(a.get("address", "") or ""))
+                            a_name = st.text_input(f"Ответственный #{i+1}", value=a.get('resp_name', ''), key=f"ea_rn_{cl['id']}_{i}")
+                            _crm_mark_widget_changed(f"ea_rn_{cl['id']}_{i}", str(a_name or "") != str(a.get("resp_name", "") or ""))
+                            a_role = st.text_input(f"Должность #{i+1}", value=a.get('resp_role', ''), key=f"ea_rr_{cl['id']}_{i}")
+                            _crm_mark_widget_changed(f"ea_rr_{cl['id']}_{i}", str(a_role or "") != str(a.get("resp_role", "") or ""))
+                            a_phone = st.text_input(f"Телефон #{i+1}", value=a.get('resp_phone', ''), key=f"ea_rp_{cl['id']}_{i}")
+                            _crm_mark_widget_changed(f"ea_rp_{cl['id']}_{i}", str(a_phone or "") != str(a.get("resp_phone", "") or ""))
+                            a_email = st.text_input(f"Email #{i+1}", value=a.get('resp_email', ''), key=f"ea_re_{cl['id']}_{i}")
+                            _crm_mark_widget_changed(f"ea_re_{cl['id']}_{i}", str(a_email or "") != str(a.get("resp_email", "") or ""))
                     _add_ea_key = f"add_ea_btn_{cl['id']}"
                     if st.button("Добавить адрес", key=_add_ea_key):
-                        cl.setdefault('extra_addresses', []).append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
+                        _extra_draft.setdefault('extra_addresses', []).append({"address": "", "resp_name": "", "resp_role": "", "resp_phone": "", "resp_email": ""})
+                        st.session_state[_extra_draft_key] = _extra_draft
                         st.rerun()
                 st.markdown("---")
                 _ces_col, _cec_col = st.columns(2)
@@ -11193,7 +11250,30 @@ def render_client_card_expanded(cl):
                         cl['source'] = source_edit
                         cl['promo_code'] = promo_code.strip()
                         cl['manager'] = em
-                        # Доп. телефоны, email, адреса уже обновлены через session_state
+                        _extra_draft["extra_phones"] = [
+                            {"phone": st.session_state.get(f"ep_phone_{cl['id']}_{i}", p.get("phone", "")),
+                             "name": st.session_state.get(f"ep_name_{cl['id']}_{i}", p.get("name", "")),
+                             "role": st.session_state.get(f"ep_role_{cl['id']}_{i}", p.get("role", ""))}
+                            for i, p in enumerate(_extra_draft.get("extra_phones", []))
+                        ]
+                        _extra_draft["extra_emails"] = [
+                            st.session_state.get(f"ee_val_{cl['id']}_{i}", e)
+                            for i, e in enumerate(_extra_draft.get("extra_emails", []))
+                        ]
+                        _extra_draft["extra_addresses"] = [
+                            ({**a,
+                              "address": st.session_state.get(f"ea_addr_{cl['id']}_{i}", a.get("address", "")),
+                              "resp_name": st.session_state.get(f"ea_rn_{cl['id']}_{i}", a.get("resp_name", "")),
+                              "resp_role": st.session_state.get(f"ea_rr_{cl['id']}_{i}", a.get("resp_role", "")),
+                              "resp_phone": st.session_state.get(f"ea_rp_{cl['id']}_{i}", a.get("resp_phone", "")),
+                              "resp_email": st.session_state.get(f"ea_re_{cl['id']}_{i}", a.get("resp_email", ""))}
+                             if isinstance(a, dict) else a)
+                            for i, a in enumerate(_extra_draft.get("extra_addresses", []))
+                        ]
+                        cl["extra_phones"] = _extra_draft.get("extra_phones", [])
+                        cl["extra_emails"] = _extra_draft.get("extra_emails", [])
+                        cl["extra_addresses"] = _extra_draft.get("extra_addresses", [])
+                        st.session_state.pop(_extra_draft_key, None)
                         cl["last_modified"] = now_str()
                         _actor = st.session_state.get("user_name", st.session_state.get("user_login", ""))
                         cl.setdefault("change_log", []).append({"date": now_str(), "author": _actor, "fields": "ФИО / Компания, телефон, способ связи, email, адрес, скидка, категория, источник, ответственный"})
@@ -11202,6 +11282,11 @@ def render_client_card_expanded(cl):
                 with _cec_col:
                     if st.button("Отменить", key=f"ec_cancel_{cl['id']}", use_container_width=True):
                         st.session_state[f"show_edit_{cl['id']}"] = False
+                        st.session_state.pop(f"_client_extra_draft_{cl['id']}", None)
+                        for _prefix in (f"ep_phone_{cl['id']}_", f"ep_name_{cl['id']}_", f"ep_role_{cl['id']}_", f"ee_val_{cl['id']}_", f"ea_addr_{cl['id']}_", f"ea_rn_{cl['id']}_", f"ea_rr_{cl['id']}_", f"ea_rp_{cl['id']}_", f"ea_re_{cl['id']}_"):
+                            for _wk in list(st.session_state.keys()):
+                                if str(_wk).startswith(_prefix):
+                                    st.session_state.pop(_wk, None)
                         st.rerun()
                 if st.session_state.user_role in ("admin", "director"):
                     st.markdown("---")
@@ -11272,6 +11357,7 @@ def render_client_card_expanded(cl):
                 st.session_state[f"new_cc_input_{cl['id']}"] = ""
                 st.session_state[cc_clr_key] = False
             nci = st.text_area("Комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"new_cc_input_{cl['id']}", bool(str(nci or "").strip()))
             _cc_sp1, _cc_btn_col, _cc_sp2 = st.columns([1, 2, 1])
             with _cc_btn_col:
                 _cc_clicked = st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True)
@@ -11288,6 +11374,7 @@ def render_client_card_expanded(cl):
             render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True)
             st.markdown("**Загрузить файлы:**")
             ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}", accept_multiple_files=True, label_visibility="collapsed")
+            _crm_mark_widget_changed(f"cf_up_{cl['id']}", bool(ucf))
             _sf_sp1, _sf_btn_col, _sf_sp2 = st.columns([1, 2, 1])
             with _sf_btn_col:
                 _sf_clicked = st.button("Сохранить файлы", key=f"cf_btn_{cl['id']}", use_container_width=True)
@@ -12220,6 +12307,7 @@ def _crm_deal_responsible_fragment(d, deal_id):
         key=widget_key,
         placeholder=MGR_PLACEHOLDER,
     )
+    _crm_mark_widget_changed(widget_key, str(new_mgr or "") != str(current_mgr or ""))
     if st.button("Делегировать", key=f"deal_mgr_delegate_{deal_id}", type="primary", use_container_width=True):
         if new_mgr and new_mgr != current_mgr:
             d["manager"] = new_mgr
@@ -12440,14 +12528,21 @@ def create_deal_dialog(cl_id):
     _deal_create_left, _deal_create_right = st.columns(2)
     with _deal_create_left:
         cd_title = st.text_input("Тема:", key=f"cdlg_title_{cl_id}")
+        _crm_mark_widget_changed(f"cdlg_title_{cl_id}", bool(str(cd_title or "").strip()))
         cd_real_date = st.date_input("Реальная дата сделки:", value=None, format="DD.MM.YYYY", key=f"cdlg_real_date_{cl_id}")
+        _crm_mark_widget_changed(f"cdlg_real_date_{cl_id}", cd_real_date is not None)
         cd_mgr = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"cdlg_mgr_{cl_id}", placeholder=MGR_PLACEHOLDER)
+        _crm_mark_widget_changed(f"cdlg_mgr_{cl_id}", bool(cd_mgr))
         cd_budget = st.text_input("Бюджет (руб.):", value="", key=f"cdlg_budget_{cl_id}", placeholder="Введите сумму")
+        _crm_mark_widget_changed(f"cdlg_budget_{cl_id}", bool(str(cd_budget or "").strip()))
         cd_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=0, key=f"cdlg_ps_{cl_id}")
+        _crm_mark_widget_changed(f"cdlg_ps_{cl_id}", str(cd_ps) != "Не оплачено")
     with _deal_create_right:
         st.markdown("**Комментарии**")
         cd_comment = st.text_area("Комментарий:", key=f"cdlg_comment_{cl_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+        _crm_mark_widget_changed(f"cdlg_comment_{cl_id}", bool(str(cd_comment or "").strip()))
         cd_files = st.file_uploader("Файлы сделки:", key=f"cdlg_files_{cl_id}", accept_multiple_files=True)
+        _crm_mark_widget_changed(f"cdlg_files_{cl_id}", bool(cd_files))
     if st.button("Создать", key=f"cdlg_go_{cl_id}", use_container_width=True, type="primary"):
         deals = st.session_state.crm_store.get("deals", [])
         did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
