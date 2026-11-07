@@ -15546,11 +15546,14 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button:hover {
             color:#BC1661 !important;
         }
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"]:has([data-testid="stBaseButton-primary"]) {
+        /* Active state comes from the keyed wrapper, not Streamlit's button type.
+           This avoids stale primary-button styling after fragment rerenders. */
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"][class*="__isactive"] {
             border-color:#BC1661 !important;
+            background:#FFFFFF !important;
         }
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"]:has([data-testid="stBaseButton-primary"]) button {
-            color:#BC1661 !important;
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"][class*="__isactive"] button {
+            color:#BC1661 !important; font-weight:600 !important;
         }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] {
             position:absolute !important; top:0 !important; right:0 !important;
@@ -15576,11 +15579,11 @@ def _crm_render_workspace_fragment():
             with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:32]
-                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'active' if _i == _active_index else 'inactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                         st.button(
                             _tab_title,
-                            key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}_{'active' if _i == _active_index else 'inactive'}",
-                            type="primary" if _i == _active_index else "secondary",
+                            key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}",
+                            type="secondary",
                             help=_tab_title,
                             on_click=_crm_workspace_activate_tab,
                             args=(_crm_active_window.get("id"), _i),
