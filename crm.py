@@ -16028,7 +16028,11 @@ def _crm_live_change_notice_fragment():
                                             st.session_state[f"dls_ps_{_deal_id_for_widgets}"] = _payment_status_value
                                         _manager_value = str(_fresh_deal.get("manager", "") or "")
                                         if _manager_value in get_managers_list():
+                                            # Keep the selectbox value and its model marker in sync together.
+                                            # Otherwise a stale marker can make the fragment trust an old widget value
+                                            # (for example, Evelina) after the deal itself was refreshed to Damir.
                                             st.session_state[f"deal_mgr_inline_{_deal_id_for_widgets}"] = _manager_value
+                                            st.session_state[f"_deal_mgr_last_model_{_deal_id_for_widgets}"] = _manager_value
                                     # Задачи по сделке хранятся в tasks клиента, а не в объекте сделки.
                                     # Обновляем также объект клиента в аргументах окна сделки,
                                     # иначе счётчик и список задач остаются старыми после обновления уведомления.
