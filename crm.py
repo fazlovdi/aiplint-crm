@@ -2431,10 +2431,6 @@ def _crm_workspace_finish_pending_close():
         return
     mode = str(pending.get("mode", "tab"))
     if mode == "switch":
-        source_index = target_index
-        source_tab = tabs[source_index] if source_index is not None else None
-        source_key = str(pending.get("tab_key") or "")
-        if source_tab is not None:
         target_key = str(pending.get("target_tab_key") or "")
         target_index = next((i for i, tab in enumerate(tabs) if _crm_workspace_tab_key(tab) == target_key), None)
         if target_index is None:
