@@ -11854,36 +11854,37 @@ def deal_report_dialog(deal_id, action):
                 st.rerun()
 
 
-@st.fragment
 def _crm_deal_responsible_fragment(d, deal_id):
-    """Перерисовывает только блок ответственного при выборе менеджера."""
+    """Выбор ответственного не перерисовывает страницу до нажатия «Делегировать»."""
     mgr_options = get_managers_list()
     current_mgr = d.get("manager", "")
     widget_key = f"deal_mgr_inline_{deal_id}"
     model_key = f"_deal_mgr_last_model_{deal_id}"
 
-    # Подхватываем модель только когда сохранённый ответственный действительно изменился.
+    # Обновляем значение селектора только когда ответственный изменился в сохранённой модели.
     if st.session_state.get(model_key) != current_mgr:
         st.session_state[widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
         st.session_state[model_key] = current_mgr
 
-    new_mgr = st.selectbox(
-        "Ответственный:",
-        mgr_options,
-        key=widget_key,
-        placeholder=MGR_PLACEHOLDER,
-    )
-    if st.button("Делегировать", key=f"deal_mgr_delegate_{deal_id}", type="primary", use_container_width=True):
-        if new_mgr and new_mgr != current_mgr:
-            d["manager"] = new_mgr
-            d["delegated_to"] = new_mgr
-            d["last_modified"] = now_str()
-            add_notification(
-                new_mgr,
-                f"Вам делегирована сделка №{d.get('deal_number', deal_id)}: {d.get('deal_title', '')}",
-                f"📌 Вам делегирована сделка №{d.get('deal_number', deal_id)}: {d.get('deal_title', '')}",
-            )
-            commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
+    with st.form(key=f"deal_mgr_form_{deal_id}", clear_on_submit=False):
+        new_mgr = st.selectbox(
+            "Ответственный:",
+            mgr_options,
+            key=widget_key,
+            placeholder=MGR_PLACEHOLDER,
+        )
+        submitted = st.form_submit_button("Делегировать", type="primary", use_container_width=True)
+
+    if submitted and new_mgr and new_mgr != current_mgr:
+        d["manager"] = new_mgr
+        d["delegated_to"] = new_mgr
+        d["last_modified"] = now_str()
+        add_notification(
+            new_mgr,
+            f"Вам делегирована сделка №{d.get('deal_number', deal_id)}: {d.get('deal_title', '')}",
+            f"📌 Вам делегирована сделка №{d.get('deal_number', deal_id)}: {d.get('deal_title', '')}",
+        )
+        commit_and_rerun(st.session_state.crm_store, "Ответственный обновлён")
 
 
 @_crm_dialog("Подробности сделки", width="large")
