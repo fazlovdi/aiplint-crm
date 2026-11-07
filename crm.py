@@ -4533,6 +4533,11 @@ def save_data(data):
                 # Инициализируем маркеры автооплаты до сравнения сделок: иначе
                 # любая правка сделки может прервать создание события уведомления.
 
+                # Маркер автооплаты нужен уже внутри цикла сравнения сделок.
+                _auto_payment_ids = st.session_state.get("_crm_auto_payment_status_deal_ids", set())
+                if not isinstance(_auto_payment_ids, set):
+                    _auto_payment_ids = set(_auto_payment_ids or [])
+
                 for _did in set(_old_deals) | set(_new_deals):
                     _old_deal = copy.deepcopy(_old_deals.get(_did) or {})
                     _new_deal = copy.deepcopy(_new_deals.get(_did) or {})
