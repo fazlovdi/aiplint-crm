@@ -15099,9 +15099,10 @@ def _crm_live_change_notice_fragment():
 
             for _win in _windows:
                 _cid = _win.get("client_id") if isinstance(_win, dict) else None
-                if _cid is None:
-                    continue
-                _cid = str(_cid)
+                # Окно может содержать только сделку и не иметь client_id.
+                # Не пропускаем такое окно целиком: уведомление сделки маршрутизируется
+                # по ID сделки, независимо от ID клиента окна.
+                _cid = str(_cid) if _cid is not None else ""
                 for _tab in (_win.get("tabs", []) or []):
                     _name = str(_tab.get("name", ""))
                     if _name == "client_detail_dialog":
