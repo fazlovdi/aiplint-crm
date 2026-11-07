@@ -3843,11 +3843,13 @@ def _ensure_sqlite_store():
         conn = _sqlite_connect()
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS crm_state (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)")
-            conn.execute("CREATE TABLE IF NOT EXISTS crm_change_events (revision INTEGER PRIMARY KEY, user_login TEXT NOT NULL, user_name TEXT NOT NULL, client_ids TEXT NOT NULL, created_at TEXT NOT NULL, change_targets TEXT NOT NULL DEFAULT '[]')")
+            conn.execute("CREATE TABLE IF NOT EXISTS crm_change_events (revision INTEGER PRIMARY KEY, user_login TEXT NOT NULL, user_name TEXT NOT NULL, client_ids TEXT NOT NULL, created_at TEXT NOT NULL, change_targets TEXT NOT NULL DEFAULT '[]', change_details TEXT NOT NULL DEFAULT '{}')")
             # Безопасная миграция уже существующей базы: старые события остаются читаемыми.
             _event_columns = {row[1] for row in conn.execute("PRAGMA table_info(crm_change_events)").fetchall()}
             if "change_targets" not in _event_columns:
                 conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_targets TEXT NOT NULL DEFAULT '[]'")
+            if "change_details" not in _event_columns:
+                conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_details TEXT NOT NULL DEFAULT '{}'")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None or not isinstance(row[0], str) or not row[0].strip():
                 # Восстанавливаем не только отсутствующую строку, но и пустую запись SQLite.
@@ -4677,10 +4679,91 @@ def save_data(data):
                 if locals().get("_auto_payment_status_event", False):
                     _event_login = "__AUTO_PAYMENT_STATUS__"
                     _event_name = "__AUTO_PAYMENT_STATUS_UPDATED__"
+                # Формируем понятное описание действия для каждой затронутой вкладки.
+                # Если точный тип действия определить нельзя, используем конкретное описание сущности.
+                _change_details = {}
+                def _added_list_items(_old_obj, _new_obj, _tokens):
+                    _found = []
+                    if not isinstance(_old_obj, dict) or not isinstance(_new_obj, dict):
+                        return _found
+                    for _field, _new_value in _new_obj.items():
+                        _field_norm = str(_field).casefold()
+                        if not any(_token in _field_norm for _token in _tokens) or not isinstance(_new_value, list):
+                            continue
+                        _old_value = _old_obj.get(_field, [])
+                        _old_value = _old_value if isinstance(_old_value, list) else []
+                        if len(_new_value) > len(_old_value):
+                            _found.append(_field_norm)
+                    return _found
+                for _target in _change_targets:
+                    _kind, _, _entity_id = _target.partition(":")
+                    _old_obj = {}
+                    _new_obj = {}
+                    if _kind in ("client", "client_tasks", "client_deals"):
+                        _old_obj = _old_clients.get(_entity_id) or {}
+                        _new_obj = _new_clients.get(_entity_id) or {}
+                        _entity_label = f"клиента «{_new_obj.get('name') or _old_obj.get('name') or _entity_id}»"
+                    elif _kind in ("deal_record", "deal_calculations", "deal_tasks"):
+                        _old_obj = _old_deals.get(_entity_id) or {}
+                        _new_obj = _new_deals.get(_entity_id) or {}
+                        _entity_label = f"сделке №{_entity_id}"
+                    elif _kind == "task_record":
+                        _old_obj = next((t for c in latest_data.get("clients", []) or [] for t in c.get("tasks", []) or [] if isinstance(t, dict) and str(t.get("id") or t.get("task_number") or "") == _entity_id), {})
+                        _new_obj = next((t for c in merged_data.get("clients", []) or [] for t in c.get("tasks", []) or [] if isinstance(t, dict) and str(t.get("id") or t.get("task_number") or "") == _entity_id), {})
+                        _entity_label = f"задаче №{_entity_id}"
+                    elif _kind == "calculation_record":
+                        _old_obj = next((c for d in latest_data.get("deals", []) or [] for c in d.get("calculations", []) or [] if isinstance(c, dict) and str(c.get("id")) == _entity_id), {})
+                        _new_obj = next((c for d in merged_data.get("deals", []) or [] for c in d.get("calculations", []) or [] if isinstance(c, dict) and str(c.get("id")) == _entity_id), {})
+                        _entity_label = f"расчёте №{_entity_id}"
+                    elif _kind == "internal_tasks":
+                        _old_obj = next((t for t in latest_data.get("internal_tasks", []) or [] if isinstance(t, dict) and str(t.get("id")) == _entity_id), {})
+                        _new_obj = next((t for t in merged_data.get("internal_tasks", []) or [] if isinstance(t, dict) and str(t.get("id")) == _entity_id), {})
+                        _entity_label = "внутренних задачах"
+                    else:
+                        _entity_label = "данных CRM"
+                    _comment_added = _added_list_items(_old_obj, _new_obj, ("comment", "comments"))
+                    _file_added = _added_list_items(_old_obj, _new_obj, ("file", "files", "document"))
+                    if _kind == "client_tasks":
+                        _old_ids = {str(t.get("id") or t.get("task_number") or "") for t in (_old_obj.get("tasks", []) or []) if isinstance(t, dict) and not t.get("deal_id")}
+                        _new_ids = {str(t.get("id") or t.get("task_number") or "") for t in (_new_obj.get("tasks", []) or []) if isinstance(t, dict) and not t.get("deal_id")}
+                        _detail = f"{_event_name} добавил(а) новую задачу по {_entity_label}" if _new_ids - _old_ids else f"{_event_name} изменил(а) список задач по {_entity_label}"
+                    elif _kind == "client_deals":
+                        _detail = f"{_event_name} добавил(а) или удалил(а) сделку у {_entity_label}"
+                    elif _kind == "deal_tasks":
+                        _detail = f"{_event_name} добавил(а) или удалил(а) задачу в {_entity_label}"
+                    elif _comment_added:
+                        _detail = f"{_event_name} добавил(а) комментарий в {_entity_label}"
+                    elif _file_added:
+                        _detail = f"{_event_name} добавил(а) файл в {_entity_label}"
+                    elif _kind == "client":
+                        _detail = f"{_event_name} изменил(а) данные {_entity_label}"
+                    elif _kind == "deal_record":
+                        _detail = f"{_event_name} изменил(а) данные {_entity_label}"
+                    elif _kind == "task_record":
+                        _detail = f"{_event_name} изменил(а) данные в {_entity_label}"
+                    elif _kind == "calculation_record":
+                        _detail = f"{_event_name} изменил(а) данные в {_entity_label}"
+                    elif _kind == "deal_calculations":
+                        _detail = f"{_event_name} добавил(а) или удалил(а) расчёт в {_entity_label}"
+                    elif _kind == "internal_tasks":
+                        _detail = f"{_event_name} изменил(а) внутренние задачи"
+                    else:
+                        _detail = f"{_event_name} внес(ла) изменения: {_entity_label}"
+                    _change_details[_target] = _detail
+                # Создание напоминания тоже является отдельным действием и относится к его объекту.
+                _old_reminders = {str(r.get("id")): r for r in (latest_data.get("reminders", []) or []) if isinstance(r, dict) and r.get("id") is not None}
+                _new_reminders = {str(r.get("id")): r for r in (merged_data.get("reminders", []) or []) if isinstance(r, dict) and r.get("id") is not None}
+                for _rid in set(_new_reminders) - set(_old_reminders):
+                    _reminder = _new_reminders[_rid]
+                    _rtype = str(_reminder.get("entity_type") or "")
+                    _reid = str(_reminder.get("entity_id") or "")
+                    _rem_target = ("deal_record:" if _rtype == "deal" else "client:" if _rtype == "client" else "task_record:") + _reid
+                    if _rem_target in _change_targets:
+                        _change_details[_rem_target] = f"{_event_name} создал(а) напоминание по объекту «{_reminder.get('entity_label') or _reid}»"
                 if _change_targets:
                     conn.execute(
-                        "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at, change_targets) VALUES (?, ?, ?, ?, ?, ?)",
-                        (new_revision, _event_login, _event_name, json.dumps(sorted(_changed_client_ids)), now_str(), json.dumps(sorted(_change_targets))),
+                        "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at, change_targets, change_details) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (new_revision, _event_login, _event_name, json.dumps(sorted(_changed_client_ids)), now_str(), json.dumps(sorted(_change_targets)), json.dumps(_change_details, ensure_ascii=False)),
                     )
                     conn.execute("DELETE FROM crm_change_events WHERE revision < ?", (max(0, new_revision - 500),))
             except Exception as _event_exc:
@@ -15095,7 +15178,7 @@ def _crm_live_change_notice_fragment():
         _conn = _sqlite_connect()
         try:
             _rows = _conn.execute(
-                "SELECT revision, user_login, user_name, client_ids, created_at, change_targets "
+                "SELECT revision, user_login, user_name, client_ids, created_at, change_targets, change_details "
                 "FROM crm_change_events WHERE revision > ? ORDER BY revision ASC LIMIT 500",
                 (int(_seen),),
             ).fetchall()
@@ -15106,7 +15189,13 @@ def _crm_live_change_notice_fragment():
 
         _notices = st.session_state.setdefault("_crm_live_change_notices_by_tab", {})
         for _row in _rows:
-            _rev, _author_login, _author_name, _client_ids_json, _created_at, _targets_json = _row
+            _rev, _author_login, _author_name, _client_ids_json, _created_at, _targets_json, _details_json = _row
+            try:
+                _details = json.loads(_details_json or "{}")
+                if not isinstance(_details, dict):
+                    _details = {}
+            except Exception:
+                _details = {}
             if str(_author_login) == _login:
                 continue
             try:
@@ -15185,6 +15274,7 @@ def _crm_live_change_notice_fragment():
                             "created_at": str(_created_at or ""),
                             "client_id": _cid,
                             "target": _target,
+                            "detail": str(_details.get(_target) or ""),
                             "tab_name": _name,
                             "window_id": str(_win.get("id", "")),
                         }
@@ -15216,7 +15306,10 @@ def _crm_live_change_notice_fragment():
             if _pending.get("author") == "__AUTO_PAYMENT_STATUS_UPDATED__":
                 st.markdown("**Обновлен статус оплаты**")
             else:
-                st.markdown(f"**{_pending.get('author', 'Другой пользователь')} внес(ла) изменения во вкладку.**")
+                _notice_text = str(_pending.get("detail") or "").strip()
+                if not _notice_text:
+                    _notice_text = f"{_pending.get('author', 'Другой пользователь')} внес(ла) изменения во вкладку."
+                st.markdown(f"**{_notice_text}**")
             st.caption("Обновление не выполняется автоматически, чтобы не затереть ваши правки.")
             _b1, _b2 = st.columns(2)
             with _b1:
