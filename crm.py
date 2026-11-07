@@ -2266,13 +2266,14 @@ def _crm_workspace_remote_path(login):
     return f"disk:/CRM_NE_TROGAT/workspaces/workspace_{safe}.json"
 
 def _crm_workspace_load_remote(login):
+    # Keep sign-in responsive if Yandex Disk is slow/unavailable.
     try:
         path = _crm_workspace_remote_path(login)
-        r = requests.get(f"{YANDEX_API_URL}/download", params={"path": path}, headers=yandex_headers(), timeout=5)
+        r = requests.get(f"{YANDEX_API_URL}/download", params={"path": path}, headers=yandex_headers(), timeout=2)
         if r.status_code != 200: return None
         href = r.json().get("href")
         if not href: return None
-        data = requests.get(href, timeout=8)
+        data = requests.get(href, timeout=2)
         if data.status_code != 200: return None
         obj = data.json()
         return obj if isinstance(obj, dict) and obj.get("version") == 1 else None
@@ -2306,6 +2307,11 @@ def _crm_workspace_save_remote(login, workspace):
         _crm_log("WORKSPACE_REMOTE_SAVE_ERROR", {"stage": "Yandex workspace save"}, exc=exc)
         return False
 
+# Workspace snapshots are uploaded off the UI thread; SQLite remains the immediate local save.
+_CRM_WORKSPACE_REMOTE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-workspace-sync")
+_CRM_WORKSPACE_REMOTE_LOCK = threading.Lock()
+_CRM_WORKSPACE_REMOTE_LAST_SUBMITTED = {}
+
 # Drafts are stored separately from the primary CRM data and per workspace tab.
 _CRM_DRAFT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-drafts-sync")
 _CRM_DRAFT_LOCK = threading.Lock()
@@ -2325,14 +2331,14 @@ def _crm_draft_load_remote(login, tab_key):
         response = requests.get(
             f"{YANDEX_API_URL}/download",
             params={"path": _crm_draft_remote_path(login, tab_key)},
-            headers=yandex_headers(), timeout=5,
+            headers=yandex_headers(), timeout=2,
         )
         if response.status_code != 200:
             return None
         href = response.json().get("href")
         if not href:
             return None
-        downloaded = requests.get(href, timeout=6)
+        downloaded = requests.get(href, timeout=2)
         if downloaded.status_code != 200:
             return None
         value = downloaded.json()
@@ -2807,10 +2813,12 @@ def _crm_workspace_queue_save():
             return
         st.session_state["_crm_last_queued_workspace_state"] = state_payload
         st.session_state["_crm_last_queued_workspace_payload"] = payload
-        # Keep the durable copy in sync with structural workspace changes. This is
-        # what prevents deleted tabs from reappearing when the ephemeral container
-        # restarts and the old SQLite file is gone.
-        _crm_workspace_save_remote(login, workspace)
+        # SQLite is saved immediately; Yandex Disk sync must never block opening,
+        # closing, or switching workspace tabs.
+        with _CRM_WORKSPACE_REMOTE_LOCK:
+            if _CRM_WORKSPACE_REMOTE_LAST_SUBMITTED.get(login) != payload:
+                _CRM_WORKSPACE_REMOTE_LAST_SUBMITTED[login] = payload
+                _CRM_WORKSPACE_REMOTE_EXECUTOR.submit(_crm_workspace_save_remote, login, workspace)
     except Exception as exc:
         _crm_log("WORKSPACE_SAVE_ERROR", {"stage": "SQLite workspace save"}, exc=exc)
 
@@ -2931,9 +2939,10 @@ def _crm_workspace_init():
             })
 
     st.session_state["_crm_windows"] = restored
-    for _draft_window in restored:
-        for _draft_tab in _draft_window.get("tabs", []) or []:
-            _crm_draft_restore_tab(login, _draft_tab)
+    # Do not download every tab's draft serially during login. Drafts are restored
+    # only for the tab the user actually opens, so sign-in stays responsive.
+    st.session_state["_crm_drafts_login"] = login
+    st.session_state["_crm_drafts_restored_tabs"] = set()
     main_tab = saved.get("main_active_tab")
     if main_tab in ("Клиенты", "Сделки", "Задачи", "Внутренние задачи", "Поставщики", "Товары и прайс"):
         st.session_state["active_tab"] = main_tab
@@ -15607,6 +15616,14 @@ def _crm_render_workspace_fragment():
                     _active_entry = _tabs[_active_index]
                     _active_spec = _CRM_DIALOG_REGISTRY.get(_active_entry.get("name"))
                     if _active_spec:
+                        _draft_login = str(st.session_state.get("_crm_drafts_login") or st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+                        _draft_tab_key = _crm_workspace_tab_key(_active_entry)
+                        _draft_restored = st.session_state.get("_crm_drafts_restored_tabs", set())
+                        if _draft_login and _draft_tab_key not in _draft_restored:
+                            _crm_draft_restore_tab(_draft_login, _active_entry)
+                            _draft_restored = set(_draft_restored)
+                            _draft_restored.add(_draft_tab_key)
+                            st.session_state["_crm_drafts_restored_tabs"] = _draft_restored
                         st.session_state["_crm_active_dialog"] = _active_entry
                         st.session_state["_crm_inside_dialog_host"] = True
                         try:
