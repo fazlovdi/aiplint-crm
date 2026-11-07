@@ -4566,6 +4566,9 @@ def save_data(data):
                     _deal = _new_deals.get(_did) or _old_deals.get(_did) or {}
                     _owner = _deal.get("client_id") or _deal.get("cl_id")
                     if _old_deal != _new_deal and _owner is not None:
+                        if str(_did) in _auto_payment_ids and str((_old_deals.get(_did) or {}).get("payment_status", "")) != str((_new_deals.get(_did) or {}).get("payment_status", "")):
+                            _event_name = "__AUTO_PAYMENT_STATUS_UPDATED__"
+                            _auto_payment_ids.discard(str(_did))
                         # Создание/удаление сделки относится к списку сделок клиента.
                         # Изменение только расчётов относится к вкладке конкретной сделки,
                         # где расположен список расчётов, и не должно уведомлять карточку клиента.
@@ -4648,6 +4651,9 @@ def save_data(data):
 
                 _event_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "system")
                 _event_name = _event_login
+                _auto_payment_ids = st.session_state.get("_crm_auto_payment_status_deal_ids", set())
+                if not isinstance(_auto_payment_ids, set):
+                    _auto_payment_ids = set(_auto_payment_ids or [])
                 for _u in merged_data.get("users", []) or []:
                     if not isinstance(_u, dict):
                         continue
@@ -7483,9 +7489,14 @@ def render_deal_card_expanded(d, cl):
         st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
         st.markdown(f"**Реальная дата сделки:** {format_date(d.get('real_date', '')) or '—'}")
         ps = d.get("payment_status", "Не оплачено")
+        _ps_widget_key = f"ps_{d['id']}"
+        _ps_model_key = f"_ps_last_model_{d['id']}"
+        if st.session_state.get(_ps_model_key) != ps:
+            st.session_state[_ps_widget_key] = ps if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else "Не оплачено"
+            st.session_state[_ps_model_key] = ps
         inject_payment_container_css(d["id"], ps)
         with st.container(key=f"ps_wrap_{d['id']}"):
-            new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=f"ps_{d['id']}")
+            new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key)
         _bank_payment_status = _tochka_bank_payment_status(d)
         if _bank_payment_status and _bank_payment_status != ps:
             st.markdown(
@@ -9394,6 +9405,7 @@ def _tochka_apply_paid_status(deal, record):
         if deal.get("payment_status") != "Оплачено":
             deal["payment_status"] = "Оплачено"
             deal["last_modified"] = now_str()
+            st.session_state.setdefault("_crm_auto_payment_status_deal_ids", set()).add(str(deal.get("id")))
             changed = True
         old_stage = deal.get("status")
         _sync_deal_board_stage_from_payment(deal)
@@ -10474,6 +10486,11 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Реальная дата сделки"})
                 commit_and_rerun(st.session_state.crm_store, "Реальная дата сделки обновлена")
             ps = d.get("payment_status", "Не оплачено")
+            _ps_widget_key_dd = f"dls_ps_{deal_id}"
+            _ps_model_key_dd = f"_dls_ps_last_model_{deal_id}"
+            if st.session_state.get(_ps_model_key_dd) != ps:
+                st.session_state[_ps_widget_key_dd] = ps if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else "Не оплачено"
+                st.session_state[_ps_model_key_dd] = ps
             mgr_options_dd = get_managers_list()
             current_mgr_dd = d.get("manager", "")
             current_idx_dd = mgr_options_dd.index(current_mgr_dd) if current_mgr_dd in mgr_options_dd else 0
@@ -10482,7 +10499,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             with _pay_col:
                 inject_payment_container_css(deal_id, ps)
                 with st.container(key=f"ps_wrap_{deal_id}"):
-                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=f"dls_ps_{deal_id}")
+                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key_dd)
                 if _bank_payment_status and _bank_payment_status != ps:
                     st.markdown(
                         f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
@@ -15155,7 +15172,10 @@ def _crm_live_change_notice_fragment():
             unsafe_allow_html=True,
         )
         with st.container(key="crm_live_change_notice"):
-            st.markdown(f"**{_pending.get('author', 'Другой пользователь')} внес(ла) изменения во вкладку.**")
+            if _pending.get("author") == "__AUTO_PAYMENT_STATUS_UPDATED__":
+                st.markdown("**Обновлен статус оплаты**")
+            else:
+                st.markdown(f"**{_pending.get('author', 'Другой пользователь')} внес(ла) изменения во вкладку.**")
             st.caption("Обновление не выполняется автоматически, чтобы не затереть ваши правки.")
             _b1, _b2 = st.columns(2)
             with _b1:
