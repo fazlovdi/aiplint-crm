@@ -2466,6 +2466,11 @@ def _crm_draft_restore_tab(login, tab):
     saved = _crm_draft_load_remote(login, tab_key)
     if not isinstance(saved, dict):
         return
+    # Older versions saved snapshots automatically. Never show a star for those.
+    tab["has_draft"] = False
+    # Restore only drafts explicitly created by the user with "Решу позже".
+    if not saved.get("user_deferred"):
+        return
     values = saved.get("values", {})
     if not isinstance(values, dict):
         return
@@ -2492,10 +2497,45 @@ def _crm_workspace_tab_has_unsaved(tab):
     args = tab.get("args", ()) or ()
     state = st.session_state
     if name == "task_detail_dialog" and len(args) >= 4:
+        task = args[0] if isinstance(args[0], dict) else {}
         prefix = str(args[3])
+        # Editing mode alone is not a change. Compare widget values with saved data.
+        field_map = {
+            f"edit_topic_{prefix}": ("text", ""),
+            f"edit_type_{prefix}": ("type", "Связаться"),
+            f"edit_mgr_{prefix}": ("manager", ""),
+            f"edit_comment_{prefix}": ("task_comment", ""),
+            f"edit_prod_{prefix}": ("products", ""),
+            f"edit_addr_{prefix}": ("ship_addr", ""),
+            f"edit_city_{prefix}": ("ship_city", ""),
+            f"edit_recv_{prefix}": ("receiver", ""),
+            f"edit_rphone_{prefix}": ("receiver_phone", ""),
+            f"edit_pay_{prefix}": ("ship_pay", ""),
+            f"edit_tk_{prefix}": ("tk_num", ""),
+            f"edit_method_{prefix}": ("ship_method", "Не выбрано"),
+            f"task_mgr_inline_{prefix}": ("manager", ""),
+        }
+        for widget_key, (field, default) in field_map.items():
+            if widget_key in state and str(state.get(widget_key) if state.get(widget_key) is not None else default) != str(task.get(field, default) if task.get(field) is not None else default):
+                return True
+        amount_key = f"edit_amount_{prefix}"
+        if amount_key in state:
+            try:
+                current_amount = float(str(state.get(amount_key) or 0).replace(",", "."))
+                saved_amount = float(task.get("order_amount") or 0)
+                if abs(current_amount - saved_amount) > 0.0001:
+                    return True
+            except (TypeError, ValueError):
+                return True
+        deadline_key = f"dl_inline_{prefix}"
+        if deadline_key in state:
+            try:
+                if parse_deadline(state.get(deadline_key)) != parse_deadline(task.get("deadline", "")):
+                    return True
+            except Exception:
+                return True
         return bool(
-            state.get(f"show_edit_task_{prefix}") or state.get(f"show_edit_dl_{prefix}")
-            or str(state.get(f"tc_input_{prefix}", "") or "").strip()
+            str(state.get(f"tc_input_{prefix}", "") or "").strip()
             or (state.get(f"show_rework_{prefix}") and str(state.get(f"rework_comment_{prefix}", "") or "").strip())
         )
     if name == "deal_detail_dialog" and args:
@@ -2623,11 +2663,11 @@ def _crm_workspace_defer_pending_switch():
         st.error("Не удалось определить вкладку для черновика. Изменения оставлены открытыми.")
         return
     values = _crm_draft_widget_values(source_tab)
-    draft = {"version": 1, "tab_key": source_key, "updated_at": now_str(), "values": values}
+    draft = {"version": 1, "tab_key": source_key, "updated_at": now_str(), "user_deferred": True, "values": values}
     if not _crm_draft_save_remote(login, source_key, draft):
         st.error("Черновик не удалось сохранить в облаке. Вкладка осталась открытой; попробуйте ещё раз.")
         return
-    payload = json.dumps({"version": 1, "tab_key": source_key, "values": values}, ensure_ascii=False, separators=(",", ":"))
+    payload = json.dumps({"version": 1, "tab_key": source_key, "user_deferred": True, "values": values}, ensure_ascii=False, separators=(",", ":"))
     cache_key = login + "|" + source_key
     with _CRM_DRAFT_LOCK:
         _CRM_DRAFT_LAST_PAYLOADS[cache_key] = payload
@@ -2731,18 +2771,7 @@ def _crm_workspace_activate_tab(window_id, tab_index):
         st.session_state["_crm_workspace_switch_target_key"] = _crm_workspace_tab_key(tabs[index])
         _crm_workspace_prompt_close(window, _old_index, "switch")
         return
-    # Snapshot the current tab into session-local memory before its widgets are
-    # unmounted. Remote draft persistence remains asynchronous.
-    try:
-        _old_index = max(0, min(int(window.get("active_tab", 0) or 0), len(tabs) - 1))
-        _old_tab = tabs[_old_index]
-        _old_key = _crm_workspace_tab_key(_old_tab)
-        _old_values = _crm_draft_widget_values(_old_tab)
-        _local_drafts = st.session_state.setdefault("_crm_drafts_local_values", {})
-        _local_drafts[_old_key] = _old_values
-    except Exception:
-        pass
-    _crm_drafts_persist_open_tabs(force=True)
+    # Do not create automatic drafts or perform cloud writes on tab switches.
     window["active_tab"] = index
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window.get("id")
@@ -15755,9 +15784,6 @@ def _crm_render_workspace_fragment():
                         finally:
                             st.session_state["_crm_inside_dialog_host"] = False
 
-    # Draft snapshots are separate from crm_store and do not trigger CRM change notifications.
-    _crm_drafts_persist_open_tabs()
-
     # When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
 
     # Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
@@ -15772,10 +15798,7 @@ def _crm_live_change_notice_fragment():
         if not _login:
             return
 
-        # A small periodic checkpoint protects edits even when the user switches tabs
-        # or closes the browser shortly after typing. Actual draft writes are queued
-        # only when the captured values differ from the last successful snapshot.
-        _crm_drafts_persist_open_tabs()
+        # Drafts are saved only after an explicit user action ("Решу позже").
 
         _seen = st.session_state.get("_crm_live_notice_seen_revision")
         if _seen is None:
