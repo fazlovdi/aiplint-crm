@@ -2276,6 +2276,33 @@ def _crm_workspace_load_remote(login):
     except Exception:
         return None
 
+def _crm_workspace_save_remote(login, workspace):
+    """Persist the latest workspace remotely so a container restart cannot revive stale tabs."""
+    if not YANDEX_TOKEN or not login or not isinstance(workspace, dict):
+        return False
+    try:
+        path = _crm_workspace_remote_path(login)
+        payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":")).encode("utf-8")
+        response = requests.get(
+            f"{YANDEX_API_URL}/upload",
+            params={"path": path, "overwrite": "true"},
+            headers=yandex_headers(), timeout=8,
+        )
+        if response.status_code not in (200, 201):
+            return False
+        href = response.json().get("href")
+        if not href:
+            return False
+        uploaded = requests.put(
+            href, data=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=10,
+        )
+        return uploaded.status_code in (200, 201, 202)
+    except Exception as exc:
+        _crm_log("WORKSPACE_REMOTE_SAVE_ERROR", {"stage": "Yandex workspace save"}, exc=exc)
+        return False
+
 def _crm_workspace_rerun():
     """Rerun only the workspace fragment for dialog interactions when possible.
 
@@ -2480,6 +2507,10 @@ def _crm_workspace_queue_save():
             return
         st.session_state["_crm_last_queued_workspace_state"] = state_payload
         st.session_state["_crm_last_queued_workspace_payload"] = payload
+        # Keep the durable copy in sync with structural workspace changes. This is
+        # what prevents deleted tabs from reappearing when the ephemeral container
+        # restarts and the old SQLite file is gone.
+        _crm_workspace_save_remote(login, workspace)
     except Exception as exc:
         _crm_log("WORKSPACE_SAVE_ERROR", {"stage": "SQLite workspace save"}, exc=exc)
 
@@ -2496,16 +2527,22 @@ def _crm_workspace_init():
     if not isinstance(store, dict):
         return
 
-    # Сначала читаем компактную персональную запись: не нужно загружать
-    # или сериализовать всю CRM-базу ради восстановления окон.
-    saved = _crm_workspace_load_from_sqlite(login)
+    # Сначала читаем локальную запись, затем сверяем её с постоянной копией
+    # на Яндекс Диске. SQLite в Streamlit Cloud может пережить часть перезапусков,
+    # поэтому приоритет определяется временем обновления, а не только наличием строки.
+    local_saved = _crm_workspace_load_from_sqlite(login)
+    remote_saved = _crm_workspace_load_remote(login)
+    saved = local_saved if isinstance(local_saved, dict) else None
+    if isinstance(remote_saved, dict):
+        local_stamp = str((saved or {}).get("updated_at") or "")
+        remote_stamp = str(remote_saved.get("updated_at") or "")
+        if saved is None or remote_stamp > local_stamp:
+            saved = remote_saved
 
     # Совместимость со старыми версиями: переносим данные из прежнего хранилища.
     if not isinstance(saved, dict):
         workspaces = store.get("_workspaces", {})
         saved = workspaces.get(login) if isinstance(workspaces, dict) else None
-    if not isinstance(saved, dict):
-        saved = _crm_workspace_load_remote(login)
     if isinstance(saved, dict):
         _crm_workspace_save_to_sqlite(login, saved)
 
