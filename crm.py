@@ -12294,10 +12294,24 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     if _real_date_key in st.session_state:
                         _real_date_value = st.session_state[_real_date_key]
                         d["real_date"] = _real_date_value.isoformat() if hasattr(_real_date_value, "isoformat") else str(_real_date_value or "")
+                    _deal_comment_key = f"dls_dc_input_{deal_id}"
+                    _deal_comment_text = str(st.session_state.get(_deal_comment_key, "") or "").strip()
+                    if _deal_comment_text:
+                        d.setdefault("deal_comments", []).append({
+                            "time": moscow_now().strftime("%d.%m.%Y %H:%M"),
+                            "author": st.session_state.get("user_name", ""),
+                            "text": _deal_comment_text,
+                        })
+                        st.session_state[_deal_comment_key] = ""
+                        st.session_state[f"dls_clr_dc_{deal_id}"] = False
                     d["last_modified"] = now_str()
                     save_data(st.session_state.crm_store)
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
+                    st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
+                    st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
+                    st.session_state[f"dls_dc_input_{deal_id}"] = ""
+                    st.session_state[f"dls_pause_reason_{deal_id}"] = ""
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
