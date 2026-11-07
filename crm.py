@@ -2311,6 +2311,7 @@ _CRM_DRAFT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-
 _CRM_DRAFT_LOCK = threading.Lock()
 _CRM_DRAFT_LAST_PAYLOADS = {}
 _CRM_DRAFT_PENDING_PAYLOADS = {}
+_CRM_DRAFT_LAST_SUBMIT_AT = {}
 
 def _crm_draft_remote_path(login, tab_key):
     user_hash = hashlib.sha256(str(login or "").encode("utf-8")).hexdigest()[:24]
@@ -2491,6 +2492,12 @@ def _crm_drafts_persist_open_tabs():
                 with _CRM_DRAFT_LOCK:
                     if _CRM_DRAFT_LAST_PAYLOADS.get(cache_key) == payload or _CRM_DRAFT_PENDING_PAYLOADS.get(cache_key) == payload:
                         continue
+                    # Avoid uploading every keystroke. The 3-second checkpoint
+                    # will pick up the newest value after this short throttle.
+                    _now_mono = time.monotonic()
+                    if _now_mono - _CRM_DRAFT_LAST_SUBMIT_AT.get(cache_key, 0.0) < 1.5:
+                        continue
+                    _CRM_DRAFT_LAST_SUBMIT_AT[cache_key] = _now_mono
                     _CRM_DRAFT_PENDING_PAYLOADS[cache_key] = payload
                 future = _CRM_DRAFT_EXECUTOR.submit(_crm_draft_save_remote, login, tab_key, draft)
                 future.add_done_callback(lambda done, ck=cache_key, pl=payload: _crm_draft_save_finished(ck, pl, done))
