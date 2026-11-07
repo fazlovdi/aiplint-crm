@@ -2375,9 +2375,13 @@ def _crm_workspace_tab_has_unsaved(tab):
                     return True
             except Exception:
                 return True
+        _calc_key = f"edit_order_calc_{prefix}"
+        if _calc_key in state and str(state.get(_calc_key) or "") != str(task.get("calculation_id", "") or ""):
+            return True
         return bool(
             str(state.get(f"tc_input_{prefix}", "") or "").strip()
             or (state.get(f"show_rework_{prefix}") and str(state.get(f"rework_comment_{prefix}", "") or "").strip())
+            or any(state.get(str(_k)) for _k in state.keys() if str(_k).startswith(f"task_upload_{prefix}_"))
         )
     if name == "deal_detail_dialog" and args:
         deal = args[0] if isinstance(args[0], dict) else {}
@@ -2425,10 +2429,12 @@ def _crm_workspace_tab_has_unsaved(tab):
         return False
     if name == "create_reminder_dialog" and len(args) >= 2:
         _rk = f"{args[0]}_{args[1]}"
+        _initial = state.get(f"_rem_initial_values_{_rk}", {})
         return bool(
-            str(state.get(f"rem_text_{_rk}", "") or "").strip()
-            or state.get(f"rem_date_{_rk}") is not None
-            or state.get(f"rem_recipient_{_rk}") not in (None, "")
+            str(state.get(f"rem_text_{_rk}", "") or "") != str(_initial.get("text", "") or "")
+            or state.get(f"rem_date_{_rk}") != _initial.get("date")
+            or state.get(f"rem_time_{_rk}", _initial.get("time")) != _initial.get("time")
+            or state.get(f"rem_recipient_{_rk}", "") != _initial.get("recipient", "")
         )
     if name == "create_deal_dialog" and args:
         _cid = str(args[0])
@@ -2467,7 +2473,7 @@ def _crm_workspace_tab_has_unsaved(tab):
         if state.get(_calc_key) not in (None, ""):
             return True
         return any(state.get(str(k)) for k in state.keys()
-                   if str(k).startswith(f"nt_file_{_suffix}_"))
+                   if str(k).startswith((f"nt_file_{_suffix}_", f"nt_uploaded_files_{_suffix}")))
     return False
 
 def _crm_workspace_prompt_close(window, tab_index, mode):
@@ -3076,7 +3082,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         warn_container_key = f"rem_unsaved_warn_{key_suffix}"
         with st.container(key=warn_container_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
-            st.markdown("Сохранить перед закрытием?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _w1, _w2 = st.columns(2)
             with _w1:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"rem_discard_{key_suffix}", use_container_width=True):
@@ -10708,7 +10714,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.markdown(f'<style>.st-key-{warn_key} {{border:2px solid #FF9800!important;border-radius:10px!important;background:#FFF8E1!important;padding:0.65rem 0.8rem!important;margin:0.35rem 0 0.65rem!important;}}</style>', unsafe_allow_html=True)
         with st.container(key=warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
-            st.markdown("Сохранить перед закрытием?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             c1, c2, c3 = st.columns(3)
             with c1:
                 if st.button("Сохранить", key=f"{key}_warn_save", type="primary", use_container_width=True):
@@ -12087,6 +12093,9 @@ def task_detail_dialog(task, cl, d, key_prefix):
                         f"edit_method_{key_prefix}", f"dl_inline_{key_prefix}",
                     ):
                         st.session_state.pop(_draft_widget_key, None)
+                    for _wk in list(st.session_state.keys()):
+                        if str(_wk).startswith(f"task_upload_{key_prefix}_"):
+                            st.session_state.pop(_wk, None)
                     st.session_state.pop("dialog_task_key", None)
                     st.session_state.pop("dialog_task_number", None)
                     st.session_state.pop("dialog_task_client_id", None)
@@ -12851,8 +12860,16 @@ def client_create_deal_task_dialog(cl_id):
         _spacer_col, _close_col = st.columns([20, 1])
         with _close_col:
             if st.button("\u2715", key=f"close_btn_{_key_prefix}", use_container_width=True):
-                st.session_state[f"_show_close_warning_{_key_prefix}"] = True
-                st.rerun()
+                _has_unsaved = _crm_workspace_tab_has_unsaved({"name": "client_create_deal_task_dialog", "args": (cl_id,)})
+                if _has_unsaved and not _show_close_warning:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = True
+                    st.rerun()
+                else:
+                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    _pop_dialog_return()
+                    st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                    st.session_state["_in_dialog"] = False
+                    st.rerun()
     if _show_close_warning:
         _warn_key = f"unsaved_warn_{_key_prefix}"
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
