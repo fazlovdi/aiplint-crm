@@ -3188,7 +3188,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         warn_container_key = f"rem_unsaved_warn_{key_suffix}"
         with st.container(key=warn_container_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
-            st.markdown("Сохранить изменения перед " + ("переходом?" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "закрытием?"))
+            st.markdown("Сохранить перед закрытием?")
             _w1, _w2 = st.columns(2)
             with _w1:
                 if st.button("Без сохр.", key=f"rem_discard_{key_suffix}", use_container_width=True):
@@ -10752,7 +10752,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         st.markdown(f'<style>.st-key-{warn_key} {{border:2px solid #FF9800!important;border-radius:10px!important;background:#FFF8E1!important;padding:0.65rem 0.8rem!important;margin:0.35rem 0 0.65rem!important;}}</style>', unsafe_allow_html=True)
         with st.container(key=warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
-            st.markdown("Сохранить изменения перед " + ("переходом?" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "закрытием?"))
+            st.markdown("Сохранить перед закрытием?")
             c1, c2, c3 = st.columns(3)
             with c1:
                 if st.button("Сохранить", key=f"{key}_warn_save", type="primary", use_container_width=True):
