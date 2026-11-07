@@ -7762,7 +7762,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 if _auto_amount_new > 0:
                     st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
                 norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
-                    _crm_mark_widget_changed(_amount_key_new, bool(str(norder_amount or "").strip()))
+                _crm_mark_widget_changed(_amount_key_new, bool(str(norder_amount or "").strip()))
             else:
                 nproducts = ""
                 nship_city = ""
