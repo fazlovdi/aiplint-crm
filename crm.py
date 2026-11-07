@@ -6500,7 +6500,7 @@ def create_internal_task_dialog():
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
-            st.markdown("Закрыть без сохранения?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wc1, _wc2 = st.columns(2)
             with _wc1:
                 if st.button("Без сохранения", key=f"cdlg_warn_nosave_{_key_prefix}", use_container_width=True):
@@ -11867,7 +11867,7 @@ def add_client_dialog(fv):
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**⚠️ Есть несохранённые изменения**")
-            st.markdown("Закрыть без сохранения?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
                 if st.button("Без сохранения", key=f"add_warn_nosave_{fv}", use_container_width=True):
@@ -12624,7 +12624,7 @@ def create_deal_dialog(cl_id):
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
-            st.markdown("Закрыть без сохранения?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"cdlg_warn_nosave_{cl_id}", use_container_width=True):
@@ -12741,7 +12741,7 @@ def deal_create_task_dialog(deal_id, client_id):
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
-            st.markdown("Закрыть без сохранения?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"cdt_warn_nosave_{deal_id}", use_container_width=True):
@@ -12837,15 +12837,16 @@ def client_create_task_dialog(cl_id):
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
-            st.markdown("Закрыть без сохранения?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"cct_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     if st.session_state.get("_crm_pending_close"):
                         for _wk in list(st.session_state.keys()):
-                            if str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk):
+                            if (str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk)) or str(_wk) == f"_nt_d_initial_{_key_prefix}":
                                 st.session_state.pop(_wk, None)
+                        st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
@@ -12905,15 +12906,16 @@ def client_create_deal_task_dialog(cl_id):
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
-            st.markdown("Закрыть без сохранения?")
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"ccdt_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     if st.session_state.get("_crm_pending_close"):
                         for _wk in list(st.session_state.keys()):
-                            if str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk):
+                            if (str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk)) or str(_wk) == f"_nt_d_initial_{_key_prefix}":
                                 st.session_state.pop(_wk, None)
+                        st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
