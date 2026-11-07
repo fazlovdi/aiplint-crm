@@ -2253,6 +2253,9 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window["id"]
     st.session_state["_crm_active_dialog"] = window["tabs"][existing]
+    _draft_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+    if _draft_login:
+        _crm_draft_restore_tab(_draft_login, window["tabs"][existing])
     st.session_state["_crm_dialog_requested_this_run"] = True
     _crm_workspace_queue_save()
     return window
@@ -2822,6 +2825,9 @@ def _crm_workspace_init():
             })
 
     st.session_state["_crm_windows"] = restored
+    for _draft_window in restored:
+        for _draft_tab in _draft_window.get("tabs", []) or []:
+            _crm_draft_restore_tab(login, _draft_tab)
     main_tab = saved.get("main_active_tab")
     if main_tab in ("Клиенты", "Сделки", "Задачи", "Внутренние задачи", "Поставщики", "Товары и прайс"):
         st.session_state["active_tab"] = main_tab
@@ -15394,6 +15400,8 @@ def _crm_render_workspace_fragment():
                         finally:
                             st.session_state["_crm_inside_dialog_host"] = False
 
+    # Draft snapshots are separate from crm_store and do not trigger CRM change notifications.
+    _crm_drafts_persist_open_tabs()
 
     # When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
 
@@ -15408,6 +15416,11 @@ def _crm_live_change_notice_fragment():
         _windows = st.session_state.get("_crm_windows", []) or []
         if not _login:
             return
+
+        # A small periodic checkpoint protects edits even when the user switches tabs
+        # or closes the browser shortly after typing. Actual draft writes are queued
+        # only when the captured values differ from the last successful snapshot.
+        _crm_drafts_persist_open_tabs()
 
         _seen = st.session_state.get("_crm_live_notice_seen_revision")
         if _seen is None:
