@@ -3905,7 +3905,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
             ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
             _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
-            _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
             _task_file_upload_col, _task_file_pick_col = st.columns(2)
             with _task_file_upload_col:
                 if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
