@@ -3101,6 +3101,8 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
                     for _k in (text_key, date_key, time_key, recipient_key):
                         st.session_state.pop(_k, None)
                     if st.session_state.get("_crm_pending_close"):
+                        st.session_state.pop("_pending_reminder_dialog", None)
+                        st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
@@ -12631,6 +12633,8 @@ def create_deal_dialog(cl_id):
                         for _wk in list(st.session_state.keys()):
                             if str(_wk).startswith("cdlg_") and str(cl_id) in str(_wk):
                                 st.session_state.pop(_wk, None)
+                        st.session_state.pop("dialog_create_deal_from_client", None)
+                        st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
@@ -12748,6 +12752,9 @@ def deal_create_task_dialog(deal_id, client_id):
                                 st.session_state.pop(_wk, None)
                         for _wk in (f"nt_form_initialized_{_key_prefix}", f"nt_order_calc_{_key_prefix}", f"nt_last_products_calc_{_key_prefix}", f"nt_prod_{_key_prefix}"):
                             st.session_state.pop(_wk, None)
+                        st.session_state.pop("dialog_create_deal_task_deal_id", None)
+                        st.session_state.pop("dialog_create_deal_task_client_id", None)
+                        st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
                     else:
