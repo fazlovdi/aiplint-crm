@@ -7242,13 +7242,19 @@ def _crm_workspace_restore_last_window_callback():
     _crm_workspace_queue_save()
 
 
-def _crm_workspace_close_window_callback(window_id, in_workspace=False):
-    """Закрывает окно в callback, чтобы избежать второго принудительного rerun."""
+def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=False):
+    """Закрывает окно только после обработки несохранённых черновиков."""
     windows = st.session_state.get("_crm_windows", [])
     window = next((w for w in windows if str(w.get("id")) == str(window_id)), None)
     if window is None:
         return
     is_statistics = any(t.get("name") == "statistics_dialog" for t in window.get("tabs", []))
+    if not force and not is_statistics:
+        _dirty_index = next((i for i, tab in enumerate(window.get("tabs", []) or [])
+                             if _crm_workspace_tab_has_unsaved(tab)), None)
+        if _dirty_index is not None:
+            _crm_workspace_prompt_close(window, _dirty_index, "window")
+            return
     if any(t.get("name") == "notifications_dialog" for t in window.get("tabs", [])):
         st.session_state["show_notifications_dialog"] = False
 
@@ -15155,8 +15161,8 @@ if not st.session_state.get("_crm_dialog_requested_this_run", False):
         if _global_calc_deal and _global_calc:
             deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
 
-def _crm_workspace_close_tab_callback(window_id, tab_index):
-    """Close a workspace tab during the normal fragment rerun, without queuing a second rerun."""
+def _crm_workspace_close_tab_callback(window_id, tab_index, force=False):
+    """Close a tab only after any unsaved edit has been explicitly handled."""
     windows = st.session_state.get("_crm_windows", [])
     window = next((w for w in windows if str(w.get("id")) == str(window_id)), None)
     if window is None:
@@ -15165,6 +15171,9 @@ def _crm_workspace_close_tab_callback(window_id, tab_index):
     if not (0 <= int(tab_index) < len(tabs)):
         return
     closing_tab = tabs[int(tab_index)]
+    if not force and _crm_workspace_tab_has_unsaved(closing_tab):
+        _crm_workspace_prompt_close(window, int(tab_index), "tab")
+        return
     if closing_tab.get("name") == "notifications_dialog":
         st.session_state["show_notifications_dialog"] = False
         st.session_state.pop("_crm_return_to_notifications", None)
