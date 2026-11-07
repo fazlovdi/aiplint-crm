@@ -10508,6 +10508,13 @@ def render_deal_detail(d, cl, cu, key_prefix):
             mgr_options_dd = get_managers_list()
             current_mgr_dd = d.get("manager", "")
             current_idx_dd = mgr_options_dd.index(current_mgr_dd) if current_mgr_dd in mgr_options_dd else 0
+            # Синхронизируем selectbox с моделью только при изменении сохранённого
+            # ответственного. Выбор пользователя не сбрасывается на обычных rerun.
+            _mgr_widget_key_dd = f"deal_mgr_inline_{deal_id}"
+            _mgr_model_key_dd = f"_deal_mgr_last_model_{deal_id}"
+            if st.session_state.get(_mgr_model_key_dd) != current_mgr_dd:
+                st.session_state[_mgr_widget_key_dd] = current_mgr_dd if current_mgr_dd in mgr_options_dd else (mgr_options_dd[0] if mgr_options_dd else "")
+                st.session_state[_mgr_model_key_dd] = current_mgr_dd
             _bank_payment_status = _tochka_bank_payment_status(d)
             _pay_col, _mgr_col = st.columns(2)
             with _pay_col:
