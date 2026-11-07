@@ -12542,16 +12542,6 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = True
                     _crm_workspace_rerun()
                 else:
-                    # Restore pending selections to the last saved deal values.
-                    _saved_payment_discard = str(d.get("payment_status") or "Не оплачено")
-                    st.session_state[f"dls_ps_{deal_id}"] = _saved_payment_discard
-                    st.session_state[f"_dls_ps_last_model_{deal_id}"] = _saved_payment_discard
-                    st.session_state[f"ps_{deal_id}"] = _saved_payment_discard
-                    st.session_state[f"_ps_last_model_{deal_id}"] = _saved_payment_discard
-                    _saved_manager_discard = str(d.get("manager") or "")
-                    _mgr_options_discard = get_managers_list()
-                    st.session_state[f"deal_mgr_inline_{deal_id}"] = _saved_manager_discard if _saved_manager_discard in _mgr_options_discard else (_mgr_options_discard[0] if _mgr_options_discard else "")
-                    st.session_state[f"_deal_mgr_last_model_{deal_id}"] = _saved_manager_discard
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     _pop_dialog_return()
@@ -12582,7 +12572,9 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"dls_ps_{deal_id}"] = _saved_payment_for_discard
                     st.session_state[f"ps_{deal_id}"] = _saved_payment_for_discard
                     st.session_state[f"_dls_ps_last_model_{deal_id}"] = _saved_payment_for_discard
-                    st.session_state[f"deal_mgr_inline_{deal_id}"] = _saved_manager_for_discard
+                    st.session_state[f"_ps_last_model_{deal_id}"] = _saved_payment_for_discard
+                    _deal_mgr_options_discard = get_managers_list()
+                    st.session_state[f"deal_mgr_inline_{deal_id}"] = _saved_manager_for_discard if _saved_manager_for_discard in _deal_mgr_options_discard else (_deal_mgr_options_discard[0] if _deal_mgr_options_discard else "")
                     st.session_state[f"_deal_mgr_last_model_{deal_id}"] = _saved_manager_for_discard
                     for _draft_widget_key in (f"dls_et_{deal_id}", f"dls_eb_{deal_id}", f"dls_em_{deal_id}"):
                         st.session_state.pop(_draft_widget_key, None)
