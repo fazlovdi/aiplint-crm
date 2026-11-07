@@ -11606,7 +11606,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
             _wcol1, _wcol2, _wcol3 = st.columns(3)
             with _wcol1:
-                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
+                if st.button("Сохранить и закрыть", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
                     # Read values from session_state widgets
                     _et_topic_key = f"edit_topic_{key_prefix}"
                     _et_type_key = f"edit_type_{key_prefix}"
@@ -11671,7 +11671,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Отменить и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
@@ -11683,7 +11683,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state["_in_dialog"] = False
                     _crm_workspace_rerun()
             with _wcol3:
-                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
+                if st.button("Редактировать", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     _crm_workspace_rerun()
 
@@ -12017,7 +12017,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
             _wcol1, _wcol2, _wcol3 = st.columns(3)
             with _wcol1:
-                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
+                if st.button("Сохранить и закрыть", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
                     _et_key = f"dls_et_{deal_id}"
                     _eb_key = f"dls_eb_{deal_id}"
                     _em_key = f"dls_em_{deal_id}"
@@ -12038,7 +12038,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("\u0411\u0435\u0437 \u0441\u043e\u0445\u0440.", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Отменить и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state.pop("dialog_deal_key", None)
@@ -12046,7 +12046,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state["_in_dialog"] = False
                     _crm_workspace_rerun()
             with _wcol3:
-                if st.button("\u041e\u0442\u043c\u0435\u043d\u0430", key=f"warn_cancel_{key_prefix}", use_container_width=True):
+                if st.button("Редактировать", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     _crm_workspace_rerun()
 
@@ -12073,7 +12073,7 @@ def client_detail_dialog(cl_id):
             st.markdown("Сохранить перед закрытием?")
             _wcol1, _wcol2, _wcol3 = st.columns(3)
             with _wcol1:
-                if st.button("Сохранить", key=f"warn_save_{_key_prefix}", type="primary", use_container_width=True):
+                if st.button("Сохранить и закрыть", key=f"warn_save_{_key_prefix}", type="primary", use_container_width=True):
                     _en_key = f"en_{cl_id}"
                     _ep_key = f"ep_{cl_id}"
                     _cm_key = f"cm_edit_{cl_id}"
@@ -12130,7 +12130,7 @@ def client_detail_dialog(cl_id):
                     st.toast("Сохранено", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("Без сохр.", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
+                if st.button("Отменить и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     _pop_dialog_return()
@@ -12138,7 +12138,7 @@ def client_detail_dialog(cl_id):
                     st.session_state["_in_dialog"] = False
                     _crm_workspace_rerun()
             with _wcol3:
-                if st.button("Отмена", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
+                if st.button("Редактировать", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     _crm_workspace_rerun()
     render_client_card_expanded(cl)
