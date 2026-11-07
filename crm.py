@@ -7497,11 +7497,6 @@ def render_deal_card_expanded(d, cl):
             d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
             d["last_modified"] = now_str()
             _sync_deal_board_stage_from_payment(d)
-            if new_ps == "Оплачено":
-                try:
-                    _ensure_paid_deal_torg12(d)
-                except Exception as exc:
-                    st.session_state["_paid_torg12_error"] = str(exc)[:300]
             commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
         st.markdown("**Ответственный:**")
         mgr_options_cd = get_managers_list()
@@ -8518,25 +8513,6 @@ def _attach_auto_torg12_to_task(task, deal_id, client_id):
     return True
 
 
-def _ensure_paid_deal_torg12(deal):
-    """Создаёт ТОРГ-12 один раз после полной оплаты на основании последнего расчёта."""
-    current = get_deal_by_id(deal.get("id")) or deal
-    calculations = [c for c in (current.get("calculations", []) or []) if not c.get("deleted") and c.get("items")]
-    if not calculations:
-        return False
-    calc = max(calculations, key=lambda c: str(c.get("updated_at", c.get("created_at", ""))))
-    if any(doc.get("kind") == "Товарная накладная ТОРГ-12" and str(doc.get("calculation_id", "")) == str(calc.get("id"))
-           for doc in (current.get("generated_documents", []) or [])):
-        return False
-    client = get_client_by_id(current.get("client_id")) or {}
-    pdf = _make_torg12_pdf(current, client, calc)
-    if isinstance(pdf, tuple):
-        pdf = pdf[0]
-    filename = f"ТОРГ-12 №{_deal_doc_number(current)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
-    _save_generated_document(current, pdf, filename, "Товарная накладная ТОРГ-12", calc)
-    return True
-
-
 def _open_pdf_link(pdf_bytes, filename, key):
     b64=base64.b64encode(pdf_bytes).decode("ascii")
     st.session_state[key]={"data":b64,"filename":filename}
@@ -9423,11 +9399,6 @@ def _tochka_apply_paid_status(deal, record):
         _sync_deal_board_stage_from_payment(deal)
         if deal.get("status") != old_stage:
             changed = True
-
-    try:
-        _ensure_paid_deal_torg12(deal)
-    except Exception as exc:
-        st.session_state["_paid_torg12_error"] = str(exc)[:300]
 
     if not record.get("paid_notification_sent"):
         manager = deal.get("manager", "")
