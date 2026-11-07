@@ -2557,42 +2557,6 @@ def _crm_workspace_tab_has_unsaved(tab):
                    if str(k).startswith((f"nt_file_{_suffix}_", f"nt_uploaded_files_{_suffix}")))
     return False
 
-def _crm_capture_deal_warning_draft(deal_id):
-    """Preserve deal-card widget drafts while the unsaved-changes warning rerenders."""
-    _deal_id = str(deal_id)
-    _snapshot_key = f"_crm_warning_draft_snapshot_deal_{_deal_id}"
-    _prefixes = (
-        f"deal_mgr_inline_{_deal_id}", f"_deal_mgr_last_model_{_deal_id}",
-        f"_crm_widget_changed_deal_mgr_inline_{_deal_id}",
-        f"dls_show_edit_{_deal_id}", f"dls_et_{_deal_id}", f"dls_eb_{_deal_id}",
-        f"dls_em_{_deal_id}", f"dls_ps_{_deal_id}", f"_dls_ps_last_model_{_deal_id}",
-        f"ps_{_deal_id}", f"_ps_last_model_{_deal_id}",
-        f"deal_real_date_detail_{_deal_id}", f"dls_dc_input_{_deal_id}",
-        f"dls_pause_reason_{_deal_id}",
-    )
-    _snapshot = {}
-    for _key in list(st.session_state.keys()):
-        _key_str = str(_key)
-        if (
-            _key_str in _prefixes
-            or (_key_str.startswith("dls_") and _key_str.endswith(f"_{_deal_id}"))
-            or (_key_str.startswith("dls_") and f"_{_deal_id}_" in _key_str and not _key_str.startswith("dls_up_"))
-        ):
-            _snapshot[_key_str] = st.session_state.get(_key)
-    st.session_state[_snapshot_key] = _snapshot
-
-
-def _crm_restore_deal_warning_draft(deal_id):
-    """Restore a captured draft before deal widgets are constructed on warning rerender."""
-    _snapshot_key = f"_crm_warning_draft_snapshot_deal_{str(deal_id)}"
-    _snapshot = st.session_state.get(_snapshot_key)
-    if not isinstance(_snapshot, dict):
-        return
-    for _key, _value in _snapshot.items():
-        # This runs before the deal's widgets are rendered, so widget state is safe to restore.
-        st.session_state[_key] = _value
-
-
 def _crm_workspace_prompt_close(window, tab_index, mode):
     tabs = window.get("tabs", []) or []
     if not (0 <= int(tab_index) < len(tabs)):
@@ -2606,8 +2570,6 @@ def _crm_workspace_prompt_close(window, tab_index, mode):
     elif name == "deal_detail_dialog" and args:
         deal = args[0] if isinstance(args[0], dict) else {}
         prefix = str(args[3]) if len(args) > 3 else f"deal_{deal.get('id', '')}"
-        if deal.get("id") is not None:
-            _crm_capture_deal_warning_draft(deal.get("id"))
         st.session_state[f"_show_close_warning_{prefix}"] = True
     elif name == "client_detail_dialog" and args:
         st.session_state[f"_show_close_warning_client_{args[0]}"] = True
@@ -12641,8 +12603,6 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
         st.session_state[_manager_model_key] = _saved_manager_for_render
         st.session_state.pop(f"_crm_widget_changed_{_manager_widget_key}", None)
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
-    if _show_close_warning:
-        _crm_restore_deal_warning_draft(deal_id)
     _is_editing = st.session_state.get(f"dls_show_edit_{deal_id}", False)
 
     _close_btn_key = f"close_btn_{key_prefix}"
@@ -12653,7 +12613,6 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
         with _close_col:
             if st.button("\u2715", key=_close_btn_key, use_container_width=True):
                 if _is_editing and not _show_close_warning:
-                    _crm_capture_deal_warning_draft(deal_id)
                     st.session_state[f"_show_close_warning_{key_prefix}"] = True
                     _crm_workspace_rerun()
                 else:
@@ -12676,7 +12635,6 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             with _wcol1:
                 if st.button("Не сохранять и перейти" if (st.session_state.get("_crm_pending_child_open") or st.session_state.get("_crm_pending_close", {}).get("mode") == "switch") else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state.pop(f"_crm_warning_draft_snapshot_deal_{deal_id}", None)
                     _saved_deal_for_discard = next(
                         (x for x in st.session_state.get("crm_store", {}).get("deals", [])
                          if str(x.get("id", "")) == str(deal_id)),
