@@ -10646,12 +10646,12 @@ def deal_calculation_dialog(deal_id, calc_id):
     name_col, dtype_col, vat_col = st.columns([1.5, 1, 0.9])
     with name_col:
         st.text_input("Название расчёта:", key=name_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-        _crm_mark_widget_changed(name_key, str(st.session_state.get(name_key, "")) != str(calc.get("name") or _calculation_display_name(deal, calc)))
+        _crm_mark_widget_changed(name_key, str(st.session_state.get(name_key, "")) != str(st.session_state.get(snapshot_key, {}).get("name") or _calculation_display_name(deal, calc)))
     with dtype_col:
         selected_dtype = st.selectbox("Тип скидки:", dtype_options,
             index=dtype_options.index(calc.get("discount_type", "Без скидки")), key=dtype_key,
             on_change=_on_discount_type_change)
-        _crm_mark_widget_changed(dtype_key, str(st.session_state.get(dtype_key, calc.get("discount_type", "Без скидки"))) != str(calc.get("discount_type", "Без скидки")))
+        _crm_mark_widget_changed(dtype_key, str(st.session_state.get(dtype_key, calc.get("discount_type", "Без скидки"))) != str(st.session_state.get(snapshot_key, {}).get("discount_type", "Без скидки")))
     with vat_col:
         vat_key = f"{key}_vat_rate"
         if vat_key not in st.session_state:
@@ -10691,6 +10691,8 @@ def deal_calculation_dialog(deal_id, calc_id):
 
     for idx, item in enumerate(items):
         item.setdefault("row_id", uuid.uuid4().hex)
+        _original_calc_items = (st.session_state.get(snapshot_key, {}) or {}).get("items", []) or []
+        _original_item = next((x for x in _original_calc_items if str(x.get("row_id", "")) == str(item.get("row_id", ""))), item)
         item.setdefault("color_ral", "")
         row_id = item["row_id"]
         pid_key = f"{key}_{row_id}_product"
@@ -10717,23 +10719,23 @@ def deal_calculation_dialog(deal_id, calc_id):
             selected_pid = st.selectbox("Товар", pids, index=pids.index(current_pid) if current_pid in pids else 0,
                 format_func=lambda x, pm=pmap: pm[x].get("name", x), key=pid_key,
                 on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-            _crm_mark_widget_changed(pid_key, str(st.session_state.get(pid_key, current_pid)) != str(current_pid))
+            _crm_mark_widget_changed(pid_key, str(st.session_state.get(pid_key, current_pid)) != str(_original_item.get("product_id", current_pid)))
         product = pmap[selected_pid]
         price_key = f"{key}_{row_id}_price"
         if price_key not in st.session_state:
             st.session_state[price_key] = float(item.get("unit_price", product.get("price", 0)) or 0)
         with cols[2]:
             st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"{key}_{row_id}_color", placeholder="RAL / цвет", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-            _crm_mark_widget_changed(f"{key}_{row_id}_color", str(st.session_state.get(f"{key}_{row_id}_color", item.get("color_ral", ""))) != str(item.get("color_ral", "")))
+            _crm_mark_widget_changed(f"{key}_{row_id}_color", str(st.session_state.get(f"{key}_{row_id}_color", item.get("color_ral", ""))) != str(_original_item.get("color_ral", "")))
         with cols[3]:
             st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem'>Ед.</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='font-size:0.78rem;font-weight:600;padding-top:0.15rem'>{product.get('unit', item.get('unit', 'шт.'))}</div>", unsafe_allow_html=True)
         with cols[4]:
             st.number_input("Кол-во", min_value=0.0, value=float(item.get("quantity", 1) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_qty", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-            _crm_mark_widget_changed(f"{key}_{row_id}_qty", float(st.session_state.get(f"{key}_{row_id}_qty", item.get("quantity", 1)) or 0) != float(item.get("quantity", 1) or 0))
+            _crm_mark_widget_changed(f"{key}_{row_id}_qty", float(st.session_state.get(f"{key}_{row_id}_qty", item.get("quantity", 1)) or 0) != float(_original_item.get("quantity", 1) or 0))
         with cols[5]:
             st.number_input("Скидка, %", min_value=0.0, max_value=100.0, value=float(item.get("discount", default_discount) or 0), step=1.0, format="%g", key=f"{key}_{row_id}_discount", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-            _crm_mark_widget_changed(f"{key}_{row_id}_discount", float(st.session_state.get(f"{key}_{row_id}_discount", item.get("discount", default_discount)) or 0) != float(item.get("discount", default_discount) or 0))
+            _crm_mark_widget_changed(f"{key}_{row_id}_discount", float(st.session_state.get(f"{key}_{row_id}_discount", item.get("discount", default_discount)) or 0) != float(_original_item.get("discount", default_discount) or 0))
         with cols[6]:
             st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem;text-align:right'>Цена</div>", unsafe_allow_html=True)
             # При смене товара показываем цену выбранной позиции из актуального прайса
@@ -10770,7 +10772,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         delivery_col, *_ = st.columns([2.8, 1.05, 0.62, 1.15, 0.72, 0.72, 0.78])
         with delivery_col:
             delivery = st.number_input("Доставка, ₽", min_value=0.0, value=float(calc.get("delivery_amount", 0) or 0), step=100.0, format="%g", key=delivery_key, on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-            _crm_mark_widget_changed(delivery_key, float(st.session_state.get(delivery_key, calc.get("delivery_amount", 0)) or 0) != float(calc.get("delivery_amount", 0) or 0))
+            _crm_mark_widget_changed(delivery_key, float(st.session_state.get(delivery_key, calc.get("delivery_amount", 0)) or 0) != float((st.session_state.get(snapshot_key, {}) or {}).get("delivery_amount", 0) or 0))
         _delivery_left, _delivery_center, _delivery_right = st.columns([1, 2.2, 1])
         with _delivery_center:
             if st.button("Убрать доставку", key=f"{key}_remove_delivery", use_container_width=True):
