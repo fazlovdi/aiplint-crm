@@ -2580,7 +2580,7 @@ def _crm_draft_save_finished(cache_key, payload, future):
         if ok:
             _CRM_DRAFT_LAST_PAYLOADS[cache_key] = payload
 
-def _crm_drafts_persist_open_tabs():
+def _crm_drafts_persist_open_tabs(force=False):
     login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
     if not login or not YANDEX_TOKEN:
         return
@@ -2595,10 +2595,10 @@ def _crm_drafts_persist_open_tabs():
                 with _CRM_DRAFT_LOCK:
                     if _CRM_DRAFT_LAST_PAYLOADS.get(cache_key) == payload or _CRM_DRAFT_PENDING_PAYLOADS.get(cache_key) == payload:
                         continue
-                    # Avoid uploading every keystroke. The 3-second checkpoint
-                    # will pick up the newest value after this short throttle.
+                    # Normal checkpoints throttle writes; tab switches force a snapshot
+                    # before the old tab's widgets are unmounted.
                     _now_mono = time.monotonic()
-                    if _now_mono - _CRM_DRAFT_LAST_SUBMIT_AT.get(cache_key, 0.0) < 1.5:
+                    if not force and _now_mono - _CRM_DRAFT_LAST_SUBMIT_AT.get(cache_key, 0.0) < 1.5:
                         continue
                     _CRM_DRAFT_LAST_SUBMIT_AT[cache_key] = _now_mono
                     _CRM_DRAFT_PENDING_PAYLOADS[cache_key] = payload
@@ -2634,6 +2634,9 @@ def _crm_workspace_activate_tab(window_id, tab_index):
     tabs = window.get("tabs", [])
     if not tabs:
         return
+    # Snapshot current widget values before changing active_tab: the following
+    # fragment render unmounts the previous tab's widgets.
+    _crm_drafts_persist_open_tabs(force=True)
     try:
         index = max(0, min(int(tab_index), len(tabs) - 1))
     except (TypeError, ValueError):
