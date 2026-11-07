@@ -2378,6 +2378,14 @@ def _crm_workspace_tab_has_unsaved(tab):
         return bool(str(state.get(f"dls_dc_input_{deal_id}", "") or "").strip()
                     or str(state.get(f"dls_pause_reason_{deal_id}", "") or "").strip()
                     or state.get(f"_show_close_warning_{prefix}", False))
+    if name == "deal_calculation_dialog" and len(args) >= 2:
+        deal_id, calc_id = str(args[0]), str(args[1])
+        key = f"calc_{deal_id}_{calc_id}"
+        if state.get(f"{key}_dirty", False):
+            return True
+        deal = next((x for x in state.get("crm_store", {}).get("deals", []) if str(x.get("id")) == deal_id), None)
+        calc = next((x for x in (deal or {}).get("calculations", []) if str(x.get("id")) == calc_id), None)
+        return bool(calc and calc.get("_draft"))
     if name == "client_detail_dialog" and args:
         return bool(state.get(f"show_edit_{args[0]}"))
     return False
@@ -2398,6 +2406,9 @@ def _crm_workspace_prompt_close(window, tab_index, mode):
         st.session_state[f"_show_close_warning_{prefix}"] = True
     elif name == "client_detail_dialog" and args:
         st.session_state[f"_show_close_warning_client_{args[0]}"] = True
+    elif name == "deal_calculation_dialog" and len(args) >= 2:
+        calc_key = f"calc_{args[0]}_{args[1]}"
+        st.session_state[f"{calc_key}_close_warning"] = True
     else:
         return False
     window["active_tab"] = int(tab_index)
@@ -10586,7 +10597,11 @@ def deal_calculation_dialog(deal_id, calc_id):
                     save_data(st.session_state.crm_store)
                     for k in (dirty_key, warning_key, name_key, f"{key}_save_requested", snapshot_key):
                         st.session_state.pop(k, None)
-                    _pop_dialog_return()
+                    _pending_workspace_close = st.session_state.get("_crm_pending_close")
+                    if isinstance(_pending_workspace_close, dict):
+                        _crm_workspace_finish_pending_close()
+                    else:
+                        _pop_dialog_return()
                     st.rerun()
             with c3:
                 if st.button("Продолжить", key=f"{key}_warn_continue", use_container_width=True):
@@ -10772,8 +10787,11 @@ def deal_calculation_dialog(deal_id, calc_id):
         for k in (dirty_key, warning_key, f"{key}_save_requested", snapshot_key):
             st.session_state.pop(k, None)
         st.toast("Расчёт сохранён", icon="✅")
-        # После сохранения оставляем окно расчёта открытым, чтобы можно было
-        # продолжить работу с расчётом без повторного открытия окна.
+        # При сохранении из предупреждения закрытия завершаем ожидаемое переключение/закрытие.
+        _pending_workspace_close = st.session_state.get("_crm_pending_close")
+        if isinstance(_pending_workspace_close, dict):
+            _crm_workspace_finish_pending_close()
+        # После обычного сохранения оставляем окно расчёта открытым.
         _calc_refresh()
 
 def render_deal_detail(d, cl, cu, key_prefix):
