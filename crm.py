@@ -4758,8 +4758,19 @@ def save_data(data):
                     _rtype = str(_reminder.get("entity_type") or "")
                     _reid = str(_reminder.get("entity_id") or "")
                     _rem_target = ("deal_record:" if _rtype == "deal" else "client:" if _rtype == "client" else "task_record:") + _reid
-                    if _rem_target in _change_targets:
-                        _change_details[_rem_target] = f"{_event_name} создал(а) напоминание по объекту «{_reminder.get('entity_label') or _reid}»"
+                    _change_targets.add(_rem_target)
+                    if _rtype == "client":
+                        _changed_client_ids.add(_reid)
+                    elif _rtype == "deal":
+                        _rem_deal = _new_deals.get(_reid) or _old_deals.get(_reid) or {}
+                        _rem_client_id = _rem_deal.get("client_id") or _rem_deal.get("cl_id")
+                        if _rem_client_id is not None:
+                            _changed_client_ids.add(str(_rem_client_id))
+                    else:
+                        _rem_task_client = next((str(c.get("id")) for c in merged_data.get("clients", []) or [] for t in c.get("tasks", []) or [] if isinstance(t, dict) and str(t.get("id") or t.get("task_number") or "") == _reid), "")
+                        if _rem_task_client:
+                            _changed_client_ids.add(_rem_task_client)
+                    _change_details[_rem_target] = f"{_event_name} создал(а) напоминание по объекту «{_reminder.get('entity_label') or _reid}»"
                 if _change_targets:
                     conn.execute(
                         "INSERT OR REPLACE INTO crm_change_events (revision, user_login, user_name, client_ids, created_at, change_targets, change_details) VALUES (?, ?, ?, ?, ?, ?, ?)",
