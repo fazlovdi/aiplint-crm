@@ -9746,8 +9746,10 @@ def _tochka_apply_paid_status(deal, record):
     return changed
 
 def _tochka_auto_refresh_payment_status(deal, calc):
-    """Проверяет неоплаченные документы не чаще раза в минуту, пока открыто окно счёта."""
+    """Проверяет неоплаченные документы не чаще раза в минуту, не блокируя повторную навигацию при сбое API."""
     changed = False
+    _attempts = st.session_state.setdefault("_crm_payment_status_attempts", {})
+    _now_ts = moscow_now().timestamp()
     for record in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []):
         if record.get("deleted"):
             continue
@@ -9762,6 +9764,23 @@ def _tochka_auto_refresh_payment_status(deal, calc):
             checked_dt = None
         if checked_dt and (moscow_now() - checked_dt).total_seconds() < 60:
             continue
+
+        # Failed requests do not set checked_at. Remember the attempt in session state
+        # as well, otherwise every tab switch can repeat a slow 30-second API request.
+        _record_identity = (
+            record.get("operation_id") or record.get("document_id")
+            or record.get("payment_link_id") or record.get("id")
+            or record.get("created_at") or str(id(record))
+        )
+        _attempt_key = f"{deal.get('id')}:{record.get('bank', 'Точка')}:{record.get('kind', '')}:{_record_identity}"
+        try:
+            _last_attempt = float(_attempts.get(_attempt_key, 0) or 0)
+        except (TypeError, ValueError):
+            _last_attempt = 0
+        if _now_ts - _last_attempt < 60:
+            continue
+        _attempts[_attempt_key] = _now_ts
+
         try:
             old_status = str(record.get("status", ""))
             if record.get("bank") == "Ozon Pay":
@@ -9773,7 +9792,7 @@ def _tochka_auto_refresh_payment_status(deal, calc):
             if _tochka_apply_paid_status(deal, record):
                 changed = True
         except Exception:
-            # Автопроверка не должна мешать работе формы; пользователь может проверить вручную.
+            # Не повторяем неудачный запрос на каждом rerun; новая попытка возможна через минуту.
             continue
     if changed:
         save_data(st.session_state.crm_store)
