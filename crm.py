@@ -12846,6 +12846,7 @@ def client_create_task_dialog(cl_id):
                         for _wk in list(st.session_state.keys()):
                             if (str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk)) or str(_wk) == f"_nt_d_initial_{_key_prefix}":
                                 st.session_state.pop(_wk, None)
+                        st.session_state.pop("dialog_create_client_task_client_id", None)
                         st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
@@ -12915,6 +12916,7 @@ def client_create_deal_task_dialog(cl_id):
                         for _wk in list(st.session_state.keys()):
                             if (str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk)) or str(_wk) == f"_nt_d_initial_{_key_prefix}":
                                 st.session_state.pop(_wk, None)
+                        st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
                         st.session_state["_in_dialog"] = False
                         _crm_workspace_finish_pending_close()
                         _crm_workspace_rerun()
