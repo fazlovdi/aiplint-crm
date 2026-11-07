@@ -2406,7 +2406,7 @@ def _crm_draft_widget_values(tab):
         reworking = bool(state.get(f"show_rework_{prefix}"))
         for key, value in list(state.items()):
             key = str(key)
-            if prefix not in key:
+            if not (key.endswith(prefix) or f"_{prefix}_" in key):
                 continue
             if key.startswith(("task_upload_", "task_upload_ver_", "task_pick_existing_", "uf_", "cnt_files_", "edit_files_")):
                 continue
@@ -2448,7 +2448,10 @@ def _crm_draft_widget_values(tab):
         if editing:
             for key, value in list(state.items()):
                 key = str(key)
-                if any(key == p or key.startswith(p) for p in prefixes):
+                if any(
+                    (key.startswith(p) if p.endswith("_") else (key == p or key.startswith(p + "_")))
+                    for p in prefixes
+                ):
                     encoded = _crm_draft_encode(value)
                     if encoded is not None or value is None:
                         values[key] = encoded
