@@ -7619,12 +7619,16 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
         _left_col, _right_col = st.columns(2, gap="large")
         with _left_col:
             ntype = st.selectbox("Тип задачи:", _task_type_options, index=_task_type_options.index(st.session_state[_task_type_key]), key=_task_type_key)
+            _crm_mark_widget_changed(_task_type_key, str(ntype or "") != str(default_type or "Связаться"))
             if ntype not in ("Отправить заказ", "Отправить образцы"):
                 ntopic = st.text_input("Тема задачи:", key=f"nt_topic_{key_suffix}")
+                _crm_mark_widget_changed(f"nt_topic_{key_suffix}", bool(str(ntopic or "").strip()))
             else:
                 ntopic = ntype
             ntm = st.selectbox("Ответственный:", get_managers_list(), index=None, key=f"nt_mgr_{key_suffix}", placeholder=MGR_PLACEHOLDER)
+            _crm_mark_widget_changed(f"nt_mgr_{key_suffix}", bool(ntm))
             ntd = st.date_input("Срок:", format="DD.MM.YYYY", key=f"nt_d_{key_suffix}")
+            _crm_mark_widget_changed(f"nt_d_{key_suffix}", ntd is not None)
             _selected_calc_id_new = ""
             if ntype in ("Отправить заказ", "Отправить образцы"):
                 _deal_for_new_task = get_deal_by_id(deal_id) if deal_id else None
@@ -7634,7 +7638,9 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                     st.session_state.get(f"nt_{key_suffix}_order_calc", "")
                 )
                 nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
+                _crm_mark_widget_changed(f"nt_city_{key_suffix}", bool(str(nship_city or "").strip()))
                 nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
+                _crm_mark_widget_changed(f"nt_addr_{key_suffix}", bool(str(nship_addr or "").strip()))
                 _current_client = get_client_by_id(cl_id) or {}
                 _client_id_key = str(_current_client.get("id", cl_id or ""))
                 _client_options = {_client_id_key: _current_client} if _current_client else {}
@@ -7671,14 +7677,16 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                 if st.session_state.get(f"nt_show_client_picker_{key_suffix}", False):
                     st.selectbox("Клиент / доп. контакт", list(_client_display), format_func=lambda x: _client_display.get(x, x), key=f"nt_client_picker_{key_suffix}", index=None, placeholder="Выберите клиента", on_change=_apply_task_receiver_selection)
                 nreceiver_phone = st.text_input("Телефон получателя:", key=f"nt_rphone_{key_suffix}")
+                _crm_mark_widget_changed(f"nt_rphone_{key_suffix}", bool(str(nreceiver_phone or "").strip()))
                 nship_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=0, key=f"nt_pay_{key_suffix}", placeholder="Укажи плательщика")
+                _crm_mark_widget_changed(f"nt_pay_{key_suffix}", str(nship_pay or "") not in ("", SHIP_PAY_OPTIONS[0]))
                 _selected_calc_new = next((c for c in (_deal_for_new_task or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_new)), None)
                 _auto_amount_new = _deal_items_total(_selected_calc_new.get("items", [])) if _selected_calc_new else 0
                 _amount_key_new = f"nt_amount_{key_suffix}"
                 if _auto_amount_new > 0:
                     st.session_state[_amount_key_new] = f"{_auto_amount_new:g}"
                 norder_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_new:g}" if _auto_amount_new > 0 else "", key=_amount_key_new, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_new))
-    _crm_mark_widget_changed(_amount_key_new, bool(str(norder_amount or "").strip()))
+                    _crm_mark_widget_changed(_amount_key_new, bool(str(norder_amount or "").strip()))
             else:
                 nproducts = ""
                 nship_city = ""
@@ -7690,15 +7698,18 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             _new_delivery_col, _new_track_col = st.columns([1, 1])
             with _new_delivery_col:
                 nship_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=0, key=f"nt_method_{key_suffix}")
+                _crm_mark_widget_changed(f"nt_method_{key_suffix}", str(nship_method or "") not in ("", DELIVERY_METHOD_OPTIONS[0]))
             with _new_track_col:
                 ntk_num = st.text_input("Трек/комментарий:", key=f"nt_tk_{key_suffix}", placeholder="Введите трек-номер или комментарий")
+                _crm_mark_widget_changed(f"nt_tk_{key_suffix}", bool(str(ntk_num or "").strip()))
             ncomment = st.text_area("Описание:", key=f"nt_c_{key_suffix}")
+            _crm_mark_widget_changed(f"nt_c_{key_suffix}", bool(str(ncomment or "").strip()))
 
         with _right_col:
             st.markdown("**Добавление файлов**")
             _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
             ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
-    _crm_mark_widget_changed(f"nt_file_{key_suffix}_{_nt_file_ver}", bool(ntf))
+            _crm_mark_widget_changed(f"nt_file_{key_suffix}_{_nt_file_ver}", bool(ntf))
             if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
                 if ntf:
                     _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
