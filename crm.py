@@ -2423,6 +2423,37 @@ def _crm_workspace_tab_has_unsaved(tab):
         if str(state.get(f"new_cc_input_{_cid}", "") or "").strip() or state.get(f"cf_up_{_cid}"):
             return True
         return False
+    if name == "create_reminder_dialog" and len(args) >= 2:
+        _rk = f"{args[0]}_{args[1]}"
+        return bool(
+            str(state.get(f"rem_text_{_rk}", "") or "").strip()
+            or state.get(f"rem_date_{_rk}") is not None
+            or state.get(f"rem_recipient_{_rk}") not in (None, "")
+        )
+    if name == "create_deal_dialog" and args:
+        _cid = str(args[0])
+        return bool(
+            str(state.get(f"cdlg_title_{_cid}", "") or "").strip()
+            or str(state.get(f"cdlg_budget_{_cid}", "") or "").strip()
+            or state.get(f"cdlg_real_date_{_cid}") is not None
+            or state.get(f"cdlg_mgr_{_cid}") not in (None, "")
+            or str(state.get(f"cdlg_comment_{_cid}", "") or "").strip()
+            or state.get(f"cdlg_files_{_cid}")
+            or state.get(f"cdlg_ps_{_cid}") not in (None, "", "Не оплачено")
+        )
+    if name in ("deal_create_task_dialog", "client_create_task_dialog", "client_create_deal_task_dialog"):
+        _suffix = (f"cdt_{args[0]}" if name == "deal_create_task_dialog" and args else
+                   f"cct_{args[0]}" if name == "client_create_task_dialog" and args else
+                   f"ccdt_{args[0]}" if args else "")
+        _dirty_prefixes = tuple(f"{k}_{_suffix}" for k in (
+            "nt_topic", "nt_mgr", "nt_city", "nt_addr", "nt_recv", "nt_rphone",
+            "nt_pay", "nt_amount", "nt_method", "nt_tk", "nt_c", "nt_prod",
+            "nt_order_calc", "nt_type"
+        ))
+        if any(str(state.get(k, "") or "").strip() for k in _dirty_prefixes if k in state):
+            return True
+        return any(state.get(str(k)) for k in state.keys()
+                   if str(k).startswith(f"nt_file_{_suffix}_"))
     return False
 
 def _crm_workspace_prompt_close(window, tab_index, mode):
@@ -2441,6 +2472,16 @@ def _crm_workspace_prompt_close(window, tab_index, mode):
         st.session_state[f"_show_close_warning_{prefix}"] = True
     elif name == "client_detail_dialog" and args:
         st.session_state[f"_show_close_warning_client_{args[0]}"] = True
+    elif name == "create_reminder_dialog" and len(args) >= 2:
+        st.session_state[f"rem_close_warning_{args[0]}_{args[1]}"] = True
+    elif name == "create_deal_dialog" and args:
+        st.session_state[f"_show_close_warning_cdlg_{args[0]}"] = True
+    elif name == "deal_create_task_dialog" and args:
+        st.session_state[f"_show_close_warning_cdt_{args[0]}"] = True
+    elif name == "client_create_task_dialog" and args:
+        st.session_state[f"_show_close_warning_cct_{args[0]}"] = True
+    elif name == "client_create_deal_task_dialog" and args:
+        st.session_state[f"_show_close_warning_ccdt_{args[0]}"] = True
     elif name == "deal_calculation_dialog" and len(args) >= 2:
         calc_key = f"calc_{args[0]}_{args[1]}"
         st.session_state[f"{calc_key}_close_warning"] = True
@@ -3015,15 +3056,20 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
             st.markdown("Сохранить перед закрытием?")
             _w1, _w2 = st.columns(2)
             with _w1:
-                if st.button("Без сохр.", key=f"rem_discard_{key_suffix}", use_container_width=True):
-                    st.session_state.pop("_pending_reminder_dialog", None)
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"rem_discard_{key_suffix}", use_container_width=True):
                     st.session_state.pop(warning_key, None)
                     for _k in (text_key, date_key, time_key, recipient_key):
                         st.session_state.pop(_k, None)
-                    st.rerun()
+                    if st.session_state.get("_crm_pending_close"):
+                        _crm_workspace_finish_pending_close()
+                        _crm_workspace_rerun()
+                    else:
+                        st.session_state.pop("_pending_reminder_dialog", None)
+                        st.rerun()
             with _w2:
                 if st.button("Продолжить редактирование", key=f"rem_continue_{key_suffix}", use_container_width=True):
                     st.session_state.pop(warning_key, None)
+                    st.session_state.pop("_crm_pending_close", None)
                     st.rerun()
 
     logins = [u["login"] for u in users]
@@ -12518,15 +12564,23 @@ def create_deal_dialog(cl_id):
             st.markdown("Закрыть без сохранения?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Без сохранения", key=f"cdlg_warn_nosave_{cl_id}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"cdlg_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_create_deal_from_client", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    if st.session_state.get("_crm_pending_close"):
+                        for _wk in list(st.session_state.keys()):
+                            if str(_wk).startswith("cdlg_") and str(cl_id) in str(_wk):
+                                st.session_state.pop(_wk, None)
+                        _crm_workspace_finish_pending_close()
+                        _crm_workspace_rerun()
+                    else:
+                        _pop_dialog_return()
+                        st.session_state.pop("dialog_create_deal_from_client", None)
+                        st.session_state["_in_dialog"] = False
+                        st.rerun()
             with _wcol2:
-                if st.button("Отмена", key=f"cdlg_warn_cancel_{cl_id}", use_container_width=True):
+                if st.button("Продолжить редактирование", key=f"cdlg_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
     _cl = get_client_by_id(cl_id)
     if not _cl:
@@ -12628,20 +12682,30 @@ def deal_create_task_dialog(deal_id, client_id):
             st.markdown("Закрыть без сохранения?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Без сохранения", key=f"cdt_warn_nosave_{deal_id}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"cdt_warn_nosave_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_create_deal_task_deal_id", None)
-                    st.session_state.pop("dialog_create_deal_task_client_id", None)
-                    st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
-                    st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    if st.session_state.get("_crm_pending_close"):
+                        for _wk in list(st.session_state.keys()):
+                            if str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk):
+                                st.session_state.pop(_wk, None)
+                        for _wk in (f"nt_form_initialized_{_key_prefix}", f"nt_order_calc_{_key_prefix}", f"nt_last_products_calc_{_key_prefix}", f"nt_prod_{_key_prefix}"):
+                            st.session_state.pop(_wk, None)
+                        _crm_workspace_finish_pending_close()
+                        _crm_workspace_rerun()
+                    else:
+                        _pop_dialog_return()
+                        st.session_state.pop("dialog_create_deal_task_deal_id", None)
+                        st.session_state.pop("dialog_create_deal_task_client_id", None)
+                        st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
+                        st.session_state.pop(f"nt_order_calc_cdt_{deal_id}", None)
+                        st.session_state.pop(f"nt_last_products_calc_cdt_{deal_id}", None)
+                        st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
+                        st.session_state["_in_dialog"] = False
+                        st.rerun()
             with _wcol2:
-                if st.button("Отмена", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
+                if st.button("Продолжить редактирование", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
     _task_form_lifecycle_key = f"nt_form_initialized_cdt_{deal_id}"
     if not st.session_state.get(_task_form_lifecycle_key):
@@ -12714,15 +12778,23 @@ def client_create_task_dialog(cl_id):
             st.markdown("Закрыть без сохранения?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Без сохранения", key=f"cct_warn_nosave_{cl_id}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"cct_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_create_client_task_client_id", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    if st.session_state.get("_crm_pending_close"):
+                        for _wk in list(st.session_state.keys()):
+                            if str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk):
+                                st.session_state.pop(_wk, None)
+                        _crm_workspace_finish_pending_close()
+                        _crm_workspace_rerun()
+                    else:
+                        _pop_dialog_return()
+                        st.session_state.pop("dialog_create_client_task_client_id", None)
+                        st.session_state["_in_dialog"] = False
+                        st.rerun()
             with _wcol2:
-                if st.button("Отмена", key=f"cct_warn_cancel_{cl_id}", use_container_width=True):
+                if st.button("Продолжить редактирование", key=f"cct_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
     _created_task = render_task_form(None, cl_id, f"cct_{cl_id}")
     if _created_task:
@@ -12766,15 +12838,23 @@ def client_create_deal_task_dialog(cl_id):
             st.markdown("Закрыть без сохранения?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Без сохранения", key=f"ccdt_warn_nosave_{cl_id}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"ccdt_warn_nosave_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
-                    st.session_state["_in_dialog"] = False
-                    st.rerun()
+                    if st.session_state.get("_crm_pending_close"):
+                        for _wk in list(st.session_state.keys()):
+                            if str(_wk).startswith("nt_") and f"_{_key_prefix}" in str(_wk):
+                                st.session_state.pop(_wk, None)
+                        _crm_workspace_finish_pending_close()
+                        _crm_workspace_rerun()
+                    else:
+                        _pop_dialog_return()
+                        st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
+                        st.session_state["_in_dialog"] = False
+                        st.rerun()
             with _wcol2:
-                if st.button("Отмена", key=f"ccdt_warn_cancel_{cl_id}", use_container_width=True):
+                if st.button("Продолжить редактирование", key=f"ccdt_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
     deal_options = {d["id"]: d.get("deal_number", d.get("title", "")) for d in cl_deals}
     selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"ccdt_deal_sel_{cl_id}")
