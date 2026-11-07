@@ -2404,6 +2404,9 @@ def _crm_workspace_tab_has_unsaved(tab):
         payment_key = f"ps_{deal_id}"
         if payment_key in state and str(state.get(payment_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
             return True
+        _payment_widget_key = f"dls_ps_{deal_id}"
+        if _payment_widget_key in state and str(state.get(_payment_widget_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
+            return True
         _manager_key = f"deal_mgr_inline_{deal_id}"
         if _manager_key in state and str(state.get(_manager_key) or "") != str(deal.get("manager") or ""):
             return True
@@ -3113,6 +3116,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
         st.caption("Выберите дату: день, месяц и год")
     with c2:
         due_time = st.time_input("Время", value=moscow_now().time().replace(second=0, microsecond=0), key=time_key, help=None)
+        _crm_mark_widget_changed(time_key, due_time != st.session_state.get(_rem_initial_key, {}).get("time"))
         st.caption("Выберите часы и минуты")
     recipient_options = [""] + logins
     recipient = st.selectbox("Получатель", recipient_options, index=0,
@@ -3489,7 +3493,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if _auto_amount_edit > 0:
                         st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
                     et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                    _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != (f"{float(t.get('order_amount', 0) or 0):g}" if t.get("order_amount", 0) else ""))
+                    _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
+                    _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
                 else:
                     et_products = t.get("products", "")
                     et_city = t.get("ship_city", "")
@@ -7713,6 +7718,8 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
                     st.session_state.get(f"nt_{key_suffix}_prod", ""),
                     st.session_state.get(f"nt_{key_suffix}_order_calc", "")
                 )
+                _crm_mark_widget_changed(f"nt_order_calc_{key_suffix}", bool(_selected_calc_id_new))
+                _crm_mark_widget_changed(f"nt_prod_{key_suffix}", bool(str(nproducts or "").strip()))
                 nship_city = st.text_input("Город:", key=f"nt_city_{key_suffix}")
                 _crm_mark_widget_changed(f"nt_city_{key_suffix}", bool(str(nship_city or "").strip()))
                 nship_addr = st.text_area("Адрес доставки:", key=f"nt_addr_{key_suffix}")
@@ -11048,6 +11055,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 with _ddc_col:
                     if st.button("Отменить", key=f"dls_ec_{deal_id}", use_container_width=True):
                         st.session_state[f"dls_show_edit_{deal_id}"] = False
+                        st.session_state.pop(f"deal_real_date_detail_{deal_id}", None)
                         _smart_rerun()
             else:
                 pencil_deal_key = f"btn_pencil_deal_{deal_id}"
@@ -12455,6 +12463,9 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
                     st.session_state[f"dls_dc_input_{deal_id}"] = ""
                     st.session_state[f"dls_pause_reason_{deal_id}"] = ""
+                    for _wk in list(st.session_state.keys()):
+                        if str(_wk).startswith(f"dls_up_{deal_id}_"):
+                            st.session_state.pop(_wk, None)
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
@@ -12494,6 +12505,8 @@ def client_detail_dialog(cl_id):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     st.session_state.pop(f"_client_extra_draft_{cl_id}", None)
+                    st.session_state.pop(f"new_cc_input_{cl_id}", None)
+                    st.session_state.pop(f"cf_up_{cl_id}", None)
                     _client_edit_prefixes = (
                         f"en_{cl_id}", f"ep_{cl_id}", f"cm_edit_{cl_id}", f"ee_{cl_id}",
                         f"ea_{cl_id}", f"ed_{cl_id}", f"ec_{cl_id}", f"client_source_edit_{cl_id}",
