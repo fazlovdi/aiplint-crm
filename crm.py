@@ -12245,7 +12245,6 @@ def task_detail_dialog(task, cl, d, key_prefix):
             with _wcol1:
                 if st.button("Не сохранять и перейти" if (st.session_state.get("_crm_pending_child_open") or st.session_state.get("_crm_pending_close", {}).get("mode") == "switch") else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state.pop(f"_crm_warning_draft_snapshot_deal_{deal_id}", None)
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
                     st.session_state[f"task_shipping_status_{key_prefix}"] = task.get("shipping_status", "") or ""
@@ -12284,7 +12283,6 @@ def task_detail_dialog(task, cl, d, key_prefix):
             with _wcol2:
                 if st.button("Продолжить редактирование", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state.pop(f"_crm_warning_draft_snapshot_deal_{deal_id}", None)
                     st.session_state.pop("_crm_pending_close", None)
                     st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
@@ -12678,6 +12676,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             with _wcol1:
                 if st.button("Не сохранять и перейти" if (st.session_state.get("_crm_pending_child_open") or st.session_state.get("_crm_pending_close", {}).get("mode") == "switch") else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state.pop(f"_crm_warning_draft_snapshot_deal_{deal_id}", None)
                     _saved_deal_for_discard = next(
                         (x for x in st.session_state.get("crm_store", {}).get("deals", [])
                          if str(x.get("id", "")) == str(deal_id)),
@@ -12713,6 +12712,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             with _wcol2:
                 if st.button("Продолжить редактирование", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state.pop(f"_crm_warning_draft_snapshot_deal_{deal_id}", None)
                     st.session_state.pop("_crm_pending_close", None)
                     st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
