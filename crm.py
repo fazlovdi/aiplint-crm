@@ -2425,8 +2425,45 @@ def _crm_workspace_tab_has_unsaved(tab):
         return bool(calc and calc.get("_draft"))
     if name == "client_detail_dialog" and args:
         _cid = str(args[0])
-        if state.get(f"show_edit_{_cid}"):
-            return True
+        _client = next((c for c in state.get("crm_store", {}).get("clients", []) if str(c.get("id")) == _cid), None)
+        if state.get(f"show_edit_{_cid}") and _client:
+            _client_fields = {
+                f"en_{_cid}": _client.get("name", ""),
+                f"ep_{_cid}": _client.get("phone", ""),
+                f"cm_edit_{_cid}": _client.get("contact_method", ""),
+                f"ee_{_cid}": _client.get("email", ""),
+                f"city_{_cid}": _client.get("city", ""),
+                f"ea_{_cid}": _client.get("address", ""),
+                f"ed_{_cid}": int(_client.get("discount", 0) or 0),
+                f"ec_{_cid}": _client.get("category", "Не определён"),
+                f"promo_code_{_cid}": _client.get("promo_code", ""),
+                f"client_source_edit_{_cid}": _client.get("source", ""),
+                f"em_{_cid}": _client.get("manager", ""),
+            }
+            for _widget_key, _saved in _client_fields.items():
+                if _widget_key in state and str(state.get(_widget_key) if state.get(_widget_key) is not None else "") != str(_saved if _saved is not None else ""):
+                    return True
+            _extra_draft = state.get(f"_client_extra_draft_{_cid}", {})
+            if any(_collection in _extra_draft and _extra_draft.get(_collection) != (_client.get(_collection, []) or [])
+                   for _collection in ("extra_phones", "extra_emails", "extra_addresses")):
+                return True
+            _extra_fields = []
+            for _i, _p in enumerate(_client.get("extra_phones", []) or []):
+                if isinstance(_p, dict):
+                    _extra_fields.extend([
+                        (f"ep_phone_{_cid}_{_i}", _p.get("phone", "")),
+                        (f"ep_name_{_cid}_{_i}", _p.get("name", "")),
+                        (f"ep_role_{_cid}_{_i}", _p.get("role", "")),
+                    ])
+            for _i, _e in enumerate(_client.get("extra_emails", []) or []):
+                _extra_fields.append((f"ee_val_{_cid}_{_i}", _e))
+            for _i, _a in enumerate(_client.get("extra_addresses", []) or []):
+                if isinstance(_a, dict):
+                    for _suffix, _field in (("addr", "address"), ("rn", "resp_name"), ("rr", "resp_role"), ("rp", "resp_phone"), ("re", "resp_email")):
+                        _extra_fields.append((f"ea_{_suffix}_{_cid}_{_i}", _a.get(_field, "")))
+            for _widget_key, _saved in _extra_fields:
+                if _widget_key in state and str(state.get(_widget_key) or "") != str(_saved or ""):
+                    return True
         if str(state.get(f"new_cc_input_{_cid}", "") or "").strip() or state.get(f"cf_up_{_cid}"):
             return True
         return False
