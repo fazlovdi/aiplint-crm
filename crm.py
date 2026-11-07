@@ -727,7 +727,7 @@ def check_cloud_status():
 
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
-    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups", "CRM_NE_TROGAT/logs", "CRM_NE_TROGAT/drafts"]:
+    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups", "CRM_NE_TROGAT/logs"]:
         try: requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except: pass
 
@@ -2253,9 +2253,6 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window["id"]
     st.session_state["_crm_active_dialog"] = window["tabs"][existing]
-    _draft_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-    if _draft_login:
-        _crm_draft_restore_tab(_draft_login, window["tabs"][existing])
     st.session_state["_crm_dialog_requested_this_run"] = True
     _crm_workspace_queue_save()
     return window
@@ -2309,188 +2306,6 @@ def _crm_workspace_save_remote(login, workspace):
 
 # Workspace snapshots are uploaded off the UI thread; SQLite remains the immediate local save.
 _CRM_WORKSPACE_REMOTE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-workspace-sync")
-
-# Drafts are stored separately from the primary CRM data and per workspace tab.
-_CRM_DRAFT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-drafts-sync")
-_CRM_DRAFT_LOCK = threading.Lock()
-_CRM_DRAFT_LAST_PAYLOADS = {}
-_CRM_DRAFT_PENDING_PAYLOADS = {}
-_CRM_DRAFT_LAST_SUBMIT_AT = {}
-
-def _crm_draft_remote_path(login, tab_key):
-    user_hash = hashlib.sha256(str(login or "").encode("utf-8")).hexdigest()[:24]
-    tab_hash = hashlib.sha256(str(tab_key or "").encode("utf-8")).hexdigest()[:32]
-    return f"disk:/CRM_NE_TROGAT/drafts/draft_{user_hash}_{tab_hash}.json"
-
-def _crm_draft_load_remote(login, tab_key):
-    if not YANDEX_TOKEN or not login or not tab_key:
-        return None
-    try:
-        response = requests.get(
-            f"{YANDEX_API_URL}/download",
-            params={"path": _crm_draft_remote_path(login, tab_key)},
-            headers=yandex_headers(), timeout=2,
-        )
-        if response.status_code != 200:
-            return None
-        href = response.json().get("href")
-        if not href:
-            return None
-        downloaded = requests.get(href, timeout=2)
-        if downloaded.status_code != 200:
-            return None
-        value = downloaded.json()
-        return value if isinstance(value, dict) and value.get("version") == 1 else None
-    except Exception:
-        return None
-
-def _crm_draft_save_remote(login, tab_key, draft):
-    if not YANDEX_TOKEN or not login or not tab_key:
-        return False
-    try:
-        payload = json.dumps(draft, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        response = requests.get(
-            f"{YANDEX_API_URL}/upload",
-            params={"path": _crm_draft_remote_path(login, tab_key), "overwrite": "true"},
-            headers=yandex_headers(), timeout=8,
-        )
-        if response.status_code not in (200, 201):
-            return False
-        href = response.json().get("href")
-        if not href:
-            return False
-        uploaded = requests.put(href, data=payload, headers={"Content-Type": "application/json"}, timeout=10)
-        return uploaded.status_code in (200, 201, 202)
-    except Exception:
-        return False
-
-def _crm_draft_encode(value):
-    if isinstance(value, datetime):
-        return {"__crm_draft_type__": "datetime", "value": value.isoformat()}
-    if type(value).__name__ == "date" and hasattr(value, "isoformat"):
-        return {"__crm_draft_type__": "date", "value": value.isoformat()}
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, (list, tuple)):
-        result = []
-        for item in value:
-            encoded = _crm_draft_encode(item)
-            if isinstance(item, (dict, list, tuple)) or item is None or isinstance(item, (str, int, float, bool)):
-                result.append(encoded)
-            else:
-                return None
-        return result
-    return None
-
-def _crm_draft_decode(value):
-    if isinstance(value, dict) and value.get("__crm_draft_type__") == "date":
-        try:
-            return datetime.strptime(str(value.get("value", "")), "%Y-%m-%d").date()
-        except Exception:
-            return None
-    if isinstance(value, dict) and value.get("__crm_draft_type__") == "datetime":
-        try:
-            return datetime.fromisoformat(str(value.get("value", "")))
-        except Exception:
-            return None
-    if isinstance(value, list):
-        return [_crm_draft_decode(item) for item in value]
-    if isinstance(value, dict):
-        return {k: _crm_draft_decode(v) for k, v in value.items()}
-    return value
-
-def _crm_draft_widget_values(tab):
-    name = str(tab.get("name", ""))
-    args = tab.get("args", ()) or ()
-    state = st.session_state
-    values = {}
-    if name == "task_detail_dialog" and len(args) >= 4:
-        prefix = str(args[3])
-        editing = bool(state.get(f"show_edit_task_{prefix}") or state.get(f"show_edit_dl_{prefix}"))
-        reworking = bool(state.get(f"show_rework_{prefix}"))
-        for key, value in list(state.items()):
-            key = str(key)
-            if not (key.endswith(prefix) or f"_{prefix}_" in key):
-                continue
-            if key.startswith(("task_upload_", "task_upload_ver_", "task_pick_existing_", "uf_", "cnt_files_", "edit_files_")):
-                continue
-            keep = (editing or key in (f"task_mgr_inline_{prefix}", f"task_shipping_status_{prefix}", f"task_estimated_ship_date_{prefix}")
-                    or key == f"tc_input_{prefix}" or (reworking and key == f"rework_comment_{prefix}"))
-            if keep:
-                encoded = _crm_draft_encode(value)
-                if encoded is not None or value is None:
-                    values[key] = encoded
-    elif name == "deal_detail_dialog" and args:
-        deal = args[0] if isinstance(args[0], dict) else {}
-        entity_id = str(deal.get("id", ""))
-        if not entity_id:
-            return values
-        editing = bool(state.get(f"dls_show_edit_{entity_id}"))
-        allowed_prefixes = (
-            f"dls_et_{entity_id}", f"dls_eb_{entity_id}", f"dls_em_{entity_id}",
-            f"dls_ps_{entity_id}", f"ps_{entity_id}",
-            f"dls_dc_input_{entity_id}", f"dls_pause_reason_{entity_id}",
-            f"dls_show_edit_{entity_id}", f"_show_close_warning_deal_{entity_id}",
-        )
-        for key, value in list(state.items()):
-            key = str(key)
-            if any(key == p or key.startswith(p + "_") for p in allowed_prefixes):
-                if editing or key.startswith((f"dls_ps_{entity_id}", f"ps_{entity_id}", f"dls_dc_input_{entity_id}")):
-                    encoded = _crm_draft_encode(value)
-                    if encoded is not None or value is None:
-                        values[key] = encoded
-    elif name == "client_detail_dialog" and args:
-        entity_id = str(args[0])
-        editing = bool(state.get(f"show_edit_{entity_id}"))
-        prefixes = (
-            f"en_{entity_id}", f"ep_{entity_id}", f"cm_edit_{entity_id}", f"ee_{entity_id}",
-            f"ea_{entity_id}", f"ed_{entity_id}", f"ec_{entity_id}", f"client_source_edit_{entity_id}",
-            f"em_{entity_id}", f"promo_code_{entity_id}", f"ep_phone_{entity_id}_",
-            f"ep_name_{entity_id}_", f"ep_role_{entity_id}_", f"ee_val_{entity_id}_",
-            f"ea_addr_{entity_id}_", f"ea_rn_{entity_id}_", f"ea_rr_{entity_id}_",
-            f"ea_rp_{entity_id}_", f"ea_re_{entity_id}_", f"show_edit_{entity_id}",
-        )
-        if editing:
-            for key, value in list(state.items()):
-                key = str(key)
-                if any(
-                    (key.startswith(p) if p.endswith("_") else (key == p or key.startswith(p + "_")))
-                    for p in prefixes
-                ):
-                    encoded = _crm_draft_encode(value)
-                    if encoded is not None or value is None:
-                        values[key] = encoded
-    return values
-
-def _crm_draft_restore_tab(login, tab):
-    tab_key = _crm_workspace_tab_key(tab)
-    saved = _crm_draft_load_remote(login, tab_key)
-    if not isinstance(saved, dict):
-        return
-    # Older versions saved snapshots automatically. Never show a star for those.
-    tab["has_draft"] = False
-    # Restore only drafts explicitly created by the user with "Решу позже".
-    if not saved.get("user_deferred"):
-        return
-    values = saved.get("values", {})
-    if not isinstance(values, dict):
-        return
-    if values:
-        tab["has_draft"] = True
-    for key, value in values.items():
-        # Never overwrite a live widget value or any existing session state.
-        if key not in st.session_state:
-            st.session_state[key] = _crm_draft_decode(value)
-    # Preserve the saved model baseline while restoring an unconfirmed payment selection.
-    if str(tab.get("name", "")) == "deal_detail_dialog":
-        args = tab.get("args", ()) or ()
-        deal = args[0] if args and isinstance(args[0], dict) else {}
-        deal_id = str(deal.get("id", ""))
-        if deal_id and f"ps_{deal_id}" in values:
-            st.session_state.setdefault(
-                f"_ps_last_model_{deal_id}",
-                deal.get("payment_status", "Не оплачено") or "Не оплачено",
-            )
 
 def _crm_workspace_tab_has_unsaved(tab):
     """Conservative guard for unfinished edits in client, deal, and task tabs."""
@@ -2620,15 +2435,6 @@ def _crm_workspace_finish_pending_close():
         source_tab = tabs[source_index] if source_index is not None else None
         source_key = str(pending.get("tab_key") or "")
         if source_tab is not None:
-            source_tab["has_draft"] = False
-            _draft_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-            if _draft_login and YANDEX_TOKEN:
-                _empty_draft = {"version": 1, "tab_key": source_key, "updated_at": now_str(), "values": {}}
-                if _crm_draft_save_remote(_draft_login, source_key, _empty_draft):
-                    _empty_payload = json.dumps({"version": 1, "tab_key": source_key, "values": {}}, ensure_ascii=False, separators=(",", ":"))
-                    with _CRM_DRAFT_LOCK:
-                        _CRM_DRAFT_LAST_PAYLOADS[_draft_login + "|" + source_key] = _empty_payload
-                        _CRM_DRAFT_PENDING_PAYLOADS.pop(_draft_login + "|" + source_key, None)
         target_key = str(pending.get("target_tab_key") or "")
         target_index = next((i for i, tab in enumerate(tabs) if _crm_workspace_tab_key(tab) == target_key), None)
         if target_index is None:
@@ -2654,99 +2460,6 @@ def _crm_workspace_finish_pending_close():
         st.session_state.pop("_crm_pending_close", None)
         if target_index is not None:
             _crm_workspace_close_tab_callback(window_id, target_index, force=True)
-
-def _crm_workspace_defer_pending_switch():
-    """Persist a private draft before leaving or postponing an edited workspace tab."""
-    pending = st.session_state.get("_crm_pending_close")
-    if not isinstance(pending, dict) or pending.get("mode") not in ("switch", "tab", "window"):
-        return
-    login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-    window_id = str(pending.get("window_id") or "")
-    windows = st.session_state.get("_crm_windows", []) or []
-    window = next((w for w in windows if str(w.get("id")) == window_id), None)
-    if not login or not YANDEX_TOKEN or window is None:
-        st.error("Не удалось сохранить черновик. Изменения оставлены открытыми.")
-        return
-    source_key = str(pending.get("tab_key") or "")
-    source_tab = next((t for t in (window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == source_key), None)
-    target_key = str(pending.get("target_tab_key") or "")
-    target_index = next((i for i, t in enumerate(window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == target_key), None) if target_key else None
-    mode = str(pending.get("mode") or "")
-    if source_tab is None or (mode == "switch" and target_index is None):
-        st.error("Не удалось определить вкладку для черновика. Изменения оставлены открытыми.")
-        return
-    values = _crm_draft_widget_values(source_tab)
-    draft = {"version": 1, "tab_key": source_key, "updated_at": now_str(), "user_deferred": True, "values": values}
-    if not _crm_draft_save_remote(login, source_key, draft):
-        st.error("Черновик не удалось сохранить в облаке. Вкладка осталась открытой; попробуйте ещё раз.")
-        return
-    payload = json.dumps({"version": 1, "tab_key": source_key, "user_deferred": True, "values": values}, ensure_ascii=False, separators=(",", ":"))
-    cache_key = login + "|" + source_key
-    with _CRM_DRAFT_LOCK:
-        _CRM_DRAFT_LAST_PAYLOADS[cache_key] = payload
-        _CRM_DRAFT_PENDING_PAYLOADS.pop(cache_key, None)
-    st.session_state.setdefault("_crm_drafts_local_values", {})[source_key] = values
-    source_tab["has_draft"] = True
-    _source_name = str(source_tab.get("name", ""))
-    _source_args = source_tab.get("args", ()) or ()
-    if _source_name == "task_detail_dialog" and len(_source_args) >= 4:
-        st.session_state[f"_show_close_warning_{_source_args[3]}"] = False
-    elif _source_name == "deal_detail_dialog" and _source_args:
-        _source_deal = _source_args[0] if isinstance(_source_args[0], dict) else {}
-        _source_prefix = str(_source_args[3]) if len(_source_args) > 3 else f"deal_{_source_deal.get('id', '')}"
-        st.session_state[f"_show_close_warning_{_source_prefix}"] = False
-    elif _source_name == "client_detail_dialog" and _source_args:
-        st.session_state[f"_show_close_warning_client_{_source_args[0]}"] = False
-    if mode == "switch":
-        window["active_tab"] = target_index
-        st.session_state["_crm_active_dialog"] = window["tabs"][target_index]
-    else:
-        window["active_tab"] = next((i for i, t in enumerate(window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == source_key), 0)
-        st.session_state["_crm_active_dialog"] = source_tab
-    window["minimized"] = False
-    st.session_state["_crm_active_window_id"] = window_id
-    st.session_state.pop("_crm_pending_close", None)
-    st.session_state["_crm_workspace_active_tab_dirty"] = True
-    _crm_workspace_clear_legacy_dialog_markers()
-    _crm_workspace_queue_save()
-
-
-def _crm_draft_save_finished(cache_key, payload, future):
-    try:
-        ok = bool(future.result())
-    except Exception:
-        ok = False
-    with _CRM_DRAFT_LOCK:
-        _CRM_DRAFT_PENDING_PAYLOADS.pop(cache_key, None)
-        if ok:
-            _CRM_DRAFT_LAST_PAYLOADS[cache_key] = payload
-
-def _crm_drafts_persist_open_tabs(force=False):
-    login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-    if not login or not YANDEX_TOKEN:
-        return
-    for window in st.session_state.get("_crm_windows", []) or []:
-        for tab in window.get("tabs", []) or []:
-            try:
-                tab_key = _crm_workspace_tab_key(tab)
-                values = _crm_draft_widget_values(tab)
-                draft = {"version": 1, "tab_key": tab_key, "updated_at": now_str(), "values": values}
-                payload = json.dumps({"version": 1, "tab_key": tab_key, "values": values}, ensure_ascii=False, separators=(",", ":"))
-                cache_key = str(login) + "|" + str(tab_key)
-                with _CRM_DRAFT_LOCK:
-                    if _CRM_DRAFT_LAST_PAYLOADS.get(cache_key) == payload or _CRM_DRAFT_PENDING_PAYLOADS.get(cache_key) == payload:
-                        continue
-                    # Normal checkpoints throttle writes; tab switches force a snapshot
-                    # before the old tab's widgets are unmounted.
-                    _now_mono = time.monotonic()
-                    if not force and _now_mono - _CRM_DRAFT_LAST_SUBMIT_AT.get(cache_key, 0.0) < 1.5:
-                        continue
-                    _CRM_DRAFT_LAST_SUBMIT_AT[cache_key] = _now_mono
-                    _CRM_DRAFT_PENDING_PAYLOADS[cache_key] = payload
-                future = _CRM_DRAFT_EXECUTOR.submit(_crm_draft_save_remote, login, tab_key, draft)
-                future.add_done_callback(lambda done, ck=cache_key, pl=payload: _crm_draft_save_finished(ck, pl, done))
-            except Exception:
-                continue
 
 def _crm_workspace_rerun():
     """Rerun only the workspace fragment for dialog interactions when possible.
@@ -3081,10 +2794,6 @@ def _crm_workspace_init():
             })
 
     st.session_state["_crm_windows"] = restored
-    # Do not download every tab's draft serially during login. Drafts are restored
-    # only for the tab the user actually opens, so sign-in stays responsive.
-    st.session_state["_crm_drafts_login"] = login
-    st.session_state["_crm_drafts_restored_tabs"] = set()
     main_tab = saved.get("main_active_tab")
     if main_tab in ("Клиенты", "Сделки", "Задачи", "Внутренние задачи", "Поставщики", "Товары и прайс"):
         st.session_state["active_tab"] = main_tab
@@ -12106,116 +11815,17 @@ def task_detail_dialog(task, cl, d, key_prefix):
         st.markdown(f'<style>.st-key-{_warn_key} {{ border:1px solid #BC1661!important;border-radius:10px!important;background-color:#FFFFFF!important;padding:0.75rem 1rem!important;margin:0.5rem 0!important;box-shadow:0 6px 24px rgba(0,0,0,.12)!important; }}</style>', unsafe_allow_html=True)
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
-            st.markdown("Сохранить изменения перед " + ("переходом?" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "закрытием?"))
+            st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
-            _wcol1, _wcol2, _wcol3 = st.columns(3)
+            _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Сохранить и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Сохранить и закрыть", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
-                    # Read values from session_state widgets
-                    _et_topic_key = f"edit_topic_{key_prefix}"
-                    _et_type_key = f"edit_type_{key_prefix}"
-                    _et_mgr_key = f"edit_mgr_{key_prefix}"
-                    _et_comment_key = f"edit_comment_{key_prefix}"
-                    if _et_type_key in st.session_state and st.session_state[_et_type_key] in ("Отправить заказ", "Отправить образцы"):
-                        t["text"] = st.session_state[_et_type_key]
-                    elif _et_topic_key in st.session_state:
-                        t["text"] = st.session_state[_et_topic_key]
-                    elif t.get("type") in ("Отправить заказ", "Отправить образцы"):
-                        t["text"] = t.get("type", "")
-                    if _et_type_key in st.session_state:
-                        t["type"] = st.session_state[_et_type_key]
-                    if _et_mgr_key in st.session_state:
-                        _mgr_val = st.session_state[_et_mgr_key]
-                        if _mgr_val:
-                            t["manager"] = _mgr_val
-                            t["delegated_to"] = _mgr_val
-                    if _et_comment_key in st.session_state:
-                        t["task_comment"] = st.session_state[_et_comment_key]
-                    # Extended fields
-                    _et_prod_key = f"edit_prod_{key_prefix}"
-                    _et_addr_key = f"edit_addr_{key_prefix}"
-                    _et_city_key = f"edit_city_{key_prefix}"
-                    _et_recv_key = f"edit_recv_{key_prefix}"
-                    _et_rphone_key = f"edit_rphone_{key_prefix}"
-                    _et_pay_key = f"edit_pay_{key_prefix}"
-                    _et_amount_key = f"edit_amount_{key_prefix}"
-                    _et_tk_key = f"edit_tk_{key_prefix}"
-                    _et_method_key = f"edit_method_{key_prefix}"
-                    if _et_method_key in st.session_state: t["ship_method"] = st.session_state[_et_method_key]
-                    if _et_prod_key in st.session_state: t["products"] = st.session_state[_et_prod_key]
-                    if _et_addr_key in st.session_state: t["ship_addr"] = st.session_state[_et_addr_key]
-                    if _et_city_key in st.session_state: t["ship_city"] = st.session_state[_et_city_key]
-                    if _et_recv_key in st.session_state: t["receiver"] = st.session_state[_et_recv_key]
-                    if _et_rphone_key in st.session_state: t["receiver_phone"] = st.session_state[_et_rphone_key]
-                    if _et_pay_key in st.session_state: t["ship_pay"] = st.session_state[_et_pay_key]
-                    if _et_amount_key in st.session_state:
-                        _amt = st.session_state[_et_amount_key]
-                        try:
-                            t["order_amount"] = round(float(str(_amt).replace(",", ".")), 2) if _amt and str(_amt).strip() else 0
-                        except (TypeError, ValueError):
-                            t["order_amount"] = 0
-                    if _et_tk_key in st.session_state: t["tk_num"] = st.session_state[_et_tk_key]
-                    # Apply selected responsible person using the same effects as "Делегировать".
-                    _inline_mgr_key = f"task_mgr_inline_{key_prefix}"
-                    _selected_task_mgr = st.session_state.get(_inline_mgr_key)
-                    _current_task_mgr = t.get("manager", "")
-                    if _selected_task_mgr and _selected_task_mgr != _current_task_mgr:
-                        t["manager"] = _selected_task_mgr
-                        t["delegated_to"] = _selected_task_mgr
-                        t["in_work"] = False
-                        t["done"] = False
-                        t["reviewed"] = False
-                        add_notification(_selected_task_mgr, f"Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}", f"📌 Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}")
-                    _shipping_status_key = f"task_shipping_status_{key_prefix}"
-                    _shipping_date_key = f"task_estimated_ship_date_{key_prefix}"
-                    if _shipping_status_key in st.session_state:
-                        t["shipping_status"] = st.session_state.get(_shipping_status_key) or ""
-                    if _shipping_date_key in st.session_state:
-                        _shipping_date_value = st.session_state.get(_shipping_date_key)
-                        t["estimated_ship_date"] = _shipping_date_value.isoformat() if hasattr(_shipping_date_value, "isoformat") and _shipping_date_value else ""
-                    # Deadline
-                    _dl_key = f"dl_inline_{key_prefix}"
-                    if _dl_key in st.session_state:
-                        t["deadline"] = str(st.session_state[_dl_key])
-                    _tc_draft_key = f"tc_input_{key_prefix}"
-                    _tc_draft_text = str(st.session_state.get(_tc_draft_key, "") or "").strip()
-                    if _tc_draft_text:
-                        t.setdefault("task_comments", []).append({
-                            "time": moscow_now().strftime("%d.%m.%Y %H:%M"),
-                            "text": _tc_draft_text,
-                            "user": st.session_state.get("user_name", ""),
-                        })
-                        st.session_state[_tc_draft_key] = ""
-                        st.session_state[f"clr_tc_{key_prefix}"] = False
-                    t["last_modified"] = now_str()
-                    cl["last_modified"] = now_str()
-                    if d: d["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store)
+                if st.button("Не сохранять и перейти/закрыть" if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window") else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                    for _draft_widget_key in (
-                        f"edit_topic_{key_prefix}", f"edit_type_{key_prefix}", f"edit_mgr_{key_prefix}",
-                        f"edit_comment_{key_prefix}", f"edit_prod_{key_prefix}", f"edit_addr_{key_prefix}",
-                        f"edit_city_{key_prefix}", f"edit_recv_{key_prefix}", f"edit_rphone_{key_prefix}",
-                        f"edit_pay_{key_prefix}", f"edit_amount_{key_prefix}", f"edit_tk_{key_prefix}",
-                        f"edit_method_{key_prefix}", f"dl_inline_{key_prefix}",
-                    ):
-                        st.session_state.pop(_draft_widget_key, None)
-                    st.session_state.pop("dialog_task_key", None)
-                    st.session_state.pop("dialog_task_number", None)
-                    st.session_state.pop("dialog_task_client_id", None)
-                    st.session_state.pop("dialog_task_deal_id", None)
-                    st.session_state.pop("_open_created_task", None)
-                    st.session_state["_in_dialog"] = False
-                    _crm_workspace_finish_pending_close()
-                    st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
-                    _crm_workspace_rerun()
-            with _wcol2:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
-                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state[f"show_edit_task_{key_prefix}"] = False
-                    st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                    st.session_state[f"task_shipping_status_{key_prefix}"] = task.get("shipping_status", "") or ""
+                    st.session_state[f"task_mgr_inline_{key_prefix}"] = task.get("manager", "") or ""
+                    st.session_state[f"task_estimated_ship_date_{key_prefix}"] = parse_optional_date(task.get("estimated_ship_date", ""))
                     for _draft_widget_key in (
                         f"edit_topic_{key_prefix}", f"edit_type_{key_prefix}", f"edit_mgr_{key_prefix}",
                         f"edit_comment_{key_prefix}", f"edit_prod_{key_prefix}", f"edit_addr_{key_prefix}",
@@ -12235,16 +11845,12 @@ def task_detail_dialog(task, cl, d, key_prefix):
                         st.session_state[f"clr_tc_{key_prefix}"] = False
                     _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
-            with _wcol3:
-                if st.button("Редактировать", key=f"warn_cancel_{key_prefix}", use_container_width=True):
+            with _wcol2:
+                if st.button("Продолжить редактирование", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
 
-    if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window"):
-        if st.button("Решу позже", key=f"warn_later_{key_prefix}", use_container_width=True):
-            _crm_workspace_defer_pending_switch()
-            _crm_workspace_rerun()
 
     render_task_detail(task, cl, d, key_prefix, show_shipping_status=True)
 
@@ -12574,64 +12180,13 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             st.markdown("**\u26a0\ufe0f \u0415\u0441\u0442\u044c \u043d\u0435\u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0435 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f**")
             st.markdown("Сохранить изменения перед " + ("переходом?" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "закрытием?"))
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
-            _wcol1, _wcol2, _wcol3 = st.columns(3)
+            _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Сохранить и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Сохранить и закрыть", key=f"warn_save_{key_prefix}", type="primary", use_container_width=True):
-                    _et_key = f"dls_et_{deal_id}"
-                    _eb_key = f"dls_eb_{deal_id}"
-                    _em_key = f"dls_em_{deal_id}"
-                    if _et_key in st.session_state: d["deal_title"] = st.session_state[_et_key]
-                    if _eb_key in st.session_state:
-                        _bv = st.session_state[_eb_key]
-                        d["budget"] = int(_bv) if _bv and str(_bv).strip().isdigit() else 0
-                    if _em_key in st.session_state:
-                        _mv = st.session_state[_em_key]
-                        if _mv: d["manager"] = _mv
-                    _payment_status_key = f"ps_{deal_id}"
-                    if _payment_status_key in st.session_state:
-                        _selected_payment_status = st.session_state[_payment_status_key]
-                        if _selected_payment_status in ("Не оплачено", "Оплачен частично", "Оплачено"):
-                            _old_payment_status = d.get("payment_status", "Не оплачено") or "Не оплачено"
-                            if _selected_payment_status != _old_payment_status:
-                                d["payment_status"] = _selected_payment_status
-                                _bank_status_for_override = _tochka_bank_payment_status(d)
-                                d["payment_status_manual_override"] = bool(_selected_payment_status == "Не оплачено" and _bank_status_for_override == "Оплачено")
-                                _sync_deal_board_stage_from_payment(d)
-                    _real_date_key = f"deal_real_date_detail_{deal_id}"
-                    if _real_date_key in st.session_state:
-                        _real_date_value = st.session_state[_real_date_key]
-                        d["real_date"] = _real_date_value.isoformat() if hasattr(_real_date_value, "isoformat") else str(_real_date_value or "")
-                    _deal_comment_key = f"dls_dc_input_{deal_id}"
-                    _deal_comment_text = str(st.session_state.get(_deal_comment_key, "") or "").strip()
-                    if _deal_comment_text:
-                        d.setdefault("deal_comments", []).append({
-                            "time": moscow_now().strftime("%d.%m.%Y %H:%M"),
-                            "author": st.session_state.get("user_name", ""),
-                            "text": _deal_comment_text,
-                        })
-                        st.session_state[_deal_comment_key] = ""
-                        st.session_state[f"dls_clr_dc_{deal_id}"] = False
-                    d["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store)
-                    st.session_state[f"_show_close_warning_{key_prefix}"] = False
-                    st.session_state[f"dls_show_edit_{deal_id}"] = False
-                    st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
-                    st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
-                    st.session_state[f"dls_dc_input_{deal_id}"] = ""
-                    st.session_state[f"dls_pause_reason_{deal_id}"] = ""
-                    for _draft_widget_key in (f"dls_et_{deal_id}", f"dls_eb_{deal_id}", f"dls_em_{deal_id}"):
-                        st.session_state.pop(_draft_widget_key, None)
-                    st.session_state.pop("dialog_deal_key", None)
-                    st.session_state.pop("_open_created_deal", None)
-                    st.session_state["_in_dialog"] = False
-                    _crm_workspace_finish_pending_close()
-                    st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
-                    _crm_workspace_rerun()
-            with _wcol2:
                 if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
+                    st.session_state[f"ps_{deal_id}"] = d.get("payment_status", "Не оплачено") or "Не оплачено"
                     for _draft_widget_key in (f"dls_et_{deal_id}", f"dls_eb_{deal_id}", f"dls_em_{deal_id}"):
                         st.session_state.pop(_draft_widget_key, None)
                     st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
@@ -12648,10 +12203,6 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
 
-    if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window"):
-        if st.button("Решу позже", key=f"warn_later_{key_prefix}", use_container_width=True):
-            _crm_workspace_defer_pending_switch()
-            _crm_workspace_rerun()
 
     render_deal_detail(d, cl, cu, key_prefix)
 
@@ -12674,57 +12225,9 @@ def client_detail_dialog(cl_id):
         with st.container(key=_warn_key):
             st.markdown("**\u26a0\ufe0f Есть несохранённые изменения**")
             st.markdown("Сохранить изменения перед " + ("переходом?" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "закрытием?"))
-            _wcol1, _wcol2, _wcol3 = st.columns(3)
+            _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Сохранить и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Сохранить и закрыть", key=f"warn_save_{_key_prefix}", type="primary", use_container_width=True):
-                    _en_key = f"en_{cl_id}"
-                    _ep_key = f"ep_{cl_id}"
-                    _cm_key = f"cm_edit_{cl_id}"
-                    _ee_key = f"ee_{cl_id}"
-                    _ea_key = f"ea_{cl_id}"
-                    _ed_key = f"ed_{cl_id}"
-                    _ec_key = f"ec_{cl_id}"
-                    _source_key = f"client_source_edit_{cl_id}"
-                    _em_key = f"em_{cl_id}"
-                    if _en_key in st.session_state: cl['name'] = st.session_state[_en_key]
-                    if _ep_key in st.session_state: cl['phone'] = format_phone(st.session_state[_ep_key])
-                    if _cm_key in st.session_state: cl['contact_method'] = st.session_state[_cm_key]
-                    if _ee_key in st.session_state: cl['email'] = st.session_state[_ee_key]
-                    if _ea_key in st.session_state: cl['address'] = st.session_state[_ea_key]
-                    if _ed_key in st.session_state: cl['discount'] = int(st.session_state[_ed_key])
-                    if _ec_key in st.session_state: cl['category'] = st.session_state[_ec_key]
-                    if _source_key in st.session_state: cl['source'] = st.session_state[_source_key]
-                    _promo_key = f"promo_code_{cl_id}"
-                    if _promo_key in st.session_state: cl['promo_code'] = str(st.session_state[_promo_key]).strip()
-                    if _em_key in st.session_state: cl['manager'] = st.session_state[_em_key]
-                    # Сохраняем доп. телефоны, email, адреса из session_state
-                    _ep_list = cl.get('extra_phones', [])
-                    for i in range(len(_ep_list)):
-                        _pk = f"ep_phone_{cl_id}_{i}"
-                        _nk = f"ep_name_{cl_id}_{i}"
-                        _rk = f"ep_role_{cl_id}_{i}"
-                        if _pk in st.session_state: _ep_list[i]['phone'] = st.session_state[_pk]
-                        if _nk in st.session_state: _ep_list[i]['name'] = st.session_state[_nk]
-                        if _rk in st.session_state: _ep_list[i]['role'] = st.session_state[_rk]
-                    _ee_list = cl.get('extra_emails', [])
-                    for i in range(len(_ee_list)):
-                        _ek = f"ee_val_{cl_id}_{i}"
-                        if _ek in st.session_state: _ee_list[i] = st.session_state[_ek]
-                    _ea_list = cl.get('extra_addresses', [])
-                    for i in range(len(_ea_list)):
-                        if isinstance(_ea_list[i], dict):
-                            _ak = f"ea_addr_{cl_id}_{i}"
-                            _rn = f"ea_rn_{cl_id}_{i}"
-                            _rr = f"ea_rr_{cl_id}_{i}"
-                            _rp = f"ea_rp_{cl_id}_{i}"
-                            _re = f"ea_re_{cl_id}_{i}"
-                            if _ak in st.session_state: _ea_list[i]['address'] = st.session_state[_ak]
-                            if _rn in st.session_state: _ea_list[i]['resp_name'] = st.session_state[_rn]
-                            if _rr in st.session_state: _ea_list[i]['resp_role'] = st.session_state[_rr]
-                            if _rp in st.session_state: _ea_list[i]['resp_phone'] = st.session_state[_rp]
-                            if _re in st.session_state: _ea_list[i]['resp_email'] = st.session_state[_re]
-                    cl["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store)
+                if st.button("Не сохранять и перейти/закрыть" if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window") else "Не сохранять и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     _client_edit_prefixes = (
@@ -12746,41 +12249,12 @@ def client_detail_dialog(cl_id):
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
                     _crm_workspace_finish_pending_close()
-                    st.toast("Сохранено", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
-                    st.session_state[f"_show_close_warning_{_key_prefix}"] = False
-                    st.session_state[f"show_edit_{cl_id}"] = False
-                    _client_edit_prefixes = (
-                        f"en_{cl_id}", f"ep_{cl_id}", f"cm_edit_{cl_id}", f"ee_{cl_id}",
-                        f"ea_{cl_id}", f"ed_{cl_id}", f"ec_{cl_id}", f"client_source_edit_{cl_id}",
-                        f"em_{cl_id}", f"promo_code_{cl_id}", f"ep_phone_{cl_id}_",
-                        f"ep_name_{cl_id}_", f"ep_role_{cl_id}_", f"ee_val_{cl_id}_",
-                        f"ea_addr_{cl_id}_", f"ea_rn_{cl_id}_", f"ea_rr_{cl_id}_",
-                        f"ea_rp_{cl_id}_", f"ea_re_{cl_id}_",
-                    )
-                    for _widget_key in list(st.session_state.keys()):
-                        _widget_key = str(_widget_key)
-                        if any(
-                            (_widget_key.startswith(_p) if _p.endswith("_") else (_widget_key == _p or _widget_key.startswith(_p + "_")))
-                            for _p in _client_edit_prefixes
-                        ):
-                            st.session_state.pop(_widget_key, None)
-                    _pop_dialog_return()
-                    st.session_state.pop("dialog_client_key", None)
-                    st.session_state["_in_dialog"] = False
-                    _crm_workspace_finish_pending_close()
-                    _crm_workspace_rerun()
-            with _wcol3:
-                if st.button("Редактировать", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
+                if st.button("Продолжить редактирование", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
-    if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window"):
-        if st.button("Решу позже", key=f"warn_later_{_key_prefix}", use_container_width=True):
-            _crm_workspace_defer_pending_switch()
-            _crm_workspace_rerun()
     render_client_card_expanded(cl)
 
 
@@ -15769,7 +15243,7 @@ def _crm_render_workspace_fragment():
             _tab_count = len(_tabs)
             with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
-                    _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:30] + (" *" if _tab.get("has_draft") else "")
+                    _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:30]
                     with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                         st.button(
                             _tab_title,
@@ -15805,21 +15279,6 @@ def _crm_render_workspace_fragment():
                     _active_entry = _tabs[_active_index]
                     _active_spec = _CRM_DIALOG_REGISTRY.get(_active_entry.get("name"))
                     if _active_spec:
-                        _draft_login = str(st.session_state.get("_crm_drafts_login") or st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-                        _draft_tab_key = _crm_workspace_tab_key(_active_entry)
-                        # Restore the in-session snapshot on every return to a tab.
-                        # Streamlit clears widget state for widgets that are not rendered.
-                        _local_drafts = st.session_state.get("_crm_drafts_local_values", {})
-                        _local_values = _local_drafts.get(_draft_tab_key, {}) if isinstance(_local_drafts, dict) else {}
-                        for _local_key, _local_value in _local_values.items():
-                            if _local_key not in st.session_state:
-                                st.session_state[_local_key] = _crm_draft_decode(_local_value)
-                        _draft_restored = st.session_state.get("_crm_drafts_restored_tabs", set())
-                        if _draft_login and _draft_tab_key not in _draft_restored:
-                            _crm_draft_restore_tab(_draft_login, _active_entry)
-                            _draft_restored = set(_draft_restored)
-                            _draft_restored.add(_draft_tab_key)
-                            st.session_state["_crm_drafts_restored_tabs"] = _draft_restored
                         st.session_state["_crm_active_dialog"] = _active_entry
                         st.session_state["_crm_inside_dialog_host"] = True
                         try:
@@ -15840,8 +15299,6 @@ def _crm_live_change_notice_fragment():
         _windows = st.session_state.get("_crm_windows", []) or []
         if not _login:
             return
-
-        # Drafts are saved only after an explicit user action ("Решу позже").
 
         _seen = st.session_state.get("_crm_live_notice_seen_revision")
         if _seen is None:
