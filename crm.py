@@ -727,7 +727,7 @@ def check_cloud_status():
 
 def init_yandex_folders():
     if not YANDEX_TOKEN: return
-    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups", "CRM_NE_TROGAT/logs"]:
+    for folder in ["CRM_NE_TROGAT", "CRM_NE_TROGAT/uploads", "CRM_NE_TROGAT/backups", "CRM_NE_TROGAT/logs", "CRM_NE_TROGAT/drafts"]:
         try: requests.put(YANDEX_API_URL, params={"path": f"disk:/{folder}"}, headers=yandex_headers(), timeout=10)
         except: pass
 
@@ -2302,6 +2302,197 @@ def _crm_workspace_save_remote(login, workspace):
     except Exception as exc:
         _crm_log("WORKSPACE_REMOTE_SAVE_ERROR", {"stage": "Yandex workspace save"}, exc=exc)
         return False
+
+# Drafts are stored separately from the primary CRM data and per workspace tab.
+_CRM_DRAFT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-drafts-sync")
+_CRM_DRAFT_LOCK = threading.Lock()
+_CRM_DRAFT_LAST_PAYLOADS = {}
+_CRM_DRAFT_PENDING_PAYLOADS = {}
+
+def _crm_draft_remote_path(login, tab_key):
+    user_hash = hashlib.sha256(str(login or "").encode("utf-8")).hexdigest()[:24]
+    tab_hash = hashlib.sha256(str(tab_key or "").encode("utf-8")).hexdigest()[:32]
+    return f"disk:/CRM_NE_TROGAT/drafts/draft_{user_hash}_{tab_hash}.json"
+
+def _crm_draft_load_remote(login, tab_key):
+    if not YANDEX_TOKEN or not login or not tab_key:
+        return None
+    try:
+        response = requests.get(
+            f"{YANDEX_API_URL}/download",
+            params={"path": _crm_draft_remote_path(login, tab_key)},
+            headers=yandex_headers(), timeout=5,
+        )
+        if response.status_code != 200:
+            return None
+        href = response.json().get("href")
+        if not href:
+            return None
+        downloaded = requests.get(href, timeout=6)
+        if downloaded.status_code != 200:
+            return None
+        value = downloaded.json()
+        return value if isinstance(value, dict) and value.get("version") == 1 else None
+    except Exception:
+        return None
+
+def _crm_draft_save_remote(login, tab_key, draft):
+    if not YANDEX_TOKEN or not login or not tab_key:
+        return False
+    try:
+        payload = json.dumps(draft, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        response = requests.get(
+            f"{YANDEX_API_URL}/upload",
+            params={"path": _crm_draft_remote_path(login, tab_key), "overwrite": "true"},
+            headers=yandex_headers(), timeout=8,
+        )
+        if response.status_code not in (200, 201):
+            return False
+        href = response.json().get("href")
+        if not href:
+            return False
+        uploaded = requests.put(href, data=payload, headers={"Content-Type": "application/json"}, timeout=10)
+        return uploaded.status_code in (200, 201, 202)
+    except Exception:
+        return False
+
+def _crm_draft_encode(value):
+    if isinstance(value, datetime):
+        return {"__crm_draft_type__": "datetime", "value": value.isoformat()}
+    if type(value).__name__ == "date" and hasattr(value, "isoformat"):
+        return {"__crm_draft_type__": "date", "value": value.isoformat()}
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (list, tuple)):
+        result = []
+        for item in value:
+            encoded = _crm_draft_encode(item)
+            if isinstance(item, (dict, list, tuple)) or item is None or isinstance(item, (str, int, float, bool)):
+                result.append(encoded)
+            else:
+                return None
+        return result
+    return None
+
+def _crm_draft_decode(value):
+    if isinstance(value, dict) and value.get("__crm_draft_type__") == "date":
+        try:
+            return datetime.strptime(str(value.get("value", "")), "%Y-%m-%d").date()
+        except Exception:
+            return None
+    if isinstance(value, dict) and value.get("__crm_draft_type__") == "datetime":
+        try:
+            return datetime.fromisoformat(str(value.get("value", "")))
+        except Exception:
+            return None
+    if isinstance(value, list):
+        return [_crm_draft_decode(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _crm_draft_decode(v) for k, v in value.items()}
+    return value
+
+def _crm_draft_widget_values(tab):
+    name = str(tab.get("name", ""))
+    args = tab.get("args", ()) or ()
+    state = st.session_state
+    values = {}
+    if name == "task_detail_dialog" and len(args) >= 4:
+        prefix = str(args[3])
+        editing = bool(state.get(f"show_edit_task_{prefix}") or state.get(f"show_edit_dl_{prefix}"))
+        reworking = bool(state.get(f"show_rework_{prefix}"))
+        for key, value in list(state.items()):
+            key = str(key)
+            if prefix not in key:
+                continue
+            if key.startswith(("task_upload_", "task_upload_ver_", "task_pick_existing_", "uf_", "cnt_files_", "edit_files_")):
+                continue
+            keep = editing or key == f"tc_input_{prefix}" or (reworking and key == f"rework_comment_{prefix}")
+            if keep:
+                encoded = _crm_draft_encode(value)
+                if encoded is not None or value is None:
+                    values[key] = encoded
+    elif name == "deal_detail_dialog" and args:
+        deal = args[0] if isinstance(args[0], dict) else {}
+        entity_id = str(deal.get("id", ""))
+        if not entity_id:
+            return values
+        editing = bool(state.get(f"dls_show_edit_{entity_id}"))
+        allowed_prefixes = (
+            f"dls_et_{entity_id}", f"dls_eb_{entity_id}", f"dls_em_{entity_id}",
+            f"dls_ps_{entity_id}", f"deal_real_date_detail_{entity_id}",
+            f"dls_dc_input_{entity_id}", f"dls_pause_reason_{entity_id}",
+            f"dls_show_edit_{entity_id}", f"_show_close_warning_deal_{entity_id}",
+        )
+        for key, value in list(state.items()):
+            key = str(key)
+            if any(key == p or key.startswith(p + "_") for p in allowed_prefixes):
+                if editing or key.startswith((f"dls_ps_{entity_id}", f"deal_real_date_detail_{entity_id}", f"dls_dc_input_{entity_id}")):
+                    encoded = _crm_draft_encode(value)
+                    if encoded is not None or value is None:
+                        values[key] = encoded
+    elif name == "client_detail_dialog" and args:
+        entity_id = str(args[0])
+        editing = bool(state.get(f"show_edit_{entity_id}"))
+        prefixes = (
+            f"en_{entity_id}", f"ep_{entity_id}", f"cm_edit_{entity_id}", f"ee_{entity_id}",
+            f"ea_{entity_id}", f"ed_{entity_id}", f"ec_{entity_id}", f"client_source_edit_{entity_id}",
+            f"em_{entity_id}", f"promo_code_{entity_id}", f"ep_phone_{entity_id}_",
+            f"ep_name_{entity_id}_", f"ep_role_{entity_id}_", f"ee_val_{entity_id}_",
+            f"ea_addr_{entity_id}_", f"ea_rn_{entity_id}_", f"ea_rr_{entity_id}_",
+            f"ea_rp_{entity_id}_", f"ea_re_{entity_id}_",
+        )
+        if editing:
+            for key, value in list(state.items()):
+                key = str(key)
+                if any(key == p or key.startswith(p) for p in prefixes):
+                    encoded = _crm_draft_encode(value)
+                    if encoded is not None or value is None:
+                        values[key] = encoded
+    return values
+
+def _crm_draft_restore_tab(login, tab):
+    tab_key = _crm_workspace_tab_key(tab)
+    saved = _crm_draft_load_remote(login, tab_key)
+    if not isinstance(saved, dict):
+        return
+    values = saved.get("values", {})
+    if not isinstance(values, dict):
+        return
+    for key, value in values.items():
+        # Never overwrite a live widget value or any existing session state.
+        if key not in st.session_state:
+            st.session_state[key] = _crm_draft_decode(value)
+
+def _crm_draft_save_finished(cache_key, payload, future):
+    try:
+        ok = bool(future.result())
+    except Exception:
+        ok = False
+    with _CRM_DRAFT_LOCK:
+        _CRM_DRAFT_PENDING_PAYLOADS.pop(cache_key, None)
+        if ok:
+            _CRM_DRAFT_LAST_PAYLOADS[cache_key] = payload
+
+def _crm_drafts_persist_open_tabs():
+    login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+    if not login or not YANDEX_TOKEN:
+        return
+    for window in st.session_state.get("_crm_windows", []) or []:
+        for tab in window.get("tabs", []) or []:
+            try:
+                tab_key = _crm_workspace_tab_key(tab)
+                values = _crm_draft_widget_values(tab)
+                draft = {"version": 1, "tab_key": tab_key, "updated_at": now_str(), "values": values}
+                payload = json.dumps({"version": 1, "tab_key": tab_key, "values": values}, ensure_ascii=False, separators=(",", ":"))
+                cache_key = str(login) + "|" + str(tab_key)
+                with _CRM_DRAFT_LOCK:
+                    if _CRM_DRAFT_LAST_PAYLOADS.get(cache_key) == payload or _CRM_DRAFT_PENDING_PAYLOADS.get(cache_key) == payload:
+                        continue
+                    _CRM_DRAFT_PENDING_PAYLOADS[cache_key] = payload
+                future = _CRM_DRAFT_EXECUTOR.submit(_crm_draft_save_remote, login, tab_key, draft)
+                future.add_done_callback(lambda done, ck=cache_key, pl=payload: _crm_draft_save_finished(ck, pl, done))
+            except Exception:
+                continue
 
 def _crm_workspace_rerun():
     """Rerun only the workspace fragment for dialog interactions when possible.
