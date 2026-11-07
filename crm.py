@@ -12557,7 +12557,9 @@ def _crm_deal_responsible_fragment(d, deal_id):
             # and its saved-model marker with the selected manager before rerun;
             # otherwise the unsaved-change guard can resurrect the previous value
             # and block switching tabs after a successful delegation.
-            st.session_state[widget_key] = new_mgr
+            # The selectbox has already been instantiated in this run, so
+            # Streamlit forbids assigning to its widget key here. Its selected
+            # value is already new_mgr; only update the model marker.
             st.session_state[model_key] = new_mgr
             st.session_state.pop(f"_crm_widget_changed_{widget_key}", None)
             add_notification(
