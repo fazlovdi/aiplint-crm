@@ -2411,16 +2411,17 @@ def _crm_workspace_tab_has_unsaved(tab):
                 _rd = _rd.isoformat() if hasattr(_rd, "isoformat") and _rd else ""
                 if str(_rd) != str(deal.get("real_date") or ""):
                     return True
-        payment_key = f"ps_{deal_id}"
-        if payment_key in state and str(state.get(payment_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
-            return True
+        # Only inspect controls belonging to this deal dialog. The legacy board
+        # key ps_<id> can retain an old value and must not trigger a false warning.
         _payment_widget_key = f"dls_ps_{deal_id}"
-        if _payment_widget_key in state and str(state.get(_payment_widget_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
+        _saved_payment = str(deal.get("payment_status") or "Не оплачено")
+        _payment_options = ["Не оплачено", "Оплачен частично", "Оплачено"]
+        if _payment_widget_key in state and _saved_payment in _payment_options and str(state.get(_payment_widget_key) or "") != _saved_payment:
             return True
         _manager_key = f"deal_mgr_inline_{deal_id}"
         _manager_options = get_managers_list()
         _saved_manager = str(deal.get("manager") or "")
-        # Ignore stale legacy values that are not valid in the current selector.
+        # Match the working task selector: compare only a valid saved manager.
         if _manager_key in state and _saved_manager in _manager_options and str(state.get(_manager_key) or "") != _saved_manager:
             return True
         if any(state.get(str(_k)) for _k in state.keys() if str(_k).startswith(f"dls_up_{deal_id}_")):
@@ -12537,6 +12538,16 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = True
                     _crm_workspace_rerun()
                 else:
+                    # Restore pending selections to the last saved deal values.
+                    _saved_payment_discard = str(d.get("payment_status") or "Не оплачено")
+                    st.session_state[f"dls_ps_{deal_id}"] = _saved_payment_discard
+                    st.session_state[f"_dls_ps_last_model_{deal_id}"] = _saved_payment_discard
+                    st.session_state[f"ps_{deal_id}"] = _saved_payment_discard
+                    st.session_state[f"_ps_last_model_{deal_id}"] = _saved_payment_discard
+                    _saved_manager_discard = str(d.get("manager") or "")
+                    _mgr_options_discard = get_managers_list()
+                    st.session_state[f"deal_mgr_inline_{deal_id}"] = _saved_manager_discard if _saved_manager_discard in _mgr_options_discard else (_mgr_options_discard[0] if _mgr_options_discard else "")
+                    st.session_state[f"_deal_mgr_last_model_{deal_id}"] = _saved_manager_discard
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     _pop_dialog_return()
