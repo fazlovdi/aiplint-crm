@@ -12107,7 +12107,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"task_estimated_ship_date_{key_prefix}"] = parse_optional_date(task.get("estimated_ship_date", ""))
                     for _draft_widget_key in (
                         f"edit_topic_{key_prefix}", f"edit_type_{key_prefix}", f"edit_mgr_{key_prefix}",
-                        f"edit_comment_{key_prefix}", f"edit_prod_{key_prefix}", f"edit_addr_{key_prefix}",
+                        f"edit_comment_{key_prefix}", f"edit_prod_{key_prefix}", f"edit_order_calc_{key_prefix}", f"edit_addr_{key_prefix}",
                         f"edit_city_{key_prefix}", f"edit_recv_{key_prefix}", f"edit_rphone_{key_prefix}",
                         f"edit_pay_{key_prefix}", f"edit_amount_{key_prefix}", f"edit_tk_{key_prefix}",
                         f"edit_method_{key_prefix}", f"dl_inline_{key_prefix}",
