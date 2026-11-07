@@ -3237,9 +3237,12 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 current_mgr = t.get("manager", "")
                 current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
                 _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
-                # Для уже взятой задачи синхронизируем значение до создания selectbox.
-                if t.get("in_work") and current_mgr in mgr_options and st.session_state.get(_task_mgr_widget_key) != current_mgr:
-                    st.session_state[_task_mgr_widget_key] = current_mgr
+                _task_mgr_model_key = f"_task_mgr_last_model_{key_prefix}"
+                # Обновляем поле только при изменении сохранённого ответственного.
+                # Обычный rerun после выбора менеджера не сбрасывает выбор пользователя.
+                if st.session_state.get(_task_mgr_model_key) != current_mgr:
+                    st.session_state[_task_mgr_widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
+                    st.session_state[_task_mgr_model_key] = current_mgr
                 new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
                 _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
                 if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
