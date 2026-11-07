@@ -12495,6 +12495,20 @@ def deal_report_dialog(deal_id, action):
 @st.fragment
 def _crm_deal_responsible_fragment(d, deal_id):
     """Перерисовывает только блок ответственного при выборе менеджера."""
+    # Streamlit fragments can rerun with the deal object captured during an
+    # earlier render. Resolve it again by ID on every fragment rerun; otherwise
+    # tab navigation can restore an obsolete manager even when crm_store is current.
+    _store_deals = st.session_state.get("crm_store", {}).get("deals", []) or []
+    _current_deal = next(
+        (
+            _item for _item in _store_deals
+            if isinstance(_item, dict) and str(_item.get("id")) == str(deal_id)
+        ),
+        None,
+    )
+    if _current_deal is not None:
+        d = _current_deal
+
     mgr_options = get_managers_list()
     current_mgr = d.get("manager", "")
     widget_key = f"deal_mgr_inline_{deal_id}"
