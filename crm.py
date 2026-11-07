@@ -12542,6 +12542,13 @@ def _crm_deal_responsible_fragment(d, deal_id):
             d["manager"] = new_mgr
             d["delegated_to"] = new_mgr
             d["last_modified"] = now_str()
+            # Delegation is an explicit save. Immediately align both widget state
+            # and its saved-model marker with the selected manager before rerun;
+            # otherwise the unsaved-change guard can resurrect the previous value
+            # and block switching tabs after a successful delegation.
+            st.session_state[widget_key] = new_mgr
+            st.session_state[model_key] = new_mgr
+            st.session_state.pop(f"_crm_widget_changed_{widget_key}", None)
             add_notification(
                 new_mgr,
                 f"Вам делегирована сделка №{d.get('deal_number', deal_id)}: {d.get('deal_title', '')}",
