@@ -2963,6 +2963,18 @@ def _crm_workspace_init():
     st.session_state.pop("_crm_last_queued_workspace_state", None)
 
 
+def _crm_finish_pending_child_open():
+    """Открывает дочернюю вкладку после отказа от черновика родителя."""
+    pending = st.session_state.pop("_crm_pending_child_open", None)
+    if not isinstance(pending, dict):
+        return False
+    target = globals().get(str(pending.get("name", "")))
+    if not callable(target):
+        return False
+    target(*(pending.get("args") or ()), **(pending.get("kwargs") or {}))
+    return True
+
+
 def _crm_dialog(title, width="large"):
     def _decorate(func):
         _CRM_DIALOG_REGISTRY[func.__name__] = {"func": func, "title": title, "width": width}
@@ -2988,6 +3000,31 @@ def _crm_dialog(title, width="large"):
                 # Legacy dispatchers can call wrappers again on every rerun;
                 # never let that replay steal focus from another tab.
                 return None
+
+            # Protect unsaved parent edits before opening a nested dialog.
+            if inside_host and active and active.get("name") != entry["name"] and _crm_workspace_tab_has_unsaved(active):
+                _parent_name = str(active.get("name", ""))
+                _parent_args = active.get("args", ()) or ()
+                _warning_key = None
+                if _parent_name == "client_detail_dialog" and _parent_args:
+                    _warning_key = f"_show_close_warning_client_{_parent_args[0]}"
+                elif _parent_name == "deal_detail_dialog" and _parent_args:
+                    _parent_deal = _parent_args[0] if isinstance(_parent_args[0], dict) else {}
+                    _parent_prefix = str(_parent_args[3]) if len(_parent_args) > 3 else f"deal_{_parent_deal.get('id', '')}"
+                    _warning_key = f"_show_close_warning_{_parent_prefix}"
+                elif _parent_name == "task_detail_dialog" and len(_parent_args) >= 4:
+                    _warning_key = f"_show_close_warning_{_parent_args[3]}"
+                if _warning_key:
+                    st.session_state["_crm_pending_child_open"] = {
+                        "name": func.__name__, "args": args, "kwargs": kwargs,
+                        "parent_name": _parent_name, "parent_args": _parent_args,
+                    }
+                    st.session_state[_warning_key] = True
+                    try:
+                        st.rerun(scope="fragment")
+                    except (TypeError, ValueError):
+                        st.rerun()
+                    return None
 
             client_id = _crm_workspace_client_id(func.__name__, args, kwargs)
             # If a legacy dispatcher repeats a dialog that is already open in any
@@ -12140,7 +12177,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
@@ -12164,6 +12201,10 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
+                    if st.session_state.get("_crm_pending_child_open"):
+                        _crm_finish_pending_child_open()
+                        _crm_workspace_rerun()
+                        return
                     if st.session_state.get("_crm_pending_close"):
                         st.session_state[f"tc_input_{key_prefix}"] = ""
                         st.session_state[f"clr_tc_{key_prefix}"] = False
@@ -12173,6 +12214,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                 if st.button("Продолжить редактирование", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
 
 
@@ -12507,7 +12549,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
@@ -12525,12 +12567,17 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
+                    if st.session_state.get("_crm_pending_child_open"):
+                        _crm_finish_pending_child_open()
+                        _crm_workspace_rerun()
+                        return
                     _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
             with _wcol2:
                 if st.button("Продолжить редактирование", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
 
 
@@ -12557,7 +12604,7 @@ def client_detail_dialog(cl_id):
             st.markdown("Несохранённые изменения будут потеряны. Продолжить?")
             _wcol1, _wcol2 = st.columns(2)
             with _wcol1:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и открыть" if st.session_state.get("_crm_pending_child_open") else ("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть"), key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     st.session_state.pop(f"_client_extra_draft_{cl_id}", None)
@@ -12581,12 +12628,17 @@ def client_detail_dialog(cl_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
+                    if st.session_state.get("_crm_pending_child_open"):
+                        _crm_finish_pending_child_open()
+                        _crm_workspace_rerun()
+                        return
                     _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
             with _wcol2:
                 if st.button("Продолжить редактирование", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
     render_client_card_expanded(cl)
 
@@ -12693,6 +12745,7 @@ def create_deal_dialog(cl_id):
                 if st.button("Продолжить редактирование", key=f"cdlg_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
     _cl = get_client_by_id(cl_id)
     if not _cl:
@@ -12821,6 +12874,7 @@ def deal_create_task_dialog(deal_id, client_id):
                 if st.button("Продолжить редактирование", key=f"cdt_warn_cancel_{deal_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
     _task_form_lifecycle_key = f"nt_form_initialized_cdt_{deal_id}"
     if not st.session_state.get(_task_form_lifecycle_key):
@@ -12912,6 +12966,7 @@ def client_create_task_dialog(cl_id):
                 if st.button("Продолжить редактирование", key=f"cct_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
     _created_task = render_task_form(None, cl_id, f"cct_{cl_id}")
     if _created_task:
@@ -12989,6 +13044,7 @@ def client_create_deal_task_dialog(cl_id):
                 if st.button("Продолжить редактирование", key=f"ccdt_warn_cancel_{cl_id}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
+                    st.session_state.pop("_crm_pending_child_open", None)
                     _crm_workspace_rerun()
     deal_options = {d["id"]: d.get("deal_number", d.get("title", "")) for d in cl_deals}
     selected_deal_id = st.selectbox("Выберите сделку:", list(deal_options.keys()), format_func=lambda x: deal_options[x], key=f"ccdt_deal_sel_{cl_id}")
