@@ -2601,9 +2601,9 @@ def _crm_workspace_finish_pending_close():
             _crm_workspace_close_tab_callback(window_id, target_index, force=True)
 
 def _crm_workspace_defer_pending_switch():
-    """Persist a private draft before leaving the edited workspace tab."""
+    """Persist a private draft before leaving or postponing an edited workspace tab."""
     pending = st.session_state.get("_crm_pending_close")
-    if not isinstance(pending, dict) or pending.get("mode") != "switch":
+    if not isinstance(pending, dict) or pending.get("mode") not in ("switch", "tab", "window"):
         return
     login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
     window_id = str(pending.get("window_id") or "")
@@ -2615,8 +2615,9 @@ def _crm_workspace_defer_pending_switch():
     source_key = str(pending.get("tab_key") or "")
     source_tab = next((t for t in (window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == source_key), None)
     target_key = str(pending.get("target_tab_key") or "")
-    target_index = next((i for i, t in enumerate(window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == target_key), None)
-    if source_tab is None or target_index is None:
+    target_index = next((i for i, t in enumerate(window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == target_key), None) if target_key else None
+    mode = str(pending.get("mode") or "")
+    if source_tab is None or (mode == "switch" and target_index is None):
         st.error("Не удалось определить вкладку для черновика. Изменения оставлены открытыми.")
         return
     values = _crm_draft_widget_values(source_tab)
@@ -2631,10 +2632,24 @@ def _crm_workspace_defer_pending_switch():
         _CRM_DRAFT_PENDING_PAYLOADS.pop(cache_key, None)
     st.session_state.setdefault("_crm_drafts_local_values", {})[source_key] = values
     source_tab["has_draft"] = True
-    window["active_tab"] = target_index
+    _source_name = str(source_tab.get("name", ""))
+    _source_args = source_tab.get("args", ()) or ()
+    if _source_name == "task_detail_dialog" and len(_source_args) >= 4:
+        st.session_state[f"_show_close_warning_{_source_args[3]}"] = False
+    elif _source_name == "deal_detail_dialog" and _source_args:
+        _source_deal = _source_args[0] if isinstance(_source_args[0], dict) else {}
+        _source_prefix = str(_source_args[3]) if len(_source_args) > 3 else f"deal_{_source_deal.get('id', '')}"
+        st.session_state[f"_show_close_warning_{_source_prefix}"] = False
+    elif _source_name == "client_detail_dialog" and _source_args:
+        st.session_state[f"_show_close_warning_client_{_source_args[0]}"] = False
+    if mode == "switch":
+        window["active_tab"] = target_index
+        st.session_state["_crm_active_dialog"] = window["tabs"][target_index]
+    else:
+        window["active_tab"] = next((i for i, t in enumerate(window.get("tabs", []) or []) if _crm_workspace_tab_key(t) == source_key), 0)
+        st.session_state["_crm_active_dialog"] = source_tab
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window_id
-    st.session_state["_crm_active_dialog"] = window["tabs"][target_index]
     st.session_state.pop("_crm_pending_close", None)
     _crm_workspace_queue_save()
 
@@ -12155,7 +12170,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
 
-    if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch":
+    if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window"):
         if st.button("Решу позже", key=f"warn_later_{key_prefix}", use_container_width=True):
             _crm_workspace_defer_pending_switch()
             _crm_workspace_rerun()
@@ -12557,7 +12572,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
 
-    if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch":
+    if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window"):
         if st.button("Решу позже", key=f"warn_later_{key_prefix}", use_container_width=True):
             _crm_workspace_defer_pending_switch()
             _crm_workspace_rerun()
@@ -12686,7 +12701,7 @@ def client_detail_dialog(cl_id):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
-    if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch":
+    if st.session_state.get("_crm_pending_close", {}).get("mode") in ("switch", "tab", "window"):
         if st.button("Решу позже", key=f"warn_later_{_key_prefix}", use_container_width=True):
             _crm_workspace_defer_pending_switch()
             _crm_workspace_rerun()
