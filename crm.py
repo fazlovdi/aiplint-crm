@@ -2414,7 +2414,8 @@ def _crm_draft_widget_values(tab):
                 continue
             if key.startswith(("task_upload_", "task_upload_ver_", "task_pick_existing_", "uf_", "cnt_files_", "edit_files_")):
                 continue
-            keep = editing or key == f"tc_input_{prefix}" or (reworking and key == f"rework_comment_{prefix}")
+            keep = (editing or key in (f"task_mgr_inline_{prefix}", f"task_shipping_status_{prefix}", f"task_estimated_ship_date_{prefix}")
+                    or key == f"tc_input_{prefix}" or (reworking and key == f"rework_comment_{prefix}"))
             if keep:
                 encoded = _crm_draft_encode(value)
                 if encoded is not None or value is None:
@@ -2427,14 +2428,14 @@ def _crm_draft_widget_values(tab):
         editing = bool(state.get(f"dls_show_edit_{entity_id}"))
         allowed_prefixes = (
             f"dls_et_{entity_id}", f"dls_eb_{entity_id}", f"dls_em_{entity_id}",
-            f"dls_ps_{entity_id}",
+            f"dls_ps_{entity_id}", f"ps_{entity_id}",
             f"dls_dc_input_{entity_id}", f"dls_pause_reason_{entity_id}",
             f"dls_show_edit_{entity_id}", f"_show_close_warning_deal_{entity_id}",
         )
         for key, value in list(state.items()):
             key = str(key)
             if any(key == p or key.startswith(p + "_") for p in allowed_prefixes):
-                if editing or key.startswith((f"dls_ps_{entity_id}", f"dls_dc_input_{entity_id}")):
+                if editing or key.startswith((f"dls_ps_{entity_id}", f"ps_{entity_id}", f"dls_dc_input_{entity_id}")):
                     encoded = _crm_draft_encode(value)
                     if encoded is not None or value is None:
                         values[key] = encoded
@@ -2485,9 +2486,9 @@ def _crm_draft_restore_tab(login, tab):
         args = tab.get("args", ()) or ()
         deal = args[0] if args and isinstance(args[0], dict) else {}
         deal_id = str(deal.get("id", ""))
-        if deal_id and f"dls_ps_{deal_id}" in values:
+        if deal_id and f"ps_{deal_id}" in values:
             st.session_state.setdefault(
-                f"_dls_ps_last_model_{deal_id}",
+                f"_ps_last_model_{deal_id}",
                 deal.get("payment_status", "Не оплачено") or "Не оплачено",
             )
 
@@ -2515,6 +2516,18 @@ def _crm_workspace_tab_has_unsaved(tab):
             f"edit_method_{prefix}": ("ship_method", "Не выбрано"),
             f"task_mgr_inline_{prefix}": ("manager", ""),
         }
+        _shipping_status_key = f"task_shipping_status_{prefix}"
+        if _shipping_status_key in state and str(state.get(_shipping_status_key) or "") != str(task.get("shipping_status") or ""):
+            return True
+        _shipping_date_key = f"task_estimated_ship_date_{prefix}"
+        if _shipping_date_key in state:
+            try:
+                _selected_ship_date = state.get(_shipping_date_key)
+                _selected_ship_date = _selected_ship_date.isoformat() if hasattr(_selected_ship_date, "isoformat") and _selected_ship_date else ""
+                if str(_selected_ship_date) != str(task.get("estimated_ship_date") or ""):
+                    return True
+            except Exception:
+                return True
         for widget_key, (field, default) in field_map.items():
             if widget_key in state and str(state.get(widget_key) if state.get(widget_key) is not None else default) != str(task.get(field, default) if task.get(field) is not None else default):
                 return True
@@ -2544,7 +2557,7 @@ def _crm_workspace_tab_has_unsaved(tab):
         prefix = str(args[3]) if len(args) > 3 else f"deal_{deal_id}"
         if state.get(f"dls_show_edit_{deal_id}"):
             return True
-        payment_key = f"dls_ps_{deal_id}"
+        payment_key = f"ps_{deal_id}"
         if payment_key in state and str(state.get(payment_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
             return True
         return bool(str(state.get(f"dls_dc_input_{deal_id}", "") or "").strip()
@@ -3462,6 +3475,8 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
         st.toast("Статус и дата отправки применены", icon="✅")
         return True
 
+    if str(st.session_state.get(status_key, current_status) or "") != str(current_status or ""):
+        st.markdown(f"<style>.st-key-{status_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
     st.selectbox(
         "Статус",
         options=statuses,
@@ -3721,6 +3736,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 if st.session_state.get(_task_mgr_model_key) != current_mgr:
                     st.session_state[_task_mgr_widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
                     st.session_state[_task_mgr_model_key] = current_mgr
+                if str(st.session_state.get(_task_mgr_widget_key, current_mgr) or "") != str(current_mgr or ""):
+                    st.markdown(f"<style>.st-key-{_task_mgr_widget_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
                 new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
                 _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
                 if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
@@ -8090,6 +8107,9 @@ def render_deal_card_expanded(d, cl):
             st.session_state[_ps_widget_key] = ps if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else "Не оплачено"
             st.session_state[_ps_model_key] = ps
         inject_payment_container_css(d["id"], ps)
+        _ps_changed = str(st.session_state.get(_ps_widget_key, ps) or "") != str(ps or "")
+        if _ps_changed:
+            st.markdown(f"<style>.st-key-ps_wrap_{d['id']} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.35rem 0.65rem!important; }}</style>", unsafe_allow_html=True)
         with st.container(key=f"ps_wrap_{d['id']}"):
             new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key)
         _bank_payment_status = _tochka_bank_payment_status(d)
@@ -12135,6 +12155,24 @@ def task_detail_dialog(task, cl, d, key_prefix):
                         except (TypeError, ValueError):
                             t["order_amount"] = 0
                     if _et_tk_key in st.session_state: t["tk_num"] = st.session_state[_et_tk_key]
+                    # Apply selected responsible person using the same effects as "Делегировать".
+                    _inline_mgr_key = f"task_mgr_inline_{key_prefix}"
+                    _selected_task_mgr = st.session_state.get(_inline_mgr_key)
+                    _current_task_mgr = t.get("manager", "")
+                    if _selected_task_mgr and _selected_task_mgr != _current_task_mgr:
+                        t["manager"] = _selected_task_mgr
+                        t["delegated_to"] = _selected_task_mgr
+                        t["in_work"] = False
+                        t["done"] = False
+                        t["reviewed"] = False
+                        add_notification(_selected_task_mgr, f"Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}", f"📌 Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}")
+                    _shipping_status_key = f"task_shipping_status_{key_prefix}"
+                    _shipping_date_key = f"task_estimated_ship_date_{key_prefix}"
+                    if _shipping_status_key in st.session_state:
+                        t["shipping_status"] = st.session_state.get(_shipping_status_key) or ""
+                    if _shipping_date_key in st.session_state:
+                        _shipping_date_value = st.session_state.get(_shipping_date_key)
+                        t["estimated_ship_date"] = _shipping_date_value.isoformat() if hasattr(_shipping_date_value, "isoformat") and _shipping_date_value else ""
                     # Deadline
                     _dl_key = f"dl_inline_{key_prefix}"
                     if _dl_key in st.session_state:
@@ -12549,11 +12587,16 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     if _em_key in st.session_state:
                         _mv = st.session_state[_em_key]
                         if _mv: d["manager"] = _mv
-                    _payment_status_key = f"dls_ps_{deal_id}"
+                    _payment_status_key = f"ps_{deal_id}"
                     if _payment_status_key in st.session_state:
                         _selected_payment_status = st.session_state[_payment_status_key]
                         if _selected_payment_status in ("Не оплачено", "Оплачен частично", "Оплачено"):
-                            d["payment_status"] = _selected_payment_status
+                            _old_payment_status = d.get("payment_status", "Не оплачено") or "Не оплачено"
+                            if _selected_payment_status != _old_payment_status:
+                                d["payment_status"] = _selected_payment_status
+                                _bank_status_for_override = _tochka_bank_payment_status(d)
+                                d["payment_status_manual_override"] = bool(_selected_payment_status == "Не оплачено" and _bank_status_for_override == "Оплачено")
+                                _sync_deal_board_stage_from_payment(d)
                     _real_date_key = f"deal_real_date_detail_{deal_id}"
                     if _real_date_key in st.session_state:
                         _real_date_value = st.session_state[_real_date_key]
