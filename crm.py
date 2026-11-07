@@ -2586,6 +2586,8 @@ def _crm_workspace_finish_pending_close():
         st.session_state["_crm_active_window_id"] = window_id
         st.session_state["_crm_active_dialog"] = tabs[target_index]
         st.session_state.pop("_crm_pending_close", None)
+        st.session_state["_crm_workspace_active_tab_dirty"] = True
+        _crm_workspace_clear_legacy_dialog_markers()
         _crm_workspace_queue_save()
         return
     if mode == "window":
@@ -2651,6 +2653,8 @@ def _crm_workspace_defer_pending_switch():
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window_id
     st.session_state.pop("_crm_pending_close", None)
+    st.session_state["_crm_workspace_active_tab_dirty"] = True
+    _crm_workspace_clear_legacy_dialog_markers()
     _crm_workspace_queue_save()
 
 
