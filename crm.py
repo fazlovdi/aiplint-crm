@@ -12470,6 +12470,8 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
                     st.session_state[f"ps_{deal_id}"] = d.get("payment_status", "Не оплачено") or "Не оплачено"
+                    st.session_state[f"deal_mgr_inline_{deal_id}"] = d.get("manager", "") or ""
+                    st.session_state[f"_deal_mgr_last_model_{deal_id}"] = d.get("manager", "") or ""
                     for _draft_widget_key in (f"dls_et_{deal_id}", f"dls_eb_{deal_id}", f"dls_em_{deal_id}"):
                         st.session_state.pop(_draft_widget_key, None)
                     st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
