@@ -2423,14 +2423,14 @@ def _crm_draft_widget_values(tab):
         editing = bool(state.get(f"dls_show_edit_{entity_id}"))
         allowed_prefixes = (
             f"dls_et_{entity_id}", f"dls_eb_{entity_id}", f"dls_em_{entity_id}",
-            f"dls_ps_{entity_id}", f"deal_real_date_detail_{entity_id}",
+            f"dls_ps_{entity_id}",
             f"dls_dc_input_{entity_id}", f"dls_pause_reason_{entity_id}",
             f"dls_show_edit_{entity_id}", f"_show_close_warning_deal_{entity_id}",
         )
         for key, value in list(state.items()):
             key = str(key)
             if any(key == p or key.startswith(p + "_") for p in allowed_prefixes):
-                if editing or key.startswith((f"dls_ps_{entity_id}", f"deal_real_date_detail_{entity_id}", f"dls_dc_input_{entity_id}")):
+                if editing or key.startswith((f"dls_ps_{entity_id}", f"dls_dc_input_{entity_id}")):
                     encoded = _crm_draft_encode(value)
                     if encoded is not None or value is None:
                         values[key] = encoded
@@ -2443,7 +2443,7 @@ def _crm_draft_widget_values(tab):
             f"em_{entity_id}", f"promo_code_{entity_id}", f"ep_phone_{entity_id}_",
             f"ep_name_{entity_id}_", f"ep_role_{entity_id}_", f"ee_val_{entity_id}_",
             f"ea_addr_{entity_id}_", f"ea_rn_{entity_id}_", f"ea_rr_{entity_id}_",
-            f"ea_rp_{entity_id}_", f"ea_re_{entity_id}_",
+            f"ea_rp_{entity_id}_", f"ea_re_{entity_id}_", f"show_edit_{entity_id}",
         )
         if editing:
             for key, value in list(state.items()):
@@ -2469,6 +2469,102 @@ def _crm_draft_restore_tab(login, tab):
         # Never overwrite a live widget value or any existing session state.
         if key not in st.session_state:
             st.session_state[key] = _crm_draft_decode(value)
+    # Preserve the saved model baseline while restoring an unconfirmed payment selection.
+    if str(tab.get("name", "")) == "deal_detail_dialog":
+        args = tab.get("args", ()) or ()
+        deal = args[0] if args and isinstance(args[0], dict) else {}
+        deal_id = str(deal.get("id", ""))
+        if deal_id and f"dls_ps_{deal_id}" in values:
+            st.session_state.setdefault(
+                f"_dls_ps_last_model_{deal_id}",
+                deal.get("payment_status", "Не оплачено") or "Не оплачено",
+            )
+
+def _crm_workspace_tab_has_unsaved(tab):
+    """Conservative guard for unfinished edits in client, deal, and task tabs."""
+    name = str(tab.get("name", ""))
+    args = tab.get("args", ()) or ()
+    state = st.session_state
+    if name == "task_detail_dialog" and len(args) >= 4:
+        prefix = str(args[3])
+        return bool(
+            state.get(f"show_edit_task_{prefix}") or state.get(f"show_edit_dl_{prefix}")
+            or str(state.get(f"tc_input_{prefix}", "") or "").strip()
+            or (state.get(f"show_rework_{prefix}") and str(state.get(f"rework_comment_{prefix}", "") or "").strip())
+        )
+    if name == "deal_detail_dialog" and args:
+        deal = args[0] if isinstance(args[0], dict) else {}
+        deal_id = str(deal.get("id", ""))
+        prefix = str(args[3]) if len(args) > 3 else f"deal_{deal_id}"
+        if state.get(f"dls_show_edit_{deal_id}"):
+            return True
+        payment_key = f"dls_ps_{deal_id}"
+        if payment_key in state and str(state.get(payment_key) or "") != str(deal.get("payment_status") or "Не оплачено"):
+            return True
+        return bool(str(state.get(f"dls_dc_input_{deal_id}", "") or "").strip()
+                    or str(state.get(f"dls_pause_reason_{deal_id}", "") or "").strip()
+                    or state.get(f"_show_close_warning_{prefix}", False))
+    if name == "client_detail_dialog" and args:
+        return bool(state.get(f"show_edit_{args[0]}"))
+    return False
+
+def _crm_workspace_prompt_close(window, tab_index, mode):
+    tabs = window.get("tabs", []) or []
+    if not (0 <= int(tab_index) < len(tabs)):
+        return False
+    tab = tabs[int(tab_index)]
+    name = str(tab.get("name", ""))
+    args = tab.get("args", ()) or ()
+    if name == "task_detail_dialog" and len(args) >= 4:
+        prefix = str(args[3])
+        st.session_state[f"_show_close_warning_{prefix}"] = True
+    elif name == "deal_detail_dialog" and args:
+        deal = args[0] if isinstance(args[0], dict) else {}
+        prefix = str(args[3]) if len(args) > 3 else f"deal_{deal.get('id', '')}"
+        st.session_state[f"_show_close_warning_{prefix}"] = True
+    elif name == "client_detail_dialog" and args:
+        st.session_state[f"_show_close_warning_client_{args[0]}"] = True
+    else:
+        return False
+    window["active_tab"] = int(tab_index)
+    window["minimized"] = False
+    st.session_state["_crm_active_window_id"] = window.get("id")
+    st.session_state["_crm_active_dialog"] = tab
+    st.session_state["_crm_pending_close"] = {
+        "window_id": str(window.get("id")),
+        "tab_key": _crm_workspace_tab_key(tab),
+        "mode": mode,
+    }
+    _crm_workspace_queue_save()
+    return True
+
+def _crm_workspace_finish_pending_close():
+    pending = st.session_state.get("_crm_pending_close")
+    if not isinstance(pending, dict):
+        return
+    window_id = str(pending.get("window_id", ""))
+    windows = st.session_state.get("_crm_windows", []) or []
+    window = next((w for w in windows if str(w.get("id")) == window_id), None)
+    if window is None:
+        st.session_state.pop("_crm_pending_close", None)
+        return
+    tabs = window.get("tabs", []) or []
+    target_key = str(pending.get("tab_key", ""))
+    target_index = next((i for i, tab in enumerate(tabs) if _crm_workspace_tab_key(tab) == target_key), None)
+    if target_index is not None and _crm_workspace_tab_has_unsaved(tabs[target_index]):
+        return
+    mode = str(pending.get("mode", "tab"))
+    if mode == "window":
+        next_dirty = next((i for i, tab in enumerate(tabs) if _crm_workspace_tab_has_unsaved(tab)), None)
+        if next_dirty is not None:
+            _crm_workspace_prompt_close(window, next_dirty, "window")
+            return
+        st.session_state.pop("_crm_pending_close", None)
+        _crm_workspace_close_window_callback(window_id, in_workspace=True, force=True)
+    else:
+        st.session_state.pop("_crm_pending_close", None)
+        if target_index is not None:
+            _crm_workspace_close_tab_callback(window_id, target_index, force=True)
 
 def _crm_draft_save_finished(cache_key, payload, future):
     try:
