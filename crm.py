@@ -3362,21 +3362,29 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             if show_edit_task:
                 # Inline editing mode
                 et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
+                _crm_mark_widget_changed(f"edit_type_{key_prefix}", str(et_type) != str(t.get("type", "Связаться")))
                 if et_type not in ("Отправить заказ", "Отправить образцы"):
                     et_topic = st.text_input("Тема:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_topic_{key_prefix}", str(et_topic) != str(t.get("text", "")))
                 else:
                     et_topic = et_type
-                et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                _crm_mark_widget_changed(f"edit_mgr_{key_prefix}", str(et_mgr) != str(t.get("manager", "")))
                 # Описание расположено рядом с основными полями, чтобы его было легко заметить.
                 et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
+                _crm_mark_widget_changed(f"edit_comment_{key_prefix}", str(et_comment) != str(t.get("task_comment", "")))
                 if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
                     _selected_calc_id_edit, et_products = render_task_products_editor(
                         d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
                     )
                     et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_city_{key_prefix}", str(et_city) != str(t.get("ship_city", "")))
                     et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_addr_{key_prefix}", str(et_addr) != str(t.get("ship_addr", "")))
                     et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_recv_{key_prefix}", str(et_recv) != str(t.get("receiver", "")))
                     et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
+                    _crm_mark_widget_changed(f"edit_rphone_{key_prefix}", str(et_rphone) != str(t.get("receiver_phone", "")))
                     et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
                     _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
                     _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
@@ -11103,15 +11111,22 @@ def render_client_card_expanded(cl):
             if show_edit:
                 # Inline editing — поля становятся редактируемыми
                 en = st.text_input("ФИО / Компания", value=cl['name'], key=f"en_{cl['id']}")
+                _crm_mark_widget_changed(f"en_{cl['id']}", str(st.session_state.get(f"en_{cl['id']}", cl['name'])) != str(cl['name']))
                 st.markdown("---")
                 st.markdown("**Информация о клиенте:**")
                 ep = st.text_input("Телефон", value=cl['phone'], key=f"ep_{cl['id']}")
+                _crm_mark_widget_changed(f"ep_{cl['id']}", str(st.session_state.get(f"ep_{cl['id']}", cl['phone'])) != str(cl['phone']))
                 cm_edit_idx = CONTACT_METHODS.index(cl.get('contact_method', '')) if cl.get('contact_method', '') in CONTACT_METHODS else 0
                 cm_edit = st.selectbox("Предпочтительный способ связи:", CONTACT_METHODS, index=cm_edit_idx, key=f"cm_edit_{cl['id']}", placeholder="Выбери вариант...")
+                _crm_mark_widget_changed(f"cm_edit_{cl['id']}", str(cm_edit) != str(cl.get('contact_method', '')))
                 ee = st.text_input("Email", value=cl.get('email', ''), key=f"ee_{cl['id']}")
+                _crm_mark_widget_changed(f"ee_{cl['id']}", str(ee) != str(cl.get('email', '')))
                 city_val = st.text_input("Город", value=cl.get('city', ''), key=f"city_{cl['id']}")
+                _crm_mark_widget_changed(f"city_{cl['id']}", str(city_val) != str(cl.get('city', '')))
                 ea_val = st.text_input("Основной адрес", value=cl.get('address', ''), key=f"ea_{cl['id']}")
+                _crm_mark_widget_changed(f"ea_{cl['id']}", str(ea_val) != str(cl.get('address', '')))
                 ed = st.number_input("Скидка (%)", min_value=0, max_value=100, value=int(cl.get('discount', 0)), key=f"ed_{cl['id']}")
+                _crm_mark_widget_changed(f"ed_{cl['id']}", int(ed) != int(cl.get('discount', 0) or 0))
                 _cat_col, _promo_col = st.columns(2)
                 with _cat_col:
                     ec_idx = CATEGORIES.index(cl.get('category', 'Не определён')) if cl.get('category', 'Не определён') in CATEGORIES else 0
