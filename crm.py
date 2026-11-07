@@ -8129,8 +8129,19 @@ def render_deal_card_expanded(d, cl):
         st.markdown("**Ответственный:**")
         mgr_options_cd = get_managers_list()
         current_mgr_cd = d.get("manager", "")
+        # Карточка клиента и вкладка сделки используют отдельные widget keys.
+        # После изменения ответственного в другой вкладке старый widget state
+        # не должен записывать прежнее имя обратно в сделку.
+        _card_mgr_widget_key = f"card_mgr_inline_{d['id']}"
+        _card_mgr_model_key = f"_card_mgr_last_model_{d['id']}"
+        if st.session_state.get(_card_mgr_model_key) != current_mgr_cd:
+            st.session_state[_card_mgr_widget_key] = (
+                current_mgr_cd if current_mgr_cd in mgr_options_cd
+                else (mgr_options_cd[0] if mgr_options_cd else "")
+            )
+            st.session_state[_card_mgr_model_key] = current_mgr_cd
         current_idx_cd = mgr_options_cd.index(current_mgr_cd) if current_mgr_cd in mgr_options_cd else 0
-        new_mgr_cd = st.selectbox("Ответственный:", mgr_options_cd, index=current_idx_cd, key=f"card_mgr_inline_{d['id']}", placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+        new_mgr_cd = st.selectbox("Ответственный:", mgr_options_cd, index=current_idx_cd, key=_card_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
         if new_mgr_cd != current_mgr_cd and new_mgr_cd:
             d["manager"] = new_mgr_cd
             d["last_modified"] = now_str()
