@@ -3241,7 +3241,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 if t.get("in_work") and current_mgr in mgr_options and st.session_state.get(_task_mgr_widget_key) != current_mgr:
                     st.session_state[_task_mgr_widget_key] = current_mgr
                 new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
-                if new_mgr != current_mgr and new_mgr:
+                _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
+                if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
                     t["manager"] = new_mgr
                     t["delegated_to"] = new_mgr
                     t["in_work"] = False
@@ -7491,7 +7492,7 @@ def render_deal_card_expanded(d, cl):
                 f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
                 unsafe_allow_html=True,
             )
-        if new_ps != ps:
+        if st.button("Обновить статус", key=f"update_payment_status_expanded_{d['id']}", type="primary", use_container_width=True) and new_ps != ps:
             d["payment_status"] = new_ps
             d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
             d["last_modified"] = now_str()
@@ -10516,15 +10517,17 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
                         unsafe_allow_html=True,
                     )
+                _update_deal_payment_clicked = st.button("Обновить статус", key=f"dls_update_status_{deal_id}", type="primary", use_container_width=True)
             with _mgr_col:
                 new_mgr_dd = st.selectbox("Ответственный:", mgr_options_dd, index=current_idx_dd, key=f"deal_mgr_inline_{deal_id}", placeholder=MGR_PLACEHOLDER)
-            if new_ps != ps:
+                _delegate_deal_clicked = st.button("Делегировать", key=f"deal_mgr_delegate_{deal_id}", type="primary", use_container_width=True)
+            if _update_deal_payment_clicked and new_ps != ps:
                 d["payment_status"] = new_ps
                 d["payment_status_manual_override"] = True
                 d["last_modified"] = now_str()
                 _sync_deal_board_stage_from_payment(d)
                 commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
-            if new_mgr_dd != current_mgr_dd and new_mgr_dd:
+            if _delegate_deal_clicked and new_mgr_dd and new_mgr_dd != current_mgr_dd:
                 d["manager"] = new_mgr_dd
                 d["delegated_to"] = new_mgr_dd
                 d["last_modified"] = now_str()
