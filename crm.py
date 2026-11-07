@@ -12205,7 +12205,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                         _crm_finish_pending_child_open()
                         _crm_workspace_rerun()
                         return
-                    if st.session_state.get("_crm_pending_close"):
+                    if st.session_state.get("_crm_pending_close") or st.session_state.get("_crm_pending_child_open"):
                         st.session_state[f"tc_input_{key_prefix}"] = ""
                         st.session_state[f"clr_tc_{key_prefix}"] = False
                     _crm_workspace_finish_pending_close()
