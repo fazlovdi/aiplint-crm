@@ -10877,6 +10877,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 format="DD.MM.YYYY",
                 key=f"deal_real_date_detail_{deal_id}",
             )
+            _crm_mark_widget_changed(f"deal_real_date_detail_{deal_id}", (_real_date_selected.isoformat() if _real_date_selected else "") != str(d.get("real_date") or ""))
             _real_date_stored = _real_date_selected.isoformat() if _real_date_selected else ""
             if _real_date_stored != str(d.get("real_date") or ""):
                 d["real_date"] = _real_date_stored
@@ -10895,6 +10896,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 inject_payment_container_css(deal_id, ps)
                 with st.container(key=f"ps_wrap_{deal_id}"):
                     new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key_dd)
+                _crm_mark_widget_changed(_ps_widget_key_dd, str(new_ps) != str(ps))
                 if _bank_payment_status and _bank_payment_status != ps:
                     st.markdown(
                         f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
@@ -10914,7 +10916,9 @@ def render_deal_detail(d, cl, cu, key_prefix):
             show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
             if show_edit_deal:
                 et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
+                _crm_mark_widget_changed(f"dls_et_{deal_id}", str(et) != str(d.get("deal_title", "")))
                 eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
+                _crm_mark_widget_changed(f"dls_eb_{deal_id}", str(eb or "") != (str(d.get("budget", 0)) if d.get("budget", 0) > 0 else ""))
                 _dds_col, _ddc_col = st.columns(2)
                 with _dds_col:
                     if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
