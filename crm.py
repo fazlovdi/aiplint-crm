@@ -12590,20 +12590,27 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             d = _canonical_deal
 
     deal_id = d["id"]
-    # On a full dialog render (including workspace-tab switches), rehydrate the
-    # responsible selectbox from the canonical saved deal. The fragment itself
-    # handles in-place selection changes, so this does not erase a live selection
-    # during its own fragment rerun.
+    _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
+    _is_editing = st.session_state.get(f"dls_show_edit_{deal_id}", False)
+
+    # При повторной отрисовке из-за предупреждения/переключения не затираем
+    # выбранного пользователем ответственного сохранённым значением сделки.
+    # Если в виджете нет отличающегося от модели значения, синхронизируем его
+    # с актуальной моделью (в том числе после делегирования с другого устройства).
     _manager_widget_key = f"deal_mgr_inline_{deal_id}"
     _manager_model_key = f"_deal_mgr_last_model_{deal_id}"
     _saved_manager_for_render = str(d.get("manager", "") or "")
     _manager_options_for_render = get_managers_list()
-    if _saved_manager_for_render in _manager_options_for_render:
+    _manager_widget_value = st.session_state.get(_manager_widget_key)
+    _manager_has_unsaved_choice = (
+        _manager_widget_key in st.session_state
+        and str(_manager_widget_value or "") != _saved_manager_for_render
+        and str(_manager_widget_value or "") in _manager_options_for_render
+    )
+    if _saved_manager_for_render in _manager_options_for_render and not _manager_has_unsaved_choice:
         st.session_state[_manager_widget_key] = _saved_manager_for_render
         st.session_state[_manager_model_key] = _saved_manager_for_render
         st.session_state.pop(f"_crm_widget_changed_{_manager_widget_key}", None)
-    _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
-    _is_editing = st.session_state.get(f"dls_show_edit_{deal_id}", False)
 
     _close_btn_key = f"close_btn_{key_prefix}"
     _close_css_key = f"close_row_{key_prefix}"
