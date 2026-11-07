@@ -2563,12 +2563,24 @@ def _crm_workspace_finish_pending_close():
         return
     mode = str(pending.get("mode", "tab"))
     if mode == "switch":
+        source_index = target_index
+        source_tab = tabs[source_index] if source_index is not None else None
+        source_key = str(pending.get("tab_key") or "")
+        if source_tab is not None:
+            source_tab["has_draft"] = False
+            _draft_login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+            if _draft_login and YANDEX_TOKEN:
+                _empty_draft = {"version": 1, "tab_key": source_key, "updated_at": now_str(), "values": {}}
+                if _crm_draft_save_remote(_draft_login, source_key, _empty_draft):
+                    _empty_payload = json.dumps({"version": 1, "tab_key": source_key, "values": {}}, ensure_ascii=False, separators=(",", ":"))
+                    with _CRM_DRAFT_LOCK:
+                        _CRM_DRAFT_LAST_PAYLOADS[_draft_login + "|" + source_key] = _empty_payload
+                        _CRM_DRAFT_PENDING_PAYLOADS.pop(_draft_login + "|" + source_key, None)
         target_key = str(pending.get("target_tab_key") or "")
         target_index = next((i for i, tab in enumerate(tabs) if _crm_workspace_tab_key(tab) == target_key), None)
         if target_index is None:
             st.session_state.pop("_crm_pending_close", None)
             return
-        tabs[target_index]["has_draft"] = False
         window["active_tab"] = target_index
         window["minimized"] = False
         st.session_state["_crm_active_window_id"] = window_id
