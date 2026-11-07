@@ -12590,15 +12590,18 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             d = _canonical_deal
 
     deal_id = d["id"]
-    # On a full dialog render (including workspace-tab switches), rehydrate the
-    # responsible selectbox from the canonical saved deal. The fragment itself
-    # handles in-place selection changes, so this does not erase a live selection
-    # during its own fragment rerun.
+    # Initialize the responsible selectbox only when the saved model changes.
+    # Rehydrating it on every full render (including when the unsaved-changes
+    # warning appears) overwrites the user's pending selection and clears its
+    # dirty marker, making the orange unsaved-changes frame disappear.
     _manager_widget_key = f"deal_mgr_inline_{deal_id}"
     _manager_model_key = f"_deal_mgr_last_model_{deal_id}"
     _saved_manager_for_render = str(d.get("manager", "") or "")
     _manager_options_for_render = get_managers_list()
-    if _saved_manager_for_render in _manager_options_for_render:
+    if (
+        _saved_manager_for_render in _manager_options_for_render
+        and st.session_state.get(_manager_model_key) != _saved_manager_for_render
+    ):
         st.session_state[_manager_widget_key] = _saved_manager_for_render
         st.session_state[_manager_model_key] = _saved_manager_for_render
         st.session_state.pop(f"_crm_widget_changed_{_manager_widget_key}", None)
