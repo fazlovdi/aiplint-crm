@@ -12145,7 +12145,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Отменить и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
@@ -12556,7 +12556,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Отменить и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
@@ -12677,7 +12677,7 @@ def client_detail_dialog(cl_id):
                     st.toast("Сохранено", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
-                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Отменить и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
+                if st.button("Не сохранять и перейти" if st.session_state.get("_crm_pending_close", {}).get("mode") == "switch" else "Не сохранять и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
                     _client_edit_prefixes = (
