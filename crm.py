@@ -10511,7 +10511,9 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _delegate_deal_clicked = st.button("Делегировать", key=f"deal_mgr_delegate_{deal_id}", type="primary", use_container_width=True)
             if _update_deal_payment_clicked and new_ps != ps:
                 d["payment_status"] = new_ps
-                d["payment_status_manual_override"] = True
+                # Ручное исключение нужно только для намеренного статуса «Не оплачено»
+                # при подтверждённой оплате банка. Другие ручные изменения не отключают автоматику.
+                d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
                 d["last_modified"] = now_str()
                 _sync_deal_board_stage_from_payment(d)
                 commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
