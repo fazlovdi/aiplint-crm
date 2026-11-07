@@ -11895,6 +11895,16 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     _dl_key = f"dl_inline_{key_prefix}"
                     if _dl_key in st.session_state:
                         t["deadline"] = str(st.session_state[_dl_key])
+                    _tc_draft_key = f"tc_input_{key_prefix}"
+                    _tc_draft_text = str(st.session_state.get(_tc_draft_key, "") or "").strip()
+                    if _tc_draft_text:
+                        t.setdefault("task_comments", []).append({
+                            "time": moscow_now().strftime("%d.%m.%Y %H:%M"),
+                            "text": _tc_draft_text,
+                            "user": st.session_state.get("user_name", ""),
+                        })
+                        st.session_state[_tc_draft_key] = ""
+                        st.session_state[f"clr_tc_{key_prefix}"] = False
                     t["last_modified"] = now_str()
                     cl["last_modified"] = now_str()
                     if d: d["last_modified"] = now_str()
@@ -11908,6 +11918,7 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
+                    _crm_workspace_finish_pending_close()
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
@@ -11921,10 +11932,15 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state.pop("dialog_task_deal_id", None)
                     st.session_state.pop("_open_created_task", None)
                     st.session_state["_in_dialog"] = False
+                    if st.session_state.get("_crm_pending_close"):
+                        st.session_state[f"tc_input_{key_prefix}"] = ""
+                        st.session_state[f"clr_tc_{key_prefix}"] = False
+                    _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
             with _wcol3:
                 if st.button("Редактировать", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
 
     render_task_detail(task, cl, d, key_prefix, show_shipping_status=True)
@@ -12246,6 +12262,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
+                    _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
 
     if _show_close_warning:
@@ -12268,6 +12285,15 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     if _em_key in st.session_state:
                         _mv = st.session_state[_em_key]
                         if _mv: d["manager"] = _mv
+                    _payment_status_key = f"dls_ps_{deal_id}"
+                    if _payment_status_key in st.session_state:
+                        _selected_payment_status = st.session_state[_payment_status_key]
+                        if _selected_payment_status in ("Не оплачено", "Оплачен частично", "Оплачено"):
+                            d["payment_status"] = _selected_payment_status
+                    _real_date_key = f"deal_real_date_detail_{deal_id}"
+                    if _real_date_key in st.session_state:
+                        _real_date_value = st.session_state[_real_date_key]
+                        d["real_date"] = _real_date_value.isoformat() if hasattr(_real_date_value, "isoformat") else str(_real_date_value or "")
                     d["last_modified"] = now_str()
                     save_data(st.session_state.crm_store)
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
@@ -12275,6 +12301,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state.pop("dialog_deal_key", None)
                     st.session_state.pop("_open_created_deal", None)
                     st.session_state["_in_dialog"] = False
+                    _crm_workspace_finish_pending_close()
                     st.toast("\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
@@ -12288,6 +12315,7 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             with _wcol3:
                 if st.button("Редактировать", key=f"warn_cancel_{key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
 
     render_deal_detail(d, cl, cu, key_prefix)
@@ -12367,6 +12395,7 @@ def client_detail_dialog(cl_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
+                    _crm_workspace_finish_pending_close()
                     st.toast("Сохранено", icon="\u2705")
                     _crm_workspace_rerun()
             with _wcol2:
@@ -12376,10 +12405,12 @@ def client_detail_dialog(cl_id):
                     _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
+                    _crm_workspace_finish_pending_close()
                     _crm_workspace_rerun()
             with _wcol3:
                 if st.button("Редактировать", key=f"warn_cancel_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
+                    st.session_state.pop("_crm_pending_close", None)
                     _crm_workspace_rerun()
     render_client_card_expanded(cl)
 
