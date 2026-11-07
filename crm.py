@@ -2400,6 +2400,17 @@ def _crm_workspace_tab_has_unsaved(tab):
     if name == "deal_detail_dialog" and args:
         deal = args[0] if isinstance(args[0], dict) else {}
         deal_id = str(deal.get("id", ""))
+        # Workspace tab args may contain an obsolete deal snapshot. Unsaved-change
+        # checks must compare widgets against the canonical record in crm_store.
+        _canonical_for_guard = next(
+            (
+                _item for _item in state.get("crm_store", {}).get("deals", []) or []
+                if isinstance(_item, dict) and str(_item.get("id", "")) == deal_id
+            ),
+            None,
+        )
+        if _canonical_for_guard is not None:
+            deal = _canonical_for_guard
         prefix = str(args[3]) if len(args) > 3 else f"deal_{deal_id}"
         if state.get(f"dls_show_edit_{deal_id}"):
             _title_key = f"dls_et_{deal_id}"
@@ -12577,6 +12588,18 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             d = _canonical_deal
 
     deal_id = d["id"]
+    # On a full dialog render (including workspace-tab switches), rehydrate the
+    # responsible selectbox from the canonical saved deal. The fragment itself
+    # handles in-place selection changes, so this does not erase a live selection
+    # during its own fragment rerun.
+    _manager_widget_key = f"deal_mgr_inline_{deal_id}"
+    _manager_model_key = f"_deal_mgr_last_model_{deal_id}"
+    _saved_manager_for_render = str(d.get("manager", "") or "")
+    _manager_options_for_render = get_managers_list()
+    if _saved_manager_for_render in _manager_options_for_render:
+        st.session_state[_manager_widget_key] = _saved_manager_for_render
+        st.session_state[_manager_model_key] = _saved_manager_for_render
+        st.session_state.pop(f"_crm_widget_changed_{_manager_widget_key}", None)
     _show_close_warning = st.session_state.get(f"_show_close_warning_{key_prefix}", False)
     _is_editing = st.session_state.get(f"dls_show_edit_{deal_id}", False)
 
