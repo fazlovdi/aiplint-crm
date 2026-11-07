@@ -12590,15 +12590,18 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
             d = _canonical_deal
 
     deal_id = d["id"]
-    # On a full dialog render (including workspace-tab switches), rehydrate the
-    # responsible selectbox from the canonical saved deal. The fragment itself
-    # handles in-place selection changes, so this does not erase a live selection
-    # during its own fragment rerun.
+    # Rehydrate the responsible selectbox only when the saved model changes
+    # or the widget has not been initialized. A warning rerun must preserve the
+    # user's unsaved selection; the responsible fragment handles local changes.
     _manager_widget_key = f"deal_mgr_inline_{deal_id}"
     _manager_model_key = f"_deal_mgr_last_model_{deal_id}"
     _saved_manager_for_render = str(d.get("manager", "") or "")
     _manager_options_for_render = get_managers_list()
-    if _saved_manager_for_render in _manager_options_for_render:
+    _last_manager_model = st.session_state.get(_manager_model_key)
+    if _saved_manager_for_render in _manager_options_for_render and (
+        _last_manager_model != _saved_manager_for_render
+        or _manager_widget_key not in st.session_state
+    ):
         st.session_state[_manager_widget_key] = _saved_manager_for_render
         st.session_state[_manager_model_key] = _saved_manager_for_render
         st.session_state.pop(f"_crm_widget_changed_{_manager_widget_key}", None)
