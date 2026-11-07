@@ -12040,6 +12040,14 @@ def task_detail_dialog(task, cl, d, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"show_edit_task_{key_prefix}"] = False
                     st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                    for _draft_widget_key in (
+                        f"edit_topic_{key_prefix}", f"edit_type_{key_prefix}", f"edit_mgr_{key_prefix}",
+                        f"edit_comment_{key_prefix}", f"edit_prod_{key_prefix}", f"edit_addr_{key_prefix}",
+                        f"edit_city_{key_prefix}", f"edit_recv_{key_prefix}", f"edit_rphone_{key_prefix}",
+                        f"edit_pay_{key_prefix}", f"edit_amount_{key_prefix}", f"edit_tk_{key_prefix}",
+                        f"edit_method_{key_prefix}", f"dl_inline_{key_prefix}",
+                    ):
+                        st.session_state.pop(_draft_widget_key, None)
                     st.session_state.pop("dialog_task_key", None)
                     st.session_state.pop("dialog_task_number", None)
                     st.session_state.pop("dialog_task_client_id", None)
@@ -12438,6 +12446,8 @@ def deal_detail_dialog(d, cl, cu, key_prefix):
                     st.session_state[f"_show_close_warning_{key_prefix}"] = False
                     st.session_state[f"dls_show_edit_{deal_id}"] = False
                     st.session_state[f"dls_ps_{deal_id}"] = d.get("payment_status", "Не оплачено")
+                    for _draft_widget_key in (f"dls_et_{deal_id}", f"dls_eb_{deal_id}", f"dls_em_{deal_id}"):
+                        st.session_state.pop(_draft_widget_key, None)
                     st.session_state[f"deal_real_date_detail_{deal_id}"] = parse_optional_date(d.get("real_date", ""))
                     st.session_state[f"dls_dc_input_{deal_id}"] = ""
                     st.session_state[f"dls_pause_reason_{deal_id}"] = ""
@@ -12551,6 +12561,21 @@ def client_detail_dialog(cl_id):
                 if st.button("Отменить и закрыть", key=f"warn_nosave_{_key_prefix}", use_container_width=True):
                     st.session_state[f"_show_close_warning_{_key_prefix}"] = False
                     st.session_state[f"show_edit_{cl_id}"] = False
+                    _client_edit_prefixes = (
+                        f"en_{cl_id}", f"ep_{cl_id}", f"cm_edit_{cl_id}", f"ee_{cl_id}",
+                        f"ea_{cl_id}", f"ed_{cl_id}", f"ec_{cl_id}", f"client_source_edit_{cl_id}",
+                        f"em_{cl_id}", f"promo_code_{cl_id}", f"ep_phone_{cl_id}_",
+                        f"ep_name_{cl_id}_", f"ep_role_{cl_id}_", f"ee_val_{cl_id}_",
+                        f"ea_addr_{cl_id}_", f"ea_rn_{cl_id}_", f"ea_rr_{cl_id}_",
+                        f"ea_rp_{cl_id}_", f"ea_re_{cl_id}_",
+                    )
+                    for _widget_key in list(st.session_state.keys()):
+                        _widget_key = str(_widget_key)
+                        if any(
+                            (_widget_key.startswith(_p) if _p.endswith("_") else (_widget_key == _p or _widget_key.startswith(_p + "_")))
+                            for _p in _client_edit_prefixes
+                        ):
+                            st.session_state.pop(_widget_key, None)
                     _pop_dialog_return()
                     st.session_state.pop("dialog_client_key", None)
                     st.session_state["_in_dialog"] = False
