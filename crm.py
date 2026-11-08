@@ -3652,7 +3652,7 @@ def render_deal_pause_panel(d, deal_id):
 @st.fragment
 def render_deal_comments_panel(d, deal_id):
     with st.container(border=True):
-        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Комментарии</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
         </style>""", unsafe_allow_html=True)
