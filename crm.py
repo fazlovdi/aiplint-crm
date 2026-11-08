@@ -3683,7 +3683,17 @@ def render_deal_comments_panel(d, deal_id):
 def render_client_comments_panel(cl):
     _comments_panel_key = f"client_comments_panel_{cl['id']}"
     st.markdown(
-        f"<style>.st-key-{_comments_panel_key} {{ background-color: rgba(59, 130, 246, 0.045) !important; border-radius: 0.5rem !important; }}</style>",
+        f"""<style>
+        .st-key-{_comments_panel_key} {{ background-color: rgba(59, 130, 246, 0.045) !important; border-radius: 0.5rem !important; }}
+        .st-key-{_comments_panel_key} > div[data-testid="stVerticalBlock"] {{ gap: 0.35rem !important; }}
+        .st-key-{_comments_panel_key} div[class*="st-key-cli_dc_btn_"] button {{
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 0.3rem 0.75rem !important;
+            font-size: 0.85rem !important;
+            line-height: 1.2 !important;
+        }}
+        </style>""",
         unsafe_allow_html=True,
     )
     with st.container(border=True, key=_comments_panel_key):
