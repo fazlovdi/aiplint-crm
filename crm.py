@@ -7767,11 +7767,10 @@ st.markdown("---")
 # На главном экране панель окон расположена сразу под навигацией CRM.
 _crm_nav_active_id = st.session_state.get("_crm_active_window_id")
 _crm_nav_active_window = next((w for w in st.session_state.get("_crm_windows", []) if w.get("id") == _crm_nav_active_id), None)
-# The main taskbar is rendered only when no expanded workspace is active.
-# Otherwise its duplicate would remain underneath the workspace taskbar, making
-# close icons appear/disappear or look doubled during the transition.
-if not (_crm_nav_active_window and not _crm_nav_active_window.get("minimized")):
-    _crm_workspace_render_bottom_panel()
+# Keep the main taskbar mounted across workspace activation/minimization.
+# The workspace is rendered as a fixed overlay; removing this panel during the
+# activation rerun causes the main buttons to disappear before the workspace appears.
+_crm_workspace_render_bottom_panel()
 
 # Toast при загрузке если есть непрочитанные
 _unread_count = get_unread_count()
