@@ -7738,8 +7738,11 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             flex:'1 1 auto', width:'0', minWidth:'0', maxWidth:'100%',
             overflowX:'auto', overflowY:'hidden', boxSizing:'border-box',
             gap:'1px', alignItems:'center', scrollbarWidth:'thin',
-            scrollbarColor:'#AAB1BC transparent'
+            scrollbarColor:'transparent transparent',
+            msOverflowStyle:'none'
           });
+          el.style.setProperty('scrollbar-width', 'none', 'important');
+          el.style.setProperty('touch-action', 'pan-y', 'important');
           let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
           el.addEventListener('pointerdown', e => {
             if (e.button !== 0) return;
@@ -7775,7 +7778,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             ];
             const outer = blocks.find(el =>
               !el.closest('[class*="st-key-crm_workspace_window_item_"]') &&
-              el.querySelector('[class*="st-key-crm_workspace_window_item_"]')
+              Array.from(el.children).some(child => child.matches('[class*="st-key-crm_workspace_window_item_"]'))
             );
             if (!outer) return;
             attach(outer);
@@ -7842,19 +7845,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               updateBar();
             }
             track.style.right = controls ? '110px' : '0';
-            const thumb = track.querySelector('.crm-bottom-visible-thumb');
-            if (thumb && !thumb.dataset.crmBound) {
-              thumb.dataset.crmBound = '1';
-              const update = () => {
-                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
-                const ratio = outer.clientWidth / Math.max(1, outer.scrollWidth);
-                thumb.style.width = Math.max(24, Math.min(track.clientWidth, track.clientWidth * ratio)) + 'px';
-                thumb.style.left = (max ? (outer.scrollLeft / max) * Math.max(0, track.clientWidth - thumb.offsetWidth) : 0) + 'px';
-                track.style.display = max > 1 ? 'block' : 'none';
-              };
-              outer.addEventListener('scroll', update, {passive:true});
-              requestAnimationFrame(update);
-            }
           });
         };
         scan();
