@@ -12622,7 +12622,7 @@ def render_client_card_expanded(cl):
             else:
                 _client_panel_key = f"client_info_panel_{cl['id']}"
                 st.markdown(
-                    f"<style>.st-key-{_client_panel_key} {{ background:#fbe0ec !important; border:1px solid #d9a9bd !important; border-radius:4px !important; padding:4px 6px 2px !important; }}</style>",
+                    f"<style>.st-key-{_client_panel_key} {{ background:transparent !important; border:0 !important; border-radius:0 !important; box-shadow:none !important; padding:4px 6px 2px !important; }}</style>",
                     unsafe_allow_html=True,
                 )
                 with st.container(key=_client_panel_key):
