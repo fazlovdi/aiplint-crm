@@ -7593,13 +7593,10 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
 
 def _crm_workspace_render_bottom_panel(in_workspace=False):
     _all_bottom_windows = st.session_state.get("_crm_windows", [])
-    # На главном экране показываем только свёрнутые окна и постоянную кнопку статистики.
-    # Внутри открытого рабочего пространства доступны все окна для переключения.
-    _visible_bottom_windows = [
-        w for w in _all_bottom_windows
-        if in_workspace or w.get("minimized")
-        or any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
-    ]
+    # Одинаковый список окон на главном экране и внутри рабочего пространства.
+    # Панели дублируются: открытое окно остаётся в главной панели, а переключатель
+    # внутри окна показывает тот же набор окон.
+    _visible_bottom_windows = list(_all_bottom_windows)
     _bottom_windows = sorted(
         _visible_bottom_windows,
         key=lambda w: 0 if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) else 1,
