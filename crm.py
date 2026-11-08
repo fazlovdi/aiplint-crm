@@ -7614,8 +7614,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         margin:0 !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
-        background:#F3F5F8 !important; padding:0 3px !important;
+        background:#F3F5F8 !important; padding:0 30px 0 3px !important;
         box-shadow:none !important; outline:0 !important;
+    }
+    /* Pin the close control to its own window chip so Streamlit's horizontal
+       flex sizing cannot overlap or suppress the glyph when more windows appear. */
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] {
+        position:absolute !important; right:2px !important; top:50% !important;
+        transform:translateY(-50%) !important; z-index:20 !important;
+        flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
+        display:flex !important; visibility:visible !important; opacity:1 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-wrap:nowrap !important; gap:0 !important;
@@ -7634,8 +7642,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     /* Streamlit horizontal layouts give each child a flex column. Reserve space on the
        column that contains the close button, not only on the button wrapper itself. */
     [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > div:has([class*="st-key-crm_workspace_taskbar_close_"]) {
-        flex:0 0 31px !important; width:31px !important; min-width:31px !important; max-width:31px !important;
-        display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important;
+        position:static !important; flex:0 0 0 !important; width:0 !important; min-width:0 !important; max-width:0 !important;
+        display:block !important; visibility:visible !important; opacity:1 !important; overflow:visible !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_taskbar_close_"] p,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_taskbar_close_"] span {
