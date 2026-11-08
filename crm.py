@@ -12594,7 +12594,14 @@ def render_client_card_expanded(cl):
     with st.container(border=True, key=f"client_detail_{cl['id']}"):
         st.markdown(
             f"""<style>
-            .st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; }}
+            .st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; background: transparent !important; background-color: transparent !important; }}
+            .st-key-client_detail_{cl['id']} [data-testid="stVerticalBlockBorderWrapper"],
+            .st-key-client_detail_{cl['id']} .st-key-client_info_panel_{cl['id']},
+            .st-key-client_detail_{cl['id']} .st-key-client_comments_panel_{cl['id']},
+            .st-key-client_detail_{cl['id']} [class*="st-key-reminders_client_"] {{
+                background: transparent !important;
+                background-color: transparent !important;
+            }}
             .st-key-client_detail_{cl['id']} h3 {{ font-size: 1.5rem !important; }}
             .st-key-client_detail_{cl['id']} .stHorizontalBlock .stButton button,
             .st-key-client_detail_{cl['id']} .stHorizontalBlock .stMarkdown button {{
