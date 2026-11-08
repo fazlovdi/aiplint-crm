@@ -15809,12 +15809,23 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"] .stButton:first-child > button {
             padding:0.5rem 0.45rem 0.5rem 0.7rem !important;
         }
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button {
-            min-width:27px !important; width:27px !important; min-height:30px !important;
-            height:30px !important; padding:0 !important; margin:0 !important;
+        /* Target close controls by their stable Streamlit key, not nth-child:
+           Streamlit inserts wrapper elements, so nth-child changes with rerenders. */
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] {
+            display:flex !important; flex:0 0 27px !important; flex-shrink:0 !important;
+            width:27px !important; min-width:27px !important; max-width:27px !important;
+            visibility:visible !important; opacity:1 !important; overflow:visible !important;
+            margin:0 !important; padding:0 !important;
+        }
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button {
+            display:flex !important; box-sizing:border-box !important;
+            width:27px !important; min-width:27px !important; max-width:27px !important;
+            height:38px !important; min-height:38px !important; max-height:38px !important;
+            flex:0 0 27px !important; padding:0 !important; margin:0 !important;
+            align-items:center !important; justify-content:center !important;
             color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
         }
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button:hover {
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button:hover {
             color:#BC1661 !important;
         }
         /* Active state comes from the keyed wrapper, not Streamlit's button type.
