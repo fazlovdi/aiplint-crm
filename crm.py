@@ -12102,7 +12102,7 @@ def render_client_form(fv):
         # иначе legacy-вызов перехватывает фокус и не даёт переключать вкладки.
         _open_form_ids = []
         for _state_key in list(st.session_state.keys()):
-            _match = re.fullmatch(r"show_add_client_dialog_(\\d+)", str(_state_key))
+            _match = re.fullmatch(r"show_add_client_dialog_(\d+)", str(_state_key))
             if _match and st.session_state.get(_state_key):
                 _open_form_ids.append(int(_match.group(1)))
         _new_fv = max([int(fv)] + _open_form_ids) + 1
