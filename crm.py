@@ -12461,7 +12461,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     for _ti, _task in enumerate(_deal_tasks_list):
                         _task_col, _date_col, _open_col = st.columns([2, 2, 1])
                         with _task_col:
-                            _task_number_label = html.escape(str(_task.get("task_number", "")))
+                            _task_number_label = html.escape("№ " + str(_task.get("task_number", "")))
                             _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
                             st.markdown(f"<strong>&#8470;{_task_number_label}</strong> · {_task_type_label}", unsafe_allow_html=True)
                         with _date_col:
@@ -12813,7 +12813,9 @@ def render_client_card_expanded(cl):
                     for _di, _deal in enumerate(_client_deals_list):
                         _deal_col, _date_col, _open_col = st.columns([2, 2, 1])
                         with _deal_col:
-                            _deal_number = html.escape(str(_deal.get("deal_number", _deal.get("title", ""))))
+                            _deal_number_raw = str(_deal.get("deal_number", _deal.get("title", "")) or "")
+                            _deal_number_raw = re.sub(r"^\s*сделка\s*[:№#-]?\s*", "", _deal_number_raw, flags=re.IGNORECASE)
+                            _deal_number = html.escape(_deal_number_raw)
                             _deal_title = html.escape(str(_deal.get("deal_title", "") or ""))
                             _deal_status = html.escape(str(_deal.get("status", "Новый") or "Новый"))
                             st.markdown(f"**{_deal_number}** · {_deal_title} <span style='color:#7B8490'>({ _deal_status })</span>", unsafe_allow_html=True)
