@@ -12771,7 +12771,7 @@ def render_client_card_expanded(cl):
                     for _ti, _task in enumerate(_client_only_tasks):
                         _task_col, _date_col, _open_col = st.columns([2, 2, 1])
                         with _task_col:
-                            _task_number_label = html.escape(str(_task.get("task_number", "")))
+                            _task_number_label = html.escape("№" + str(_task.get("task_number", "")))
                             _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
                             st.markdown(f"**{_task_number_label}** · {_task_type_label}")
                         with _date_col:
