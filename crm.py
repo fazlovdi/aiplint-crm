@@ -1570,27 +1570,13 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
 
     def _file_recency(entry):
         _original_idx, _file = entry
-        # Use a real timestamp so ISO dates, legacy date strings and filename
-        # timestamps are compared consistently in every window/tab.
-        # В имени файла есть epoch-время фактической загрузки; оно надёжнее
-        # старых/перезаписанных метаданных created_at.
-        _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
-        _match = re.search(r"_(\d{9,})_", _path_value)
-        _timestamp = None
-        if _match:
+
+        def _parse_file_date(_value):
+            _value = str(_value or "").strip()
+            if not _value:
+                return None
             try:
-                _timestamp = float(_match.group(1))
-            except (ValueError, OverflowError):
-                _timestamp = None
-        _date_value = str(
-            _file.get("uploaded_at")
-            or _file.get("created_at")
-            or _file.get("last_modified")
-            or ""
-        ).strip()
-        if _timestamp is None and _date_value:
-            try:
-                _timestamp = datetime.fromisoformat(_date_value.replace("Z", "+00:00")).timestamp()
+                return datetime.fromisoformat(_value.replace("Z", "+00:00")).timestamp()
             except (ValueError, TypeError, OverflowError):
                 for _fmt in (
                     "%d.%m.%Y %H:%M:%S",
@@ -1601,12 +1587,28 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
                     "%Y-%m-%d",
                 ):
                     try:
-                        _timestamp = datetime.strptime(_date_value[:19], _fmt).timestamp()
-                        break
+                        return datetime.strptime(_value[:19], _fmt).timestamp()
                     except (ValueError, TypeError, OverflowError):
                         continue
-        # When legacy records have no date at all, keep their existing relative
-        # order (newer appended records first) while dated records sort by time.
+            return None
+
+        # Главный источник — время загрузки в CRM. Не позволяем старой дате
+        # исходного файла или timestamp в пути перебить свежую загрузку.
+        _timestamp = _parse_file_date(_file.get("uploaded_at"))
+        if _timestamp is None:
+            _timestamp = _parse_file_date(_file.get("created_at"))
+        if _timestamp is None:
+            _timestamp = _parse_file_date(_file.get("last_modified"))
+        if _timestamp is None:
+            _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
+            _match = re.search(r"_(\d{9,})_", _path_value)
+            if _match:
+                try:
+                    _timestamp = float(_match.group(1))
+                except (ValueError, OverflowError):
+                    _timestamp = None
+
+        # Для старых записей без даты сохраняем их относительный порядок.
         return (1, _timestamp, _original_idx) if _timestamp is not None else (0, 0, _original_idx)
 
     _sorted_file_entries = sorted(enumerate(files), key=_file_recency, reverse=True)
