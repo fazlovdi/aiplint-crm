@@ -11506,7 +11506,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.markdown(f"<div style='font-size:1.35rem;font-weight:750;margin-top:0.8rem;margin-bottom:0.7rem;'>{html.escape(str(num))}</div>", unsafe_allow_html=True)
             with status_col:
                 _header_deal_status = str(d.get("status", "Новый") or "Новый")
-                st.markdown(f"<div style='text-align:right;font-size:0.95rem;font-weight:650;margin-top:1rem;margin-bottom:0.7rem;'>Статус: {html.escape(_header_deal_status)}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:right;padding-right:0.5rem;font-size:0.95rem;font-weight:650;margin-top:1rem;margin-bottom:0.7rem;'>Статус: {html.escape(_header_deal_status)}</div>", unsafe_allow_html=True)
             st.markdown(format_created_date(d), unsafe_allow_html=True)
             with st.container(border=True):
                 if d.get("deal_title"):
