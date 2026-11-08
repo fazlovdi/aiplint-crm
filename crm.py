@@ -3690,7 +3690,7 @@ def render_deal_pause_panel(d, deal_id):
 @st.fragment
 def render_deal_comments_panel(d, deal_id):
     with st.container(border=True):
-        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии ({len(d.get('deal_comments', []) or [])})</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии ({active_item_count(d.get('deal_comments', []))})</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
         </style>""", unsafe_allow_html=True)
@@ -3736,7 +3736,7 @@ def render_client_comments_panel(cl):
         unsafe_allow_html=True,
     )
     with st.container(border=True, key=_comments_panel_key):
-        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии ({len(cl.get('client_comments', []) or [])})</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии ({active_item_count(cl.get('client_comments', []))})</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-cli_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
         </style>""", unsafe_allow_html=True)
@@ -3780,6 +3780,17 @@ def format_change_history_date(value):
             except (ValueError, TypeError, OverflowError):
                 continue
     return _value
+
+
+def active_item_count(items):
+    """Количество неудалённых комментариев или файлов для заголовков."""
+    return sum(
+        1 for item in (items or [])
+        if not (
+            isinstance(item, dict)
+            and (item.get("deleted") or item.get("is_deleted") or item.get("deleted_at"))
+        )
+    )
 
 
 def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user", local_update=False):
@@ -4536,7 +4547,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         with right_col:
             # Comments block (now above files) — no gap at top
-            st.markdown(f"**Комментарии задачи ({len(t.get('task_comments', []) or [])}):**")
+            st.markdown(f"**Комментарии задачи ({active_item_count(t.get('task_comments', []))}):**")
             if t.get("task_comments"):
                 render_soft_delete_comments(t["task_comments"], f"task_{key_prefix}", "time", "user")
             tc_clr_key = f"clr_tc_{key_prefix}"
@@ -4554,7 +4565,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442")
             st.markdown("---")
             # Files block (now below comments)
-            st.markdown(f"**Файлы задачи ({len(t.get('task_files', []) or [])}):**")
+            st.markdown(f"**Файлы задачи ({active_item_count(t.get('task_files', []))}):**")
             if t.get("task_files"):
                 render_file_thumbs(t["task_files"], f"{key_prefix}_files")
             st.markdown("**Добавить файлы в задачу:**")
@@ -9340,7 +9351,7 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
-            st.markdown(f"**Файлы сделки ({len(d.get('deal_files', []) or [])}):**")
+            st.markdown(f"**Файлы сделки ({active_item_count(d.get('deal_files', []))}):**")
             render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
@@ -9360,7 +9371,7 @@ def render_deal_card_expanded(d, cl):
                         st.rerun()
                 else: st.warning("Выберите файл(ы)")
         st.markdown("---")
-        st.markdown(f"**Комментарии ({len(d.get('deal_comments', []) or [])}):**")
+        st.markdown(f"**Комментарии ({active_item_count(d.get('deal_comments', []))}):**")
         if d.get("deal_comments"):
             render_soft_delete_comments(d["deal_comments"], f"deal_card_{d['id']}", "time", "author")
         dc_clr_key = f"clr_dc_{d['id']}"
@@ -12515,7 +12526,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             render_deal_comments_panel(d, deal_id)
             st.markdown("---")
             with st.container(border=True):
-                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы сделки ({len(d.get('deal_files', []) or [])})</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы сделки ({active_item_count(d.get('deal_files', []))})</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
                 st.markdown("**Загрузить файлы:**")
@@ -12835,7 +12846,7 @@ def render_client_card_expanded(cl):
             # Разделитель перед файлами
             st.markdown("---")
             with st.container(border=True):
-                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы клиента ({len(cl.get('client_files', []) or [])})</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы клиента ({active_item_count(cl.get('client_files', []))})</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-client_detail_{cl['id']} .st-key-cli_{cl['id']} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
                 st.markdown("**Загрузить файлы:**")
