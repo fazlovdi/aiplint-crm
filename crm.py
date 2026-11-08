@@ -7730,10 +7730,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         # The client picker belongs to the window strip, not the inner tab strip.
         if in_workspace:
                 # Quick client opener: add a client card from the current window tab strip.
-                with st.popover("+", key=f"crm_workspace_add_client_{_crm_active_window['id']}", help="Открыть карточку клиента"):
+                with st.popover("+", key=f"crm_workspace_add_client_{_bottom_active_window_id}", help="Открыть карточку клиента"):
                     _picker_query = st.text_input(
                         "Поиск среди клиентов",
-                        key=f"crm_workspace_client_picker_search_{_crm_active_window['id']}",
+                        key=f"crm_workspace_client_picker_search_{_bottom_active_window_id}",
                         placeholder="Имя, телефон, город…",
                     )
                     _picker_clients = list(st.session_state.crm_store.get("clients", []) or [])
@@ -7771,7 +7771,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     if not _picker_shown:
                         st.caption("Совпадений не найдено")
                     else:
-                        st.caption(f"Найдено: {len(_picker_matches)}" if _picker_q else "Последние изменённые клиенты")
+                        st.caption(f"Найдено: {len(_picker_matches)}" if _picker_q else "Первые клиенты из списка")
                         for _picker_client in _picker_shown:
                             _picker_client_id = _picker_client.get("id")
                             _picker_name = str(_picker_client.get("name", "Без названия") or "Без названия")
@@ -7779,7 +7779,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             _picker_label = _picker_name + (f" · {_picker_phone}" if _picker_phone else "")
                             if st.button(
                                 _picker_label,
-                                key=f"crm_workspace_pick_client_{_crm_active_window['id']}_{_picker_client_id}",
+                                key=f"crm_workspace_pick_client_{_bottom_active_window_id}_{_picker_client_id}",
                                 use_container_width=True,
                             ):
                                 _picker_entry = {
@@ -7920,6 +7920,7 @@ nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
     st.button(
         "Клиенты",
+        key="crm_main_tab_clients",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Клиенты" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7929,6 +7930,7 @@ with nc2:
     _deals_label = f"Сделки ({_new_deals_count})" if _new_deals_count > 0 else "Сделки"
     st.button(
         _deals_label,
+        key="crm_main_tab_deals",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Сделки" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7938,6 +7940,7 @@ with nc3:
     _tasks_label = f"Задачи ({_new_tasks_count})" if _new_tasks_count > 0 else "Задачи"
     st.button(
         _tasks_label,
+        key="crm_main_tab_tasks",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Задачи" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7947,6 +7950,7 @@ with nc4:
     _it_label = f"Внутренние ({_new_it_count})" if _new_it_count > 0 else "Внутренние"
     st.button(
         _it_label,
+        key="crm_main_tab_internal",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7955,6 +7959,7 @@ with nc4:
 with nc5:
     st.button(
         "Поставщики",
+        key="crm_main_tab_suppliers",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Поставщики" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7963,6 +7968,7 @@ with nc5:
 with nc6:
     st.button(
         "Товары и прайс",
+        key="crm_main_tab_products",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary",
         on_click=_crm_select_main_tab,
@@ -16035,6 +16041,11 @@ def _crm_render_workspace_fragment():
         }
         /* Active state comes from the keyed wrapper, not Streamlit's button type.
            This avoids stale primary-button styling after fragment rerenders. */
+        /* Keep main navigation buttons stable across section switches; no transition clone/ghost. */
+        [class*="st-key-crm_main_tab_"] button {
+            transform:none !important;
+            transition:none !important;
+        }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"][class*="__isactive"] {
             border-color:#BC1661 !important;
             background:#FFFFFF !important;
