@@ -8637,12 +8637,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             st.caption("Нет открытых окон")
         # Глобальный поиск по CRM доступен из нижней панели.
         with st.popover("🔍", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
-            _global_q = st.text_input(
-                "Поиск по CRM",
-                key=f"crm_workspace_global_search_input_{_bottom_scope}",
-                placeholder="Номер, имя, тема, телефон…",
-                label_visibility="collapsed",
-            ).strip().lower()
+            _global_q = str(st.session_state.get(f"crm_workspace_global_search_input_{_bottom_scope}", "") or "").strip().lower()
             if _global_q:
                 _global_results = []
                 _global_store = st.session_state.get("crm_store", {}) or {}
@@ -8755,6 +8750,14 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             if st.button(_grs["label"], key=f"crm_workspace_global_search_result_{_bottom_scope}_{_grs['stable_id']}", use_container_width=True):
                                 _crm_workspace_open_dialog(_grs["entry"], client_id=_grs["client_id"])
                                 st.rerun()
+
+            # Поле поиска располагается внизу раскрывающегося окна, под результатами.
+            st.text_input(
+                "Поиск по CRM",
+                key=f"crm_workspace_global_search_input_{_bottom_scope}",
+                placeholder="Номер, имя, тема, телефон…",
+                label_visibility="collapsed",
+            )
 
         for _w in list(_bottom_windows):
             _window_id = str(_w.get("id"))
