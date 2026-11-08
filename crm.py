@@ -12474,7 +12474,24 @@ def render_deal_detail(d, cl, cu, key_prefix):
 def render_client_card_expanded(cl):
     with st.container(border=True, key=f"client_detail_{cl['id']}"):
         st.markdown(
-            f"<style>.st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; }} .st-key-client_detail_{cl['id']} h3 {{ font-size: 1.5rem !important; }}</style>",
+            f"""<style>
+            .st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; }}
+            .st-key-client_detail_{cl['id']} h3 {{ font-size: 1.5rem !important; }}
+            .st-key-client_detail_{cl['id']} .stHorizontalBlock .stButton button,
+            .st-key-client_detail_{cl['id']} .stHorizontalBlock .stMarkdown button {{
+                min-height: 32px !important;
+                padding: 4px 10px !important;
+                font-size: 0.85rem !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }}
+            .st-key-client_detail_{cl['id']} .stHorizontalBlock .stMarkdown {{
+                margin-top: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+            }}
+            </style>""",
             unsafe_allow_html=True,
         )
         # Две колонки: заголовок и информация слева, комментарии и файлы справа
