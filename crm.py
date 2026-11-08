@@ -3566,7 +3566,6 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
             st.rerun()
 
 
-@st.fragment
 def render_deal_pause_panel(d, deal_id):
     _stage_now = d.get("status", "Новый")
     if _stage_now not in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
@@ -3606,7 +3605,7 @@ def render_deal_pause_panel(d, deal_id):
             d["last_modified"] = now_str()
             save_data(st.session_state.crm_store)
             st.toast(_pause_message, icon="✅")
-            st.rerun(scope="fragment")
+            st.rerun()
 
 @st.fragment
 def render_deal_comments_panel(d, deal_id):
