@@ -437,6 +437,9 @@ st.markdown("""
     .st-key-remembered_pin_login_form button[kind="primary"]:hover {
         background: #a31353 !important; background-color: #a31353 !important;
     }
+
+    [data-testid="InputInstructions"][data-crm-search-hint] { color: transparent !important; position: relative !important; }
+    [data-testid="InputInstructions"][data-crm-search-hint]::after { content: attr(data-crm-search-hint); color: #808B98 !important; font-size: 0.75rem !important; position: absolute; left: 0; top: 0; white-space: nowrap; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -8874,7 +8877,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                   try {{
                     var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
                     if(!root) return;
-                    root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function(el){{
+                    root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function(el){
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');{
 
                       ['title','aria-label'].forEach(function(attr){{
                         var value=el.getAttribute(attr);
@@ -15952,6 +15956,7 @@ if st.session_state.active_tab == "Клиенты":
               var root = w.document.querySelector('.st-key-search_input_key');
               if (!root) return;
               root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
 
                 ['title', 'aria-label'].forEach(function (attr) {
                   var value = el.getAttribute(attr);
@@ -16365,6 +16370,7 @@ elif st.session_state.active_tab == "Сделки":
                   var root = w.document.querySelector('.st-key-deal_tab_search');
                   if (!root) return;
                   root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
 
                     ['title', 'aria-label'].forEach(function (attr) {
                       var value = el.getAttribute(attr);
@@ -16722,6 +16728,7 @@ elif st.session_state.active_tab == "Задачи":
                   var root = w.document.querySelector('.st-key-task_search_input');
                   if (!root) return;
                   root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
 
                     ['title', 'aria-label'].forEach(function (attr) {
                       var value = el.getAttribute(attr);
