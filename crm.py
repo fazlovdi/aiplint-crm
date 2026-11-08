@@ -15704,11 +15704,11 @@ def _crm_render_workspace_fragment():
         /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
         [class*="st-key-crm_workspace_tabbar_"] { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
         [class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"] {
-            display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+            display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
             gap:0 !important; column-gap:0 !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
             border-bottom:0 !important; padding:0.15rem 0 0 !important;
-            width:100% !important; overflow-x:auto !important;
+            width:100% !important; overflow:visible !important;
         }
         /* Each tab container must occupy only its own content width, not share
            the available row width with neighboring tabs. */
@@ -15780,6 +15780,24 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button:hover {
             color:#BC1661 !important;
         }
+        /* Close controls have their own keyed wrapper: keep the X visible
+           regardless of the number of tabs or Streamlit's internal DOM nesting. */
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] {
+            display:flex !important; flex:0 0 31px !important; flex-shrink:0 !important;
+            width:31px !important; min-width:31px !important; max-width:31px !important;
+            visibility:visible !important; opacity:1 !important; overflow:visible !important;
+        }
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button {
+            display:flex !important; visibility:visible !important; opacity:1 !important;
+            width:31px !important; min-width:31px !important; max-width:31px !important;
+            height:30px !important; min-height:30px !important; padding:0 !important;
+            align-items:center !important; justify-content:center !important;
+            color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
+            background:transparent !important; border:0 !important; box-shadow:none !important;
+        }
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button:hover {
+            color:#BC1661 !important;
+        }
         /* Active state comes from the keyed wrapper, not Streamlit's button type.
            This avoids stale primary-button styling after fragment rerenders. */
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"][class*="__isactive"] {
@@ -15810,7 +15828,7 @@ def _crm_render_workspace_fragment():
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
-            with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
+            with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=True, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:30]
                     with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
