@@ -8796,25 +8796,39 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                   var trigger=pop&&pop.querySelector('button');
                   if(trigger && trigger.getAttribute('aria-expanded')==='true') trigger.click();
                 }}
-                if(!w.document.__crmGlobalSearchOutside_{_bottom_scope}){{
-                  w.document.__crmGlobalSearchOutside_{_bottom_scope}=true;
+                function clearSearchInput(){{
+                  var input=w.document.querySelector(inputSelector);
+                  if(!input || !input.value) return;
+                  var setter=Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value');
+                  if(setter && setter.set) setter.set.call(input,'');
+                  else input.value='';
+                  input.dispatchEvent(new w.Event('input',{{bubbles:true}}));
+                  input.dispatchEvent(new w.Event('change',{{bubbles:true}}));
+                  input.dispatchEvent(new w.Event('blur',{{bubbles:true}}));
+                }}
+                if(!w.document.__crmGlobalSearchOutsideV2_{_bottom_scope}){{
+                  w.document.__crmGlobalSearchOutsideV2_{_bottom_scope}=true;
+                  var wasOpen=false;
+                  function checkPopoverClosed(){{
+                    var pop=w.document.querySelector(popSelector);
+                    var trigger=pop&&pop.querySelector('button[aria-expanded]');
+                    var isOpen=!!(trigger && trigger.getAttribute('aria-expanded')==='true');
+                    if(wasOpen && !isOpen) clearSearchInput();
+                    wasOpen=isOpen;
+                  }}
+                  var observer=new w.MutationObserver(checkPopoverClosed);
+                  observer.observe(w.document.body,{{subtree:true,childList:true,attributes:true,attributeFilter:['aria-expanded','class','style'] }});
                   w.document.addEventListener('click',function(ev){{
                     var pop=w.document.querySelector(popSelector);
-                    var trigger=pop&&pop.querySelector('button');
-                    if(!pop || !trigger || trigger.getAttribute('aria-expanded')!=='true') return;
-                    if(pop.contains(ev.target)) return;
+                    var trigger=pop&&pop.querySelector('button[aria-expanded]');
+                    if(!trigger || trigger.getAttribute('aria-expanded')!=='true') return;
+                    if(pop && pop.contains(ev.target)) return;
                     w.setTimeout(function(){{
+                      checkPopoverClosed();
                       var currentPop=w.document.querySelector(popSelector);
-                      var currentTrigger=currentPop&&currentPop.querySelector('button');
-                      if(currentTrigger && currentTrigger.getAttribute('aria-expanded')==='true') return;
-                      var input=w.document.querySelector(inputSelector);
-                      if(input && input.value){{
-                        var setter=Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value').set;
-                        setter.call(input,'');
-                        input.dispatchEvent(new w.Event('input',{{bubbles:true}}));
-                        input.dispatchEvent(new w.Event('change',{{bubbles:true}}));
-                      }}
-                    }},80);
+                      var currentTrigger=currentPop&&currentPop.querySelector('button[aria-expanded]');
+                      if(!currentTrigger || currentTrigger.getAttribute('aria-expanded')!=='true') clearSearchInput();
+                    }},150);
                   }},true);
                 }}
               }}
