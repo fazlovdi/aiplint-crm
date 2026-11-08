@@ -11023,7 +11023,7 @@ def render_deal_products_block(d, key_prefix):
             if calc.get("deleted"):
                 deleted_col, restore_col = st.columns([3.2, 1.0])
                 with deleted_col:
-                    _deleted_calc_name = re.sub(r"^Расчёт\\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                    _deleted_calc_name = re.sub(r"^Расчёт\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
                     st.markdown(
                         f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{html.escape(_deleted_calc_name)} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
                         unsafe_allow_html=True,
@@ -11041,7 +11041,7 @@ def render_deal_products_block(d, key_prefix):
             _calc_paid_badge = _calculation_payment_badge(calc)
             name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
             with name_col:
-                _calc_display_name = re.sub(r"^Расчёт\\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                _calc_display_name = re.sub(r"^Расчёт\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
                 st.markdown(f"**{html.escape(_calc_display_name)}**")
                 _calc_created_raw = str(calc.get("created_at") or "")[:19]
                 _calc_created_display = ""
