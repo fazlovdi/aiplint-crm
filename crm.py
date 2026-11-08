@@ -8798,38 +8798,33 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 }}
                 function clearSearchInput(){{
                   var input=w.document.querySelector(inputSelector);
-                  if(!input || !input.value) return;
-                  var setter=Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value');
-                  if(setter && setter.set) setter.set.call(input,'');
-                  else input.value='';
-                  input.dispatchEvent(new w.Event('input',{{bubbles:true}}));
-                  input.dispatchEvent(new w.Event('change',{{bubbles:true}}));
-                  input.dispatchEvent(new w.Event('blur',{{bubbles:true}}));
-                }}
-                if(!w.document.__crmGlobalSearchOutsideV2_{_bottom_scope}){{
-                  w.document.__crmGlobalSearchOutsideV2_{_bottom_scope}=true;
-                  var wasOpen=false;
-                  function checkPopoverClosed(){{
-                    var pop=w.document.querySelector(popSelector);
-                    var trigger=pop&&pop.querySelector('button[aria-expanded]');
-                    var isOpen=!!(trigger && trigger.getAttribute('aria-expanded')==='true');
-                    if(wasOpen && !isOpen) clearSearchInput();
-                    wasOpen=isOpen;
+                  if(!input) return;
+                  if(input.value){{
+                    var setter=Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value');
+                    if(setter && setter.set) setter.set.call(input,'');
+                    else input.value='';
+                    var ev;
+                    try{{ev=new w.InputEvent('input',{{bubbles:true,inputType:'deleteContentBackward',data:null}});}}
+                    catch(e){{ev=new w.Event('input',{{bubbles:true}});}}
+                    input.dispatchEvent(ev);
+                    input.dispatchEvent(new w.Event('change',{{bubbles:true}}));
                   }}
-                  var observer=new w.MutationObserver(checkPopoverClosed);
-                  observer.observe(w.document.body,{{subtree:true,childList:true,attributes:true,attributeFilter:['aria-expanded','class','style'] }});
-                  w.document.addEventListener('click',function(ev){{
+                }}
+                if(!w.document.__crmGlobalSearchOutsideV3_{_bottom_scope}){{
+                  w.document.__crmGlobalSearchOutsideV3_{_bottom_scope}=true;
+                  function outsideClick(ev){{
+                    var pop=w.document.querySelector(popSelector);
+                    if(pop && pop.contains(ev.target)) return;
+                    clearSearchInput();
+                  }}
+                  w.document.addEventListener('pointerdown',outsideClick,true);
+                  w.document.addEventListener('click',outsideClick,true);
+                  var observer=new w.MutationObserver(function(){{
                     var pop=w.document.querySelector(popSelector);
                     var trigger=pop&&pop.querySelector('button[aria-expanded]');
-                    if(!trigger || trigger.getAttribute('aria-expanded')!=='true') return;
-                    if(pop && pop.contains(ev.target)) return;
-                    w.setTimeout(function(){{
-                      checkPopoverClosed();
-                      var currentPop=w.document.querySelector(popSelector);
-                      var currentTrigger=currentPop&&currentPop.querySelector('button[aria-expanded]');
-                      if(!currentTrigger || currentTrigger.getAttribute('aria-expanded')!=='true') clearSearchInput();
-                    }},150);
-                  }},true);
+                    if(trigger && trigger.getAttribute('aria-expanded')!=='true') clearSearchInput();
+                  }});
+                  observer.observe(w.document.body,{{subtree:true,childList:true,attributes:true,attributeFilter:['aria-expanded']}});
                 }}
               }}
               setup();
