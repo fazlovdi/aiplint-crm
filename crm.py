@@ -3776,8 +3776,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     _deal_link_key = f"deal_link_{key_prefix}"
                     _hdr_inner, _status_inner = st.columns([3, 2])
                     with _hdr_inner:
-                        st.subheader(_task_header)
-                        st.markdown(format_created_date(t), unsafe_allow_html=True)
+
+
                         if not show_edit_task:
                             if _tp not in ("Отправить заказ", "Отправить образцы"):
                                 st.markdown(f"**Тема:** {t.get('text', '')}")
@@ -3926,8 +3926,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     _hdr_inner, _status_inner = st.columns([3, 2])
                     with _hdr_inner:
-                        st.subheader(_task_header)
-                        st.markdown(format_created_date(t), unsafe_allow_html=True)
+
+
                         if not show_edit_task:
                             if _tp not in ("Отправить заказ", "Отправить образцы"):
                                 st.markdown(f"**Тема:** {t.get('text', '')}")
