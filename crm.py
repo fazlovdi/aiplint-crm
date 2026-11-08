@@ -13131,7 +13131,7 @@ def render_client_card_expanded(cl):
                 if st.session_state.user_role in ("admin", "director"):
                     st.markdown("---")
                     cdl = st.checkbox("Подтверждаю удаление клиента", key=f"cdl_{cl['id']}")
-                    if st.button("Удалить клиента", key=f"del_cli_{cl['id']}", use_container_width=True, type="primary", disabled=not cdl):
+                    if cdl and st.button("Удалить клиента", key=f"del_cli_{cl['id']}", use_container_width=True, type="primary"):
                         st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != cl["id"]]
                         st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
                         st.session_state.expanded_client_id = None
