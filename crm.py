@@ -17285,6 +17285,12 @@ def _crm_render_workspace_fragment():
                                 ):
                                     _tabbar_open_object_keys.add(_crm_workspace_tab_key(_open_tab))
 
+                        _tabbar_has_client_tasks = bool(_tabbar_client_tasks)
+                        _tabbar_has_deals = bool(_tabbar_deals)
+                        _tabbar_has_deal_tasks = bool(_tabbar_deal_tasks)
+                        _tabbar_has_calculations = bool(_tabbar_calculations)
+                        _tabbar_has_requisites = bool(_tabbar_requisites)
+
                         _tabbar_client_tasks_sorted = sorted(
                             _tabbar_client_tasks, key=lambda t: str(t.get("created_at", "")), reverse=True
                         )
@@ -17340,7 +17346,7 @@ def _crm_render_workspace_fragment():
 
                         st.markdown("**Задачи по клиенту**")
                         if not _tabbar_client_tasks_sorted:
-                            st.caption("Нет задач по клиенту")
+                            st.caption("Уже открыты" if _tabbar_has_client_tasks else "Нет задач по клиенту")
                         for _oi, _obj in enumerate(_tabbar_client_tasks_sorted):
                             _task_number = str(_obj.get("task_number", "") or "")
                             _task_number_label = _task_number if _task_number.startswith("№") else f"№{_task_number}"
@@ -17351,7 +17357,7 @@ def _crm_render_workspace_fragment():
 
                         st.markdown("**Сделки**")
                         if not _tabbar_deals_sorted:
-                            st.caption("Нет сделок")
+                            st.caption("Уже открыты" if _tabbar_has_deals else "Нет сделок")
                         for _oi, _obj in enumerate(_tabbar_deals_sorted):
                             _deal_number = str(_obj.get("deal_number") or _obj.get("title") or _obj.get("id") or "")
                             _deal_number_label = _deal_number if _deal_number.startswith("№") else f"№{_deal_number}"
@@ -17362,7 +17368,7 @@ def _crm_render_workspace_fragment():
 
                         st.markdown("**Задачи по сделкам**")
                         if not _tabbar_deal_tasks_sorted:
-                            st.caption("Нет задач по сделкам")
+                            st.caption("Уже открыты" if _tabbar_has_deal_tasks else "Нет задач по сделкам")
                         for _oi, _obj in enumerate(_tabbar_deal_tasks_sorted):
                             _obj_deal = _tabbar_deals_by_id.get(str(_obj.get("deal_id")))
                             _task_number = str(_obj.get("task_number", "") or "")
@@ -17374,7 +17380,7 @@ def _crm_render_workspace_fragment():
 
                         st.markdown("**Расчёты**")
                         if not _tabbar_calculations_sorted:
-                            st.caption("Нет расчётов")
+                            st.caption("Уже открыты" if _tabbar_has_calculations else "Нет расчётов")
                         for _oi, (_obj_deal, _obj_calc) in enumerate(_tabbar_calculations_sorted):
                             _obj_deal_number = str(_obj_deal.get("deal_number") or _obj_deal.get("title") or _obj_deal.get("id") or "")
                             _obj_label = _obj_deal_number if _obj_deal_number.startswith("№") else f"№{_obj_deal_number}"
@@ -17384,7 +17390,7 @@ def _crm_render_workspace_fragment():
 
                         st.markdown("**Реквизиты**")
                         if not _tabbar_requisites:
-                            st.caption("Нет реквизитов")
+                            st.caption("Уже открыты" if _tabbar_has_requisites else "Нет реквизитов")
                         for _oi, _obj in enumerate(_tabbar_requisites):
                             _obj_label = str(_obj.get("legal_name") or "Реквизиты без названия")
                             if _obj.get("deleted"):
