@@ -11007,103 +11007,119 @@ def render_deal_products_block(d, key_prefix):
         _ensure_calculation_names(d)
         save_data(st.session_state.crm_store)
 
-    st.markdown("**Расчёты по сделке**")
-    if not calculations:
-        st.caption("Расчётов пока нет.")
-    for idx, calc in enumerate(calculations):
-        calc.setdefault("id", uuid.uuid4().hex)
-        calc.setdefault("deleted", False)
-        calc.setdefault("name", f"Расчёт {idx + 1}")
-        calc.setdefault("total", _deal_calc_total(calc))
-        # Черновик доступен только в открытом редакторе и не показывается
-        # в общем списке, пока пользователь явно не сохранит расчёт.
-        if calc.get("_draft"):
-            continue
-        if calc.get("deleted"):
-            deleted_col, restore_col = st.columns([3.2, 1.0])
-            with deleted_col:
-                st.markdown(
-                    f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{calc.get('name', 'Расчёт')} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
-                    unsafe_allow_html=True,
-                )
-            with restore_col:
-                if st.button("Восстановить", key=f"calc_restore_{d['id']}_{calc['id']}", use_container_width=True):
-                    calc["deleted"] = False
-                    calc.pop("deleted_at", None)
-                    calc.pop("deleted_by", None)
-                    d["last_modified"] = now_str()
-                    d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» восстановлен"})
-                    save_data(st.session_state.crm_store)
+    with st.container(border=True):
+        st.markdown("**Расчёты по сделке**")
+        if not calculations:
+            st.caption("Расчётов пока нет.")
+        for idx, calc in enumerate(calculations):
+            calc.setdefault("id", uuid.uuid4().hex)
+            calc.setdefault("deleted", False)
+            calc.setdefault("name", f"Расчёт {idx + 1}")
+            calc.setdefault("total", _deal_calc_total(calc))
+            # Черновик доступен только в открытом редакторе и не показывается
+            # в общем списке, пока пользователь явно не сохранит расчёт.
+            if calc.get("_draft"):
+                continue
+            if calc.get("deleted"):
+                deleted_col, restore_col = st.columns([3.2, 1.0])
+                with deleted_col:
+                    _deleted_calc_name = re.sub(r"^Расчёт\\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                    st.markdown(
+                        f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{html.escape(_deleted_calc_name)} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
+                        unsafe_allow_html=True,
+                    )
+                with restore_col:
+                    if st.button("Восстановить", key=f"calc_restore_{d['id']}_{calc['id']}", use_container_width=True):
+                        calc["deleted"] = False
+                        calc.pop("deleted_at", None)
+                        calc.pop("deleted_by", None)
+                        d["last_modified"] = now_str()
+                        d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» восстановлен"})
+                        save_data(st.session_state.crm_store)
+                        st.rerun()
+                continue
+            _calc_paid_badge = _calculation_payment_badge(calc)
+            name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
+            with name_col:
+                _calc_display_name = re.sub(r"^Расчёт\\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                st.markdown(f"**{html.escape(_calc_display_name)}**")
+                _calc_created_raw = str(calc.get("created_at") or "")[:19]
+                _calc_created_display = ""
+                for _calc_date_format in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                    try:
+                        _calc_created_display = datetime.strptime(_calc_created_raw, _calc_date_format).strftime("%d.%m.%Y")
+                        break
+                    except (TypeError, ValueError):
+                        pass
+                if _calc_created_display:
+                    st.caption(f"Создан: {_calc_created_display}")
+            with total_col:
+                st.markdown(f"{calc['total']:,.0f} ₽".replace(",", " "))
+            with edit_col:
+                if st.button("Открыть", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
+                    _push_dialog_return()
+                    st.session_state["dialog_calculation_deal_id"] = str(d["id"])
+                    st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
                     st.rerun()
-            continue
-        _calc_paid_badge = _calculation_payment_badge(calc)
-        name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
-        with name_col:
-            st.markdown(f"**{calc.get('name', 'Расчёт')}**")
-        with total_col:
-            st.markdown(f"{calc['total']:,.0f} ₽".replace(",", " "))
-        with edit_col:
-            if st.button("Открыть", key=f"calc_edit_{d['id']}_{calc['id']}", use_container_width=True):
-                _push_dialog_return()
-                st.session_state["dialog_calculation_deal_id"] = str(d["id"])
-                st.session_state["dialog_calculation_calc_id"] = str(calc["id"])
-                st.rerun()
-        with delete_col:
-            if _calc_paid_badge:
-                st.markdown(f"<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>{html.escape(_calc_paid_badge)}</div>", unsafe_allow_html=True)
+            with delete_col:
+                if _calc_paid_badge:
+                    st.markdown(f"<div style='color:#218739;font-weight:600;text-align:center;padding:0.45rem 0;font-size:0.82rem'>{html.escape(_calc_paid_badge)}</div>", unsafe_allow_html=True)
+                else:
+                    confirm_key = f"confirm_delete_calc_{d['id']}_{calc['id']}"
+                    if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+                if not _calc_paid_badge and st.session_state.get(confirm_key):
+                    _confirm_ui_key = f"calc_delete_confirm_ui_{d['id']}_{calc['id']}"
+                    st.markdown(f"""<style>
+                    .st-key-{_confirm_ui_key} {{background:#FFF7F7!important;border:1px solid #F0C5C5!important;border-radius:10px!important;padding:0.7rem 0.8rem!important;margin:0.25rem 0 0.55rem!important;}}
+                    .st-key-{_confirm_ui_key} [data-testid="stMarkdownContainer"] p {{margin:0.15rem 0 0.55rem!important;color:#8B3030!important;font-weight:600!important;line-height:1.35!important;}}
+                    .st-key-{_confirm_ui_key} [data-testid="stHorizontalBlock"] {{gap:0.6rem!important;align-items:center!important;}}
+                    .st-key-{_confirm_ui_key} .stButton button {{min-height:38px!important;height:auto!important;white-space:normal!important;border-radius:8px!important;font-weight:600!important;padding:0.45rem 0.55rem!important;}}
+                    </style>""", unsafe_allow_html=True)
+                    with st.container(key=_confirm_ui_key):
+                        st.markdown(f"Удалить расчёт «{html.escape(str(calc.get('name', 'Расчёт')))}»?")
+                        confirm_col, cancel_col = st.columns([1, 1], gap="small")
+                        with confirm_col:
+                            if st.button("Да, удалить", key=f"calc_delete_yes_{d['id']}_{calc['id']}", type="primary", use_container_width=True):
+                                calc["deleted"] = True
+                                calc["deleted_at"] = now_str()
+                                calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                                d["last_modified"] = now_str()
+                                d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
+                                st.session_state.pop(confirm_key, None)
+                                save_data(st.session_state.crm_store)
+                                st.rerun()
+                        with cancel_col:
+                            if st.button("Отмена", key=f"calc_delete_no_{d['id']}_{calc['id']}", use_container_width=True):
+                                st.session_state.pop(confirm_key, None)
+                                st.rerun()
+    
+        _calc_add_left, _calc_add_button, _calc_add_right = st.columns([1, 2, 1])
+        with _calc_add_button:
+            _calc_add_clicked = st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True)
+        if _calc_add_clicked:
+            # В окне сделки объект d может быть устаревшей копией из вкладки рабочего
+            # пространства. Добавляем расчёт в актуальную сделку из crm_store, иначе
+            # вкладка откроется, но диспетчер не найдёт расчёт в сохранённой базе.
+            _current_deal = next(
+                (item for item in st.session_state.crm_store.get("deals", [])
+                 if str(item.get("id")) == str(d.get("id"))),
+                None,
+            )
+            if _current_deal is None:
+                st.error("Сделка не найдена. Обновите страницу и попробуйте ещё раз.")
             else:
-                confirm_key = f"confirm_delete_calc_{d['id']}_{calc['id']}"
-                if st.button("Удалить", key=f"calc_delete_{d['id']}_{calc['id']}", use_container_width=True):
-                    st.session_state[confirm_key] = True
-                    st.rerun()
-            if not _calc_paid_badge and st.session_state.get(confirm_key):
-                _confirm_ui_key = f"calc_delete_confirm_ui_{d['id']}_{calc['id']}"
-                st.markdown(f"""<style>
-                .st-key-{_confirm_ui_key} {{background:#FFF7F7!important;border:1px solid #F0C5C5!important;border-radius:10px!important;padding:0.7rem 0.8rem!important;margin:0.25rem 0 0.55rem!important;}}
-                .st-key-{_confirm_ui_key} [data-testid="stMarkdownContainer"] p {{margin:0.15rem 0 0.55rem!important;color:#8B3030!important;font-weight:600!important;line-height:1.35!important;}}
-                .st-key-{_confirm_ui_key} [data-testid="stHorizontalBlock"] {{gap:0.6rem!important;align-items:center!important;}}
-                .st-key-{_confirm_ui_key} .stButton button {{min-height:38px!important;height:auto!important;white-space:normal!important;border-radius:8px!important;font-weight:600!important;padding:0.45rem 0.55rem!important;}}
-                </style>""", unsafe_allow_html=True)
-                with st.container(key=_confirm_ui_key):
-                    st.markdown(f"Удалить расчёт «{html.escape(str(calc.get('name', 'Расчёт')))}»?")
-                    confirm_col, cancel_col = st.columns([1, 1], gap="small")
-                    with confirm_col:
-                        if st.button("Да, удалить", key=f"calc_delete_yes_{d['id']}_{calc['id']}", type="primary", use_container_width=True):
-                            calc["deleted"] = True
-                            calc["deleted_at"] = now_str()
-                            calc["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
-                            d["last_modified"] = now_str()
-                            d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Расчёт «{calc.get('name', 'Расчёт')}» помечен удалённым"})
-                            st.session_state.pop(confirm_key, None)
-                            save_data(st.session_state.crm_store)
-                            st.rerun()
-                    with cancel_col:
-                        if st.button("Отмена", key=f"calc_delete_no_{d['id']}_{calc['id']}", use_container_width=True):
-                            st.session_state.pop(confirm_key, None)
-                            st.rerun()
-
-    if st.button("Добавить новый расчёт", key=f"calc_add_{d['id']}", type="primary", use_container_width=True):
-        # В окне сделки объект d может быть устаревшей копией из вкладки рабочего
-        # пространства. Добавляем расчёт в актуальную сделку из crm_store, иначе
-        # вкладка откроется, но диспетчер не найдёт расчёт в сохранённой базе.
-        _current_deal = next(
-            (item for item in st.session_state.crm_store.get("deals", [])
-             if str(item.get("id")) == str(d.get("id"))),
-            None,
-        )
-        if _current_deal is None:
-            st.error("Сделка не найдена. Обновите страницу и попробуйте ещё раз.")
-        else:
-            _current_calculations = _current_deal.setdefault("calculations", [])
-            calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(_current_deal, {"id": "__new__"}, len(_current_calculations)), "items": [],
-                    "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
-                    "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
-            # Создаём черновик только в текущей сессии. Не сохраняем общую базу
-            # и не отправляем уведомления другим устройствам до сохранения расчёта.
-            _current_calculations.append(calc)
-            # Открываем расчёт через реестр вкладок рабочего пространства.
-            deal_calculation_dialog(str(_current_deal["id"]), str(calc["id"]))
-
+                _current_calculations = _current_deal.setdefault("calculations", [])
+                calc = {"id": uuid.uuid4().hex, "name": _calculation_display_name(_current_deal, {"id": "__new__"}, len(_current_calculations)), "items": [],
+                        "delivery_amount": 0.0, "discount_type": "Без скидки", "individual_discount": 0.0,
+                        "total": 0.0, "deleted": False, "_draft": True, "created_at": now_str()}
+                # Создаём черновик только в текущей сессии. Не сохраняем общую базу
+                # и не отправляем уведомления другим устройствам до сохранения расчёта.
+                _current_calculations.append(calc)
+                # Открываем расчёт через реестр вкладок рабочего пространства.
+                deal_calculation_dialog(str(_current_deal["id"]), str(calc["id"]))
+    
 
 @_crm_dialog("Расчёт сделки", width="large")
 def deal_calculation_dialog(deal_id, calc_id):
