@@ -3681,7 +3681,12 @@ def render_deal_comments_panel(d, deal_id):
 
 @st.fragment
 def render_client_comments_panel(cl):
-    with st.container(border=True):
+    _comments_panel_key = f"client_comments_panel_{cl['id']}"
+    st.markdown(
+        f"<style>.st-key-{_comments_panel_key} {{ background-color: rgba(59, 130, 246, 0.045) !important; border-radius: 0.5rem !important; }}</style>",
+        unsafe_allow_html=True,
+    )
+    with st.container(border=True, key=_comments_panel_key):
         st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Комментарии</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-cli_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
