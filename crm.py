@@ -7796,6 +7796,73 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               controls.style.zIndex = '10';
               outer.style.paddingRight = '110px';
             }
+            // Draw a dedicated scrollbar so it remains visible even when Chrome hides native bars.
+            panel.style.position = 'relative';
+            panel.style.paddingBottom = '11px';
+            let track = panel.querySelector(':scope > .crm-bottom-visible-track');
+            if (!track) {
+              track = doc.createElement('div');
+              track.className = 'crm-bottom-visible-track';
+              Object.assign(track.style, {
+                position:'absolute', left:'0', right:controls ? '110px' : '0', bottom:'1px',
+                height:'8px', background:'#E1E4E9', borderRadius:'5px',
+                zIndex:'20', cursor:'pointer', overflow:'hidden'
+              });
+              const thumb = doc.createElement('div');
+              thumb.className = 'crm-bottom-visible-thumb';
+              Object.assign(thumb.style, {
+                position:'absolute', left:'0', top:'0', height:'8px',
+                minWidth:'24px', background:'#AAB1BC', borderRadius:'5px', cursor:'grab'
+              });
+              track.appendChild(thumb);
+              panel.appendChild(track);
+              const updateBar = () => {
+                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
+                const ratio = outer.clientWidth / Math.max(1, outer.scrollWidth);
+                thumb.style.width = Math.max(24, Math.min(track.clientWidth, track.clientWidth * ratio)) + 'px';
+                thumb.style.left = (max ? (outer.scrollLeft / max) * Math.max(0, track.clientWidth - thumb.offsetWidth) : 0) + 'px';
+                track.style.display = max > 1 ? 'block' : 'none';
+              };
+              outer.addEventListener('scroll', updateBar, {passive:true});
+              track.addEventListener('pointerdown', e => {
+                if (e.target === thumb) return;
+                const rect = track.getBoundingClientRect();
+                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
+                outer.scrollLeft = ((e.clientX - rect.left) / Math.max(1, track.clientWidth)) * max;
+              });
+              let thumbDown = false, thumbX = 0, thumbScroll = 0;
+              thumb.addEventListener('pointerdown', e => {
+                e.preventDefault(); e.stopPropagation();
+                thumbDown = true; thumbX = e.clientX; thumbScroll = outer.scrollLeft;
+                thumb.setPointerCapture?.(e.pointerId);
+                thumb.style.cursor = 'grabbing';
+              });
+              thumb.addEventListener('pointermove', e => {
+                if (!thumbDown) return;
+                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
+                const trackRange = Math.max(1, track.clientWidth - thumb.offsetWidth);
+                outer.scrollLeft = thumbScroll + (e.clientX - thumbX) / trackRange * max;
+              });
+              const endThumb = () => { thumbDown = false; thumb.style.cursor = 'grab'; };
+              thumb.addEventListener('pointerup', endThumb);
+              thumb.addEventListener('pointercancel', endThumb);
+              new ResizeObserver(updateBar).observe(outer);
+              updateBar();
+            }
+            track.style.right = controls ? '110px' : '0';
+            const thumb = track.querySelector('.crm-bottom-visible-thumb');
+            if (thumb && !thumb.dataset.crmBound) {
+              thumb.dataset.crmBound = '1';
+              const update = () => {
+                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
+                const ratio = outer.clientWidth / Math.max(1, outer.scrollWidth);
+                thumb.style.width = Math.max(24, Math.min(track.clientWidth, track.clientWidth * ratio)) + 'px';
+                thumb.style.left = (max ? (outer.scrollLeft / max) * Math.max(0, track.clientWidth - thumb.offsetWidth) : 0) + 'px';
+                track.style.display = max > 1 ? 'block' : 'none';
+              };
+              outer.addEventListener('scroll', update, {passive:true});
+              requestAnimationFrame(update);
+            }
           });
         };
         scan();
