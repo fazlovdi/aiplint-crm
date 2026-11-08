@@ -8769,19 +8769,35 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 )
             st.markdown(f"""
             <style>
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} {{ position:relative !important; }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] {{
-                position:absolute !important; right:4px !important; top:0 !important;
-                width:34px !important; z-index:5 !important; margin:0 !important;
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} {{
+                position:relative !important; width:100% !important; min-width:0 !important;
+                padding:0 !important; margin:0 !important;
             }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] button {{
-                width:34px !important; min-width:34px !important; height:38px !important;
-                min-height:38px !important; padding:0 !important; margin:0 !important;
-                font-size:20px !important; line-height:1 !important; color:#808B98 !important;
-                border:0 !important; background:transparent !important; box-shadow:none !important;
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] {{
+                width:100% !important; min-width:0 !important; margin:0 !important;
+            }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] > div {{
+                width:100% !important; min-width:0 !important;
             }}
             .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] input {{
-                padding-right:40px !important;
+                box-sizing:border-box !important; width:100% !important; min-width:0 !important;
+                height:38px !important; min-height:38px !important; padding-right:42px !important;
+            }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] {{
+                position:absolute !important; right:2px !important; top:0 !important;
+                width:34px !important; height:38px !important; z-index:10 !important;
+                margin:0 !important; padding:0 !important;
+            }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] > div {{
+                width:34px !important; height:38px !important; margin:0 !important; padding:0 !important;
+            }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] button {{
+                display:flex !important; align-items:center !important; justify-content:center !important;
+                width:34px !important; min-width:34px !important; max-width:34px !important;
+                height:38px !important; min-height:38px !important; max-height:38px !important;
+                padding:0 !important; margin:0 !important; font-size:20px !important;
+                line-height:1 !important; color:#808B98 !important; border:0 !important;
+                background:transparent !important; box-shadow:none !important;
             }}
             </style>
             """, unsafe_allow_html=True)
