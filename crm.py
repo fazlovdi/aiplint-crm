@@ -2206,7 +2206,7 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
         window_id = "cw_" + hashlib.sha1((str(client_id or "general") + "|" + str(moscow_now().timestamp()) + "|" + str(len(windows))).encode("utf-8")).hexdigest()[:12]
         window = {"id": window_id, "client_id": str(client_id) if client_id else None,
                   "title": _crm_workspace_client_name(client_id) if client_id else str(entry.get("title") or "CRM"),
-                  "tabs": [], "active_tab": 0, "minimized": False}
+                  "tabs": [], "active_tab": 0, "minimized": False, "session_opened": True}
         windows.append(window)
     # If a deal was opened directly, add the client as a permanent first tab.
     if client_id and entry.get("name") not in ("client_detail_dialog", "add_client_dialog"):
@@ -2975,6 +2975,8 @@ def _crm_workspace_init():
                 # После входа все восстановленные окна должны быть свёрнуты.
                 # Это меняет только начальное отображение, но не сохранённые вкладки.
                 "minimized": True,
+                # Значок показывает, открывали ли окно в текущей сессии, а не его свёрнутое состояние.
+                "session_opened": False,
             })
 
     st.session_state["_crm_windows"] = restored
@@ -7453,6 +7455,7 @@ def _crm_workspace_activate_window_callback(window_id, in_workspace=False):
     if _window is None:
         return
     _window["minimized"] = False
+    _window["session_opened"] = True
     st.session_state["_crm_active_window_id"] = _window.get("id")
     _tabs = _window.get("tabs", [])
     _index = max(0, min(int(_window.get("active_tab", 0) or 0), len(_tabs) - 1)) if _tabs else -1
@@ -7684,7 +7687,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             _is_statistics_window = any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
             _label = "📊 Статистика" if _is_statistics_window else str(_w.get("title") or "CRM")[:24]
             if not in_workspace and not _is_statistics_window:
-                _label = ("▣ " if _w.get("minimized") else "● ") + _label
+                _label = ("● " if _w.get("session_opened") else "▣ ") + _label
             with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                 _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
                 st.button(
