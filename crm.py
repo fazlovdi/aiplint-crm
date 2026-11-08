@@ -1564,14 +1564,43 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
 
     def _file_recency(entry):
         _original_idx, _file = entry
-        _date_value = str(_file.get("created_at") or _file.get("uploaded_at") or _file.get("last_modified") or "")
+        # Use a real timestamp so ISO dates, legacy date strings and filename
+        # timestamps are compared consistently in every window/tab.
+        _date_value = str(
+            _file.get("created_at")
+            or _file.get("uploaded_at")
+            or _file.get("last_modified")
+            or ""
+        ).strip()
+        _timestamp = None
         if _date_value:
-            return (2, _date_value)
-        _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
-        _match = re.search(r"_(\d{9,})_", _path_value)
-        if _match:
-            return (2, _match.group(1))
-        return (1, _original_idx)
+            try:
+                _timestamp = datetime.fromisoformat(_date_value.replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError, OverflowError):
+                for _fmt in (
+                    "%d.%m.%Y %H:%M:%S",
+                    "%d.%m.%Y %H:%M",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M",
+                    "%d.%m.%Y",
+                    "%Y-%m-%d",
+                ):
+                    try:
+                        _timestamp = datetime.strptime(_date_value[:19], _fmt).timestamp()
+                        break
+                    except (ValueError, TypeError, OverflowError):
+                        continue
+        if _timestamp is None:
+            _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
+            _match = re.search(r"_(\d{9,})_", _path_value)
+            if _match:
+                try:
+                    _timestamp = float(_match.group(1))
+                except (ValueError, OverflowError):
+                    _timestamp = None
+        # When legacy records have no date at all, keep their existing relative
+        # order (newer appended records first) while dated records sort by time.
+        return (1, _timestamp, _original_idx) if _timestamp is not None else (0, 0, _original_idx)
 
     _sorted_file_entries = sorted(enumerate(files), key=_file_recency, reverse=True)
     _visible_count = len(files) if _show_all else min(3, len(files))
