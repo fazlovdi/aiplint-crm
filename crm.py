@@ -7779,55 +7779,41 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             continue
                         _picker_matches.append(_picker_client)
 
-                    _picker_page_key = f"crm_workspace_client_picker_page_{_bottom_active_window_id}"
-                    _picker_page_start = max(0, int(st.session_state.get(_picker_page_key, 0) or 0))
-                    _picker_page_start = (_picker_page_start // 10) * 10
-                    _picker_total = len(_picker_matches)
-                    _picker_page_start = min(_picker_page_start, max(0, ((_picker_total - 1) // 10) * 10))
-                    if _picker_page_start > 0:
-                        if st.button("Показать предыдущих", key=f"crm_workspace_client_picker_prev_{_bottom_active_window_id}", type="tertiary", use_container_width=True):
-                            st.session_state[_picker_page_key] = max(0, _picker_page_start - 10)
-                            st.rerun()
-
-                    _picker_shown = _picker_matches[_picker_page_start:_picker_page_start + 10]
+                    # Keep at most 50 matching clients in the list and make
+                    # approximately ten rows visible at a time via vertical scrolling.
+                    _picker_shown = _picker_matches[:50]
                     if not _picker_shown:
                         st.caption("Совпадений не найдено")
                     else:
-                        for _picker_client in _picker_shown:
-                            _picker_client_id = _picker_client.get("id")
-                            _picker_name = str(_picker_client.get("name", "Без названия") or "Без названия")
-                            _picker_phone = str(_picker_client.get("phone", "") or "")
-                            _picker_city = str(_picker_client.get("city", "") or "").strip() or "Город не указан"
-                            _picker_category = str(_picker_client.get("category", "") or "").strip() or "Тип не указан"
-                            _picker_label = f"{_picker_name} · {_picker_category} · {_picker_city}"
-                            if _picker_phone:
-                                _picker_label += f" · {_picker_phone}"
-                            if st.button(
-                                _picker_label,
-                                key=f"crm_workspace_pick_client_{_bottom_active_window_id}_{_picker_client_id}",
-                                use_container_width=True,
-                            ):
-                                _picker_entry = {
-                                    "name": "client_detail_dialog",
-                                    "title": "Карточка клиента",
-                                    "width": "large",
-                                    "args": (_picker_client_id,),
-                                    "kwargs": {},
-                                    "signature": (
-                                        _crm_dialog_signature_value((_picker_client_id,)),
-                                        _crm_dialog_signature_value({}),
-                                    ),
-                                }
-                                _crm_workspace_open_dialog(_picker_entry, client_id=_picker_client_id)
-                                st.session_state[_picker_page_key] = 0
-                                st.rerun()
+                        with st.container(height=420, key=f"crm_workspace_client_picker_list_{_bottom_active_window_id}"):
+                            for _picker_client in _picker_shown:
+                                _picker_client_id = _picker_client.get("id")
+                                _picker_name = str(_picker_client.get("name", "Без названия") or "Без названия")
+                                _picker_phone = str(_picker_client.get("phone", "") or "")
+                                _picker_city = str(_picker_client.get("city", "") or "").strip() or "Город не указан"
+                                _picker_category = str(_picker_client.get("category", "") or "").strip() or "Тип не указан"
+                                _picker_label = f"{_picker_name} · {_picker_category} · {_picker_city}"
+                                if _picker_phone:
+                                    _picker_label += f" · {_picker_phone}"
+                                if st.button(
+                                    _picker_label,
+                                    key=f"crm_workspace_pick_client_{_bottom_active_window_id}_{_picker_client_id}",
+                                    use_container_width=True,
+                                ):
+                                    _picker_entry = {
+                                        "name": "client_detail_dialog",
+                                        "title": "Карточка клиента",
+                                        "width": "large",
+                                        "args": (_picker_client_id,),
+                                        "kwargs": {},
+                                        "signature": (
+                                            _crm_dialog_signature_value((_picker_client_id,)),
+                                            _crm_dialog_signature_value({}),
+                                        ),
+                                    }
+                                    _crm_workspace_open_dialog(_picker_entry, client_id=_picker_client_id)
+                                    st.rerun()
 
-                    if _picker_page_start + 10 < _picker_total:
-                        if st.button("Показать ещё", key=f"crm_workspace_client_picker_next_{_bottom_active_window_id}", type="tertiary", use_container_width=True):
-                            st.session_state[_picker_page_key] = _picker_page_start + 10
-                            st.rerun()
-
-                    st.divider()
                     if st.button("Добавить клиента", key=f"crm_workspace_client_picker_add_{_bottom_active_window_id}", type="tertiary", use_container_width=True):
                         _open_form_ids = []
                         for _state_key in list(st.session_state.keys()):
