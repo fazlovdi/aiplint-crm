@@ -7551,14 +7551,11 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
         (item for item in remaining if return_window_id and str(item.get("id")) == str(return_window_id)),
         None,
     )
-    # При закрытии с главной страницы не разворачиваем другое свёрнутое окно.
-    # Внутри рабочего пространства, напротив, переключаемся на следующее окно.
-    if in_workspace:
-        if next_window is None:
-            next_window = next((item for item in reversed(remaining) if not item.get("minimized")), None)
-        if next_window is None and remaining:
-            next_window = remaining[-1]
-            next_window["minimized"] = False
+    if next_window is None:
+        next_window = next((item for item in reversed(remaining) if not item.get("minimized")), None)
+    if next_window is None and remaining:
+        next_window = remaining[-1]
+        next_window["minimized"] = False
 
     if next_window:
         st.session_state["_crm_active_window_id"] = next_window.get("id")
@@ -7575,12 +7572,13 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
 
     _crm_workspace_clear_legacy_dialog_markers()
     _crm_workspace_queue_save()
-    # Закрытие меняет состав панели: выполняем полный rerun, чтобы
-    # кнопки закрытого окна гарантированно исчезли и не оставались в fragment.
-    try:
-        st.rerun(scope="app")
-    except Exception:
-        st.rerun()
+    # При закрытии последнего окна из fragment нужно обновить главную страницу.
+    # В остальных случаях достаточно обычного rerun, инициированного кнопкой.
+    if in_workspace and next_window is None:
+        try:
+            st.rerun(scope="app")
+        except Exception:
+            st.rerun()
 
 
 def _crm_workspace_render_bottom_panel(in_workspace=False):
@@ -7601,8 +7599,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         align-items:center !important; justify-content:flex-start !important;
-        gap:4px !important; column-gap:4px !important; row-gap:0 !important;
-        width:100% !important; overflow-x:auto !important; overflow-y:hidden !important;
+        gap:0 !important; column-gap:0 !important; row-gap:0 !important;
+        width:100% !important; overflow-x:auto !important;
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
@@ -7614,16 +7612,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         margin:0 !important; overflow:visible !important;
         border:1px solid #D9DEE7 !important; border-radius:7px !important;
-        background:#F3F5F8 !important; padding:0 30px 0 3px !important;
+        background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
-    }
-    /* Pin the close control to its own window chip so Streamlit's horizontal
-       flex sizing cannot overlap or suppress the glyph when more windows appear. */
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] {
-        position:absolute !important; right:2px !important; top:50% !important;
-        transform:translateY(-50%) !important; z-index:20 !important;
-        flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important;
-        display:flex !important; visibility:visible !important; opacity:1 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-wrap:nowrap !important; gap:0 !important;
@@ -7639,18 +7629,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; }
-    /* Streamlit horizontal layouts give each child a flex column. Reserve space on the
-       column that contains the close button, not only on the button wrapper itself. */
-    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > div:has([class*="st-key-crm_workspace_taskbar_close_"]) {
-        position:static !important; flex:0 0 0 !important; width:0 !important; min-width:0 !important; max-width:0 !important;
-        display:block !important; visibility:visible !important; opacity:1 !important; overflow:visible !important;
-    }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_taskbar_close_"] p,
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_taskbar_close_"] span {
-        display:block !important; visibility:visible !important; opacity:1 !important;
-        color:#8A94A3 !important; -webkit-text-fill-color:#8A94A3 !important;
-    }
-
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#8A94A3 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
@@ -15728,7 +15706,7 @@ def _crm_render_workspace_fragment():
             gap:0 !important; column-gap:0 !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
             border-bottom:0 !important; padding:0.15rem 0 0 !important;
-            width:100% !important; overflow-x:auto !important; overflow-y:hidden !important;
+            width:100% !important; overflow-x:auto !important;
         }
         /* Each tab container must occupy only its own content width, not share
            the available row width with neighboring tabs. */
@@ -15798,32 +15776,6 @@ def _crm_render_workspace_fragment():
             color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
         }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"] .stButton:nth-child(2) > button:hover {
-            color:#BC1661 !important;
-        }
-        /* Close controls have their own keyed wrapper: keep the X visible
-           regardless of the number of tabs or Streamlit's internal DOM nesting. */
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] {
-            display:flex !important; flex:0 0 31px !important; flex-shrink:0 !important;
-            width:31px !important; min-width:31px !important; max-width:31px !important;
-            visibility:visible !important; opacity:1 !important; overflow:visible !important;
-        }
-        /* Reserve the close-button width on its Streamlit column as well. */
-        [class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"] > div:has([class*="st-key-crm_workspace_tab_close_"]) {
-            display:flex !important; flex:0 0 31px !important; width:31px !important;
-            min-width:31px !important; max-width:31px !important; overflow:visible !important;
-            visibility:visible !important; opacity:1 !important;
-        }
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] [data-testid="stBaseButton-secondary"],
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button {
-            display:flex !important; visibility:visible !important; opacity:1 !important;
-            flex:0 0 31px !important; width:31px !important; min-width:31px !important; max-width:31px !important;
-            height:30px !important; min-height:30px !important; padding:0 !important;
-            align-items:center !important; justify-content:center !important;
-            color:#8A94A3 !important; -webkit-text-fill-color:#8A94A3 !important;
-            font-size:18px !important; line-height:1 !important; overflow:visible !important;
-            background:transparent !important; border:0 !important; box-shadow:none !important;
-        }
-        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button:hover {
             color:#BC1661 !important;
         }
         /* Active state comes from the keyed wrapper, not Streamlit's button type.
