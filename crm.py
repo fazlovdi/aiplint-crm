@@ -1537,7 +1537,7 @@ def get_thumbnail_base64(remote_path, size=220):
         return f"data:{mt};base64,{base64.b64encode(fb).decode()}"
 
 
-def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
+def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_all_button_columns=False):
     """Отображает вложения списком; содержимое загружается только по запросу пользователя."""
     if not files:
         st.caption("Файлов нет")
@@ -1645,7 +1645,13 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True):
     if len(files) > 3:
         _button_label = "Скрыть дополнительные файлы" if _show_all else "Показать все файлы"
         _button_key = f"show_all_files_btn_{prefix}"
-        if st.button(_button_label, key=_button_key, use_container_width=True):
+        if show_all_button_columns:
+            _show_all_left, _show_all_button_col, _show_all_right = st.columns([1, 2, 1])
+            with _show_all_button_col:
+                _show_all_clicked = st.button(_button_label, key=_button_key, use_container_width=True)
+        else:
+            _show_all_clicked = st.button(_button_label, key=_button_key, use_container_width=True)
+        if _show_all_clicked:
             st.session_state[_show_all_key] = not _show_all
             st.rerun()
 
@@ -8547,29 +8553,8 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
-            _deal_files_box_key = f"deal_files_box_{d['id']}"
-            _deal_files_button_key = f"show_all_files_btn_deal_file_{d['id']}"
-            st.markdown(
-                f"""<style>
-                .st-key-{_deal_files_box_key} {{
-                    border: 1px solid #C9CFD7 !important;
-                    border-radius: 10px !important;
-                    padding: 10px !important;
-                    box-sizing: border-box !important;
-                }}
-                .st-key-{_deal_files_box_key} .st-key-{_deal_files_button_key} {{
-                    margin-left: -10px !important;
-                    width: calc(100% + 20px) !important;
-                }}
-                .st-key-{_deal_files_box_key} .st-key-{_deal_files_button_key} button {{
-                    width: 100% !important;
-                }}
-                </style>""",
-                unsafe_allow_html=True,
-            )
-            with st.container(key=_deal_files_box_key):
-                st.markdown("**Файлы сделки:**")
-                render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
+            st.markdown("**Файлы сделки:**")
+            render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
             df_ver = st.session_state.deal_file_uploader_ver.get(d["id"], 0)
@@ -11733,29 +11718,30 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     else:
                         st.warning("Введите текст")
             st.markdown("---")
-            st.markdown("**Файлы сделки:**")
-            st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
-            render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True)
-            st.markdown("**Загрузить файлы:**")
-            df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
-            udf = st.file_uploader("Выберите файлы:", key=f"dls_up_{deal_id}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
-            _crm_mark_widget_changed(f"dls_up_{deal_id}_{df_ver}", bool(udf))
-            _du1, _du_btn, _du2 = st.columns([1, 2, 1])
-            with _du_btn:
-                _du_clicked = st.button("Загрузить", key=f"dls_upbtn_{deal_id}", use_container_width=True)
-            if _du_clicked:
-                if udf:
-                    with st.spinner("Загрузка файлов..."):
-                        fi_list = save_uploaded_files(udf, d["client_id"], "deal_file")
-                    if fi_list:
-                        d.setdefault("deal_files", []).extend(normalize_file_list(fi_list))
-                        d["last_modified"] = now_str()
-                        st.session_state.deal_file_uploader_ver[f"tab_{deal_id}"] = df_ver + 1
-                        save_data(st.session_state.crm_store)
-                        st.toast("Файлы загружены", icon="\U0001F4C1")
-                        _smart_rerun()
-                else:
-                    st.warning("Выберите файл(ы)")
+            with st.container(border=True):
+                st.markdown("**Файлы сделки:**")
+                st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
+                render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True)
+                st.markdown("**Загрузить файлы:**")
+                df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
+                udf = st.file_uploader("Выберите файлы:", key=f"dls_up_{deal_id}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
+                _crm_mark_widget_changed(f"dls_up_{deal_id}_{df_ver}", bool(udf))
+                _du1, _du_btn, _du2 = st.columns([1, 2, 1])
+                with _du_btn:
+                    _du_clicked = st.button("Загрузить", key=f"dls_upbtn_{deal_id}", use_container_width=True)
+                if _du_clicked:
+                    if udf:
+                        with st.spinner("Загрузка файлов..."):
+                            fi_list = save_uploaded_files(udf, d["client_id"], "deal_file")
+                        if fi_list:
+                            d.setdefault("deal_files", []).extend(normalize_file_list(fi_list))
+                            d["last_modified"] = now_str()
+                            st.session_state.deal_file_uploader_ver[f"tab_{deal_id}"] = df_ver + 1
+                            save_data(st.session_state.crm_store)
+                            st.toast("Файлы загружены", icon="\U0001F4C1")
+                            _smart_rerun()
+                    else:
+                        st.warning("Выберите файл(ы)")
             st.markdown("---")
             render_deal_products_block(d, key_prefix)
             st.markdown("---")
