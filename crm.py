@@ -7631,6 +7631,18 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; }
+    /* Streamlit horizontal layouts give each child a flex column. Reserve space on the
+       column that contains the close button, not only on the button wrapper itself. */
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > div:has([class*="st-key-crm_workspace_taskbar_close_"]) {
+        flex:0 0 31px !important; width:31px !important; min-width:31px !important; max-width:31px !important;
+        display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_taskbar_close_"] p,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_taskbar_close_"] span {
+        display:block !important; visibility:visible !important; opacity:1 !important;
+        color:#8A94A3 !important; -webkit-text-fill-color:#8A94A3 !important;
+    }
+
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#8A94A3 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
@@ -15786,6 +15798,12 @@ def _crm_render_workspace_fragment():
             display:flex !important; flex:0 0 31px !important; flex-shrink:0 !important;
             width:31px !important; min-width:31px !important; max-width:31px !important;
             visibility:visible !important; opacity:1 !important; overflow:visible !important;
+        }
+        /* Reserve the close-button width on its Streamlit column as well. */
+        [class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"] > div:has([class*="st-key-crm_workspace_tab_close_"]) {
+            display:flex !important; flex:0 0 31px !important; width:31px !important;
+            min-width:31px !important; max-width:31px !important; overflow:visible !important;
+            visibility:visible !important; opacity:1 !important;
         }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] [data-testid="stBaseButton-secondary"],
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button {
