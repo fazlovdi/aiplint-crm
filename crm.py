@@ -15959,7 +15959,10 @@ def _crm_render_workspace_fragment():
                 const scan = () => {
                   doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"]').forEach(attachDrag);
                   doc.querySelectorAll('[class*="st-key-crm_workspace_bottom_"]').forEach(panel => {
-                    const blocks = Array.from(panel.querySelectorAll('[data-testid="stHorizontalBlock"]'));
+                    const blocks = [
+                      ...(panel.matches('[data-testid="stHorizontalBlock"]') ? [panel] : []),
+                      ...Array.from(panel.querySelectorAll('[data-testid="stHorizontalBlock"]'))
+                    ];
                     const outer = blocks.find(el =>
                       !el.closest('[class*="st-key-crm_workspace_window_item_"]') &&
                       el.querySelector('[class*="st-key-crm_workspace_window_item_"]')
