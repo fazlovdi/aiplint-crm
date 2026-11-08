@@ -5130,6 +5130,165 @@ def save_data(data):
             else:
                 merged_data = copy.deepcopy(data)
 
+            # Полный журнал действий: если конкретный обработчик не добавил запись сам,
+            # фиксируем фактическое изменение объекта перед сохранением общей базы.
+            try:
+                _audit_actor = str(st.session_state.get("user_name") or st.session_state.get("user_login") or "Система")
+                _audit_date = now_str()
+                def _audit_map(items, key="id"):
+                    return {str(x.get(key)): x for x in (items or []) if isinstance(x, dict) and x.get(key) is not None}
+                def _audit_log(obj, message):
+                    if not isinstance(obj, dict):
+                        return
+                    obj.setdefault("change_log", []).append({"date": _audit_date, "author": _audit_actor, "fields": message})
+                def _audit_clean(obj, ignored):
+                    result = copy.deepcopy(obj or {})
+                    for field in ignored:
+                        result.pop(field, None)
+                    return result
+                def _audit_list_action(old_obj, new_obj, field, noun):
+                    old_items = old_obj.get(field, []) if isinstance(old_obj, dict) else []
+                    new_items = new_obj.get(field, []) if isinstance(new_obj, dict) else []
+                    old_items = old_items if isinstance(old_items, list) else []
+                    new_items = new_items if isinstance(new_items, list) else []
+                    def _item_key(item, index):
+                        if isinstance(item, dict):
+                            return str(item.get("id") or item.get("file_hash") or item.get("name") or item.get("file_name") or item.get("time") or item.get("created_at") or index)
+                        return str(item)
+                    old_map = {_item_key(item, i): item for i, item in enumerate(old_items)}
+                    new_map = {_item_key(item, i): item for i, item in enumerate(new_items)}
+                    added, removed = set(new_map) - set(old_map), set(old_map) - set(new_map)
+                    if added and removed:
+                        return f"{noun}: добавлено {len(added)}, удалено {len(removed)}"
+                    if added:
+                        return f"Добавлен(ы): {noun.lower()}"
+                    if removed:
+                        return f"Удалён(ы): {noun.lower()}"
+                    return ""
+                _old_clients_audit = _audit_map(latest_data.get("clients", []))
+                _new_clients_audit = _audit_map(merged_data.get("clients", []))
+                _old_deals_audit = _audit_map(latest_data.get("deals", []))
+                _new_deals_audit = _audit_map(merged_data.get("deals", []))
+                _logged_task_ids = set()
+                # Сделки: статус, оплата, ответственный, комментарии, файлы, расчёты и остальные поля.
+                for _did_audit in set(_old_deals_audit) | set(_new_deals_audit):
+                    _old_d = _old_deals_audit.get(_did_audit)
+                    _new_d = _new_deals_audit.get(_did_audit)
+                    _target_d = _new_d or _old_d
+                    if not isinstance(_target_d, dict):
+                        continue
+                    if _old_d is None:
+                        _audit_log(_target_d, "Создана новая сделка")
+                        continue
+                    if _new_d is None:
+                        continue
+                    if _old_d.get("change_log", []) != _new_d.get("change_log", []):
+                        continue
+                    _changes = []
+                    _old_core = _audit_clean(_old_d, ("change_log", "last_modified", "viewed", "calculations", "tasks", "deal_comments", "deal_files", "generated_documents"))
+                    _new_core = _audit_clean(_new_d, ("change_log", "last_modified", "viewed", "calculations", "tasks", "deal_comments", "deal_files", "generated_documents"))
+                    for _field in sorted(set(_old_core) | set(_new_core)):
+                        if _old_core.get(_field) != _new_core.get(_field):
+                            _labels = {"status":"Статус сделки", "payment_status":"Статус оплаты", "manager":"Ответственный", "budget":"Бюджет", "pause_reason":"Причина паузы", "close_reason":"Причина закрытия", "title":"Название сделки"}
+                            _label = _labels.get(_field, _field.replace("_", " ").capitalize())
+                            _changes.append(f"{_label}: «{_old_core.get(_field, '—')}» → «{_new_core.get(_field, '—')}»")
+                    for _field, _noun in (("deal_comments", "комментарий"), ("deal_files", "файл"), ("generated_documents", "документ")):
+                        _action = _audit_list_action(_old_d, _new_d, _field, _noun)
+                        if _action:
+                            _changes.append(_action)
+                    _old_calcs = _audit_map(_old_d.get("calculations", []))
+                    _new_calcs = _audit_map(_new_d.get("calculations", []))
+                    if set(_old_calcs) != set(_new_calcs):
+                        _changes.append("Добавлен новый расчёт" if set(_new_calcs)-set(_old_calcs) else "Удалён расчёт")
+                    else:
+                        for _calc_id_audit in set(_old_calcs) & set(_new_calcs):
+                            if _old_calcs[_calc_id_audit] != _new_calcs[_calc_id_audit]:
+                                _changes.append(f"Изменён расчёт «{_new_calcs[_calc_id_audit].get('name') or _calc_id_audit}»")
+                    if _changes:
+                        _audit_log(_target_d, "; ".join(_changes))
+                # Клиенты и вложенные задачи: каждое создание, изменение, удаление, комментарий и файл.
+                for _cid_audit in set(_old_clients_audit) | set(_new_clients_audit):
+                    _old_c = _old_clients_audit.get(_cid_audit)
+                    _new_c = _new_clients_audit.get(_cid_audit)
+                    _target_c = _new_c or _old_c
+                    if not isinstance(_target_c, dict):
+                        continue
+                    if _old_c is None:
+                        _audit_log(_target_c, "Создана новая карточка клиента")
+                        continue
+                    if _new_c is None:
+                        continue
+                    _old_tasks_audit = _audit_map(_old_c.get("tasks", []))
+                    _new_tasks_audit = _audit_map(_new_c.get("tasks", []))
+                    if _old_c.get("change_log", []) == _new_c.get("change_log", []):
+                        _client_changes = []
+                        _old_client_core = _audit_clean(_old_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "requisites"))
+                        _new_client_core = _audit_clean(_new_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "requisites"))
+                        _client_labels = {"name":"ФИО / Компания", "phone":"Телефон", "email":"Email", "manager":"Ответственный", "address":"Адрес", "city":"Город", "discount":"Скидка", "category":"Категория", "source":"Источник", "promo_code":"Промокод"}
+                        for _field in sorted(set(_old_client_core) | set(_new_client_core)):
+                            if _old_client_core.get(_field) != _new_client_core.get(_field):
+                                _client_changes.append(f"{_client_labels.get(_field, _field.replace('_', ' ').capitalize())}: «{_old_client_core.get(_field, '—')}» → «{_new_client_core.get(_field, '—')}»")
+                        for _field, _noun in (("client_comments", "комментарий"), ("files", "файл"), ("requisites", "реквизиты")):
+                            _action = _audit_list_action(_old_c, _new_c, _field, _noun)
+                            if _action:
+                                _client_changes.append(_action)
+                        if _client_changes:
+                            _audit_log(_target_c, "; ".join(_client_changes))
+                    for _task_id_audit in set(_old_tasks_audit) | set(_new_tasks_audit):
+                        _old_t = _old_tasks_audit.get(_task_id_audit)
+                        _new_t = _new_tasks_audit.get(_task_id_audit)
+                        _target_t = _new_t or _old_t
+                        if not isinstance(_target_t, dict):
+                            continue
+                        if _old_t is None:
+                            _task_message = f"Создана новая задача «{_new_t.get('title') or _new_t.get('task_type') or _task_id_audit}»"
+                        elif _new_t is None:
+                            _task_message = f"Удалена задача «{_old_t.get('title') or _old_t.get('task_type') or _task_id_audit}»"
+                        elif _old_t == _new_t:
+                            continue
+                        else:
+                            _task_changes = []
+                            for _field in sorted(set(_old_t) | set(_new_t)):
+                                if _old_t.get(_field) != _new_t.get(_field):
+                                    _task_labels = {"status":"Статус задачи", "manager":"Ответственный", "responsible":"Ответственный", "task_type":"Тип задачи", "comment":"Комментарий"}
+                                    _task_changes.append(f"{_task_labels.get(_field, _field.replace('_', ' ').capitalize())}: «{_old_t.get(_field, '—')}» → «{_new_t.get(_field, '—')}»")
+                            _task_message = "; ".join(_task_changes) or "Изменена задача"
+                        _deal_id_task = (_new_t or _old_t or {}).get("deal_id")
+                        if _deal_id_task is not None:
+                            _parent_deal = _new_deals_audit.get(str(_deal_id_task))
+                            if _parent_deal is not None:
+                                _audit_log(_parent_deal, _task_message)
+                        else:
+                            _audit_log(_target_c, _task_message)
+                # Напоминания относятся к карточке/сделке/задаче, к которой они привязаны.
+                _old_reminders_audit = _audit_map(latest_data.get("reminders", []))
+                _new_reminders_audit = _audit_map(merged_data.get("reminders", []))
+                for _rid_audit in set(_old_reminders_audit) | set(_new_reminders_audit):
+                    _old_r = _old_reminders_audit.get(_rid_audit)
+                    _new_r = _new_reminders_audit.get(_rid_audit)
+                    if _old_r == _new_r:
+                        continue
+                    _r = _new_r or _old_r or {}
+                    _rtype = str(_r.get("entity_type") or "")
+                    _reid = str(_r.get("entity_id") or "")
+                    _rmessage = ("Создано напоминание" if _old_r is None else "Удалено напоминание" if _new_r is None else "Изменено напоминание")
+                    if _rtype == "deal":
+                        _parent = _new_deals_audit.get(_reid)
+                        if _parent is not None:
+                            _audit_log(_parent, _rmessage)
+                    elif _rtype == "client":
+                        _parent = _new_clients_audit.get(_reid)
+                        if _parent is not None:
+                            _audit_log(_parent, _rmessage)
+                    else:
+                        _parent = next((t for c in _new_clients_audit.values() for t in c.get("tasks", []) or [] if isinstance(t, dict) and str(t.get("id") or t.get("task_number") or "") == _reid), None)
+                        if _parent is not None:
+                            _owner_client = next((c for c in _new_clients_audit.values() if any(isinstance(t, dict) and (t is _parent or str(t.get("id")) == str(_parent.get("id"))) for t in c.get("tasks", []) or [])), None)
+                            if _owner_client is not None:
+                                _audit_log(_owner_client, _rmessage + " по задаче")
+            except Exception as _audit_exc:
+                _crm_log("CHANGE_LOG_AUDIT_ERROR", {}, exc=_audit_exc, remote=False)
+
             snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
             new_revision = revision + 1
 
