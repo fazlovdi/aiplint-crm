@@ -3415,9 +3415,9 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
         items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
         items.sort(key=lambda r:r.get("due_at", ""))
         if heading_size:
-            st.markdown(f"<div style='font-size:{heading_size};font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Напоминания ({len(items)})</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:{heading_size};font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Напоминания ({active_item_count(items)})</div>", unsafe_allow_html=True)
         else:
-            st.markdown(f"**Напоминания ({len(items)})**")
+            st.markdown(f"**Напоминания ({active_item_count(items)})**")
         now = moscow_now()
         users = {u.get("login"):u for u in store.get("users", [])}
         if not items:
