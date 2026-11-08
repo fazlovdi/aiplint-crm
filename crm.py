@@ -16110,6 +16110,12 @@ def _crm_render_workspace_fragment():
             font-size:26px !important; line-height:1 !important; margin:0 !important; padding:0 !important; font-weight:400 !important;
         }
         [class*="st-key-crm_workspace_client_objects_add_"] button svg { display:none !important; }
+        [class*="st-key-crm_obj_add_client_task_"] button,
+        [class*="st-key-crm_obj_add_deal_"] button,
+        [class*="st-key-crm_obj_add_req_"] button {
+            border:0 !important; outline:0 !important; box-shadow:none !important;
+            background:transparent !important; justify-content:flex-start !important;
+        }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] {
             position:absolute !important; top:0 !important; right:0 !important;
             width:96px !important; min-width:96px !important; z-index:10 !important;
