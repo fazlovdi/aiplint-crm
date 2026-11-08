@@ -8611,7 +8611,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_add_client_"] > div > button,
     [class*="st-key-crm_workspace_add_client_"] button[data-testid^="stPopoverButton"] { display:flex !important; box-sizing:border-box !important; align-items:center !important; justify-content:flex-start !important; width:50px !important; min-width:50px !important; max-width:50px !important; height:42px !important; min-height:42px !important; padding:0 0 0 16px !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#BC1661 !important; font-size:26px !important; font-weight:400 !important; }
     [class*="st-key-crm_workspace_add_client_"] button p { font-size:26px !important; line-height:1 !important; margin:0 !important; padding:0 !important; font-weight:400 !important; }
-    [class*="st-key-crm_workspace_add_client_"] button svg { display:none !important; }
+    [class*="st-key-crm_workspace_add_client_"] button svg,
+    [class*="st-key-crm_workspace_add_client_"] button [data-testid="stIconMaterial"],
+    [class*="st-key-crm_workspace_add_client_"] button [data-testid*="Icon"],
+    [class*="st-key-crm_workspace_add_client_"] button > span:not([class*="st-emotion-cache"]) { display:none !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:active { color:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
