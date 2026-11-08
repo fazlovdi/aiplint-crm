@@ -1292,31 +1292,31 @@ def save_uploaded_file(u_file, c_id, prefix=""):
     for c in st.session_state.crm_store.get("clients", []):
         for f in c.get("client_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str(), "uploaded_at": now_str()}
         for t in c.get("tasks", []):
             for f in t.get("task_files", []):
                 if f.get("file_hash") == file_hash and file_hash:
-                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str(), "uploaded_at": now_str()}
             for f in t.get("completion_files", []):
                 if f.get("file_hash") == file_hash and file_hash:
-                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                    return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str(), "uploaded_at": now_str()}
     for d in st.session_state.crm_store.get("deals", []):
         for f in d.get("deal_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str(), "uploaded_at": now_str()}
         for f in d.get("close_files", []):
             if f.get("file_hash") == file_hash and file_hash:
-                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str()}
+                return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str(), "uploaded_at": now_str()}
     name = f"{c_id}_{prefix}_{int(time.time())}_{u_file.name}"
     if YANDEX_TOKEN:
         rp = f"CRM_NE_TROGAT/uploads/{name}"
         if upload_file_to_yandex(b, name):
-            return {"path": rp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str()}
+            return {"path": rp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str(), "uploaded_at": now_str()}
         st.warning("Не удалось загрузить на Диск, файл сохранён локально")
     os.makedirs("uploads", exist_ok=True)
     lp = f"uploads/{name}"
     with open(lp, "wb") as f: f.write(b)
-    return {"path": lp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str()}
+    return {"path": lp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str(), "uploaded_at": now_str()}
 
 def save_uploaded_files(files, c_id, prefix=""):
     if files is None: return []
@@ -1324,7 +1324,13 @@ def save_uploaded_files(files, c_id, prefix=""):
     return [fi for fi in (save_uploaded_file(f, c_id, prefix) for f in files) if fi]
 
 def normalize_file_list(fi_list):
-    return [{"file_path": fi["path"], "file_name": fi["name"], "file_hash": fi.get("file_hash", ""), **({"created_at": fi.get("created_at")} if fi.get("created_at") else {})} for fi in fi_list]
+    return [{
+        "file_path": fi["path"],
+        "file_name": fi["name"],
+        "file_hash": fi.get("file_hash", ""),
+        **({"created_at": fi.get("created_at")} if fi.get("created_at") else {}),
+        **({"uploaded_at": fi.get("uploaded_at")} if fi.get("uploaded_at") else {}),
+    } for fi in fi_list]
 
 def normalize_remote_path(fp):
     if not fp: return None
@@ -1577,8 +1583,8 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
             except (ValueError, OverflowError):
                 _timestamp = None
         _date_value = str(
-            _file.get("created_at")
-            or _file.get("uploaded_at")
+            _file.get("uploaded_at")
+            or _file.get("created_at")
             or _file.get("last_modified")
             or ""
         ).strip()
