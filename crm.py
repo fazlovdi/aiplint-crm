@@ -8609,7 +8609,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         # Глобальный поиск по CRM доступен из нижней панели.
-        with st.popover("⌕", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
+        with st.popover("🔍", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
             _global_q = st.text_input(
                 "Поиск по CRM",
                 key=f"crm_workspace_global_search_input_{_bottom_scope}",
