@@ -8520,6 +8520,19 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         flex:0 0 auto !important; flex-shrink:0 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
+    /* Left-align labels in the client-object dropdown buttons only. */
+    [class*="st-key-crm_obj_"] button {
+        display:flex !important;
+        align-items:center !important;
+        justify-content:flex-start !important;
+        text-align:left !important;
+    }
+    [class*="st-key-crm_obj_"] button > div,
+    [class*="st-key-crm_obj_"] button p {
+        width:100% !important;
+        text-align:left !important;
+        margin-left:0 !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { display:flex !important; align-items:center !important; justify-content:center !important; box-sizing:border-box !important; height:42px !important; min-height:42px !important; width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
         display:flex !important; align-items:center !important; justify-content:center !important;
