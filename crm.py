@@ -7688,19 +7688,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_taskbar_close_"] button,
     [class*="st-key-crm_workspace_taskbar_close_"] button p { color:#BC1661 !important; font-size:18px !important; line-height:1 !important; }
     [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
-    /* Prevent a transient doubled close glyph during Streamlit's rerender after click. */
-    [class*="st-key-crm_workspace_taskbar_close_"] button,
-    [class*="st-key-crm_workspace_taskbar_close_"] button::before,
-    [class*="st-key-crm_workspace_taskbar_close_"] button::after {
-        animation:none !important; transition:none !important;
-    }
-    [class*="st-key-crm_workspace_taskbar_close_"] button::before,
-    [class*="st-key-crm_workspace_taskbar_close_"] button::after {
-        content:none !important; display:none !important;
-    }
-    .crm-close-flash-suppressed [class*="st-key-crm_workspace_taskbar_close_"] button {
-        visibility:hidden !important;
-    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
         .crm-bottom-scroll-row {
@@ -7719,15 +7706,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         for _w in list(_bottom_windows):
+            _window_id = str(_w.get("id"))
             _is_statistics_window = any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
             _label = "📊 Статистика" if _is_statistics_window else str(_w.get("title") or "CRM")[:24]
             if not in_workspace and not _is_statistics_window:
                 _label = ("● " if _w.get("session_opened") else "▣ ") + _label
-            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_w.get('id')}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
-                _window_is_active = (_w.get("id") == _bottom_active_window_id and not _w.get("minimized"))
+            # Stable window-specific keys prevent a neighboring window's close button from being reused.
+            with st.container(key=f"crm_workspace_window_item_{_bottom_scope}_{_window_id}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+                _window_is_active = (str(_w.get("id")) == str(_bottom_active_window_id) and not _w.get("minimized"))
                 st.button(
                     _label,
-                    key=f"crm_workspace_restore_{_bottom_scope}_{_w.get('id')}",
+                    key=f"crm_workspace_restore_{_bottom_scope}_{_window_id}",
                     type="primary" if (in_workspace and _window_is_active) or (not in_workspace and not _w.get("minimized")) else "secondary",
                     on_click=_crm_workspace_activate_window_callback,
                     args=(_w.get("id"), in_workspace),
@@ -7735,7 +7724,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 if in_workspace or not _is_statistics_window:
                     st.button(
                         "×",
-                        key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_w.get('id')}",
+                        key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_window_id}",
                         on_click=_crm_workspace_close_window_callback,
                         args=(_w.get("id"), in_workspace),
                     )
@@ -7745,31 +7734,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     (() => {
       try {
         const doc = window.parent.document;
-        // Suppress close glyphs during the taskbar's DOM reconciliation after a close click.
-        // Streamlit may briefly reuse a neighboring button node while removing a window item.
-        if (doc.documentElement.dataset.crmCloseFlashGuard !== '1') {
-          doc.documentElement.dataset.crmCloseFlashGuard = '1';
-          let closeFlashTimer = null;
-          const clearCloseFlashGuard = () => {
-            doc.documentElement.classList.remove('crm-close-flash-suppressed');
-            if (closeFlashTimer) { clearTimeout(closeFlashTimer); closeFlashTimer = null; }
-          };
-          doc.addEventListener('click', e => {
-            const closeButton = e.target && e.target.closest
-              ? e.target.closest('[class*="st-key-crm_workspace_taskbar_close_"] button')
-              : null;
-            if (!closeButton) return;
-            doc.documentElement.classList.add('crm-close-flash-suppressed');
-            if (closeFlashTimer) clearTimeout(closeFlashTimer);
-            closeFlashTimer = setTimeout(clearCloseFlashGuard, 900);
-          }, true);
-          const closeFlashObserver = new MutationObserver(() => {
-            if (!doc.documentElement.classList.contains('crm-close-flash-suppressed')) return;
-            if (closeFlashTimer) clearTimeout(closeFlashTimer);
-            closeFlashTimer = setTimeout(clearCloseFlashGuard, 160);
-          });
-          closeFlashObserver.observe(doc.body, {childList:true, subtree:true});
-        }
         const attach = el => {
           if (el.dataset.crmDragScrollReady === '1') return;
           el.dataset.crmDragScrollReady = '1';
