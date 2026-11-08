@@ -8748,16 +8748,61 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     with st.container(height=360, key=f"crm_workspace_global_search_results_{_bottom_scope}"):
                         for _gri, _grs in enumerate(_global_results[:60]):
                             if st.button(_grs["label"], key=f"crm_workspace_global_search_result_{_bottom_scope}_{_grs['stable_id']}", use_container_width=True):
+                                st.session_state[f"crm_workspace_global_search_input_{_bottom_scope}"] = ""
+                                st.session_state[f"crm_workspace_global_search_close_{_bottom_scope}"] = True
                                 _crm_workspace_open_dialog(_grs["entry"], client_id=_grs["client_id"])
                                 st.rerun()
 
-            # Поле поиска располагается внизу раскрывающегося окна, под результатами.
-            st.text_input(
-                "Поиск по CRM",
-                key=f"crm_workspace_global_search_input_{_bottom_scope}",
-                placeholder="Номер, имя, тема, телефон…",
-                label_visibility="collapsed",
-            )
+            # Поле поиска внизу окна, с отключённым автозаполнением и крестиком очистки.
+            with st.container(key=f"crm_workspace_global_search_wrap_{_bottom_scope}"):
+                st.text_input(
+                    "Поиск по CRM",
+                    key=f"crm_workspace_global_search_input_{_bottom_scope}",
+                    placeholder="Номер, имя, тема, телефон…",
+                    label_visibility="collapsed",
+                )
+                st.button(
+                    "×",
+                    key=f"crm_workspace_global_search_clear_{_bottom_scope}",
+                    help="Очистить поиск",
+                    on_click=lambda _k=f"crm_workspace_global_search_input_{_bottom_scope}": st.session_state.__setitem__(_k, ""),
+                )
+            st.markdown(f"""
+            <style>
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} {{ position:relative !important; }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] {{
+                position:absolute !important; right:4px !important; top:0 !important;
+                width:34px !important; z-index:5 !important; margin:0 !important;
+            }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] button {{
+                width:34px !important; min-width:34px !important; height:38px !important;
+                min-height:38px !important; padding:0 !important; margin:0 !important;
+                font-size:20px !important; line-height:1 !important; color:#808B98 !important;
+                border:0 !important; background:transparent !important; box-shadow:none !important;
+            }}
+            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] input {{
+                padding-right:40px !important;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+            st.components.v1.html(f"""<script>
+            (function(){{
+              var w=window; try{{if(window.parent&&window.parent!==window)w=window.parent;}}catch(e){{}}
+              function setup(){{
+                var root=w.document.querySelector('.st-key-crm_workspace_global_search_wrap_{_bottom_scope}');
+                if(root){{var input=root.querySelector('input'); if(input){{input.setAttribute('autocomplete','off');input.setAttribute('autocorrect','off');input.setAttribute('autocapitalize','off');input.setAttribute('spellcheck','false');}}}}
+                var closeFlag={str(bool(st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False))).lower()};
+                if(closeFlag){{
+                  var pop=w.document.querySelector('[class*="st-key-crm_workspace_global_search_{_bottom_scope}"]');
+                  var trigger=pop&&pop.querySelector('button');
+                  if(trigger && trigger.getAttribute('aria-expanded')==='true') trigger.click();
+                }}
+              }}
+              setup();
+            }})();
+            </script>""", height=0)
+            if st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False):
+                st.session_state[f"crm_workspace_global_search_close_{_bottom_scope}"] = False
 
         for _w in list(_bottom_windows):
             _window_id = str(_w.get("id"))
