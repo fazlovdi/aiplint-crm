@@ -12815,7 +12815,8 @@ def render_client_card_expanded(cl):
                         with _deal_col:
                             _deal_number_raw = str(_deal.get("deal_number", _deal.get("title", "")) or "")
                             _deal_number_raw = re.sub(r"^\s*сделка\s*[:№#-]?\s*", "", _deal_number_raw, flags=re.IGNORECASE)
-                            _deal_number = html.escape(_deal_number_raw)
+                            _deal_number_raw = re.sub(r"^\s*№\s*", "", _deal_number_raw)
+                            _deal_number = html.escape("№" + _deal_number_raw)
                             _deal_title = html.escape(str(_deal.get("deal_title", "") or ""))
                             _deal_status = html.escape(str(_deal.get("status", "Новый") or "Новый"))
                             st.markdown(f"**{_deal_number}** · {_deal_title} <span style='color:#7B8490'>({ _deal_status })</span>", unsafe_allow_html=True)
