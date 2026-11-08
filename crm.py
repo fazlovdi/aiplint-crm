@@ -8626,6 +8626,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     )
                     _picker_clients = list(st.session_state.crm_store.get("clients", []) or [])
 
+                    # Use the same ordering as the main Clients tab.
+                    _picker_sort_mode = st.session_state.get("client_sort_select", "По дате изменения")
+                    if _picker_sort_mode == "По дате изменения":
+                        _picker_clients.sort(key=lambda cl: cl.get("last_modified", ""), reverse=True)
+                    elif _picker_sort_mode == "По дате создания":
+                        _picker_clients.sort(key=lambda cl: cl.get("created_at", ""), reverse=True)
+                    elif _picker_sort_mode == "По алфавиту":
+                        _picker_clients.sort(key=lambda cl: cl.get("name", "").lower())
+                    elif _picker_sort_mode == "По городу":
+                        _picker_clients.sort(key=lambda cl: (cl.get("city", "") or "").strip().lower())
+
                     # Do not show clients that already have a window open.
                     _picker_open_client_ids = set()
                     for _picker_window in st.session_state.get("_crm_windows", []) or []:
