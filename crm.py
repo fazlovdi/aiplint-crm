@@ -13701,8 +13701,12 @@ def deal_create_task_dialog(deal_id, client_id):
         st.session_state.pop(f"nt_prod_cdt_{deal_id}", None)
         st.session_state["_in_dialog"] = False
         if _crm_close_created_task_form_tab():
-            st.session_state.pop("dialog_task_key", None)
-            st.session_state.pop("_open_created_task", None)
+            _created_client = get_client_by_id(client_id)
+            _created_deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id")) == str(deal_id)), None)
+            _created_key = f"created_{_created_task.get('task_number', '')}"
+            _created_args = (_created_task, _created_client, _created_deal, _created_key)
+            _created_sig = (_crm_dialog_signature_value(_created_args), _crm_dialog_signature_value({}))
+            _crm_workspace_open_dialog({"name": "task_detail_dialog", "title": "Задача", "width": "large", "args": _created_args, "kwargs": {}, "signature": _created_sig}, client_id=client_id, from_host=True)
         else:
             _push_dialog_return()
             st.session_state["dialog_task_key"] = f"cdt_{deal_id}_{_created_task.get('task_number', '')}"
@@ -13773,8 +13777,12 @@ def client_create_task_dialog(cl_id):
         st.session_state.pop("dialog_create_client_task_client_id", None)
         st.session_state["_in_dialog"] = False
         if _crm_close_created_task_form_tab():
-            st.session_state.pop("dialog_task_key", None)
-            st.session_state.pop("_open_created_task", None)
+            _created_client = get_client_by_id(cl_id)
+            _created_deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id")) == str(_created_task.get("deal_id", ""))), None)
+            _created_key = f"created_{_created_task.get('task_number', '')}"
+            _created_args = (_created_task, _created_client, _created_deal, _created_key)
+            _created_sig = (_crm_dialog_signature_value(_created_args), _crm_dialog_signature_value({}))
+            _crm_workspace_open_dialog({"name": "task_detail_dialog", "title": "Задача", "width": "large", "args": _created_args, "kwargs": {}, "signature": _created_sig}, client_id=cl_id, from_host=True)
         else:
             _push_dialog_return()
             st.session_state["dialog_task_key"] = f"cct_{cl_id}_{_created_task.get('task_number', '')}"
@@ -13859,8 +13867,12 @@ def client_create_deal_task_dialog(cl_id):
         st.session_state.pop("dialog_create_client_task_deal_select_cl_id", None)
         st.session_state["_in_dialog"] = False
         if _crm_close_created_task_form_tab():
-            st.session_state.pop("dialog_task_key", None)
-            st.session_state.pop("_open_created_task", None)
+            _created_client = get_client_by_id(cl_id)
+            _created_deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id")) == str(_created_task.get("deal_id", ""))), None)
+            _created_key = f"created_{_created_task.get('task_number', '')}"
+            _created_args = (_created_task, _created_client, _created_deal, _created_key)
+            _created_sig = (_crm_dialog_signature_value(_created_args), _crm_dialog_signature_value({}))
+            _crm_workspace_open_dialog({"name": "task_detail_dialog", "title": "Задача", "width": "large", "args": _created_args, "kwargs": {}, "signature": _created_sig}, client_id=cl_id, from_host=True)
         else:
             _push_dialog_return()
             st.session_state["dialog_task_key"] = f"ccdt_{cl_id}_{_created_task.get('task_number', '')}"
