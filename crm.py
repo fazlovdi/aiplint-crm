@@ -8812,7 +8812,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
                     if(!root) return;
                     root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function(el){{
-                      if(el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) el.textContent='Нажми Ввод для поиска';
+
                       ['title','aria-label'].forEach(function(attr){{
                         var value=el.getAttribute(attr);
                         if(value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr,'Нажми Ввод для поиска');
@@ -15889,9 +15889,7 @@ if st.session_state.active_tab == "Клиенты":
               var root = w.document.querySelector('.st-key-search_input_key');
               if (!root) return;
               root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
-                if (el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) {
-                  el.textContent = 'Нажми Ввод для поиска';
-                }
+
                 ['title', 'aria-label'].forEach(function (attr) {
                   var value = el.getAttribute(attr);
                   if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) {
@@ -16304,7 +16302,7 @@ elif st.session_state.active_tab == "Сделки":
                   var root = w.document.querySelector('.st-key-deal_tab_search');
                   if (!root) return;
                   root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
-                    if (el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) el.textContent = 'Нажми Ввод для поиска';
+
                     ['title', 'aria-label'].forEach(function (attr) {
                       var value = el.getAttribute(attr);
                       if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
@@ -16661,7 +16659,7 @@ elif st.session_state.active_tab == "Задачи":
                   var root = w.document.querySelector('.st-key-task_search_input');
                   if (!root) return;
                   root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
-                    if (el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) el.textContent = 'Нажми Ввод для поиска';
+
                     ['title', 'aria-label'].forEach(function (attr) {
                       var value = el.getAttribute(attr);
                       if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
