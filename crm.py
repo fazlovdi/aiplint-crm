@@ -3805,11 +3805,12 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             if _is_client_samples_task:
                 st.markdown(f"""<style>
                 .st-key-task_detail_{key_prefix} .stMarkdown:has(.created-date) {{
-                    margin-bottom: 0.9rem !important;
+                    margin-bottom: 1.4rem !important;
                 }}
                 .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown:has(button.custom-print-btn) {{
                     justify-content: flex-end !important;
                     padding-right: 0 !important;
+                    transform: translateX(0.45rem) !important;
                 }}
                 .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button.custom-print-btn {{
                     min-height: 28px !important;
