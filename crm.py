@@ -11690,26 +11690,27 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
                     st.rerun()
         with right_col:
-            if d.get("deal_comments"):
-                st.markdown("**Комментарии:**")
-                render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
-            dc_clr_key = f"dls_clr_dc_{deal_id}"
-            if st.session_state.get(dc_clr_key):
-                st.session_state[f"dls_dc_input_{deal_id}"] = ""
-                st.session_state[dc_clr_key] = False
-            nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
-            _crm_mark_widget_changed(f"dls_dc_input_{deal_id}", bool(str(nc or "").strip()))
-            _dcc1, _dcc_btn, _dcc2 = st.columns([1, 2, 1])
-            with _dcc_btn:
-                _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
-            if _dcc_clicked:
-                if nc.strip():
-                    d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
-                    d["last_modified"] = now_str()
-                    st.session_state[dc_clr_key] = True
-                    commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
-                else:
-                    st.warning("Введите текст")
+            with st.container(border=True):
+                if d.get("deal_comments"):
+                    st.markdown("**Комментарии:**")
+                    render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
+                dc_clr_key = f"dls_clr_dc_{deal_id}"
+                if st.session_state.get(dc_clr_key):
+                    st.session_state[f"dls_dc_input_{deal_id}"] = ""
+                    st.session_state[dc_clr_key] = False
+                nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+                _crm_mark_widget_changed(f"dls_dc_input_{deal_id}", bool(str(nc or "").strip()))
+                _dcc1, _dcc_btn, _dcc2 = st.columns([1, 2, 1])
+                with _dcc_btn:
+                    _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
+                if _dcc_clicked:
+                    if nc.strip():
+                        d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
+                        d["last_modified"] = now_str()
+                        st.session_state[dc_clr_key] = True
+                        commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
+                    else:
+                        st.warning("Введите текст")
             st.markdown("---")
             st.markdown("**Файлы сделки:**")
             st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
