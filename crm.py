@@ -11023,7 +11023,17 @@ def render_deal_products_block(d, key_prefix):
             if calc.get("deleted"):
                 deleted_col, restore_col = st.columns([3.2, 1.0])
                 with deleted_col:
-                    _deleted_calc_name = re.sub(r"^Расчёт\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                    _deleted_calc_name = re.sub(r"^Расчёт\s*№?\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                    _deleted_calc_date = str(calc.get("created_at") or "")[:19]
+                    try:
+                        _deleted_calc_date = datetime.strptime(_deleted_calc_date, "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y")
+                    except (TypeError, ValueError):
+                        try:
+                            _deleted_calc_date = datetime.strptime(_deleted_calc_date, "%Y-%m-%d").strftime("%d.%m.%Y")
+                        except (TypeError, ValueError):
+                            _deleted_calc_date = ""
+                    if _deleted_calc_date:
+                        _deleted_calc_name = f"{_deleted_calc_name} от {_deleted_calc_date}"
                     st.markdown(
                         f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0;'>{html.escape(_deleted_calc_name)} — {calc['total']:,.0f} ₽ (удалён)</div>".replace(",", " "),
                         unsafe_allow_html=True,
@@ -11041,8 +11051,7 @@ def render_deal_products_block(d, key_prefix):
             _calc_paid_badge = _calculation_payment_badge(calc)
             name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
             with name_col:
-                _calc_display_name = re.sub(r"^Расчёт\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
-                st.markdown(f"**{html.escape(_calc_display_name)}**")
+                _calc_display_name = re.sub(r"^Расчёт\s*№?\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
                 _calc_created_raw = str(calc.get("created_at") or "")[:19]
                 _calc_created_display = ""
                 for _calc_date_format in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
@@ -11051,8 +11060,8 @@ def render_deal_products_block(d, key_prefix):
                         break
                     except (TypeError, ValueError):
                         pass
-                if _calc_created_display:
-                    st.caption(f"Создан: {_calc_created_display}")
+                _calc_title = f"{_calc_display_name} от {_calc_created_display}" if _calc_created_display else _calc_display_name
+                st.markdown(f"**{html.escape(_calc_title)}**")
             with total_col:
                 st.markdown(f"{calc['total']:,.0f} ₽".replace(",", " "))
             with edit_col:
