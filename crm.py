@@ -3777,19 +3777,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
-            _is_client_samples_task = not d and _tp == "Отправить образцы"
-            if _is_client_samples_task:
-                st.markdown(f"""<style>
-                .st-key-task_detail_{key_prefix} .created-date {{
-                    margin-bottom: 0.7rem !important;
-                }}
-                .st-key-task_detail_{key_prefix} .st-key-btn_dl_click_{key_prefix} {{
-                    margin-top: 0.65rem !important;
-                }}
-                .st-key-task_detail_{key_prefix} button.custom-print-btn {{
-                    margin-right: 1.25rem !important;
-                }}
-                </style>""", unsafe_allow_html=True)
             _task_header_row, _task_print_col = st.columns([5, 1])
             with _task_header_row:
                 st.markdown(f"""<style>
