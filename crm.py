@@ -3925,6 +3925,35 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
                             pass  # Нет дополнительных полей статуса для обычной задачи
+
+                    # Поля отправки заказа отображаются и для задачи, привязанной к сделке.
+                    # При редактировании их заменяют поля формы выше.
+                    if not show_edit_task:
+                        st.markdown("---")
+                        if t.get("products"):
+                            st.markdown("**Товары:**")
+                            for _product_line in str(t.get("products", "")).splitlines():
+                                if _product_line.strip():
+                                    st.markdown(f"- {html.escape(_product_line.strip())}", unsafe_allow_html=True)
+                        if _tp in ("Отправить заказ", "Отправить образцы"):
+                            st.markdown(f"**Город:** {t.get('ship_city', '') or '—'}")
+                        if t.get("ship_addr"):
+                            st.markdown(f"**Адрес:** {t['ship_addr']}")
+                        if t.get("receiver"):
+                            st.markdown(f"**Получатель:** {t['receiver']} ({t.get('receiver_phone', '')})")
+                        if t.get("ship_pay"):
+                            st.markdown(f"**Оплата:** {t['ship_pay']}")
+                        _view_delivery_col, _view_track_col = st.columns([1, 1])
+                        with _view_delivery_col:
+                            st.markdown(f"**Способ доставки:** {t.get('ship_method', 'Не выбрано') or 'Не выбрано'}")
+                        with _view_track_col:
+                            st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
+                        if t.get("order_amount", 0) > 0:
+                            st.markdown(f"**Сумма:** {t['order_amount']:,.0f} руб.".replace(",", " "))
+                        if t.get("ready_to_ship"):
+                            st.markdown('<span class="ready-badge">Готово к отправке</span>', unsafe_allow_html=True)
+                        _task_description = str(t.get("task_comment", "") or "").strip()
+                        st.markdown(f"**Описание:** {linkify_text(_task_description) if _task_description else '—'}", unsafe_allow_html=True)
                 else:
                     _hdr_inner, _status_inner = st.columns([3, 2])
                     with _hdr_inner:
