@@ -8520,15 +8520,15 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         flex:0 0 auto !important; flex-shrink:0 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
-    /* Left-align labels in the client-object dropdown buttons only. */
-    [class*="st-key-crm_obj_"] button {
-        display:flex !important;
-        align-items:center !important;
+    /* Left-align text in buttons inside the client-object dropdown. */
+    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button,
+    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button > div,
+    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button [data-testid="stMarkdownContainer"] {
         justify-content:flex-start !important;
         text-align:left !important;
     }
-    [class*="st-key-crm_obj_"] button > div,
-    [class*="st-key-crm_obj_"] button p {
+    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button [data-testid="stMarkdownContainer"],
+    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button p {
         width:100% !important;
         text-align:left !important;
         margin-left:0 !important;
