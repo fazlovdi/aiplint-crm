@@ -12459,7 +12459,11 @@ def render_deal_detail(d, cl, cu, key_prefix):
 
 
 def render_client_card_expanded(cl):
-    with st.container(border=True):
+    with st.container(border=True, key=f"client_detail_{cl['id']}"):
+        st.markdown(
+            f"<style>.st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; }}</style>",
+            unsafe_allow_html=True,
+        )
         # Две колонки: заголовок и информация слева, комментарии и файлы справа
         show_edit = st.session_state.get(f"show_edit_{cl['id']}", False)
         _left_col, _right_col = st.columns(2)
