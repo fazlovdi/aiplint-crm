@@ -3923,6 +3923,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
+                            pass  # Нет дополнительных полей статуса для обычной задачи
                 else:
                     _hdr_inner, _status_inner = st.columns([3, 2])
                     with _hdr_inner:
