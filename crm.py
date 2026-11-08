@@ -3930,141 +3930,141 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             st.markdown(f"**Тема:** {t.get('text', '')}")
                         st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                         if not show_edit_task:
-                    st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
-                    mgr_options = get_managers_list()
-                    current_mgr = t.get("manager", "")
-                    current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
-                    _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
-                    _task_mgr_model_key = f"_task_mgr_last_model_{key_prefix}"
-                    # Обновляем поле только при изменении сохранённого ответственного.
-                    # Обычный rerun после выбора менеджера не сбрасывает выбор пользователя.
-                    if st.session_state.get(_task_mgr_model_key) != current_mgr:
-                        st.session_state[_task_mgr_widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
-                        st.session_state[_task_mgr_model_key] = current_mgr
-                    if str(st.session_state.get(_task_mgr_widget_key, current_mgr) or "") != str(current_mgr or ""):
-                        st.markdown(f"<style>.st-key-{_task_mgr_widget_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
-                    new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
-                    _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
-                    if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
-                        t["manager"] = new_mgr
-                        t["delegated_to"] = new_mgr
-                        t["in_work"] = False
-                        t["done"] = False
-                        t["reviewed"] = False
-                        t["last_modified"] = now_str()
-                        add_notification(new_mgr, f"Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}", f"📌 Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}")
-                        cl["last_modified"] = now_str()
-                        if d: d["last_modified"] = now_str()
-                        commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
-                if show_edit_task:
-                    # Inline editing mode
-                    et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
-                    _crm_mark_widget_changed(f"edit_type_{key_prefix}", str(et_type) != str(t.get("type", "Связаться")))
-                    if et_type not in ("Отправить заказ", "Отправить образцы"):
-                        et_topic = st.text_input("Тема:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_topic_{key_prefix}", str(et_topic) != str(t.get("text", "")))
-                    else:
-                        et_topic = et_type
-                    et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
-                    _crm_mark_widget_changed(f"edit_mgr_{key_prefix}", str(et_mgr) != str(t.get("manager", "")))
-                    # Описание расположено рядом с основными полями, чтобы его было легко заметить.
-                    et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
-                    _crm_mark_widget_changed(f"edit_comment_{key_prefix}", str(et_comment) != str(t.get("task_comment", "")))
-                    if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
-                        _selected_calc_id_edit, et_products = render_task_products_editor(
-                            d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
-                        )
-                        _crm_mark_widget_changed(f"edit_order_calc_{key_prefix}", str(_selected_calc_id_edit or "") != str(t.get("calculation_id", "") or ""))
-                        _crm_mark_widget_changed(f"edit_prod_{key_prefix}", str(et_products or "") != str(t.get("products", "") or ""))
-                        et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_city_{key_prefix}", str(et_city) != str(t.get("ship_city", "")))
-                        et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_addr_{key_prefix}", str(et_addr) != str(t.get("ship_addr", "")))
-                        et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_recv_{key_prefix}", str(et_recv) != str(t.get("receiver", "")))
-                        et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_rphone_{key_prefix}", str(et_rphone) != str(t.get("receiver_phone", "")))
-                        et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
-                        _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
-                        _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
-                        _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _amount_key_edit = f"edit_amount_{key_prefix}"
-                        if _auto_amount_edit > 0:
-                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
-                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                        _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
-                        _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
-                    else:
-                        et_products = t.get("products", "")
-                        et_city = t.get("ship_city", "")
-                        et_addr = t.get("ship_addr", "")
-                        et_recv = t.get("receiver", "")
-                        et_rphone = t.get("receiver_phone", "")
-                        et_pay = t.get("ship_pay", "")
-                        et_amount = str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""
-                    _edit_delivery_col, _edit_track_col = st.columns([1, 1])
-                    with _edit_delivery_col:
-                        et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
-                    with _edit_track_col:
-                        et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
-                    _save_col, _cancel_col = st.columns(2)
-                    with _save_col:
-                        if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
-                            if not et_mgr:
-                                st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                            st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
+                            mgr_options = get_managers_list()
+                            current_mgr = t.get("manager", "")
+                            current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
+                            _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
+                            _task_mgr_model_key = f"_task_mgr_last_model_{key_prefix}"
+                            # Обновляем поле только при изменении сохранённого ответственного.
+                            # Обычный rerun после выбора менеджера не сбрасывает выбор пользователя.
+                            if st.session_state.get(_task_mgr_model_key) != current_mgr:
+                                st.session_state[_task_mgr_widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
+                                st.session_state[_task_mgr_model_key] = current_mgr
+                            if str(st.session_state.get(_task_mgr_widget_key, current_mgr) or "") != str(current_mgr or ""):
+                                st.markdown(f"<style>.st-key-{_task_mgr_widget_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
+                            new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+                            _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
+                            if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
+                                t["manager"] = new_mgr
+                                t["delegated_to"] = new_mgr
+                                t["in_work"] = False
+                                t["done"] = False
+                                t["reviewed"] = False
+                                t["last_modified"] = now_str()
+                                add_notification(new_mgr, f"Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}", f"📌 Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}")
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                        if show_edit_task:
+                            # Inline editing mode
+                            et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
+                            _crm_mark_widget_changed(f"edit_type_{key_prefix}", str(et_type) != str(t.get("type", "Связаться")))
+                            if et_type not in ("Отправить заказ", "Отправить образцы"):
+                                et_topic = st.text_input("Тема:", value=t.get("text", ""), key=f"edit_topic_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_topic_{key_prefix}", str(et_topic) != str(t.get("text", "")))
                             else:
-                                t["text"] = et_topic
-                                t["type"] = et_type
-                                t["manager"] = et_mgr
-                                t["task_comment"] = et_comment
-                                t["products"] = et_products
-                                t["ship_city"] = et_city
-                                t["ship_addr"] = et_addr
-                                t["receiver"] = et_recv
-                                t["receiver_phone"] = et_rphone
-                                t["ship_pay"] = et_pay
-                                t["ship_method"] = et_method
-                                t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
-                                if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
-                                    t["calculation_id"] = str(_selected_calc_id_edit)
-                                t["tk_num"] = et_tk
-                                t["last_modified"] = now_str()
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                st.session_state[f"show_edit_task_{key_prefix}"] = False
-                                commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
-                    with _cancel_col:
-                        if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"edit_cancel_{key_prefix}", use_container_width=True):
-                            st.session_state[f"show_edit_task_{key_prefix}"] = False
-                            _smart_rerun()
-                else:
-                    # Display mode: task topic and type are shown directly under the task number above.
-                    # Deadline: clickable date, no pencil button
-                    show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
-                    if show_edit_dl:
-                        ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
-                        dl_btn_col1, dl_btn_col2 = st.columns(2)
-                        with dl_btn_col1:
-                            if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
-                                t["deadline"] = ndd.isoformat()
-                                t["last_modified"] = now_str()
-                                cl["last_modified"] = now_str()
-                                if d: d["last_modified"] = now_str()
-                                st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                                commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
-                        with dl_btn_col2:
-                            if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
-                                st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                                _smart_rerun()
-                    else:
-                        dl_btn_key = f"btn_dl_click_{key_prefix}"
-                        _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
-                        st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
-                        if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
-                            st.session_state[f"show_edit_dl_{key_prefix}"] = True
-                            _smart_rerun()
+                                et_topic = et_type
+                            et_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0432\u0435\u043d\u043d\u044b\u0439:", get_managers_list(), index=0 if t.get("manager", "") not in get_managers_list() else (get_managers_list()).index(t.get("manager", "")), key=f"edit_mgr_{key_prefix}", placeholder=MGR_PLACEHOLDER)
+                            _crm_mark_widget_changed(f"edit_mgr_{key_prefix}", str(et_mgr) != str(t.get("manager", "")))
+                            # Описание расположено рядом с основными полями, чтобы его было легко заметить.
+                            et_comment = st.text_area("Описание:", value=t.get("task_comment", ""), key=f"edit_comment_{key_prefix}")
+                            _crm_mark_widget_changed(f"edit_comment_{key_prefix}", str(et_comment) != str(t.get("task_comment", "")))
+                            if et_type in ("\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u0440\u0430\u0437\u0446\u044b"):
+                                _selected_calc_id_edit, et_products = render_task_products_editor(
+                                    d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
+                                )
+                                _crm_mark_widget_changed(f"edit_order_calc_{key_prefix}", str(_selected_calc_id_edit or "") != str(t.get("calculation_id", "") or ""))
+                                _crm_mark_widget_changed(f"edit_prod_{key_prefix}", str(et_products or "") != str(t.get("products", "") or ""))
+                                et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_city_{key_prefix}", str(et_city) != str(t.get("ship_city", "")))
+                                et_addr = st.text_area("\u0410\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_addr_{key_prefix}", str(et_addr) != str(t.get("ship_addr", "")))
+                                et_recv = st.text_input("\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_recv_{key_prefix}", str(et_recv) != str(t.get("receiver", "")))
+                                et_rphone = st.text_input("\u0422\u0435\u043b\u0435\u0444\u043e\u043d \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044f:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_rphone_{key_prefix}", str(et_rphone) != str(t.get("receiver_phone", "")))
+                                et_pay = st.selectbox("\u041e\u043f\u043b\u0430\u0442\u0430:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="\u0423\u043a\u0430\u0436\u0438 \u043f\u043b\u0430\u0442\u0435\u043b\u044c\u0449\u0438\u043a\u0430")
+                                _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
+                                _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
+                                _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
+                                _amount_key_edit = f"edit_amount_{key_prefix}"
+                                if _auto_amount_edit > 0:
+                                    st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
+                                et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
+                                _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
+                                _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
+                            else:
+                                et_products = t.get("products", "")
+                                et_city = t.get("ship_city", "")
+                                et_addr = t.get("ship_addr", "")
+                                et_recv = t.get("receiver", "")
+                                et_rphone = t.get("receiver_phone", "")
+                                et_pay = t.get("ship_pay", "")
+                                et_amount = str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""
+                            _edit_delivery_col, _edit_track_col = st.columns([1, 1])
+                            with _edit_delivery_col:
+                                et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
+                            with _edit_track_col:
+                                et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                                _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
+                            _save_col, _cancel_col = st.columns(2)
+                            with _save_col:
+                                if st.button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
+                                    if not et_mgr:
+                                        st.warning("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0433\u043e")
+                                    else:
+                                        t["text"] = et_topic
+                                        t["type"] = et_type
+                                        t["manager"] = et_mgr
+                                        t["task_comment"] = et_comment
+                                        t["products"] = et_products
+                                        t["ship_city"] = et_city
+                                        t["ship_addr"] = et_addr
+                                        t["receiver"] = et_recv
+                                        t["receiver_phone"] = et_rphone
+                                        t["ship_pay"] = et_pay
+                                        t["ship_method"] = et_method
+                                        t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
+                                        if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
+                                            t["calculation_id"] = str(_selected_calc_id_edit)
+                                        t["tk_num"] = et_tk
+                                        t["last_modified"] = now_str()
+                                        cl["last_modified"] = now_str()
+                                        if d: d["last_modified"] = now_str()
+                                        st.session_state[f"show_edit_task_{key_prefix}"] = False
+                                        commit_and_rerun(st.session_state.crm_store, "\u0417\u0430\u0434\u0430\u0447\u0430 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0430")
+                            with _cancel_col:
+                                if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"edit_cancel_{key_prefix}", use_container_width=True):
+                                    st.session_state[f"show_edit_task_{key_prefix}"] = False
+                                    _smart_rerun()
+                        else:
+                            # Display mode: task topic and type are shown directly under the task number above.
+                            # Deadline: clickable date, no pencil button
+                            show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
+                            if show_edit_dl:
+                                ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
+                                dl_btn_col1, dl_btn_col2 = st.columns(2)
+                                with dl_btn_col1:
+                                    if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
+                                        t["deadline"] = ndd.isoformat()
+                                        t["last_modified"] = now_str()
+                                        cl["last_modified"] = now_str()
+                                        if d: d["last_modified"] = now_str()
+                                        st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                                        commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                                with dl_btn_col2:
+                                    if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
+                                        st.session_state[f"show_edit_dl_{key_prefix}"] = False
+                                        _smart_rerun()
+                            else:
+                                dl_btn_key = f"btn_dl_click_{key_prefix}"
+                                _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
+                                st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
+                                if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
+                                    st.session_state[f"show_edit_dl_{key_prefix}"] = True
+                                    _smart_rerun()
 
                 with _status_inner:
                     if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
