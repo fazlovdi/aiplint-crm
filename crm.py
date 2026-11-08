@@ -16094,6 +16094,22 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_item_"][class*="__isactive"] button {
             color:#BC1661 !important; font-weight:600 !important;
         }
+        [class*="st-key-crm_workspace_client_objects_add_"] {
+            flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important;
+            margin:0 !important; padding:0 !important;
+        }
+        [class*="st-key-crm_workspace_client_objects_add_"] > div > button,
+        [class*="st-key-crm_workspace_client_objects_add_"] button[data-testid^="stPopoverButton"] {
+            display:flex !important; box-sizing:border-box !important; align-items:center !important;
+            justify-content:flex-start !important; width:50px !important; min-width:50px !important; max-width:50px !important;
+            height:42px !important; min-height:42px !important; padding:0 0 0 16px !important; margin:0 !important;
+            border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important;
+            background:transparent !important; color:#BC1661 !important; font-size:26px !important; font-weight:400 !important;
+        }
+        [class*="st-key-crm_workspace_client_objects_add_"] button p {
+            font-size:26px !important; line-height:1 !important; margin:0 !important; padding:0 !important; font-weight:400 !important;
+        }
+        [class*="st-key-crm_workspace_client_objects_add_"] button svg { display:none !important; }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] {
             position:absolute !important; top:0 !important; right:0 !important;
             width:96px !important; min-width:96px !important; z-index:10 !important;
