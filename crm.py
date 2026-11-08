@@ -5665,7 +5665,7 @@ def save_data(data):
                     if _old_c.get("change_log", []) == _new_c.get("change_log", []):
                         _client_changes = []
                         _old_client_core = _audit_clean(_old_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "client_files", "requisites"))
-                        _new_client_core = _audit_clean(_new_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "requisites"))
+                        _new_client_core = _audit_clean(_new_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "client_files", "requisites"))
                         _client_labels = {"name":"ФИО / Компания", "phone":"Телефон", "email":"Email", "manager":"Ответственный", "address":"Адрес", "city":"Город", "discount":"Скидка", "category":"Категория", "source":"Источник", "promo_code":"Промокод"}
                         for _field in sorted(set(_old_client_core) | set(_new_client_core)):
                             if _old_client_core.get(_field) != _new_client_core.get(_field):
