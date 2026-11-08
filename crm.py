@@ -8547,8 +8547,9 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
-            st.markdown("**Файлы сделки:**")
-            render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
+            with st.container(border=True):
+                st.markdown("**Файлы сделки:**")
+                render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
             df_ver = st.session_state.deal_file_uploader_ver.get(d["id"], 0)
