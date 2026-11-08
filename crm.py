@@ -3798,6 +3798,33 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _render_task_shipping_fields(t, cl, d, key_prefix)
                     else:
                         render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
+            if not show_edit_task:
+                st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
+                mgr_options = get_managers_list()
+                current_mgr = t.get("manager", "")
+                current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
+                _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
+                _task_mgr_model_key = f"_task_mgr_last_model_{key_prefix}"
+                # Обновляем поле только при изменении сохранённого ответственного.
+                # Обычный rerun после выбора менеджера не сбрасывает выбор пользователя.
+                if st.session_state.get(_task_mgr_model_key) != current_mgr:
+                    st.session_state[_task_mgr_widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
+                    st.session_state[_task_mgr_model_key] = current_mgr
+                if str(st.session_state.get(_task_mgr_widget_key, current_mgr) or "") != str(current_mgr or ""):
+                    st.markdown(f"<style>.st-key-{_task_mgr_widget_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
+                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
+                _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
+                if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
+                    t["manager"] = new_mgr
+                    t["delegated_to"] = new_mgr
+                    t["in_work"] = False
+                    t["done"] = False
+                    t["reviewed"] = False
+                    t["last_modified"] = now_str()
+                    add_notification(new_mgr, f"Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}", f"📌 Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}")
+                    cl["last_modified"] = now_str()
+                    if d: d["last_modified"] = now_str()
+                    commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
             if show_edit_task:
                 # Inline editing mode
                 et_type = st.selectbox("\u0422\u0438\u043f:", TASK_TYPES, index=TASK_TYPES.index(t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f")) if t.get("type", "\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f") in TASK_TYPES else 0, key=f"edit_type_{key_prefix}")
@@ -3907,33 +3934,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                         _smart_rerun()
-                # Editable responsible person (replaces delegate button)
-                st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
-                mgr_options = get_managers_list()
-                current_mgr = t.get("manager", "")
-                current_idx = mgr_options.index(current_mgr) if current_mgr in mgr_options else 0
-                _task_mgr_widget_key = f"task_mgr_inline_{key_prefix}"
-                _task_mgr_model_key = f"_task_mgr_last_model_{key_prefix}"
-                # Обновляем поле только при изменении сохранённого ответственного.
-                # Обычный rerun после выбора менеджера не сбрасывает выбор пользователя.
-                if st.session_state.get(_task_mgr_model_key) != current_mgr:
-                    st.session_state[_task_mgr_widget_key] = current_mgr if current_mgr in mgr_options else (mgr_options[0] if mgr_options else "")
-                    st.session_state[_task_mgr_model_key] = current_mgr
-                if str(st.session_state.get(_task_mgr_widget_key, current_mgr) or "") != str(current_mgr or ""):
-                    st.markdown(f"<style>.st-key-{_task_mgr_widget_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
-                new_mgr = st.selectbox("\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:", mgr_options, index=current_idx, key=_task_mgr_widget_key, placeholder=MGR_PLACEHOLDER, label_visibility="collapsed")
-                _delegate_task_clicked = st.button("Делегировать", key=f"task_mgr_delegate_{key_prefix}", type="primary", use_container_width=True)
-                if _delegate_task_clicked and new_mgr and new_mgr != current_mgr:
-                    t["manager"] = new_mgr
-                    t["delegated_to"] = new_mgr
-                    t["in_work"] = False
-                    t["done"] = False
-                    t["reviewed"] = False
-                    t["last_modified"] = now_str()
-                    add_notification(new_mgr, f"Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}", f"📌 Вам делегирована задача №{t.get('task_number', '')}: {t.get('text', '')}")
-                    cl["last_modified"] = now_str()
-                    if d: d["last_modified"] = now_str()
-                    commit_and_rerun(st.session_state.crm_store, "\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
                 st.markdown("---")
                 if t.get('products'):
                     st.markdown("**Товары:**")
