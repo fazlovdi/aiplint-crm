@@ -4010,7 +4010,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
             _task_file_upload_col, _task_file_pick_col = st.columns(2)
             with _task_file_upload_col:
-                if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True):
+                if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True, disabled=not bool(ntf_existing), type="primary" if ntf_existing else "secondary"):
                     if ntf_existing:
                         with st.spinner("Загрузка файлов..."):
                             fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
@@ -6821,7 +6821,7 @@ def internal_task_detail_dialog(it_id):
         _it_files = it.get("it_files", [])
         if _it_files: render_file_thumbs(_it_files, f"itdlg_files_{it['id']}", allow_delete=True, show_desc=False)
         _it_up = st.file_uploader("Загрузить файлы:", key=f"itdlg_up_{it['id']}", accept_multiple_files=True)
-        if st.button("Загрузить", key=f"itdlg_upload_{it['id']}", use_container_width=True):
+        if st.button("Загрузить", key=f"itdlg_upload_{it['id']}", use_container_width=True, disabled=not bool(_it_up), type="primary" if _it_up else "secondary"):
             if _it_up:
                 it.setdefault("it_files", []).extend(normalize_file_list(save_uploaded_files(_it_up, it['id'], "internal")))
                 it["last_modified"] = now_str()
@@ -8364,7 +8364,7 @@ def render_task_form(deal_id, cl_id, key_suffix, default_type="Связатьс�
             _nt_file_ver = st.session_state.get(f"nt_file_ver_{key_suffix}", 0)
             ntf = st.file_uploader("Файлы задачи:", key=f"nt_file_{key_suffix}_{_nt_file_ver}", accept_multiple_files=True)
             _crm_mark_widget_changed(f"nt_file_{key_suffix}_{_nt_file_ver}", bool(ntf))
-            if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True):
+            if st.button("Загрузить", key=f"nt_file_upload_btn_{key_suffix}", use_container_width=True, disabled=not bool(ntf), type="primary" if ntf else "secondary"):
                 if ntf:
                     _new_uploaded_task_files = normalize_file_list(save_uploaded_files(ntf, cl_id, "task_file"))
                     st.session_state.setdefault(f"nt_uploaded_files_{key_suffix}", []).extend(_new_uploaded_task_files)
@@ -8585,7 +8585,7 @@ def render_deal_card_expanded(d, cl):
             df_ver = st.session_state.deal_file_uploader_ver.get(d["id"], 0)
             udf = st.file_uploader("Выберите файлы:", key=f"df_up_{d['id']}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
             _crm_mark_widget_changed(f"df_up_{d['id']}_{df_ver}", bool(udf))
-            if st.button("Загрузить", key=f"df_btn_{d['id']}", use_container_width=True):
+            if st.button("Загрузить", key=f"df_btn_{d['id']}", use_container_width=True, disabled=not bool(udf), type="primary" if udf else "secondary"):
                 if udf:
                     with st.spinner("Загрузка файлов..."):
                         fi_list = save_uploaded_files(udf, d["client_id"], "deal_file")
@@ -11816,7 +11816,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _crm_mark_widget_changed(f"dls_up_{deal_id}_{df_ver}", bool(udf))
                 _du1, _du_btn, _du2 = st.columns([1, 2, 1])
                 with _du_btn:
-                    _du_clicked = st.button("Загрузить", key=f"dls_upbtn_{deal_id}", use_container_width=True)
+                    _du_clicked = st.button("Загрузить", key=f"dls_upbtn_{deal_id}", use_container_width=True, disabled=not bool(udf), type="primary" if udf else "secondary")
                 if _du_clicked:
                     if udf:
                         with st.spinner("Загрузка файлов..."):
@@ -12119,7 +12119,7 @@ def render_client_card_expanded(cl):
             _crm_mark_widget_changed(f"cf_up_{cl['id']}", bool(ucf))
             _sf_sp1, _sf_btn_col, _sf_sp2 = st.columns([1, 2, 1])
             with _sf_btn_col:
-                _sf_clicked = st.button("Сохранить файлы", key=f"cf_btn_{cl['id']}", use_container_width=True)
+                _sf_clicked = st.button("Сохранить файлы", key=f"cf_btn_{cl['id']}", use_container_width=True, disabled=not bool(ucf), type="primary" if ucf else "secondary")
             if _sf_clicked:
                 if ucf:
                     with st.spinner("Загрузка файлов..."):
