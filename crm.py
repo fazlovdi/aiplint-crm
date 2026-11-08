@@ -7779,10 +7779,15 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               ...(panel.matches('[data-testid="stHorizontalBlock"]') ? [panel] : []),
               ...Array.from(panel.querySelectorAll('[data-testid="stHorizontalBlock"]'))
             ];
-            const outer = blocks.find(el =>
-              !el.closest('[class*="st-key-crm_workspace_window_item_"]') &&
-              Array.from(el.children).some(child => child.matches('[class*="st-key-crm_workspace_window_item_"]'))
-            );
+            const outer = blocks
+              .filter(el =>
+                !el.closest('[class*="st-key-crm_workspace_window_item_"]') &&
+                Array.from(el.children).some(child =>
+                  child.matches('[class*="st-key-crm_workspace_window_item_"]') ||
+                  child.querySelector('[class*="st-key-crm_workspace_window_item_"]')
+                )
+              )
+              .sort((a, b) => a.querySelectorAll('[data-testid="stHorizontalBlock"]').length - b.querySelectorAll('[data-testid="stHorizontalBlock"]').length)[0];
             if (!outer) return;
             attach(outer);
             const controls = panel.querySelector('[class*="st-key-crm_workspace_main_expand_wrap"]');
