@@ -3955,7 +3955,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     dl_btn_key = f"btn_dl_click_{key_prefix}"
                                     _dl_date = parse_optional_date(t.get("deadline", ""))
                                     _today_date = moscow_now().date()
-                                    if _dl_date is not None and _dl_date < _today_date:
+                                    if not t.get("done") and _dl_date is not None and _dl_date < _today_date:
                                         _dl_color = "#C62828"
                                     elif _dl_date is not None and _dl_date >= _today_date:
                                         _dl_color = "#2E7D32"
@@ -4156,7 +4156,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     dl_btn_key = f"btn_dl_click_{key_prefix}"
                                     _dl_date = parse_optional_date(t.get("deadline", ""))
                                     _today_date = moscow_now().date()
-                                    if _dl_date is not None and _dl_date < _today_date:
+                                    if not t.get("done") and _dl_date is not None and _dl_date < _today_date:
                                         _dl_color = "#C62828"
                                     elif _dl_date is not None and _dl_date >= _today_date:
                                         _dl_color = "#2E7D32"
