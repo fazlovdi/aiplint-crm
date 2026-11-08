@@ -3335,6 +3335,11 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
 @st.fragment
 def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_size=None):
+    if entity_type == "client":
+        st.markdown(
+            f"<style>.st-key-reminders_{key_prefix} {{ background-color: rgba(13, 148, 136, 0.045) !important; border-radius: 0.5rem !important; }}</style>",
+            unsafe_allow_html=True,
+        )
     with st.container(border=True, key=f"reminders_{key_prefix}"):
         st.markdown(f"""<style>
         .st-key-reminders_{key_prefix} .stHorizontalBlock .stButton button,
