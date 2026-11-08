@@ -8660,23 +8660,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         " ".join([str(_gd.get(_k) or "") for _k in ("id", "deal_number", "title", "deal_title", "topic", "status", "category", "manager", "payment_status")] + [_gd_topic, _gd_number, str((_gc or {}).get("name") or "")]),
                         _gd_entry, (_gc or {}).get("id"), f"deal_{_gd_id}")
 
-                    for _gi, _gt in enumerate(_gc.get("tasks", []) or [] if _gc else []):
-                        if _gt.get("deleted"):
-                            continue
-                        _gt_deal = _global_deals_by_id.get(str(_gt.get("deal_id"))) if _gt.get("deal_id") else None
-                        _gt_number = str(_gt.get("task_number") or _gt.get("id") or "")
-                        _gt_type = str(_gt.get("task_type") or _gt.get("type") or _gt.get("text") or "Задача")
-                        _gt_prefix = (f"deal_task_{_gc.get('id')}_{_gt_number}_{(_gt_deal or {}).get('id', '')}" if _gt_deal else f"client_task_{_gc.get('id')}_{_gt_number}")
-                        _gt_entry_args = (_gt, _gc, _gt_deal, _gt_prefix)
-                        _gt_entry = {
-                            "name": "task_detail_dialog", "title": "Задача", "width": "large",
-                            "args": _gt_entry_args, "kwargs": {},
-                            "signature": (_crm_dialog_signature_value(_gt_entry_args), _crm_dialog_signature_value({})),
-                        }
-                        _global_search_add("Задача", f"Задача · №{_gt_number.lstrip('№')} · {_gt_type} · {_gc.get('name', '')}" + (f" · сделка №{str(_gt_deal.get('deal_number') or _gt_deal.get('id'))}" if _gt_deal else ""),
-                            " ".join(str(_gt.get(_k) or "") for _k in ("id", "task_number", "task_type", "type", "text", "description", "status", "responsible", "comment", "deal_id")) + f" {_gt_type} {_gt_number} {_gc.get('name', '')} {(_gt_deal or {}).get('deal_number', '')} {(_gt_deal or {}).get('topic', '')}",
-                            _gt_entry, _gc.get("id"), f"task_{_gc.get('id')}_{_gt.get('id') or _gt_number}")
-
                     for _gci, _gcalc in enumerate(_gd.get("calculations", []) or []):
                         if _gcalc.get("deleted"):
                             continue
@@ -8694,6 +8677,22 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 
                 for _gc in _global_clients:
                     _gc_id = _gc.get("id")
+                    for _gi, _gt in enumerate(_gc.get("tasks", []) or []):
+                        if _gt.get("deleted"):
+                            continue
+                        _gt_deal = _global_deals_by_id.get(str(_gt.get("deal_id"))) if _gt.get("deal_id") else None
+                        _gt_number = str(_gt.get("task_number") or _gt.get("id") or "")
+                        _gt_type = str(_gt.get("task_type") or _gt.get("type") or _gt.get("text") or "Задача")
+                        _gt_prefix = (f"deal_task_{_gc.get('id')}_{_gt_number}_{(_gt_deal or {}).get('id', '')}" if _gt_deal else f"client_task_{_gc.get('id')}_{_gt_number}")
+                        _gt_entry_args = (_gt, _gc, _gt_deal, _gt_prefix)
+                        _gt_entry = {
+                            "name": "task_detail_dialog", "title": "Задача", "width": "large",
+                            "args": _gt_entry_args, "kwargs": {},
+                            "signature": (_crm_dialog_signature_value(_gt_entry_args), _crm_dialog_signature_value({})),
+                        }
+                        _global_search_add("Задача", f"Задача · №{_gt_number.lstrip('№')} · {_gt_type} · {_gc.get('name', '')}" + (f" · сделка №{str(_gt_deal.get('deal_number') or _gt_deal.get('id'))}" if _gt_deal else ""),
+                            " ".join(str(_gt.get(_k) or "") for _k in ("id", "task_number", "task_type", "type", "text", "description", "status", "responsible", "comment", "deal_id")) + f" {_gt_type} {_gt_number} {_gc.get('name', '')} {(_gt_deal or {}).get('deal_number', '')} {(_gt_deal or {}).get('topic', '')}",
+                            _gt_entry, _gc.get("id"), f"task_{_gc.get('id')}_{_gt.get('id') or _gt_number}")
                     for _gr in (_gc.get("requisites", []) or []):
                         if _gr.get("deleted"):
                             continue
