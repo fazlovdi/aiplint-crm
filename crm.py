@@ -8605,6 +8605,121 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
+        # Глобальный поиск по CRM доступен из нижней панели.
+        with st.popover("⌕", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
+            _global_q = st.text_input(
+                "Поиск по CRM",
+                key=f"crm_workspace_global_search_input_{_bottom_scope}",
+                placeholder="Номер, имя, тема, телефон…",
+                label_visibility="collapsed",
+            ).strip().lower()
+            if _global_q:
+                _global_results = []
+                _global_store = st.session_state.get("crm_store", {}) or {}
+                _global_clients = _global_store.get("clients", []) or []
+                _global_deals = _global_store.get("deals", []) or []
+                _global_clients_by_id = {str(_c.get("id")): _c for _c in _global_clients}
+                _global_deals_by_id = {str(_d.get("id")): _d for _d in _global_deals}
+
+                def _global_search_add(_kind, _label, _haystack, _entry, _client_id, _stable_id):
+                    if _global_q in str(_haystack or "").lower():
+                        _global_results.append({
+                            "kind": _kind, "label": _label, "entry": _entry,
+                            "client_id": _client_id, "stable_id": _stable_id,
+                        })
+
+                for _gc in _global_clients:
+                    _gc_id = _gc.get("id")
+                    _gc_name = str(_gc.get("name") or "Без названия")
+                    _gc_phone = str(_gc.get("phone") or "")
+                    _gc_city = str(_gc.get("city") or "")
+                    _gc_entry_args = (_gc_id,)
+                    _gc_entry = {
+                        "name": "client_detail_dialog", "title": "Карточка клиента", "width": "large",
+                        "args": _gc_entry_args, "kwargs": {},
+                        "signature": (_crm_dialog_signature_value(_gc_entry_args), _crm_dialog_signature_value({})),
+                    }
+                    _global_search_add("Клиент", f"Клиент · {_gc_name} · {_gc_phone} · {_gc_city}",
+                        " ".join(str(_gc.get(_k) or "") for _k in ("id", "name", "phone", "city", "email", "address", "base_comment", "promo_code", "source", "category")),
+                        _gc_entry, _gc_id, f"client_{_gc_id}")
+
+                for _gd in _global_deals:
+                    if _gd.get("deleted"):
+                        continue
+                    _gd_id = _gd.get("id")
+                    _gc = _global_clients_by_id.get(str(_gd.get("client_id")))
+                    _gd_number = str(_gd.get("deal_number") or _gd.get("title") or _gd_id or "")
+                    _gd_topic = str(_gd.get("deal_title") or _gd.get("topic") or "")
+                    _gd_entry_args = (_gd, _gc, st.session_state.get("current_user"), f"deal_{_gd_id}")
+                    _gd_entry = {
+                        "name": "deal_detail_dialog", "title": "Подробности сделки", "width": "large",
+                        "args": _gd_entry_args, "kwargs": {},
+                        "signature": (_crm_dialog_signature_value(_gd_entry_args), _crm_dialog_signature_value({})),
+                    }
+                    _global_search_add("Сделка", f"Сделка · №{_gd_number.lstrip('№')} · {_gd_topic} · {(_gc or {}).get('name', '')}",
+                        " ".join([str(_gd.get(_k) or "") for _k in ("id", "deal_number", "title", "deal_title", "topic", "status", "category", "manager", "payment_status")] + [_gd_topic, _gd_number, str((_gc or {}).get("name") or "")]),
+                        _gd_entry, (_gc or {}).get("id"), f"deal_{_gd_id}")
+
+                    for _gi, _gt in enumerate(_gc.get("tasks", []) or [] if _gc else []):
+                        if _gt.get("deleted"):
+                            continue
+                        _gt_deal = _global_deals_by_id.get(str(_gt.get("deal_id"))) if _gt.get("deal_id") else None
+                        _gt_number = str(_gt.get("task_number") or _gt.get("id") or "")
+                        _gt_type = str(_gt.get("task_type") or _gt.get("type") or _gt.get("text") or "Задача")
+                        _gt_prefix = (f"deal_task_{_gc.get('id')}_{_gt_number}_{(_gt_deal or {}).get('id', '')}" if _gt_deal else f"client_task_{_gc.get('id')}_{_gt_number}")
+                        _gt_entry_args = (_gt, _gc, _gt_deal, _gt_prefix)
+                        _gt_entry = {
+                            "name": "task_detail_dialog", "title": "Задача", "width": "large",
+                            "args": _gt_entry_args, "kwargs": {},
+                            "signature": (_crm_dialog_signature_value(_gt_entry_args), _crm_dialog_signature_value({})),
+                        }
+                        _global_search_add("Задача", f"Задача · №{_gt_number.lstrip('№')} · {_gt_type} · {_gc.get('name', '')}" + (f" · сделка №{str(_gt_deal.get('deal_number') or _gt_deal.get('id'))}" if _gt_deal else ""),
+                            " ".join(str(_gt.get(_k) or "") for _k in ("id", "task_number", "task_type", "type", "text", "description", "status", "responsible", "comment", "deal_id")) + f" {_gt_type} {_gt_number} {_gc.get('name', '')} {(_gt_deal or {}).get('deal_number', '')} {(_gt_deal or {}).get('topic', '')}",
+                            _gt_entry, _gc.get("id"), f"task_{_gc.get('id')}_{_gt.get('id') or _gt_number}")
+
+                    for _gci, _gcalc in enumerate(_gd.get("calculations", []) or []):
+                        if _gcalc.get("deleted"):
+                            continue
+                        _gcalc_id = _gcalc.get("id")
+                        _gcalc_name = str(_gcalc.get("name") or f"Расчёт {_gci + 1}")
+                        _gcalc_args = (str(_gd_id), str(_gcalc_id))
+                        _gcalc_entry = {
+                            "name": "deal_calculation_dialog", "title": "Расчёт", "width": "large",
+                            "args": _gcalc_args, "kwargs": {},
+                            "signature": (_crm_dialog_signature_value(_gcalc_args), _crm_dialog_signature_value({})),
+                        }
+                        _global_search_add("Расчёт", f"Расчёт · №{_gd_number.lstrip('№')} · {_gcalc_name} · {(_gc or {}).get('name', '')}",
+                            " ".join(str(_gcalc.get(_k) or "") for _k in ("id", "name", "title", "number", "comment", "status")) + f" {_gd_number} {_gd_topic} {_gc.get('name', '') if _gc else ''}",
+                            _gcalc_entry, (_gc or {}).get("id"), f"calc_{_gd_id}_{_gcalc_id}")
+
+                for _gc in _global_clients:
+                    _gc_id = _gc.get("id")
+                    for _gr in (_gc.get("requisites", []) or []):
+                        if _gr.get("deleted"):
+                            continue
+                        _gr_id = _gr.get("id")
+                        _gr_args = (_gc_id, False, _gr_id)
+                        _gr_entry = {
+                            "name": "client_requisites_view_dialog", "title": "Реквизиты", "width": "large",
+                            "args": _gr_args, "kwargs": {},
+                            "signature": (_crm_dialog_signature_value(_gr_args), _crm_dialog_signature_value({})),
+                        }
+                        _gr_name = str(_gr.get("legal_name") or "Реквизиты")
+                        _global_search_add("Реквизиты", f"Реквизиты · {_gr_name} · {_gc.get('name', '')}",
+                            " ".join(str(_gr.get(_k) or "") for _k in ("id", "legal_name", "inn", "kpp", "phone", "email", "address", "settlement_account", "bik")) + f" {_gc.get('name', '')}",
+                            _gr_entry, _gc_id, f"req_{_gc_id}_{_gr_id}")
+
+                _global_results.sort(key=lambda _r: (0 if _r["kind"] == "Клиент" else 1, _r["label"].lower()))
+                if not _global_results:
+                    st.caption("Совпадений не найдено")
+                else:
+                    st.caption(f"Найдено: {len(_global_results)}")
+                    with st.container(height=360, key=f"crm_workspace_global_search_results_{_bottom_scope}"):
+                        for _gri, _grs in enumerate(_global_results[:60]):
+                            if st.button(_grs["label"], key=f"crm_workspace_global_search_result_{_bottom_scope}_{_grs['stable_id']}", use_container_width=True):
+                                _crm_workspace_open_dialog(_grs["entry"], client_id=_grs["client_id"])
+                                st.rerun()
+
         for _w in list(_bottom_windows):
             _window_id = str(_w.get("id"))
             _is_statistics_window = any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
