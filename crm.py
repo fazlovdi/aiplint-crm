@@ -3337,7 +3337,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_size=None):
     if entity_type == "client":
         st.markdown(
-            f"<style>.st-key-reminders_{key_prefix} {{ background-color: rgba(13, 148, 136, 0.045) !important; border-radius: 0.5rem !important; }}</style>",
+            f"<style>.st-key-reminders_{key_prefix} {{ background-color: rgba(139, 92, 246, 0.065) !important; border-radius: 0.5rem !important; }}</style>",
             unsafe_allow_html=True,
         )
     with st.container(border=True, key=f"reminders_{key_prefix}"):
@@ -12682,7 +12682,7 @@ def render_client_card_expanded(cl):
                             st.rerun()
             # Разделитель под кнопкой редактирования
             st.markdown("---")
-            render_reminders("client", cl.get("id", ""), cl.get("name", "Клиент"), f"client_{cl.get('id')}")
+            render_reminders("client", cl.get("id", ""), cl.get("name", "Клиент"), f"client_{cl.get('id')}", heading_size="1.05rem")
         with _right_col:
             render_client_comments_panel(cl)
             # Разделитель перед файлами
