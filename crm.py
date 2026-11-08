@@ -7599,10 +7599,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     [class*="st-key-crm_workspace_bottom_"] {
-        display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
+        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         align-items:center !important; justify-content:flex-start !important;
-        gap:4px !important; column-gap:4px !important; row-gap:4px !important;
-        width:100% !important; overflow:visible !important;
+        gap:4px !important; column-gap:4px !important; row-gap:0 !important;
+        width:100% !important; overflow-x:auto !important; overflow-y:hidden !important;
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
@@ -7640,7 +7640,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
-    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=True, gap=None, horizontal_alignment="left"):
+    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         for _w in list(_bottom_windows):
@@ -15704,11 +15704,11 @@ def _crm_render_workspace_fragment():
         /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
         [class*="st-key-crm_workspace_tabbar_"] { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
         [class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"] {
-            display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
+            display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
             gap:0 !important; column-gap:0 !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
             border-bottom:0 !important; padding:0.15rem 0 0 !important;
-            width:100% !important; overflow:visible !important;
+            width:100% !important; overflow-x:auto !important; overflow-y:hidden !important;
         }
         /* Each tab container must occupy only its own content width, not share
            the available row width with neighboring tabs. */
@@ -15787,12 +15787,14 @@ def _crm_render_workspace_fragment():
             width:31px !important; min-width:31px !important; max-width:31px !important;
             visibility:visible !important; opacity:1 !important; overflow:visible !important;
         }
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] [data-testid="stBaseButton-secondary"],
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button {
             display:flex !important; visibility:visible !important; opacity:1 !important;
-            width:31px !important; min-width:31px !important; max-width:31px !important;
+            flex:0 0 31px !important; width:31px !important; min-width:31px !important; max-width:31px !important;
             height:30px !important; min-height:30px !important; padding:0 !important;
             align-items:center !important; justify-content:center !important;
-            color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
+            color:#8A94A3 !important; -webkit-text-fill-color:#8A94A3 !important;
+            font-size:18px !important; line-height:1 !important; overflow:visible !important;
             background:transparent !important; border:0 !important; box-shadow:none !important;
         }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_tab_close_"] button:hover {
@@ -15828,7 +15830,7 @@ def _crm_render_workspace_fragment():
             _tabs = _crm_active_window.get("tabs", [])
             _active_index = max(0, min(int(_crm_active_window.get("active_tab", 0) or 0), len(_tabs)-1)) if _tabs else -1
             _tab_count = len(_tabs)
-            with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=True, gap=None, horizontal_alignment="left"):
+            with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:30]
                     with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
