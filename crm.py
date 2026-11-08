@@ -7609,7 +7609,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] {
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         align-items:center !important; justify-content:flex-start !important;
-        gap:0 !important; column-gap:0 !important; row-gap:0 !important;
+        gap:1px !important; column-gap:1px !important; row-gap:0 !important;
         width:100% !important; overflow-x:auto !important;
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
@@ -7626,7 +7626,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         box-shadow:none !important; outline:0 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
-        display:flex !important; flex-wrap:nowrap !important; gap:0 !important;
+        display:flex !important; flex-wrap:nowrap !important; gap:1px !important;
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         align-items:center !important; overflow:visible !important;
     }
@@ -15713,7 +15713,7 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
         [class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"] {
             display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
-            gap:0 !important; column-gap:0 !important; row-gap:0 !important;
+            gap:1px !important; column-gap:1px !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
             border-bottom:0 !important; padding:0.15rem 0 0 !important;
             width:100% !important; overflow-x:auto !important;
