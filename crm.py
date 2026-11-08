@@ -7644,6 +7644,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:active { color:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] p { margin:0 !important; padding:0 !important; line-height:1 !important; }
+    /* Apply close-icon styling by its own stable key as well: Streamlit may wrap
+       horizontal containers differently, so relying on the full ancestor chain
+       can leave the close button inheriting global button styles. */
+    [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; }
+    [class*="st-key-crm_workspace_taskbar_close_"] button,
+    [class*="st-key-crm_workspace_taskbar_close_"] button p { color:#BC1661 !important; font-size:18px !important; line-height:1 !important; }
+    [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
