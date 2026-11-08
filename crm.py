@@ -13130,8 +13130,41 @@ def render_client_card_expanded(cl):
                         st.rerun()
                 if st.session_state.user_role in ("admin", "director"):
                     st.markdown("---")
+                    # Явно возвращаем видимость кнопки подтверждения удаления:
+                    # некоторые общие CSS-правила диалогов могли сделать её текст/фон невидимыми.
+                    _del_cli_btn_key = f"del_cli_{cl['id']}"
+                    st.markdown(f"""
+                    <style>
+                    .st-key-{_del_cli_btn_key} {{
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        height: auto !important;
+                        max-height: none !important;
+                        overflow: visible !important;
+                    }}
+                    .st-key-{_del_cli_btn_key} button,
+                    .st-key-{_del_cli_btn_key} button[kind="primary"] {{
+                        display: flex !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        color: #FFFFFF !important;
+                        background: #bc1661 !important;
+                        border: 1px solid #bc1661 !important;
+                        min-height: 40px !important;
+                        height: auto !important;
+                        width: 100% !important;
+                    }}
+                    .st-key-{_del_cli_btn_key} button p,
+                    .st-key-{_del_cli_btn_key} button span {{
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        color: #FFFFFF !important;
+                    }}
+                    </style>
+                    """, unsafe_allow_html=True)
                     cdl = st.checkbox("Подтверждаю удаление клиента", key=f"cdl_{cl['id']}")
-                    if cdl and st.button("Удалить клиента", key=f"del_cli_{cl['id']}", use_container_width=True, type="primary"):
+                    if cdl and st.button("Удалить клиента", key=_del_cli_btn_key, use_container_width=True, type="primary"):
                         st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != cl["id"]]
                         st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
                         st.session_state.expanded_client_id = None
