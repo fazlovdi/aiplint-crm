@@ -12695,8 +12695,10 @@ def render_client_card_expanded(cl):
                 st.markdown(f"<style>.st-key-client_detail_{cl['id']} .st-key-cli_{cl['id']} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
                 st.markdown("**Загрузить файлы:**")
-                ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}", accept_multiple_files=True, label_visibility="collapsed")
-                _crm_mark_widget_changed(f"cf_up_{cl['id']}", bool(ucf))
+                _cf_ver_key = f"client_file_uploader_ver_{cl['id']}"
+                _cf_ver = int(st.session_state.get(_cf_ver_key, 0) or 0)
+                ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}_{_cf_ver}", accept_multiple_files=True, label_visibility="collapsed")
+                _crm_mark_widget_changed(f"cf_up_{cl['id']}_{_cf_ver}", bool(ucf))
                 _cf1, _cf_btn, _cf2 = st.columns([1, 2, 1])
                 with _cf_btn:
                     _cf_clicked = st.button("Загрузить", key=f"cf_btn_{cl['id']}", use_container_width=True, disabled=not bool(ucf), type="primary" if ucf else "secondary")
@@ -12708,6 +12710,7 @@ def render_client_card_expanded(cl):
                             cl.setdefault("client_files", []).extend(normalize_file_list(fi_list))
                             cl["last_modified"] = now_str()
                             save_data(st.session_state.crm_store)
+                            st.session_state[_cf_ver_key] = _cf_ver + 1
                             st.toast("Файлы загружены", icon="📁")
                             st.rerun()
                     else:
