@@ -7723,15 +7723,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         on_click=_crm_workspace_close_window_callback,
                         args=(_w.get("id"), in_workspace),
                     )
-        if not in_workspace and any(w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", [])) for w in st.session_state.get("_crm_windows", [])):
-            with st.container(key="crm_workspace_main_expand_wrap"):
-                st.button(
-                    "Развернуть",
-                    key="crm_workspace_main_expand",
-                    type="tertiary",
-                    help="Вернуть последнее окно клиентов",
-                    on_click=_crm_workspace_restore_last_window_callback,
-                )
 
     # Attach scrolling to both copies of the window strip (main page and workspace).
     components.html("""<script>
@@ -7798,7 +7789,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             }
             // Draw a dedicated scrollbar so it remains visible even when Chrome hides native bars.
             panel.style.position = 'relative';
-            panel.style.paddingBottom = '11px';
+            // Reserve real layout space under the buttons; stylesheet padding:0!important otherwise overlaps them.
+            panel.style.setProperty('padding-bottom', '13px', 'important');
             let track = panel.querySelector(':scope > .crm-bottom-visible-track');
             if (!track) {
               track = doc.createElement('div');
@@ -12083,13 +12075,34 @@ def render_client_in_tree(cl):
                     commit_and_rerun(st.session_state.crm_store, "Сделка создана")
 
 def render_client_form(fv):
-    if st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False):
+    _has_minimized_client_window = any(
+        w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
+        for w in st.session_state.get("_crm_windows", [])
+    )
+    if _has_minimized_client_window:
+        _add_client_col, _expand_client_col = st.columns([1, 1], gap="small")
+    else:
+        _add_client_col = st.container()
+        _expand_client_col = None
+    with _add_client_col:
+        _add_client_clicked = st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False)
+    if _expand_client_col is not None:
+        with _expand_client_col:
+            st.button(
+                "Развернуть",
+                key="crm_workspace_main_expand",
+                help="Вернуть последнее окно клиентов",
+                on_click=_crm_workspace_restore_last_window_callback,
+                type="secondary",
+                use_container_width=False,
+            )
+    if _add_client_clicked:
         # Каждое нажатие явно создаёт отдельную вкладку в рабочем окне.
         # Не вызываем add_client_dialog повторно при каждом общем rerun:
         # иначе legacy-вызов перехватывает фокус и не даёт переключать вкладки.
         _open_form_ids = []
         for _state_key in list(st.session_state.keys()):
-            _match = re.fullmatch(r"show_add_client_dialog_(\d+)", str(_state_key))
+            _match = re.fullmatch(r"show_add_client_dialog_(\\d+)", str(_state_key))
             if _match and st.session_state.get(_state_key):
                 _open_form_ids.append(int(_match.group(1)))
         _new_fv = max([int(fv)] + _open_form_ids) + 1
