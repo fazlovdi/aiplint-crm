@@ -15843,6 +15843,35 @@ if st.session_state.active_tab == "Клиенты":
         }
         </style>
         """, unsafe_allow_html=True)
+        # Переименовываем стандартную подсказку Streamlit только у поля поиска клиентов.
+        st.components.v1.html("""<script>
+        (function () {
+          var w = window;
+          try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
+          function renameSearchHint() {
+            try {
+              var root = w.document.querySelector('.st-key-search_input_key');
+              if (!root) return;
+              root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+                if (el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) {
+                  el.textContent = 'Нажми Ввод для поиска';
+                }
+                ['title', 'aria-label'].forEach(function (attr) {
+                  var value = el.getAttribute(attr);
+                  if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) {
+                    el.setAttribute(attr, 'Нажми Ввод для поиска');
+                  }
+                });
+              });
+            } catch (e) {}
+          }
+          renameSearchHint();
+          try {
+            var observer = new w.MutationObserver(renameSearchHint);
+            observer.observe(w.document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+          } catch (e) {}
+        })();
+        </script>""", height=0)
         sq = (_search_input_now or "").strip().lower()
     with _sort_col:
         sort_options = ["По дате изменения", "По дате создания", "По алфавиту", "По городу"]
