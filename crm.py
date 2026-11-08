@@ -3578,14 +3578,14 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
             _shown = f"<s>{_text}</s>" if _deleted else _text
             st.markdown((f"- *{html.escape(_meta)}*: {_shown}" if _meta else f"- {_shown}"), unsafe_allow_html=True)
         with _action:
-            if not _deleted and st.button("×", key=f"soft_comment_del_{key_prefix}_{_i}", help="Удалить комментарий"):
+            if not _deleted and st.button("🗑", key=f"soft_comment_del_{key_prefix}_{_i}", help="Удалить комментарий", use_container_width=True):
                 st.session_state[f"soft_comment_confirm_{key_prefix}_{_i}"] = True
         _ck = f"soft_comment_confirm_{key_prefix}_{_i}"
         if st.session_state.get(_ck) and not _deleted:
             st.caption("Удалить комментарий? Он останется в истории зачёркнутым.")
-            _yes, _no, _confirm_spacer = st.columns([1, 1, 4])
+            _yes, _no, _confirm_spacer = st.columns([2, 1, 3])
             with _yes:
-                if st.button("Подтвердить удаление", key=f"soft_comment_yes_{key_prefix}_{_i}", type="primary"):
+                if st.button("Подтвердить удаление", key=f"soft_comment_yes_{key_prefix}_{_i}", type="primary", use_container_width=True):
                     _item["deleted"] = True
                     _item["deleted_at"] = now_str()
                     _item["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
@@ -12515,14 +12515,14 @@ def add_client_dialog(fv):
                         _pc_line = f"- *{pc.get('time', '')}*: {_pc_text}"
                         st.markdown(f"<s>{_pc_line}</s>" if pc.get("deleted") else _pc_line, unsafe_allow_html=True)
                     with _pc_del:
-                        if not pc.get("deleted") and st.button("×", key=f"pending_comment_delete_{fv}_{_pci}", help="Удалить комментарий"):
+                        if not pc.get("deleted") and st.button("🗑", key=f"pending_comment_delete_{fv}_{_pci}", help="Удалить комментарий", use_container_width=True):
                             st.session_state[f"pending_comment_confirm_{fv}_{_pci}"] = True
                     _pck = f"pending_comment_confirm_{fv}_{_pci}"
                     if st.session_state.get(_pck) and not pc.get("deleted"):
                         st.warning("Удалить комментарий? Он останется зачёркнутым.")
-                        _pc_yes, _pc_no, _pc_confirm_spacer = st.columns([1, 1, 4])
+                        _pc_yes, _pc_no, _pc_confirm_spacer = st.columns([2, 1, 3])
                         with _pc_yes:
-                            if st.button("Подтвердить", key=f"pending_comment_yes_{fv}_{_pci}", type="primary"):
+                            if st.button("Подтвердить", key=f"pending_comment_yes_{fv}_{_pci}", type="primary", use_container_width=True):
                                 pc["deleted"] = True
                                 st.session_state.pop(_pck, None)
                                 st.rerun()
