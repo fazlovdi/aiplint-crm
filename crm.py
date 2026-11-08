@@ -11824,7 +11824,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         with _task_col:
                             _task_number_label = html.escape(str(_task.get("task_number", "")))
                             _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
-                            st.markdown(f"**{_task_number_label}** · {_task_type_label}")
+                            st.markdown(f"**№ {_task_number_label}** · {_task_type_label}")
                         with _date_col:
                             _created = str(_task.get("created_at", "") or "")
                             try:
@@ -13695,7 +13695,7 @@ def client_tasks_dialog(cl_id):
             _done = t.get("done", False)
             _icon = "\u2705" if _done else "\u23f3"
             _deal_num = d.get("deal_number", d.get("title", ""))
-            _label = f"{_icon} Задача \u2116{t.get('task_number', '')} — {t.get('text', '')} | {_fd} | \u2116 {_deal_num}"
+            _label = f"{_icon} Задача \u2116{t.get('task_number', '')} — {t.get('text', '')} | {_fd} | {_deal_num}"
             _bg, _bc = "#F5F6F8", "#C9CFD7"
             if not _done:
                 if is_task_overdue(t): _bg, _bc = "#FFEBEE", "#C62828"
