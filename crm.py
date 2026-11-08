@@ -3775,7 +3775,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     _deal_num = d.get('deal_number', d.get('title', ''))
                     _deal_id = d.get('id')
                     _deal_link_key = f"deal_link_{key_prefix}"
-                    _hdr_inner, _status_inner = st.columns([3, 2])
+                    _hdr_inner, _status_inner = st.columns([1, 1] if _tp in ("Отправить заказ", "Отправить образцы") else [3, 2])
                     with _hdr_inner:
 
 
