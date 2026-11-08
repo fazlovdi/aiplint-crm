@@ -3340,14 +3340,65 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix):
                             st.session_state.pop(del_key, None)
                             st.rerun()
         _send_spacer, _send_col, _send_spacer2 = st.columns([1, 2, 1])
+        _rem_form_key = f"rem_inline_open_{key_prefix}"
         with _send_col:
             if st.button("Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
-                _reminder_args = (str(entity_type), str(entity_id), str(entity_label))
-                if _crm_queue_child_open_if_parent_dirty("create_reminder_dialog", _reminder_args):
-                    return
-                # The decorated dialog routes into the current workspace when invoked
-                # from a client/deal/task tab; it becomes a regular tab, not a separate modal.
-                create_reminder_dialog(*_reminder_args)
+                st.session_state[_rem_form_key] = not st.session_state.get(_rem_form_key, False)
+                st.rerun()
+
+        if st.session_state.get(_rem_form_key, False):
+            st.markdown("**Новое напоминание**")
+            users_for_reminder = [u for u in store.get("users", []) if u.get("login") and u.get("role") != "admin" and u.get("login") != "admin"]
+            key_suffix = f"{entity_type}_{entity_id}"
+            text_key = f"rem_text_{key_suffix}"
+            date_key = f"rem_date_{key_suffix}"
+            time_key = f"rem_time_{key_suffix}"
+            recipient_key = f"rem_recipient_{key_suffix}"
+            _rem_text_value = st.text_area("О чём напомнить?", key=text_key, height=68)
+            c1, c2 = st.columns(2)
+            with c1:
+                due_date = st.date_input("Дата", value=None, format="DD.MM.YYYY", key=date_key)
+            with c2:
+                due_time = st.time_input("Время", value=moscow_now().time().replace(second=0, microsecond=0), key=time_key)
+            names = {u["login"]: u.get("name") or u["login"] for u in users_for_reminder}
+            recipient_options = [""] + [u["login"] for u in users_for_reminder]
+            recipient = st.selectbox("Получатель", recipient_options, index=0,
+                format_func=lambda x: "Выберите получателя" if not x else names.get(x, x),
+                key=recipient_key, placeholder="Выберите получателя")
+            if not users_for_reminder:
+                st.warning("В CRM нет пользователей, которым можно назначить напоминание.")
+            _save_col, _cancel_col = st.columns(2)
+            with _save_col:
+                if st.button("Сохранить напоминание", key=f"rem_save_inline_{key_suffix}", type="primary", use_container_width=True):
+                    errors = []
+                    text_value = str(_rem_text_value or "").strip()
+                    if not text_value:
+                        errors.append("Введите текст напоминания.")
+                    if due_date is None:
+                        errors.append("Выберите дату.")
+                    if not recipient:
+                        errors.append("Выберите получателя.")
+                    if errors:
+                        for error in errors:
+                            st.warning(error)
+                    else:
+                        due = datetime.combine(due_date, due_time).replace(second=0, microsecond=0)
+                        if due <= moscow_now():
+                            st.warning("Выберите дату и время в будущем.")
+                        else:
+                            store.setdefault("reminders", []).append({"id":uuid.uuid4().hex,"entity_type":str(entity_type),"entity_id":str(entity_id),"entity_label":str(entity_label),"text":text_value,"created_at":now_str(),"created_by":st.session_state.get("user_login", ""),"recipient":recipient,"due_at":due.strftime("%Y-%m-%d %H:%M:%S"),"sent":False,"sent_at":""})
+                            save_data(store)
+                            st.session_state[_rem_form_key] = False
+                            for _k in (text_key, date_key, time_key, recipient_key):
+                                st.session_state.pop(_k, None)
+                            st.toast("Напоминание создано", icon="🔔")
+                            st.rerun()
+            with _cancel_col:
+                if st.button("Отмена", key=f"rem_cancel_inline_{key_suffix}", use_container_width=True):
+                    st.session_state[_rem_form_key] = False
+                    for _k in (text_key, date_key, time_key, recipient_key):
+                        st.session_state.pop(_k, None)
+                    st.rerun()
 
 def process_due_reminders():
     """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
