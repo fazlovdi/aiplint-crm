@@ -8786,6 +8786,21 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             (function(){{
               var w=window; try{{if(window.parent&&window.parent!==window)w=window.parent;}}catch(e){{}}
               function setup(){{
+                function renameHint(){{
+                  try {{
+                    var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
+                    if(!root) return;
+                    root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function(el){{
+                      if(el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) el.textContent='Нажми Ввод для поиска';
+                      ['title','aria-label'].forEach(function(attr){{
+                        var value=el.getAttribute(attr);
+                        if(value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr,'Нажми Ввод для поиска');
+                      }});
+                    }});
+                  }} catch(e) {{}}
+                }}
+                renameHint();
+                try{{new w.MutationObserver(renameHint).observe(w.document.body,{{childList:true,subtree:true,characterData:true,attributes:true}});}}catch(e){{}}
                 var popSelector='[class*="st-key-crm_workspace_global_search_{_bottom_scope}"]';
                 var inputSelector='[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"] input';
                 var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
@@ -16259,6 +16274,28 @@ elif st.session_state.active_tab == "Сделки":
         fc1, fc2, fc3 = st.columns([3, 2.4, 2])
         with fc1:
             _deal_search_now = st.text_input("Поиск", key="deal_tab_search", placeholder="Поиск...", label_visibility="collapsed")
+            st.components.v1.html("""<script>
+            (function () {
+              var w = window;
+              try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
+              function renameHint() {
+                try {
+                  var root = w.document.querySelector('.st-key-deal_tab_search');
+                  if (!root) return;
+                  root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+                    if (el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) el.textContent = 'Нажми Ввод для поиска';
+                    ['title', 'aria-label'].forEach(function (attr) {
+                      var value = el.getAttribute(attr);
+                      if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
+                    });
+                  });
+                } catch (e) {}
+              }
+              renameHint();
+              try { new w.MutationObserver(renameHint).observe(w.document.body, {childList:true,subtree:true,characterData:true,attributes:true}); } catch (e) {}
+            })();
+            </script>""", height=0)
+
             deal_search = (_deal_search_now or "").strip().lower()
         with fc2:
             deal_sort_mode = st.selectbox(
@@ -16594,6 +16631,28 @@ elif st.session_state.active_tab == "Задачи":
         col_sq, col_sort, col_mf = st.columns([3.2, 2.4, 1.8], gap="small")
         with col_sq:
             _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="⌕  Поиск по задачам...", label_visibility="collapsed")
+            st.components.v1.html("""<script>
+            (function () {
+              var w = window;
+              try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
+              function renameHint() {
+                try {
+                  var root = w.document.querySelector('.st-key-task_search_input');
+                  if (!root) return;
+                  root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+                    if (el.textContent && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent.trim())) el.textContent = 'Нажми Ввод для поиска';
+                    ['title', 'aria-label'].forEach(function (attr) {
+                      var value = el.getAttribute(attr);
+                      if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
+                    });
+                  });
+                } catch (e) {}
+              }
+              renameHint();
+              try { new w.MutationObserver(renameHint).observe(w.document.body, {childList:true,subtree:true,characterData:true,attributes:true}); } catch (e) {}
+            })();
+            </script>""", height=0)
+
             task_search = (_task_search_now or "").strip().lower()
         with col_sort:
             task_sort_mode = st.selectbox(
