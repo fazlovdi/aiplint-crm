@@ -7679,6 +7679,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button p {
         font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
     }
+    div[data-testid="stVerticalBlock"] > div:has(div[style*="height:36px;display:flex;align-items:center;width:100%"]) {
+        margin-bottom:-8px !important;
+    }
     [class*="st-key-crm_workspace_main_expand_"] {
         align-self:center !important;
         margin:0 !important;
