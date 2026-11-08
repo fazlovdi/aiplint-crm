@@ -7751,7 +7751,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                                     _picker_open_client_ids.add(str(_picker_args[0]))
 
                     _picker_q = str(_picker_query or "").strip().lower()
-                    _picker_digits = re.sub(r"\\D", "", _picker_q)
+                    _picker_digits = re.sub(r"\D", "", _picker_q)
                     if _picker_digits and _picker_digits.startswith(("7", "8")) and len(_picker_digits) > 1:
                         _picker_digits = _picker_digits[1:]
                     _picker_matches = []
@@ -7774,7 +7774,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                             if isinstance(_p, dict)
                         )
                         _picker_text = " ".join(_picker_text_values).lower()
-                        _picker_phone_digits = " ".join(re.sub(r"\\D", "", _p) for _p in _picker_phone_values)
+                        _picker_phone_digits = " ".join(re.sub(r"\D", "", _p) for _p in _picker_phone_values)
                         if _picker_q and _picker_q not in _picker_text and not (_picker_digits and _picker_digits in _picker_phone_digits):
                             continue
                         _picker_matches.append(_picker_client)
@@ -7831,7 +7831,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     if st.button("Добавить клиента", key=f"crm_workspace_client_picker_add_{_bottom_active_window_id}", type="tertiary", use_container_width=True):
                         _open_form_ids = []
                         for _state_key in list(st.session_state.keys()):
-                            _match = re.fullmatch(r"show_add_client_dialog_(\\d+)", str(_state_key))
+                            _match = re.fullmatch(r"show_add_client_dialog_(\d+)", str(_state_key))
                             if _match and st.session_state.get(_state_key):
                                 _open_form_ids.append(int(_match.group(1)))
                         _new_fv = max([int(st.session_state.get("client_form_version", 0))] + _open_form_ids) + 1
