@@ -4074,6 +4074,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
+                            pass  # Для обычных задач блок статуса доставки не используется
                     st.markdown("---")
                     if t.get('products'):
                         st.markdown("**Товары:**")
