@@ -3337,7 +3337,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_size=None):
     if entity_type == "client":
         st.markdown(
-            f"<style>.st-key-reminders_{key_prefix} {{ background-color: rgba(139, 92, 246, 0.065) !important; border-radius: 0.5rem !important; }}</style>",
+            f"<style>.st-key-reminders_{key_prefix} {{ background-color: rgba(255, 248, 190, 0.32) !important; border-radius: 0.5rem !important; }}</style>",
             unsafe_allow_html=True,
         )
     with st.container(border=True, key=f"reminders_{key_prefix}"):
@@ -12471,7 +12471,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
 def render_client_card_expanded(cl):
     with st.container(border=True, key=f"client_detail_{cl['id']}"):
         st.markdown(
-            f"<style>.st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; }}</style>",
+            f"<style>.st-key-client_detail_{cl['id']} {{ padding: 0.5rem !important; }} .st-key-client_detail_{cl['id']} h3 {{ font-size: 1.5rem !important; }}</style>",
             unsafe_allow_html=True,
         )
         # Две колонки: заголовок и информация слева, комментарии и файлы справа
