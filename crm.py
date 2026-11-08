@@ -4536,8 +4536,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         with right_col:
             # Comments block (now above files) — no gap at top
+            st.markdown(f"**Комментарии задачи ({len(t.get('task_comments', []) or [])}):**")
             if t.get("task_comments"):
-                st.markdown("**\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0438 \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 render_soft_delete_comments(t["task_comments"], f"task_{key_prefix}", "time", "user")
             tc_clr_key = f"clr_tc_{key_prefix}"
             if st.session_state.get(tc_clr_key):
@@ -4554,8 +4554,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442")
             st.markdown("---")
             # Files block (now below comments)
+            st.markdown(f"**Файлы задачи ({len(t.get('task_files', []) or [])}):**")
             if t.get("task_files"):
-                st.markdown("**\u0424\u0430\u0439\u043b\u044b \u0437\u0430\u0434\u0430\u0447\u0438:**")
                 render_file_thumbs(t["task_files"], f"{key_prefix}_files")
             st.markdown("**Добавить файлы в задачу:**")
             _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
