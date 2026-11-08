@@ -3802,6 +3802,22 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
             _is_client_samples_task = not d and _tp == "Отправить образцы"
+            if _is_client_samples_task:
+                st.markdown(f"""<style>
+                .st-key-task_detail_{key_prefix} .stMarkdown:has(.created-date) {{
+                    margin-bottom: 0.9rem !important;
+                }}
+                .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown:has(button.custom-print-btn) {{
+                    justify-content: flex-end !important;
+                    padding-right: 0 !important;
+                }}
+                .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button.custom-print-btn {{
+                    min-height: 28px !important;
+                    height: 28px !important;
+                    padding: 0 10px !important;
+                    margin-right: 0 !important;
+                }}
+                </style>""", unsafe_allow_html=True)
             _task_header_row, _task_print_col = st.columns([5, 1])
             with _task_header_row:
                 st.markdown(f"""<style>
