@@ -2106,7 +2106,7 @@ def _crm_workspace_tab_label(entry):
     if name in ("task_detail_dialog", "task_report_dialog", "task_execution_report_dialog") and args:
         task = args[0] if isinstance(args[0], dict) else None
         if task and task.get("task_number"):
-            return str(task["task_number"])
+            return f"Задача №{task['task_number']}"
 
     # Deal detail dialogs receive the deal object as the first argument.
     if name == "deal_detail_dialog" and args:
