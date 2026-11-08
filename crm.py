@@ -17784,7 +17784,9 @@ def _crm_render_workspace_fragment():
                             st.caption("Уже открыты" if _tabbar_has_deals else "Нет сделок")
                         for _oi, _obj in enumerate(_tabbar_deals_sorted):
                             _deal_number = str(_obj.get("deal_number") or _obj.get("title") or _obj.get("id") or "")
-                            _deal_number_label = _deal_number if _deal_number.startswith("№") else f"№{_deal_number}"
+                            _deal_number = re.sub(r"^\s*сделка\s*[:№#-]?\s*", "", _deal_number, flags=re.IGNORECASE)
+                            _deal_number = re.sub(r"^\s*№\s*", "", _deal_number)
+                            _deal_number_label = f"№{_deal_number}"
                             _deal_topic_label = str(_obj.get("deal_title") or _obj.get("topic") or "").strip()
                             _obj_label = f"{_deal_number_label} · {_deal_topic_label}".strip(" ·")
                             _obj_args = (_obj, _tabbar_client, st.session_state.get("current_user"), f"deal_{_obj.get('id')}")
@@ -17807,7 +17809,9 @@ def _crm_render_workspace_fragment():
                             st.caption("Уже открыты" if _tabbar_has_calculations else "Нет расчётов")
                         for _oi, (_obj_deal, _obj_calc) in enumerate(_tabbar_calculations_sorted):
                             _obj_deal_number = str(_obj_deal.get("deal_number") or _obj_deal.get("title") or _obj_deal.get("id") or "")
-                            _obj_label = _obj_deal_number if _obj_deal_number.startswith("№") else f"№{_obj_deal_number}"
+                            _obj_deal_number = re.sub(r"^\s*сделка\s*[:№#-]?\s*", "", _obj_deal_number, flags=re.IGNORECASE)
+                            _obj_deal_number = re.sub(r"^\s*№\s*", "", _obj_deal_number)
+                            _obj_label = f"№{_obj_deal_number}"
                             if _obj_calc.get("deleted"):
                                 _obj_label += " (удалён)"
                             st.button(_obj_label, key=f"crm_obj_calc_{_crm_active_window['id']}_{_obj_deal.get('id')}_{_obj_calc.get('id', _oi)}", use_container_width=True, disabled=bool(_obj_calc.get("deleted")), on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "deal_calculation_dialog", (str(_obj_deal.get("id")), str(_obj_calc.get("id")))))
