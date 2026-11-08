@@ -8547,7 +8547,27 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
-            with st.container(border=True):
+            _deal_files_box_key = f"deal_files_box_{d['id']}"
+            _deal_files_button_key = f"show_all_files_btn_deal_file_{d['id']}"
+            st.markdown(
+                f"""<style>
+                .st-key-{_deal_files_box_key} {{
+                    border: 1px solid #C9CFD7 !important;
+                    border-radius: 10px !important;
+                    padding: 10px !important;
+                    box-sizing: border-box !important;
+                }}
+                .st-key-{_deal_files_box_key} .st-key-{_deal_files_button_key} {{
+                    margin-left: -10px !important;
+                    width: calc(100% + 20px) !important;
+                }}
+                .st-key-{_deal_files_box_key} .st-key-{_deal_files_button_key} button {{
+                    width: 100% !important;
+                }}
+                </style>""",
+                unsafe_allow_html=True,
+            )
+            with st.container(key=_deal_files_box_key):
                 st.markdown("**Файлы сделки:**")
                 render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
         with dl_upload_col:
