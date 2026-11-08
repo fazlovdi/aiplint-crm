@@ -1596,8 +1596,10 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
 
         with cols[0]:
             st.markdown(f'<div class="crm-file-row-icon" title="{html.escape(ext or "Файл", quote=True)}">{icon}</div>', unsafe_allow_html=True)
+        _file_deleted = bool(ff.get("deleted") or ff.get("is_deleted"))
         with cols[1]:
-            st.markdown(f'<div class="crm-file-row-name">{html.escape(str(fn))}</div>', unsafe_allow_html=True)
+            _file_name_style = "text-decoration:line-through;color:#8B929D;" if _file_deleted else ""
+            st.markdown(f'<div class="crm-file-row-name" style="{_file_name_style}">{html.escape(str(fn))}{" (удалён)" if _file_deleted else ""}</div>', unsafe_allow_html=True)
 
         if show_desc:
             with cols[2]:
@@ -1620,26 +1622,43 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
         # большие вложения в session_state. Идентификатор устойчив к смене порядка списка.
         _file_identity = hashlib.sha256(f"{fp or ''}|{fn or ''}".encode("utf-8", errors="replace")).hexdigest()
         _download_payload = st.session_state.get("_crm_file_download_payload") or {}
-        with cols[dl_col]:
-            if _download_payload.get("identity") == _file_identity and _download_payload.get("bytes") is not None:
-                st.download_button(label="⬇", help=f"Скачать {fn}", data=_download_payload["bytes"],
-                                   file_name=fn, key=f"dl_{prefix}_{i}", use_container_width=True)
-            elif st.button("⬇", help=f"Подготовить скачивание {fn}", key=f"dl_req_{prefix}_{i}", use_container_width=True):
-                with st.spinner("Загружаю файл…"):
-                    _file_bytes = get_file_bytes(fp)
-                if _file_bytes is not None:
-                    st.session_state["_crm_file_download_payload"] = {
-                        "identity": _file_identity, "bytes": _file_bytes, "filename": str(fn)
-                    }
-                    st.rerun()
-                else:
-                    st.warning(f"Не удалось получить файл «{fn}».")
+        if not _file_deleted:
+            with cols[dl_col]:
+                if _download_payload.get("identity") == _file_identity and _download_payload.get("bytes") is not None:
+                    st.download_button(label="⬇", help=f"Скачать {fn}", data=_download_payload["bytes"],
+                                       file_name=fn, key=f"dl_{prefix}_{i}", use_container_width=True)
+                elif st.button("⬇", help=f"Подготовить скачивание {fn}", key=f"dl_req_{prefix}_{i}", use_container_width=True):
+                    with st.spinner("Загружаю файл…"):
+                        _file_bytes = get_file_bytes(fp)
+                    if _file_bytes is not None:
+                        st.session_state["_crm_file_download_payload"] = {
+                            "identity": _file_identity, "bytes": _file_bytes, "filename": str(fn)
+                        }
+                        st.rerun()
+                    else:
+                        st.warning(f"Не удалось получить файл «{fn}».")
 
-        if is_admin_delete:
+        _delete_confirm_key = f"file_delete_confirm_{prefix}_{_file_identity}"
+        if is_admin_delete and not _file_deleted:
             with cols[del_col]:
-                if st.button("🗑", key=f"del_{prefix}_{i}", help=f"Удалить {fn}"):
-                    files.pop(i)
-                    commit_and_rerun(st.session_state.crm_store, "Файл удалён")
+                if st.button("🗑", key=f"del_{prefix}_{i}", help=f"Удалить {fn}", use_container_width=True):
+                    st.session_state[_delete_confirm_key] = True
+                    st.rerun()
+            if st.session_state.get(_delete_confirm_key):
+                with st.container(border=True):
+                    st.markdown(f"**Точно удалить файл «{html.escape(str(fn))}»?**")
+                    _confirm_col, _cancel_col = st.columns(2)
+                    with _confirm_col:
+                        if st.button("Удалить", key=f"confirm_del_{prefix}_{_file_identity}", use_container_width=True, type="primary"):
+                            ff["deleted"] = True
+                            ff["deleted_at"] = now_str()
+                            ff["deleted_by"] = st.session_state.get("user_login", "")
+                            st.session_state.pop(_delete_confirm_key, None)
+                            commit_and_rerun(st.session_state.crm_store, "Файл помечен как удалённый")
+                    with _cancel_col:
+                        if st.button("Отмена", key=f"cancel_del_{prefix}_{_file_identity}", use_container_width=True):
+                            st.session_state.pop(_delete_confirm_key, None)
+                            st.rerun()
 
         st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
 
