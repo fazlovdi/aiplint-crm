@@ -7698,6 +7698,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_taskbar_close_"] button::after {
         content:none !important; display:none !important;
     }
+    .crm-close-flash-suppressed [class*="st-key-crm_workspace_taskbar_close_"] button {
+        visibility:hidden !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
         .crm-bottom-scroll-row {
@@ -7742,6 +7745,31 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     (() => {
       try {
         const doc = window.parent.document;
+        // Suppress close glyphs during the taskbar's DOM reconciliation after a close click.
+        // Streamlit may briefly reuse a neighboring button node while removing a window item.
+        if (doc.documentElement.dataset.crmCloseFlashGuard !== '1') {
+          doc.documentElement.dataset.crmCloseFlashGuard = '1';
+          let closeFlashTimer = null;
+          const clearCloseFlashGuard = () => {
+            doc.documentElement.classList.remove('crm-close-flash-suppressed');
+            if (closeFlashTimer) { clearTimeout(closeFlashTimer); closeFlashTimer = null; }
+          };
+          doc.addEventListener('click', e => {
+            const closeButton = e.target && e.target.closest
+              ? e.target.closest('[class*="st-key-crm_workspace_taskbar_close_"] button')
+              : null;
+            if (!closeButton) return;
+            doc.documentElement.classList.add('crm-close-flash-suppressed');
+            if (closeFlashTimer) clearTimeout(closeFlashTimer);
+            closeFlashTimer = setTimeout(clearCloseFlashGuard, 900);
+          }, true);
+          const closeFlashObserver = new MutationObserver(() => {
+            if (!doc.documentElement.classList.contains('crm-close-flash-suppressed')) return;
+            if (closeFlashTimer) clearTimeout(closeFlashTimer);
+            closeFlashTimer = setTimeout(clearCloseFlashGuard, 160);
+          });
+          closeFlashObserver.observe(doc.body, {childList:true, subtree:true});
+        }
         const attach = el => {
           if (el.dataset.crmDragScrollReady === '1') return;
           el.dataset.crmDragScrollReady = '1';
