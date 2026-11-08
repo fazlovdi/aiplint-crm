@@ -7615,11 +7615,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] {
-        width:100% !important; min-width:0 !important; max-width:100% !important;
-        box-sizing:border-box !important; overflow-x:auto !important; overflow-y:hidden !important;
-        scrollbar-width:thin !important;
-    }
+    /* Scroll behavior is applied to the detected outer row only by the script below. */
     [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) {
         padding-right:110px !important;
     }
@@ -7638,7 +7634,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] {
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-wrap:nowrap !important; gap:1px !important;
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         align-items:center !important; overflow:visible !important; flex-shrink:0 !important;
@@ -7691,22 +7687,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
-        /* Only the panel's outer row scrolls. Inner rows keep their original sizing. */
-    [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"] {
-        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
-        flex:1 1 auto !important; width:0 !important; min-width:0 !important; max-width:100% !important;
-        overflow-x:auto !important; overflow-y:hidden !important; box-sizing:border-box !important;
+        .crm-bottom-scroll-row {
         scrollbar-width:thin !important;
+        scrollbar-color:#AAB1BC transparent !important;
+        cursor:grab !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"]::-webkit-scrollbar {
-        height:8px !important;
-    }
-    [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb {
-        background:#AAB1BC !important; border-radius:8px !important;
-    }
-    [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) > [data-testid="stHorizontalBlock"] {
-        padding-right:110px !important;
-    }
+    .crm-bottom-scroll-row::-webkit-scrollbar { height:8px !important; }
+    .crm-bottom-scroll-row::-webkit-scrollbar-thumb { background:#AAB1BC !important; border-radius:8px !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
         position:absolute !important; right:0 !important; top:0 !important; z-index:10 !important;
     }
@@ -15938,7 +15925,7 @@ def _crm_render_workspace_fragment():
             (() => {
               try {
                 const doc = window.parent.document;
-                doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"], [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"]').forEach(el => {
+                const attachDrag = el => {
                   if (el.dataset.crmDragScrollReady === '1') return;
                   el.dataset.crmDragScrollReady = '1';
                   let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
@@ -15953,6 +15940,7 @@ def _crm_render_workspace_fragment():
                     if (moved) {
                       el.scrollLeft = startScroll - dx;
                       el.style.cursor = 'grabbing';
+                      e.preventDefault();
                     }
                   }, true);
                   const endDrag = () => {
@@ -15967,7 +15955,38 @@ def _crm_render_workspace_fragment():
                     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
                     suppressClick = false;
                   }, true);
-                });
+                };
+                const scan = () => {
+                  doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"]').forEach(attachDrag);
+                  doc.querySelectorAll('[class*="st-key-crm_workspace_bottom_"]').forEach(panel => {
+                    const blocks = Array.from(panel.querySelectorAll('[data-testid="stHorizontalBlock"]'));
+                    const outer = blocks.find(el =>
+                      !el.closest('[class*="st-key-crm_workspace_window_item_"]') &&
+                      el.querySelector('[class*="st-key-crm_workspace_window_item_"]')
+                    );
+                    if (!outer) return;
+                    outer.classList.add('crm-bottom-scroll-row');
+                    Object.assign(outer.style, {
+                      display:'flex', flexDirection:'row', flexWrap:'nowrap',
+                      flex:'1 1 auto', width:'0', minWidth:'0', maxWidth:'100%',
+                      overflowX:'auto', overflowY:'hidden', boxSizing:'border-box',
+                      gap:'1px', alignItems:'center'
+                    });
+                    const controls = panel.querySelector('[class*="st-key-crm_workspace_main_expand_wrap"]');
+                    if (controls) {
+                      controls.style.position = 'absolute';
+                      controls.style.right = '0';
+                      controls.style.top = '0';
+                      controls.style.zIndex = '10';
+                      outer.style.paddingRight = '110px';
+                    }
+                    attachDrag(outer);
+                  });
+                };
+                scan();
+                const observer = new MutationObserver(scan);
+                observer.observe(doc.body, {childList:true, subtree:true});
+                setTimeout(() => observer.disconnect(), 15000);
               } catch (e) {}
             })();
             </script>""", height=0, width=0)
