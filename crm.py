@@ -3961,9 +3961,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2E7D32"
                                     else:
                                         _dl_color = "#2C3E50"
-                                    with st.container(key=f"deadline_color_scope_{key_prefix}"):
-                                        st.markdown(f'<style>.st-key-deadline_color_scope_{key_prefix} .stButton > button, .st-key-deadline_color_scope_{key_prefix} .stButton > button p, .st-key-deadline_color_scope_{key_prefix} .stButton > button span, .st-key-deadline_color_scope_{key_prefix} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
-                                        _dl_clicked = st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key)
+                                    _dl_clicked = st.button(f"\\u0421\\u0440\\u043e\\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key)
+                                    st.markdown(f'<style>.st-key-{dl_btn_key} .stButton > button, .st-key-{dl_btn_key} .stButton > button p, .st-key-{dl_btn_key} .stButton > button span, .st-key-{dl_btn_key} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
                                     if _dl_clicked:
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                                         _smart_rerun()
@@ -4164,9 +4163,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2E7D32"
                                     else:
                                         _dl_color = "#2C3E50"
-                                    with st.container(key=f"deadline_color_scope_{key_prefix}"):
-                                        st.markdown(f'<style>.st-key-deadline_color_scope_{key_prefix} .stButton > button, .st-key-deadline_color_scope_{key_prefix} .stButton > button p, .st-key-deadline_color_scope_{key_prefix} .stButton > button span, .st-key-deadline_color_scope_{key_prefix} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
-                                        _dl_clicked = st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key)
+                                    _dl_clicked = st.button(f"\\u0421\\u0440\\u043e\\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key)
+                                    st.markdown(f'<style>.st-key-{dl_btn_key} .stButton > button, .st-key-{dl_btn_key} .stButton > button p, .st-key-{dl_btn_key} .stButton > button span, .st-key-{dl_btn_key} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
                                     if _dl_clicked:
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                                         _smart_rerun()
