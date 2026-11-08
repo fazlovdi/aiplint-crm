@@ -7733,6 +7733,79 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     on_click=_crm_workspace_restore_last_window_callback,
                 )
 
+    # Attach scrolling to both copies of the window strip (main page and workspace).
+    components.html("""<script>
+    (() => {
+      try {
+        const doc = window.parent.document;
+        const attach = el => {
+          if (el.dataset.crmDragScrollReady === '1') return;
+          el.dataset.crmDragScrollReady = '1';
+          el.classList.add('crm-bottom-scroll-row');
+          Object.assign(el.style, {
+            display:'flex', flexDirection:'row', flexWrap:'nowrap',
+            flex:'1 1 auto', width:'0', minWidth:'0', maxWidth:'100%',
+            overflowX:'auto', overflowY:'hidden', boxSizing:'border-box',
+            gap:'1px', alignItems:'center', scrollbarWidth:'thin',
+            scrollbarColor:'#AAB1BC transparent'
+          });
+          let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
+          el.addEventListener('pointerdown', e => {
+            if (e.button !== 0) return;
+            down = true; moved = false; startX = e.clientX; startScroll = el.scrollLeft;
+          }, true);
+          doc.addEventListener('pointermove', e => {
+            if (!down) return;
+            const dx = e.clientX - startX;
+            if (Math.abs(dx) > 4) moved = true;
+            if (moved) {
+              el.scrollLeft = startScroll - dx;
+              el.style.cursor = 'grabbing';
+              e.preventDefault();
+            }
+          }, true);
+          const end = () => {
+            if (down && moved) suppressClick = true;
+            down = false; el.style.cursor = 'grab';
+          };
+          doc.addEventListener('pointerup', end, true);
+          doc.addEventListener('pointercancel', end, true);
+          el.addEventListener('click', e => {
+            if (!suppressClick) return;
+            e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+            suppressClick = false;
+          }, true);
+        };
+        const scan = () => {
+          doc.querySelectorAll('[class*="st-key-crm_workspace_bottom_"]').forEach(panel => {
+            const blocks = [
+              ...(panel.matches('[data-testid="stHorizontalBlock"]') ? [panel] : []),
+              ...Array.from(panel.querySelectorAll('[data-testid="stHorizontalBlock"]'))
+            ];
+            const outer = blocks.find(el =>
+              !el.closest('[class*="st-key-crm_workspace_window_item_"]') &&
+              el.querySelector('[class*="st-key-crm_workspace_window_item_"]')
+            );
+            if (!outer) return;
+            attach(outer);
+            const controls = panel.querySelector('[class*="st-key-crm_workspace_main_expand_wrap"]');
+            if (controls) {
+              controls.style.position = 'absolute';
+              controls.style.right = '0';
+              controls.style.top = '0';
+              controls.style.zIndex = '10';
+              outer.style.paddingRight = '110px';
+            }
+          });
+        };
+        scan();
+        const observer = new MutationObserver(scan);
+        observer.observe(doc.body, {childList:true, subtree:true});
+        setTimeout(() => observer.disconnect(), 20000);
+      } catch (e) {}
+    })();
+    </script>""", height=0, width=0)
+
 # Восстанавливаем персональное рабочее пространство до первого рендеринга
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
 _crm_workspace_init()
