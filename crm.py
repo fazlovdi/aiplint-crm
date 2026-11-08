@@ -1586,7 +1586,7 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
             ".zip": "🗜️", ".rar": "🗜️", ".7z": "🗜️", ".txt": "📄", ".log": "📄",
         }
         icon = icons.get(ext, "📎")
-        is_admin_delete = allow_delete and st.session_state.get("user_role") == "admin"
+        is_admin_delete = bool(allow_delete)
         if show_desc:
             cols = st.columns([0.055, 0.34, 0.37, 0.13, 0.075], gap="small", vertical_alignment="center")
         elif is_admin_delete:
