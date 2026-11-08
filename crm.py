@@ -7679,6 +7679,15 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button p {
         font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
     }
+    [class*="st-key-crm_workspace_main_expand_"] button {
+        font-size:30px !important; line-height:1 !important;
+        min-width:44px !important; width:44px !important;
+        min-height:44px !important; height:44px !important;
+        padding:0 !important;
+    }
+    [class*="st-key-crm_workspace_main_expand_"] button p {
+        font-size:30px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
@@ -7870,6 +7879,34 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
           });
           el.style.setProperty('scrollbar-width', 'none', 'important');
           el.style.setProperty('touch-action', 'pan-y', 'important');
+          el.style.setProperty('cursor', 'grab', 'important');
+          // Fallback mouse-drag handler: keeps the main taskbar draggable even
+          // when Streamlit rerenders the button row and pointer listeners are stale.
+          if (el.dataset.crmMouseDragReady !== '1') {
+            el.dataset.crmMouseDragReady = '1';
+            let mouseDown = false, mouseMoved = false, mouseStartX = 0, mouseStartScroll = 0;
+            el.addEventListener('mousedown', e => {
+              if (e.button !== 0) return;
+              mouseDown = true; mouseMoved = false;
+              mouseStartX = e.clientX; mouseStartScroll = el.scrollLeft;
+              el.style.cursor = 'grabbing';
+            }, true);
+            doc.addEventListener('mousemove', e => {
+              if (!mouseDown) return;
+              const dx = e.clientX - mouseStartX;
+              if (Math.abs(dx) > 3) mouseMoved = true;
+              if (mouseMoved) {
+                el.scrollLeft = mouseStartScroll - dx;
+                e.preventDefault();
+              }
+            }, true);
+            const finishMouseDrag = () => {
+              mouseDown = false;
+              el.style.cursor = 'grab';
+            };
+            doc.addEventListener('mouseup', finishMouseDrag, true);
+            doc.addEventListener('mouseleave', finishMouseDrag, true);
+          }
           let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
           el.addEventListener('pointerdown', e => {
             if (e.button !== 0) return;
