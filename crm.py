@@ -8683,6 +8683,34 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         " ".join(str(_gc.get(_k) or "") for _k in ("id", "name", "phone", "city", "email", "address", "base_comment", "promo_code", "source", "category")),
                         _gc_entry, _gc_id, f"client_{_gc_id}")
 
+                # Индексируем комментарии и файлы клиента.
+                for _gc in _global_clients:
+                    _gc_id = _gc.get("id")
+                    _gc_name = str(_gc.get("name") or "Без названия")
+                    _gc_entry_args = (_gc_id,)
+                    _gc_entry = {
+                        "name": "client_detail_dialog", "title": "Карточка клиента", "width": "large",
+                        "args": _gc_entry_args, "kwargs": {},
+                        "signature": (_crm_dialog_signature_value(_gc_entry_args), _crm_dialog_signature_value({})),
+                    }
+                    for _gcom_i, _gcom in enumerate(_gc.get("client_comments", []) or []):
+                        if not isinstance(_gcom, dict) or _gcom.get("deleted"):
+                            continue
+                        _gcom_text = str(_gcom.get("text") or _gcom.get("comment") or "")
+                        _gcom_author = str(_gcom.get("author") or _gcom.get("user") or "")
+                        _global_search_add("Комментарий клиента", f"Комментарий · {_gc_name} · {_gcom_author} · {_gcom_text[:90]}",
+                            " ".join(str(_gcom.get(_k) or "") for _k in ("text", "comment", "author", "user", "time", "date", "id")) + f" {_gc_name}",
+                            _gc_entry, _gc_id, f"client_comment_{_gc_id}_{_gcom.get('id') or _gcom_i}")
+                    _gc_files = list(_gc.get("client_files", []) or []) + list(_gc.get("files", []) or [])
+                    for _gf_i, _gf in enumerate(_gc_files):
+                        if not isinstance(_gf, dict) or _gf.get("deleted"):
+                            continue
+                        _gf_name = str(_gf.get("file_name") or _gf.get("name") or os.path.basename(str(_gf.get("file_path") or _gf.get("path") or "Файл")))
+                        _gf_desc = str(_gf.get("description") or _gf.get("comment") or _gf.get("title") or "")
+                        _global_search_add("Файл клиента", f"Файл · {_gc_name} · {_gf_name}" + (f" · {_gf_desc[:70]}" if _gf_desc else ""),
+                            " ".join(str(_gf.get(_k) or "") for _k in ("file_name", "name", "description", "comment", "title", "file_path", "path", "id", "file_hash")) + f" {_gc_name}",
+                            _gc_entry, _gc_id, f"client_file_{_gc_id}_{_gf.get('id') or _gf.get('file_hash') or _gf_i}")
+
                 for _gd in _global_deals:
                     if _gd.get("deleted"):
                         continue
@@ -8699,6 +8727,24 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     _global_search_add("Сделка", f"Сделка · №{_gd_number.lstrip('№')} · {_gd_topic} · {(_gc or {}).get('name', '')}",
                         " ".join([str(_gd.get(_k) or "") for _k in ("id", "deal_number", "title", "deal_title", "topic", "status", "category", "manager", "payment_status")] + [_gd_topic, _gd_number, str((_gc or {}).get("name") or "")]),
                         _gd_entry, (_gc or {}).get("id"), f"deal_{_gd_id}")
+
+                    for _gcom_i, _gcom in enumerate(_gd.get("deal_comments", []) or []):
+                        if not isinstance(_gcom, dict) or _gcom.get("deleted"):
+                            continue
+                        _gcom_text = str(_gcom.get("text") or _gcom.get("comment") or "")
+                        _gcom_author = str(_gcom.get("author") or _gcom.get("user") or "")
+                        _global_search_add("Комментарий сделки", f"Комментарий · Сделка №{_gd_number.lstrip('№')} · {_gcom_author} · {_gcom_text[:90]}",
+                            " ".join(str(_gcom.get(_k) or "") for _k in ("text", "comment", "author", "user", "time", "date", "id")) + f" {_gd_topic} {_gd_number} {(_gc or {}).get('name', '')}",
+                            _gd_entry, (_gc or {}).get("id"), f"deal_comment_{_gd_id}_{_gcom.get('id') or _gcom_i}")
+                    for _gfiles_key in ("deal_files", "close_files", "generated_documents"):
+                        for _gf_i, _gf in enumerate(_gd.get(_gfiles_key, []) or []):
+                            if not isinstance(_gf, dict) or _gf.get("deleted"):
+                                continue
+                            _gf_name = str(_gf.get("file_name") or _gf.get("name") or os.path.basename(str(_gf.get("file_path") or _gf.get("path") or "Файл")))
+                            _gf_desc = str(_gf.get("description") or _gf.get("comment") or _gf.get("title") or "")
+                            _global_search_add("Файл сделки", f"Файл · Сделка №{_gd_number.lstrip('№')} · {_gf_name}" + (f" · {_gf_desc[:70]}" if _gf_desc else ""),
+                                " ".join(str(_gf.get(_k) or "") for _k in ("file_name", "name", "description", "comment", "title", "file_path", "path", "id", "file_hash", "kind")) + f" {_gd_topic} {_gd_number} {(_gc or {}).get('name', '')}",
+                                _gd_entry, (_gc or {}).get("id"), f"deal_file_{_gd_id}_{_gfiles_key}_{_gf.get('id') or _gf.get('file_hash') or _gf_i}")
 
                     for _gci, _gcalc in enumerate(_gd.get("calculations", []) or []):
                         if _gcalc.get("deleted"):
@@ -8733,6 +8779,23 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         _global_search_add("Задача", f"Задача · №{_gt_number.lstrip('№')} · {_gt_type} · {_gc.get('name', '')}" + (f" · сделка №{str(_gt_deal.get('deal_number') or _gt_deal.get('id'))}" if _gt_deal else ""),
                             " ".join(str(_gt.get(_k) or "") for _k in ("id", "task_number", "task_type", "type", "text", "description", "status", "responsible", "comment", "deal_id")) + f" {_gt_type} {_gt_number} {_gc.get('name', '')} {(_gt_deal or {}).get('deal_number', '')} {(_gt_deal or {}).get('topic', '')}",
                             _gt_entry, _gc.get("id"), f"task_{_gc.get('id')}_{_gt.get('id') or _gt_number}")
+                        for _gtcom_i, _gtcom in enumerate(_gt.get("task_comments", []) or []):
+                            if not isinstance(_gtcom, dict) or _gtcom.get("deleted"):
+                                continue
+                            _gtcom_text = str(_gtcom.get("text") or _gtcom.get("comment") or "")
+                            _gtcom_author = str(_gtcom.get("author") or _gtcom.get("user") or "")
+                            _global_search_add("Комментарий задачи", f"Комментарий · Задача №{_gt_number} · {_gc.get('name', '')} · {_gtcom_author} · {_gtcom_text[:75]}",
+                                " ".join(str(_gtcom.get(_k) or "") for _k in ("text", "comment", "author", "user", "time", "date", "id")) + f" {_gt_type} {_gt_number} {_gc.get('name', '')}",
+                                _gt_entry, _gc.get("id"), f"task_comment_{_gc.get('id')}_{_gt.get('id') or _gt_number}_{_gtcom.get('id') or _gtcom_i}")
+                        for _gtfiles_key in ("task_files", "completion_files"):
+                            for _gtf_i, _gtf in enumerate(_gt.get(_gtfiles_key, []) or []):
+                                if not isinstance(_gtf, dict) or _gtf.get("deleted"):
+                                    continue
+                                _gtf_name = str(_gtf.get("file_name") or _gtf.get("name") or os.path.basename(str(_gtf.get("file_path") or _gtf.get("path") or "Файл")))
+                                _gtf_desc = str(_gtf.get("description") or _gtf.get("comment") or _gtf.get("title") or "")
+                                _global_search_add("Файл задачи", f"Файл · Задача №{_gt_number} · {_gc.get('name', '')} · {_gtf_name}" + (f" · {_gtf_desc[:50]}" if _gtf_desc else ""),
+                                    " ".join(str(_gtf.get(_k) or "") for _k in ("file_name", "name", "description", "comment", "title", "file_path", "path", "id", "file_hash")) + f" {_gt_type} {_gt_number} {_gc.get('name', '')}",
+                                    _gt_entry, _gc.get("id"), f"task_file_{_gc.get('id')}_{_gt.get('id') or _gt_number}_{_gtfiles_key}_{_gtf.get('id') or _gtf.get('file_hash') or _gtf_i}")
                     for _gr in (_gc.get("requisites", []) or []):
                         if _gr.get("deleted"):
                             continue
