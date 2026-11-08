@@ -427,19 +427,6 @@ st.markdown("""
             animation: none !important;
         }
     }
-    /* Навигация и крестики окон не используют transform-анимацию:
-       при Streamlit rerun она создаёт кратковременный визуальный дубль. */
-    .st-key-crm_main_tab_clients button,
-    .st-key-crm_main_tab_deals button,
-    .st-key-crm_main_tab_tasks button,
-    .st-key-crm_main_tab_internal button,
-    .st-key-crm_main_tab_suppliers button,
-    .st-key-crm_main_tab_products button,
-    [class*="st-key-crm_workspace_taskbar_close_"] button,
-    [class*="st-key-crm_workspace_taskbar_close_"] button:active {
-        transform: none !important;
-        transition: none !important;
-    }
     /* PIN login button must keep the requested burgundy color regardless of browser theme. */
     .st-key-remembered_pin_login_btn button,
     .st-key-remembered_pin_login_form button[kind="primary"] {
@@ -7859,7 +7846,6 @@ nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
     st.button(
         "Клиенты",
-        key="crm_main_tab_clients",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Клиенты" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7869,7 +7855,6 @@ with nc2:
     _deals_label = f"Сделки ({_new_deals_count})" if _new_deals_count > 0 else "Сделки"
     st.button(
         _deals_label,
-        key="crm_main_tab_deals",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Сделки" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7879,7 +7864,6 @@ with nc3:
     _tasks_label = f"Задачи ({_new_tasks_count})" if _new_tasks_count > 0 else "Задачи"
     st.button(
         _tasks_label,
-        key="crm_main_tab_tasks",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Задачи" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7889,7 +7873,6 @@ with nc4:
     _it_label = f"Внутренние ({_new_it_count})" if _new_it_count > 0 else "Внутренние"
     st.button(
         _it_label,
-        key="crm_main_tab_internal",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7898,7 +7881,6 @@ with nc4:
 with nc5:
     st.button(
         "Поставщики",
-        key="crm_main_tab_suppliers",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Поставщики" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7907,7 +7889,6 @@ with nc5:
 with nc6:
     st.button(
         "Товары и прайс",
-        key="crm_main_tab_products",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary",
         on_click=_crm_select_main_tab,
@@ -16012,10 +15993,12 @@ def _crm_render_workspace_fragment():
             with st.container(key=f"crm_workspace_tabbar_{_crm_active_window['id']}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
                 for _i, _tab in enumerate(_tabs):
                     _tab_title = _crm_workspace_tab_label(_tab).replace("###", "")[:30]
-                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
+                    _tab_identity = hashlib.sha1(_crm_workspace_tab_key(_tab).encode("utf-8")).hexdigest()[:16]
+                    _tab_active_suffix = "__isactive" if _i == _active_index else "__notactive"
+                    with st.container(key=f"crm_workspace_tab_item_{_crm_active_window['id']}_{_tab_identity}_{_tab_active_suffix}", horizontal=True, wrap=False, gap=None, width="content", horizontal_alignment="left"):
                         st.button(
                             _tab_title,
-                            key=f"crm_workspace_tab_{_crm_active_window['id']}_{_i}_{'__isactive' if _i == _active_index else '__notactive'}",
+                            key=f"crm_workspace_tab_{_crm_active_window['id']}_{_tab_identity}_{_tab_active_suffix}",
                             type="secondary",
                             help=_tab_title,
                             on_click=_crm_workspace_activate_tab,
@@ -16023,10 +16006,12 @@ def _crm_render_workspace_fragment():
                         )
                         # The client-card tab is closed through the window switcher above;
                         # do not render a second close control beside this tab.
+                        # Use entity identity, not list position: after closing a tab,
+                        # index-based keys make Streamlit briefly reuse the neighbor's X.
                         if str(_tab.get("name", "")) not in ("client_detail_dialog", "statistics_dialog"):
                             st.button(
                                 "×",
-                                key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_i}",
+                                key=f"crm_workspace_tab_close_{_crm_active_window['id']}_{_tab_identity}",
                                 help="Закрыть вкладку",
                                 on_click=_crm_workspace_close_tab_callback,
                                 args=(_crm_active_window.get("id"), _i),
