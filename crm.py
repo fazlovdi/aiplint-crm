@@ -8770,6 +8770,27 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             )
             st.markdown(f"""
             <style>
+            /* Compact global search popover: hide scrollbar and minimize vertical spacing. */
+            [data-testid="stPopoverBody"]:has([class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]) {{
+                overflow-y:hidden !important;
+                scrollbar-width:none !important;
+                padding-top:4px !important;
+                padding-bottom:4px !important;
+            }}
+            [data-testid="stPopoverBody"]:has([class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"])::-webkit-scrollbar {{
+                display:none !important;
+                width:0 !important;
+                height:0 !important;
+            }}
+            [data-testid="stPopoverBody"]:has([class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]) [data-testid="stVerticalBlock"] {{
+                gap:0.25rem !important;
+            }}
+            [data-testid="stPopoverBody"]:has([class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]) .st-key-crm_workspace_global_search_input_{_bottom_scope} {{
+                margin-top:0 !important;
+                margin-bottom:0 !important;
+                padding-top:0 !important;
+                padding-bottom:0 !important;
+            }}
             .st-key-crm_workspace_global_search_input_{_bottom_scope} {{
                 width:100% !important; min-width:0 !important; margin:0 !important;
             }}
