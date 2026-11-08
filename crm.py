@@ -11802,7 +11802,10 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 else:
                     st.caption("Задач по сделке пока нет.")
                 _dls_ct_key = f"dls_show_ct_{deal_id}"
-                if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
+                _dls_ct_left, _dls_ct_button, _dls_ct_right = st.columns([1, 2, 1])
+                with _dls_ct_button:
+                    _dls_ct_clicked = st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary")
+                if _dls_ct_clicked:
                     # Use the workspace registry instead of legacy one-shot dialog flags.
                     deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
