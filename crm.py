@@ -1537,7 +1537,7 @@ def get_thumbnail_base64(remote_path, size=220):
         return f"data:{mt};base64,{base64.b64encode(fb).decode()}"
 
 
-def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_all_button_columns=False, show_all_separator=False):
+def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_all_button_columns=False, show_all_separator=False, strong_row_separator=False):
     """Отображает вложения списком; содержимое загружается только по запросу пользователя."""
     if not files:
         st.caption("Файлов нет")
@@ -1660,7 +1660,10 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
                             st.session_state.pop(_delete_confirm_key, None)
                             st.rerun()
 
-        st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
+        if strong_row_separator:
+            st.markdown('<div style="border-bottom:2px solid #DCE0E5;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:1px 0 5px 0;"></div>', unsafe_allow_html=True)
 
     if len(files) > 3:
         _button_label = "Скрыть дополнительные файлы" if _show_all else "Показать все файлы"
@@ -3929,7 +3932,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     # Поля отправки заказа отображаются и для задачи, привязанной к сделке.
                     # При редактировании их заменяют поля формы выше.
                     if not show_edit_task:
-                        st.divider()
+                        st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0;"></div>', unsafe_allow_html=True)
                         if t.get("products"):
                             st.markdown("**Товары:**")
                             for _product_line in str(t.get("products", "")).splitlines():
@@ -4105,7 +4108,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
                             pass  # Для обычных задач блок статуса доставки не используется
-                    st.divider()
+                    st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0;"></div>', unsafe_allow_html=True)
                     if t.get('products'):
                         st.markdown("**Товары:**")
                         for _product_line in str(t.get("products", "")).splitlines():
@@ -12209,7 +12212,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             with st.container(border=True):
                 st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
-                render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True)
+                render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
                 st.markdown("**Загрузить файлы:**")
                 df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
                 udf = st.file_uploader("Выберите файлы:", key=f"dls_up_{deal_id}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
