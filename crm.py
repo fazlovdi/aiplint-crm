@@ -8584,8 +8584,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         box-sizing:border-box !important; width:46px !important; min-width:46px !important; max-width:46px !important;
         height:46px !important; min-height:46px !important; padding:0 !important; margin:0 !important;
         border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:none !important;
-        background:#BC1661 !important; color:#FFFFFF !important; font-size:0 !important; line-height:1 !important;
-        opacity:0.25 !important; transition:opacity 0.15s ease !important;
+        background:rgba(188,22,97,0.25) !important; color:#FFFFFF !important; font-size:0 !important; line-height:1 !important;
+        transition:background 0.15s ease !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
@@ -8601,7 +8601,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:hover,
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:focus,
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:active {
-        opacity:1 !important; background:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important;
+        background:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important;
     }
     [class*="st-key-crm_workspace_add_client_"] { flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important; margin:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_add_client_"] > div > button,
