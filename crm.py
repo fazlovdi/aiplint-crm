@@ -5565,6 +5565,8 @@ def save_data(data):
                         )
                         if _deleted_flags and "комментар" in noun:
                             return "Удалён комментарий"
+                        if _deleted_flags and "файл" in noun:
+                            return "Удалён файл"
                         if "комментар" in noun:
                             return "Изменён комментарий"
                         return f"Изменён(ы): {noun.lower()}"
@@ -5626,13 +5628,13 @@ def save_data(data):
                     _new_tasks_audit = _audit_map(_new_c.get("tasks", []))
                     if _old_c.get("change_log", []) == _new_c.get("change_log", []):
                         _client_changes = []
-                        _old_client_core = _audit_clean(_old_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "requisites"))
+                        _old_client_core = _audit_clean(_old_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "client_files", "requisites"))
                         _new_client_core = _audit_clean(_new_c, ("change_log", "last_modified", "viewed", "tasks", "client_comments", "files", "requisites"))
                         _client_labels = {"name":"ФИО / Компания", "phone":"Телефон", "email":"Email", "manager":"Ответственный", "address":"Адрес", "city":"Город", "discount":"Скидка", "category":"Категория", "source":"Источник", "promo_code":"Промокод"}
                         for _field in sorted(set(_old_client_core) | set(_new_client_core)):
                             if _old_client_core.get(_field) != _new_client_core.get(_field):
                                 _client_changes.append(f"{_client_labels.get(_field, _field.replace('_', ' ').capitalize())}: «{_old_client_core.get(_field, '—')}» → «{_new_client_core.get(_field, '—')}»")
-                        for _field, _noun in (("client_comments", "комментарий"), ("files", "файл"), ("requisites", "реквизиты")):
+                        for _field, _noun in (("client_comments", "комментарий"), ("client_files", "файл"), ("requisites", "реквизиты")):
                             _action = _audit_list_action(_old_c, _new_c, _field, _noun)
                             if _action:
                                 _client_changes.append(_action)
