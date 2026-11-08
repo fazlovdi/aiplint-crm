@@ -7614,7 +7614,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     }
     /* Scroll behavior is applied to the detected outer row only by the script below. */
     [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) {
-        padding-right:110px !important;
+        padding-right:48px !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
         position:absolute !important; top:0 !important; right:0 !important; z-index:10 !important;
@@ -7664,8 +7664,21 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { display:flex !important; align-items:center !important; justify-content:center !important; box-sizing:border-box !important; height:42px !important; min-height:42px !important; width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] { margin-left:auto !important; flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button { width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; color:#31333F !important; font:inherit !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
+        display:flex !important; align-items:center !important; justify-content:center !important;
+        width:42px !important; min-width:42px !important; max-width:42px !important;
+        height:42px !important; min-height:42px !important; padding:0 !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button {
+        display:flex !important; align-items:center !important; justify-content:center !important;
+        width:42px !important; min-width:42px !important; max-width:42px !important;
+        height:42px !important; min-height:42px !important; padding:0 !important;
+        border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important;
+        background:transparent !important; color:#31333F !important; font-size:24px !important; line-height:1 !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button p {
+        font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
@@ -7837,6 +7850,20 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         _crm_workspace_open_dialog(_add_client_entry)
                         st.rerun()
 
+        _has_minimized_restore_window = any(
+            w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
+            for w in _all_bottom_windows
+        )
+        if _has_minimized_restore_window:
+            with st.container(key="crm_workspace_main_expand_wrap"):
+                st.button(
+                    "⛶",
+                    key=f"crm_workspace_main_expand_{_bottom_scope}",
+                    help="Развернуть последнее свёрнутое окно",
+                    on_click=_crm_workspace_restore_last_window_callback,
+                    type="tertiary",
+                    use_container_width=False,
+                )
 
     # Attach scrolling to both copies of the window strip (main page and workspace).
     components.html("""<script>
@@ -7907,7 +7934,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               controls.style.right = '0';
               controls.style.top = '0';
               controls.style.zIndex = '10';
-              outer.style.paddingRight = '110px';
+              outer.style.paddingRight = '48px';
             }
             // No visible scrollbar: keep only left-mouse drag scrolling.
             panel.querySelectorAll(':scope > .crm-bottom-visible-track').forEach(track => track.remove());
@@ -7916,7 +7943,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             outer.style.setProperty('-ms-overflow-style', 'none', 'important');
             outer.style.setProperty('overflow-x', 'auto', 'important');
             outer.style.setProperty('overflow-y', 'hidden', 'important');
-            outer.style.setProperty('padding-right', controls ? '110px' : '0', 'important');
+            outer.style.setProperty('padding-right', controls ? '48px' : '0', 'important');
             // Remove custom scrollbar leftovers from prior renders.
             doc.querySelectorAll('.crm-bottom-visible-track, .crm-bottom-visible-thumb').forEach(node => node.remove());
           });
@@ -12145,27 +12172,7 @@ def render_client_in_tree(cl):
                     commit_and_rerun(st.session_state.crm_store, "Сделка создана")
 
 def render_client_form(fv):
-    _has_minimized_client_window = any(
-        w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
-        for w in st.session_state.get("_crm_windows", [])
-    )
-    if _has_minimized_client_window:
-        _add_client_col, _expand_client_col = st.columns([10, 1], gap="small")
-    else:
-        _add_client_col = st.container()
-        _expand_client_col = None
-    with _add_client_col:
-        _add_client_clicked = st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False)
-    if _expand_client_col is not None:
-        with _expand_client_col:
-            st.container(horizontal=True, horizontal_alignment="right").button(
-                "Развернуть",
-                key="crm_workspace_main_expand",
-                help="Вернуть последнее окно клиентов",
-                on_click=_crm_workspace_restore_last_window_callback,
-                type="tertiary",
-                use_container_width=False,
-            )
+    _add_client_clicked = st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False)
     if _add_client_clicked:
         # Каждое нажатие явно создаёт отдельную вкладку в рабочем окне.
         # Не вызываем add_client_dialog повторно при каждом общем rerun:
