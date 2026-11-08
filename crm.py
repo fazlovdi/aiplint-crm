@@ -11836,8 +11836,8 @@ def render_deal_detail(d, cl, cu, key_prefix):
             with st.container(border=True):
                 _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
                 _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Задачи по сделке</div>", unsafe_allow_html=True)
                 if _deal_tasks_list:
-                    st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Задачи по сделке</div>", unsafe_allow_html=True)
                     for _ti, _task in enumerate(_deal_tasks_list):
                         _task_col, _date_col, _open_col = st.columns([2, 2, 1])
                         with _task_col:
