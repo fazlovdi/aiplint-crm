@@ -8753,51 +8753,24 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                                 _crm_workspace_open_dialog(_grs["entry"], client_id=_grs["client_id"])
                                 st.rerun()
 
-            # Поле поиска внизу окна, с отключённым автозаполнением и крестиком очистки.
-            with st.container(key=f"crm_workspace_global_search_wrap_{_bottom_scope}"):
-                st.text_input(
-                    "Поиск по CRM",
-                    key=f"crm_workspace_global_search_input_{_bottom_scope}",
-                    placeholder="Номер, имя, тема, телефон…",
-                    label_visibility="collapsed",
-                )
-                st.button(
-                    "×",
-                    key=f"crm_workspace_global_search_clear_{_bottom_scope}",
-                    help="Очистить поиск",
-                    on_click=lambda _k=f"crm_workspace_global_search_input_{_bottom_scope}": st.session_state.__setitem__(_k, ""),
-                )
+            # Поле поиска внизу раскрывающегося окна.
+            st.text_input(
+                "Поиск по CRM",
+                key=f"crm_workspace_global_search_input_{_bottom_scope}",
+                placeholder="Номер, имя, тема, телефон…",
+                label_visibility="collapsed",
+            )
             st.markdown(f"""
             <style>
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} {{
-                position:relative !important; width:100% !important; min-width:0 !important;
-                padding:0 !important; margin:0 !important;
-            }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] {{
+            .st-key-crm_workspace_global_search_input_{_bottom_scope} {{
                 width:100% !important; min-width:0 !important; margin:0 !important;
             }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] > div {{
+            .st-key-crm_workspace_global_search_input_{_bottom_scope} > div {{
                 width:100% !important; min-width:0 !important;
             }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_input"] input {{
+            .st-key-crm_workspace_global_search_input_{_bottom_scope} input {{
                 box-sizing:border-box !important; width:100% !important; min-width:0 !important;
-                height:38px !important; min-height:38px !important; padding-right:42px !important;
-            }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] {{
-                position:absolute !important; right:2px !important; top:0 !important;
-                width:34px !important; height:38px !important; z-index:10 !important;
-                margin:0 !important; padding:0 !important;
-            }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] > div {{
-                width:34px !important; height:38px !important; margin:0 !important; padding:0 !important;
-            }}
-            .st-key-crm_workspace_global_search_wrap_{_bottom_scope} [class*="st-key-crm_workspace_global_search_clear"] button {{
-                display:flex !important; align-items:center !important; justify-content:center !important;
-                width:34px !important; min-width:34px !important; max-width:34px !important;
-                height:38px !important; min-height:38px !important; max-height:38px !important;
-                padding:0 !important; margin:0 !important; font-size:20px !important;
-                line-height:1 !important; color:#808B98 !important; border:0 !important;
-                background:transparent !important; box-shadow:none !important;
+                height:38px !important; min-height:38px !important;
             }}
             </style>
             """, unsafe_allow_html=True)
@@ -8805,7 +8778,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             (function(){{
               var w=window; try{{if(window.parent&&window.parent!==window)w=window.parent;}}catch(e){{}}
               function setup(){{
-                var root=w.document.querySelector('.st-key-crm_workspace_global_search_wrap_{_bottom_scope}');
+                var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
                 if(root){{var input=root.querySelector('input'); if(input){{input.setAttribute('autocomplete','off');input.setAttribute('autocorrect','off');input.setAttribute('autocapitalize','off');input.setAttribute('spellcheck','false');}}}}
                 var closeFlag={str(bool(st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False))).lower()};
                 if(closeFlag){{
