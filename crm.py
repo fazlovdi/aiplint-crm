@@ -7622,12 +7622,22 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         background:#F3F5F8 !important; padding:0 3px !important;
         box-shadow:none !important; outline:0 !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] {
         display:flex !important; flex-wrap:nowrap !important; gap:1px !important;
         width:max-content !important; min-width:max-content !important; max-width:none !important;
-        align-items:center !important; overflow:visible !important;
+        align-items:center !important; overflow:visible !important; flex-shrink:0 !important;
     }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] > div { flex:0 0 auto !important; min-width:0 !important; padding:0 !important; }
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > div,
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] > div {
+        flex:0 0 auto !important; flex-shrink:0 !important;
+        width:max-content !important; min-width:max-content !important; max-width:none !important;
+        padding:0 !important; overflow:visible !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stButton"],
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stButton"] > button {
+        flex:0 0 auto !important; flex-shrink:0 !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] { margin-left:auto !important; flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
@@ -7635,7 +7645,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
