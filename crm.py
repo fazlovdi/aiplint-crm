@@ -1566,14 +1566,23 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
         _original_idx, _file = entry
         # Use a real timestamp so ISO dates, legacy date strings and filename
         # timestamps are compared consistently in every window/tab.
+        # В имени файла есть epoch-время фактической загрузки; оно надёжнее
+        # старых/перезаписанных метаданных created_at.
+        _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
+        _match = re.search(r"_(\d{9,})_", _path_value)
+        _timestamp = None
+        if _match:
+            try:
+                _timestamp = float(_match.group(1))
+            except (ValueError, OverflowError):
+                _timestamp = None
         _date_value = str(
             _file.get("created_at")
             or _file.get("uploaded_at")
             or _file.get("last_modified")
             or ""
         ).strip()
-        _timestamp = None
-        if _date_value:
+        if _timestamp is None and _date_value:
             try:
                 _timestamp = datetime.fromisoformat(_date_value.replace("Z", "+00:00")).timestamp()
             except (ValueError, TypeError, OverflowError):
@@ -1590,14 +1599,6 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
                         break
                     except (ValueError, TypeError, OverflowError):
                         continue
-        if _timestamp is None:
-            _path_value = str(_file.get("file_path", _file.get("path", "")) or "")
-            _match = re.search(r"_(\d{9,})_", _path_value)
-            if _match:
-                try:
-                    _timestamp = float(_match.group(1))
-                except (ValueError, OverflowError):
-                    _timestamp = None
         # When legacy records have no date at all, keep their existing relative
         # order (newer appended records first) while dated records sort by time.
         return (1, _timestamp, _original_idx) if _timestamp is not None else (0, 0, _original_idx)
@@ -5520,6 +5521,41 @@ def save_data(data):
                 merged_data, conflicts = _three_way_merge(base_data, data, latest_data, conflicts=conflicts)
             else:
                 merged_data = copy.deepcopy(data)
+
+            # Не теряем историю клиента при трёхстороннем слиянии параллельных сессий.
+            # Сохраняем объединение записей из последней БД, отправленной сессии и результата merge.
+            try:
+                _client_log_sources = []
+                for _source_data in (latest_data, data, merged_data):
+                    _client_log_sources.append({
+                        str(_c.get("id")): _c
+                        for _c in (_source_data.get("clients", []) or [])
+                        if isinstance(_c, dict) and _c.get("id") is not None
+                    })
+                _merged_clients_by_id = {
+                    str(_c.get("id")): _c
+                    for _c in (merged_data.get("clients", []) or [])
+                    if isinstance(_c, dict) and _c.get("id") is not None
+                }
+                for _cid, _merged_client in _merged_clients_by_id.items():
+                    _seen_client_log = set()
+                    _combined_client_log = []
+                    for _source_map in _client_log_sources:
+                        _source_client = _source_map.get(_cid, {})
+                        for _entry in (_source_client.get("change_log", []) or []):
+                            if not isinstance(_entry, dict):
+                                continue
+                            _entry_key = (
+                                str(_entry.get("date", "") or ""),
+                                str(_entry.get("author", "") or ""),
+                                str(_entry.get("fields", "") or ""),
+                            )
+                            if _entry_key not in _seen_client_log:
+                                _seen_client_log.add(_entry_key)
+                                _combined_client_log.append(copy.deepcopy(_entry))
+                    _merged_client["change_log"] = _combined_client_log
+            except Exception as _client_log_merge_exc:
+                _crm_log("CLIENT_CHANGE_LOG_MERGE_ERROR", {}, exc=_client_log_merge_exc, remote=False)
 
             # Полный журнал действий: если конкретный обработчик не добавил запись сам,
             # фиксируем фактическое изменение объекта перед сохранением общей базы.
@@ -12908,16 +12944,35 @@ def render_client_card_expanded(cl):
                      if str(item.get("id", "")) == str(cl.get("id", ""))),
                     cl,
                 )
-                _client_changes = _client_for_history.get("change_log", []) or cl.get("change_log", [])
+                # Объединяем обе версии: карточка может быть отрисована из устаревшей
+                # ссылки на объект, пока crm_store уже содержит актуальную запись.
+                _client_changes = []
+                _seen_history = set()
+                for _history_source in (cl.get("change_log", []) or [], _client_for_history.get("change_log", []) or []):
+                    for _chg in _history_source:
+                        if not isinstance(_chg, dict):
+                            continue
+                        _history_key = (
+                            str(_chg.get("date", "") or ""),
+                            str(_chg.get("author", "") or ""),
+                            str(_chg.get("fields", "") or ""),
+                        )
+                        if _history_key not in _seen_history:
+                            _seen_history.add(_history_key)
+                            _client_changes.append(_chg)
                 if _client_changes:
                     for _chg in reversed(_client_changes[-20:]):
-                        _chg_date = str(_chg.get("date", "") or "")
-                        _chg_author = str(_chg.get("author", "") or "")
+                        _chg_date = html.escape(str(_chg.get("date", "") or ""))
+                        _chg_author = html.escape(str(_chg.get("author", "") or ""))
                         _chg_fields = str(_chg.get("fields", "") or "")
                         # Не показываем технический дамп списка файлов в истории.
-                        if re.match(r"^Client files:\\s*«.*»\\s*→\\s*«\\[", _chg_fields, flags=re.IGNORECASE | re.DOTALL):
+                        if re.match(r"^Client files:\s*«.*»\s*→\s*«\[", _chg_fields, flags=re.IGNORECASE | re.DOTALL):
                             _chg_fields = "Изменён список файлов клиента"
-                        st.markdown(f"**{_chg_date}** | {_chg_author} — {_chg_fields}")
+                        _chg_fields = html.escape(_chg_fields)
+                        st.markdown(
+                            f"<div style='font-size:0.82rem;line-height:1.45;color:#95A5B7;margin-bottom:0.45rem;white-space:normal;overflow-wrap:anywhere;'>{_chg_date} | {_chg_author} — {_chg_fields}</div>",
+                            unsafe_allow_html=True,
+                        )
                 else:
                     st.caption("История изменений появится после редактирования карточки.")
 
