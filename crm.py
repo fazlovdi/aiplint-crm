@@ -11760,8 +11760,11 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.rerun()
         with right_col:
             with st.container(border=True):
+                st.markdown("**Комментарии**")
+                st.markdown("""<style>
+                div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
+                </style>""", unsafe_allow_html=True)
                 if d.get("deal_comments"):
-                    st.markdown("**Комментарии:**")
                     render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
                 dc_clr_key = f"dls_clr_dc_{deal_id}"
                 if st.session_state.get(dc_clr_key):
