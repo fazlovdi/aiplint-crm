@@ -3953,7 +3953,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             _smart_rerun()
                                 else:
                                     dl_btn_key = f"btn_dl_click_{key_prefix}"
-                                    _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
+                                    _dl_date = parse_optional_date(t.get("deadline", ""))
+                                    _today_date = moscow_now().date()
+                                    if _dl_date is not None and _dl_date < _today_date:
+                                        _dl_color = "#C62828"
+                                    elif _dl_date is not None and _dl_date >= _today_date:
+                                        _dl_color = "#2E7D32"
+                                    else:
+                                        _dl_color = "#2C3E50"
                                     st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
                                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
@@ -4147,7 +4154,14 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             _smart_rerun()
                                 else:
                                     dl_btn_key = f"btn_dl_click_{key_prefix}"
-                                    _dl_color = "#C62828" if is_task_overdue(t) else "#2C3E50"
+                                    _dl_date = parse_optional_date(t.get("deadline", ""))
+                                    _today_date = moscow_now().date()
+                                    if _dl_date is not None and _dl_date < _today_date:
+                                        _dl_color = "#C62828"
+                                    elif _dl_date is not None and _dl_date >= _today_date:
+                                        _dl_color = "#2E7D32"
+                                    else:
+                                        _dl_color = "#2C3E50"
                                     st.markdown(f"<style>.st-key-{dl_btn_key} button {{ background:none!important;border:none!important;color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
                                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
