@@ -15960,9 +15960,36 @@ def _crm_workspace_close_tab_callback(window_id, tab_index, force=False):
 
 # Изолируем рабочее пространство во фрагмент Streamlit: переключение вкладок и
 # локальные изменения внутри открытого окна не должны заново выполнять всю CRM.
+def _crm_queue_client_object_add(window_id, dialog_name, dialog_args):
+    """Queue an add-dialog request from the client-object popover before rerender."""
+    st.session_state[f"_crm_client_objects_pending_open_{window_id}"] = (dialog_name, dialog_args)
+    version_key = f"_crm_workspace_client_objects_popover_version_{window_id}"
+    st.session_state[version_key] = int(st.session_state.get(version_key, 0) or 0) + 1
+
+
 @st.fragment
 def _crm_render_workspace_fragment():
     """Render active workspace in isolation to reduce full-app reruns."""
+    # Process queued actions before rendering the popover. The callback closes it
+    # by changing its key, then this rerun opens the requested dialog immediately.
+    _pending_window_id = st.session_state.get("_crm_active_window_id")
+    if _pending_window_id is not None:
+        _pending_open_key = f"_crm_client_objects_pending_open_{_pending_window_id}"
+        _pending_open = st.session_state.pop(_pending_open_key, None)
+        if _pending_open:
+            _pending_name, _pending_args = _pending_open
+            if _pending_name == "client_create_task_dialog":
+                client_create_task_dialog(*_pending_args)
+            elif _pending_name == "create_deal_dialog":
+                create_deal_dialog(*_pending_args)
+            elif _pending_name == "client_requisites_dialog":
+                client_requisites_dialog(*_pending_args)
+            try:
+                st.rerun(scope="fragment")
+            except (TypeError, ValueError):
+                st.rerun()
+            return
+
     _crm_windows = st.session_state.get("_crm_windows", [])
     _crm_active_window_id = st.session_state.get("_crm_active_window_id")
     _crm_active_window = next((w for w in _crm_windows if w.get("id") == _crm_active_window_id), None)
@@ -16269,28 +16296,27 @@ def _crm_render_workspace_fragment():
                                 client_requisites_view_dialog(_tabbar_client_id, False, _obj.get("id"))
 
                         st.markdown("---")
-                        if st.button("Добавить Задачу по клиенту", key=f"crm_obj_add_client_task_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
-                            _crm_bump_client_objects_popover()
-                            st.session_state[f"_crm_client_objects_pending_open_{_crm_active_window['id']}"] = ("client_create_task_dialog", (_tabbar_client_id_str,))
-                        if st.button("Добавить сделку", key=f"crm_obj_add_deal_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
-                            _crm_bump_client_objects_popover()
-                            st.session_state[f"_crm_client_objects_pending_open_{_crm_active_window['id']}"] = ("create_deal_dialog", (_tabbar_client_id_str,))
-                        if st.button("Добавить реквизиты", key=f"crm_obj_add_req_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
-                            _crm_bump_client_objects_popover()
-                            st.session_state[f"_crm_client_objects_pending_open_{_crm_active_window['id']}"] = ("client_requisites_dialog", (_tabbar_client_id, False))
-
-                # Открываем диалог уже после выхода из popover: так смена его ключа
-                # для закрытия списка не перехватывает первый клик по кнопке добавления.
-                _pending_open_key = f"_crm_client_objects_pending_open_{_crm_active_window['id']}"
-                _pending_open = st.session_state.pop(_pending_open_key, None)
-                if _pending_open:
-                    _pending_name, _pending_args = _pending_open
-                    if _pending_name == "client_create_task_dialog":
-                        client_create_task_dialog(*_pending_args)
-                    elif _pending_name == "create_deal_dialog":
-                        create_deal_dialog(*_pending_args)
-                    elif _pending_name == "client_requisites_dialog":
-                        client_requisites_dialog(*_pending_args)
+                        st.button(
+                            "Добавить Задачу по клиенту",
+                            key=f"crm_obj_add_client_task_{_crm_active_window['id']}",
+                            type="tertiary", use_container_width=True,
+                            on_click=_crm_queue_client_object_add,
+                            args=(_crm_active_window["id"], "client_create_task_dialog", (_tabbar_client_id_str,)),
+                        )
+                        st.button(
+                            "Добавить сделку",
+                            key=f"crm_obj_add_deal_{_crm_active_window['id']}",
+                            type="tertiary", use_container_width=True,
+                            on_click=_crm_queue_client_object_add,
+                            args=(_crm_active_window["id"], "create_deal_dialog", (_tabbar_client_id_str,)),
+                        )
+                        st.button(
+                            "Добавить реквизиты",
+                            key=f"crm_obj_add_req_{_crm_active_window['id']}",
+                            type="tertiary", use_container_width=True,
+                            on_click=_crm_queue_client_object_add,
+                            args=(_crm_active_window["id"], "client_requisites_dialog", (_tabbar_client_id, False)),
+                        )
 
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                     st.button(
