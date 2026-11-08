@@ -8572,9 +8572,36 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
-    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) { flex:0 0 38px !important; width:38px !important; min-width:38px !important; max-width:38px !important; margin:0 !important; padding:0 !important; }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] { display:flex !important; align-items:center !important; justify-content:center !important; box-sizing:border-box !important; width:36px !important; min-width:36px !important; max-width:36px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#31333F !important; font-size:22px !important; line-height:1 !important; }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { font-size:22px !important; line-height:1 !important; margin:0 !important; padding:0 !important; }
+        [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) {
+        position:fixed !important; left:14px !important; bottom:14px !important; z-index:999999 !important;
+        display:flex !important; align-items:center !important; justify-content:center !important;
+        flex:0 0 46px !important; width:46px !important; min-width:46px !important; max-width:46px !important;
+        height:46px !important; margin:0 !important; padding:0 !important; overflow:visible !important;
+        background:transparent !important; border:0 !important;
+    }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] {
+        position:relative !important; display:flex !important; align-items:center !important; justify-content:center !important;
+        box-sizing:border-box !important; width:46px !important; min-width:46px !important; max-width:46px !important;
+        height:46px !important; min-height:46px !important; padding:0 !important; margin:0 !important;
+        border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:none !important;
+        background:#BC1661 !important; color:#FFFFFF !important; font-size:0 !important; line-height:1 !important;
+    }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
+        content:"" !important; position:absolute !important; left:12px !important; top:11px !important;
+        width:14px !important; height:14px !important; box-sizing:border-box !important;
+        border:2.5px solid #FFFFFF !important; border-radius:50% !important;
+    }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::after {
+        content:"" !important; position:absolute !important; left:26px !important; top:26px !important;
+        width:8px !important; height:2.5px !important; background:#FFFFFF !important;
+        border-radius:2px !important; transform:rotate(45deg) !important; transform-origin:left center !important;
+    }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:hover,
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:focus,
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:active {
+        background:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important;
+    }
     [class*="st-key-crm_workspace_add_client_"] { flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important; margin:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_add_client_"] > div > button,
     [class*="st-key-crm_workspace_add_client_"] button[data-testid^="stPopoverButton"] { display:flex !important; box-sizing:border-box !important; align-items:center !important; justify-content:flex-start !important; width:50px !important; min-width:50px !important; max-width:50px !important; height:42px !important; min-height:42px !important; padding:0 0 0 16px !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#BC1661 !important; font-size:26px !important; font-weight:400 !important; }
