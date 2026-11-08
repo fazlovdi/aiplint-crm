@@ -8559,7 +8559,7 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
-            st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
+            st.markdown("**Файлы сделки:**")
             render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
@@ -11788,7 +11788,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         st.warning("Введите текст")
             st.markdown("---")
             with st.container(border=True):
-                st.markdown("**Файлы сделки:**")
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True)
                 st.markdown("**Загрузить файлы:**")
