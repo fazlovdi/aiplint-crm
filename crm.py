@@ -11521,7 +11521,11 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 )
                 _crm_mark_widget_changed(f"deal_real_date_detail_{deal_id}", (_real_date_selected.isoformat() if _real_date_selected else "") != str(d.get("real_date") or ""))
             else:
-                st.markdown(f"**Реальная дата сделки:** {format_date(d.get('real_date', '')) or '—'}")
+                _real_date_display = format_date(d.get("real_date", "")) or "—"
+                st.markdown(
+                    f"<div style='font-size:1rem;line-height:1.5;color:inherit;margin:0 0 0.5rem 0;'><strong>Реальная дата сделки:</strong> {html.escape(str(_real_date_display))}</div>",
+                    unsafe_allow_html=True,
+                )
                 _real_date_selected = _real_date_current
             ps = d.get("payment_status", "Не оплачено")
             _ps_widget_key_dd = f"dls_ps_{deal_id}"
