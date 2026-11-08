@@ -7627,16 +7627,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         align-items:center !important; overflow:visible !important; flex-shrink:0 !important;
     }
-    /* Reserve a dedicated grid track for each close control. Streamlit's
-       horizontal flex layout was squeezing/overlapping the close-button slot
-       once several window items were present, regardless of available width. */
+    /* Keep each window item as a single flex row. A grid here changes
+       Streamlit's child sizing and can make items/close controls uneven. */
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
-        display:grid !important;
-        grid-template-columns:max-content 27px !important;
-        grid-auto-flow:column !important;
+        display:flex !important;
+        flex-direction:row !important;
+        flex-wrap:nowrap !important;
         align-items:center !important;
-        justify-content:start !important;
+        justify-content:flex-start !important;
         gap:1px !important;
+        column-gap:1px !important;
         width:max-content !important;
         min-width:max-content !important;
         max-width:none !important;
@@ -7654,14 +7654,14 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         flex:0 0 auto !important; flex-shrink:0 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { display:flex !important; align-items:center !important; justify-content:center !important; box-sizing:border-box !important; height:42px !important; min-height:42px !important; width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] { margin-left:auto !important; flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button { width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; color:#31333F !important; font:inherit !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
-    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:active { color:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
@@ -7672,7 +7672,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; }
     [class*="st-key-crm_workspace_taskbar_close_"] button,
     [class*="st-key-crm_workspace_taskbar_close_"] button p { color:#BC1661 !important; font-size:18px !important; line-height:1 !important; }
-    [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:30px !important; min-height:30px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
+    [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
