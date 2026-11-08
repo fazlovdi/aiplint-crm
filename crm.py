@@ -3332,7 +3332,23 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
 @st.fragment
 def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_size=None):
-    with st.container(border=True):
+    with st.container(border=True, key=f"reminders_{key_prefix}"):
+        st.markdown(f"""<style>
+        .st-key-reminders_{key_prefix} .stHorizontalBlock .stButton button,
+        .st-key-reminders_{key_prefix} .stHorizontalBlock .stMarkdown button {{
+            min-height: 32px !important;
+            padding: 4px 10px !important;
+            font-size: 0.85rem !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }}
+        .st-key-reminders_{key_prefix} .stHorizontalBlock .stMarkdown {{
+            margin-top: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+        }}
+        </style>""", unsafe_allow_html=True)
         store = st.session_state.crm_store
         store.setdefault("reminders", [])
         if heading_size:
