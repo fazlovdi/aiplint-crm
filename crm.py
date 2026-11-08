@@ -12762,127 +12762,129 @@ def render_client_card_expanded(cl):
                     else:
                         st.warning("Выберите файл(ы)")
             st.markdown("---")
-            # Список задач по клиенту — сразу под блоком файлов
-            _client_only_tasks = [t for t in cl.get("tasks", []) if not t.get("deal_id")]
-            _client_only_tasks.sort(key=lambda task: task.get("created_at", ""), reverse=True)
-            st.markdown(f"**Список задач по клиенту ({len(_client_only_tasks)})**")
-            if _client_only_tasks:
-                for _ti, _task in enumerate(_client_only_tasks):
-                    _task_col, _date_col, _open_col = st.columns([2, 2, 1])
-                    with _task_col:
-                        _task_number_label = html.escape(str(_task.get("task_number", "")))
-                        _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
-                        st.markdown(f"**{_task_number_label}** · {_task_type_label}")
-                    with _date_col:
-                        _created = str(_task.get("created_at", "") or "")
-                        try:
-                            _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
-                            _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
-                        except Exception:
-                            _created_label = f"Создано {_created}" if _created else "Создано —"
-                        st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
-                    with _open_col:
-                        if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
-                            _task_deal = next((x for x in st.session_state.crm_store.get("deals", [])
-                                               if str(x.get("id", "")) == str(_task.get("deal_id", ""))), None)
-                            _task_args = (_task, cl, _task_deal, f"client_task_{cl['id']}_{_task.get('task_number', '')}")
-                            if _crm_queue_child_open_if_parent_dirty("task_detail_dialog", _task_args):
-                                return
-                            task_detail_dialog(*_task_args)
-            else:
-                st.caption("Задач по клиенту пока нет.")
-            if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
-                _task_args = (str(cl["id"]),)
-                if _crm_queue_child_open_if_parent_dirty("client_create_task_dialog", _task_args):
-                    return
-                # Create the client task in the current workspace as a normal tab.
-                client_create_task_dialog(*_task_args)
-
+            with st.container(border=True):
+                # Список задач по клиенту — сразу под блоком файлов
+                _client_only_tasks = [t for t in cl.get("tasks", []) if not t.get("deal_id")]
+                _client_only_tasks.sort(key=lambda task: task.get("created_at", ""), reverse=True)
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Список задач по клиенту (" + str(len(_client_only_tasks)) + ")</div>", unsafe_allow_html=True)
+                if _client_only_tasks:
+                    for _ti, _task in enumerate(_client_only_tasks):
+                        _task_col, _date_col, _open_col = st.columns([2, 2, 1])
+                        with _task_col:
+                            _task_number_label = html.escape(str(_task.get("task_number", "")))
+                            _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
+                            st.markdown(f"**{_task_number_label}** · {_task_type_label}")
+                        with _date_col:
+                            _created = str(_task.get("created_at", "") or "")
+                            try:
+                                _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
+                                _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
+                            except Exception:
+                                _created_label = f"Создано {_created}" if _created else "Создано —"
+                            st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
+                        with _open_col:
+                            if st.button("Открыть", key=f"client_task_open_{cl['id']}_{_ti}", use_container_width=True):
+                                _task_deal = next((x for x in st.session_state.crm_store.get("deals", [])
+                                                   if str(x.get("id", "")) == str(_task.get("deal_id", ""))), None)
+                                _task_args = (_task, cl, _task_deal, f"client_task_{cl['id']}_{_task.get('task_number', '')}")
+                                if _crm_queue_child_open_if_parent_dirty("task_detail_dialog", _task_args):
+                                    return
+                                task_detail_dialog(*_task_args)
+                else:
+                    st.caption("Задач по клиенту пока нет.")
+                if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
+                    _task_args = (str(cl["id"]),)
+                    if _crm_queue_child_open_if_parent_dirty("client_create_task_dialog", _task_args):
+                        return
+                    # Create the client task in the current workspace as a normal tab.
+                    client_create_task_dialog(*_task_args)
+    
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
 
-            # Список сделок клиента — в том же стиле, что список задач по сделке
-            _client_deals_list = [deal for deal in st.session_state.crm_store.get("deals", []) if str(deal.get("client_id", "")) == str(cl.get("id", ""))]
-            _client_deals_list.sort(key=lambda deal: deal.get("created_at", ""), reverse=True)
-            st.markdown(f"**Список сделок ({len(_client_deals_list)})**")
-            if _client_deals_list:
-                for _di, _deal in enumerate(_client_deals_list):
-                    _deal_col, _date_col, _open_col = st.columns([2, 2, 1])
-                    with _deal_col:
-                        _deal_number = html.escape(str(_deal.get("deal_number", _deal.get("title", ""))))
-                        _deal_title = html.escape(str(_deal.get("deal_title", "") or ""))
-                        _deal_status = html.escape(str(_deal.get("status", "Новый") or "Новый"))
-                        st.markdown(f"**{_deal_number}** · {_deal_title} <span style='color:#7B8490'>({ _deal_status })</span>", unsafe_allow_html=True)
-                    with _date_col:
-                        _created = str(_deal.get("created_at", "") or "")
-                        try:
-                            _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
-                            _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
-                        except Exception:
-                            _created_label = f"Создано {_created}" if _created else "Создано —"
-                        st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
-                    with _open_col:
-                        if st.button("Открыть", key=f"client_deal_open_{cl['id']}_{_di}", use_container_width=True):
-                            _deal_args = (_deal, cl, st.session_state.get("current_user"), f"deal_{_deal.get('id')}")
-                            if _crm_queue_child_open_if_parent_dirty("deal_detail_dialog", _deal_args):
-                                return
-                            deal_detail_dialog(*_deal_args)
-            else:
-                st.caption("Сделок пока нет.")
-            if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
-                _deal_args = (str(cl["id"]),)
-                if _crm_queue_child_open_if_parent_dirty("create_deal_dialog", _deal_args):
-                    return
-                # Create the deal in the current client workspace as a normal tab.
-                create_deal_dialog(*_deal_args)
-
+            with st.container(border=True):
+                # Список сделок клиента — в том же стиле, что список задач по сделке
+                _client_deals_list = [deal for deal in st.session_state.crm_store.get("deals", []) if str(deal.get("client_id", "")) == str(cl.get("id", ""))]
+                _client_deals_list.sort(key=lambda deal: deal.get("created_at", ""), reverse=True)
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Список сделок (" + str(len(_client_deals_list)) + ")</div>", unsafe_allow_html=True)
+                if _client_deals_list:
+                    for _di, _deal in enumerate(_client_deals_list):
+                        _deal_col, _date_col, _open_col = st.columns([2, 2, 1])
+                        with _deal_col:
+                            _deal_number = html.escape(str(_deal.get("deal_number", _deal.get("title", ""))))
+                            _deal_title = html.escape(str(_deal.get("deal_title", "") or ""))
+                            _deal_status = html.escape(str(_deal.get("status", "Новый") or "Новый"))
+                            st.markdown(f"**{_deal_number}** · {_deal_title} <span style='color:#7B8490'>({ _deal_status })</span>", unsafe_allow_html=True)
+                        with _date_col:
+                            _created = str(_deal.get("created_at", "") or "")
+                            try:
+                                _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
+                                _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
+                            except Exception:
+                                _created_label = f"Создано {_created}" if _created else "Создано —"
+                            st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
+                        with _open_col:
+                            if st.button("Открыть", key=f"client_deal_open_{cl['id']}_{_di}", use_container_width=True):
+                                _deal_args = (_deal, cl, st.session_state.get("current_user"), f"deal_{_deal.get('id')}")
+                                if _crm_queue_child_open_if_parent_dirty("deal_detail_dialog", _deal_args):
+                                    return
+                                deal_detail_dialog(*_deal_args)
+                else:
+                    st.caption("Сделок пока нет.")
+                if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
+                    _deal_args = (str(cl["id"]),)
+                    if _crm_queue_child_open_if_parent_dirty("create_deal_dialog", _deal_args):
+                        return
+                    # Create the deal in the current client workspace as a normal tab.
+                    create_deal_dialog(*_deal_args)
+    
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
-            # Реквизиты для документов — между действиями и историей изменений.
-            st.markdown("---")
-            st.markdown("**Реквизиты для документов**")
-            _reqs = cl.setdefault("requisites", [])
-            if not _reqs:
-                st.caption("Реквизиты плательщика пока не добавлены.")
-            for _ri, _req in enumerate(_reqs):
-                _req_cols = st.columns([3.2, 1.1, 1.1])
-                _req_name = str(_req.get("legal_name", "Реквизиты без названия"))
-                with _req_cols[0]:
-                    if _req.get("deleted"):
-                        st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0'>{html.escape(_req_name)} (удалены)</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='padding:0.35rem 0;font-weight:500'>{html.escape(_req_name)}</div>", unsafe_allow_html=True)
-                with _req_cols[1]:
-                    if not _req.get("deleted") and st.button("Открыть", key=f"client_req_open_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
-                        _req_args = (cl["id"], False, _req.get("id"))
-                        if _crm_queue_child_open_if_parent_dirty("client_requisites_view_dialog", _req_args):
-                            return
-                        client_requisites_view_dialog(*_req_args)
-                with _req_cols[2]:
-                    _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
-                    if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
-                        st.session_state[_req_confirm_key] = True
-                        st.rerun()
-                if not _req.get("deleted") and st.session_state.get(_req_confirm_key):
-                    st.warning(f"Удалить реквизиты «{_req_name}»? Они останутся в истории карточки клиента.")
-                    _req_yes, _req_no = st.columns(2)
-                    with _req_yes:
-                        if st.button("Да, удалить", key=f"client_req_del_yes_{cl['id']}_{_req.get('id',_ri)}", type="primary", use_container_width=True):
-                            _req["deleted"] = True
-                            _req["deleted_at"] = now_str()
-                            _req["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
-                            cl["last_modified"] = now_str()
-                            cl.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Реквизиты «{_req_name}» помечены удалёнными"})
-                            st.session_state.pop(_req_confirm_key, None)
-                            save_data(st.session_state.crm_store)
+            with st.container(border=True):
+                # Реквизиты для документов — между действиями и историей изменений.
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Реквизиты для документов</div>", unsafe_allow_html=True)
+                _reqs = cl.setdefault("requisites", [])
+                if not _reqs:
+                    st.caption("Реквизиты плательщика пока не добавлены.")
+                for _ri, _req in enumerate(_reqs):
+                    _req_cols = st.columns([3.2, 1.1, 1.1])
+                    _req_name = str(_req.get("legal_name", "Реквизиты без названия"))
+                    with _req_cols[0]:
+                        if _req.get("deleted"):
+                            st.markdown(f"<div style='text-decoration:line-through;color:#9299A3;padding:0.35rem 0'>{html.escape(_req_name)} (удалены)</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div style='padding:0.35rem 0;font-weight:500'>{html.escape(_req_name)}</div>", unsafe_allow_html=True)
+                    with _req_cols[1]:
+                        if not _req.get("deleted") and st.button("Открыть", key=f"client_req_open_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
+                            _req_args = (cl["id"], False, _req.get("id"))
+                            if _crm_queue_child_open_if_parent_dirty("client_requisites_view_dialog", _req_args):
+                                return
+                            client_requisites_view_dialog(*_req_args)
+                    with _req_cols[2]:
+                        _req_confirm_key = f"client_req_del_confirm_{cl['id']}_{_req.get('id',_ri)}"
+                        if not _req.get("deleted") and st.button("Удалить", key=f"client_req_del_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
+                            st.session_state[_req_confirm_key] = True
                             st.rerun()
-                    with _req_no:
-                        if st.button("Отмена", key=f"client_req_del_no_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
-                            st.session_state.pop(_req_confirm_key, None)
-                            st.rerun()
-            if st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary"):
-                _req_args = (cl["id"], False)
-                if _crm_queue_child_open_if_parent_dirty("client_requisites_dialog", _req_args):
-                    return
-                client_requisites_dialog(*_req_args)
+                    if not _req.get("deleted") and st.session_state.get(_req_confirm_key):
+                        st.warning(f"Удалить реквизиты «{_req_name}»? Они останутся в истории карточки клиента.")
+                        _req_yes, _req_no = st.columns(2)
+                        with _req_yes:
+                            if st.button("Да, удалить", key=f"client_req_del_yes_{cl['id']}_{_req.get('id',_ri)}", type="primary", use_container_width=True):
+                                _req["deleted"] = True
+                                _req["deleted_at"] = now_str()
+                                _req["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
+                                cl["last_modified"] = now_str()
+                                cl.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": f"Реквизиты «{_req_name}» помечены удалёнными"})
+                                st.session_state.pop(_req_confirm_key, None)
+                                save_data(st.session_state.crm_store)
+                                st.rerun()
+                        with _req_no:
+                            if st.button("Отмена", key=f"client_req_del_no_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
+                                st.session_state.pop(_req_confirm_key, None)
+                                st.rerun()
+                if st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary"):
+                    _req_args = (cl["id"], False)
+                    if _crm_queue_child_open_if_parent_dirty("client_requisites_dialog", _req_args):
+                        return
+                    client_requisites_dialog(*_req_args)
             # История изменений — после реквизитов
             if st.session_state.get("user_role") in ("admin", "director"):
                 st.markdown("---")
