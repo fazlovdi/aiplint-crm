@@ -3297,57 +3297,57 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
 
 def render_reminders(entity_type, entity_id, entity_label, key_prefix):
-    store = st.session_state.crm_store
-    store.setdefault("reminders", [])
-    st.markdown("---")
-    st.markdown("**Напоминания**")
-    items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
-    items.sort(key=lambda r:r.get("due_at", ""))
-    now = moscow_now()
-    users = {u.get("login"):u for u in store.get("users", [])}
-    if not items:
-        st.caption("Напоминаний пока нет")
-    for r in items:
-        due_raw = r.get("due_at", "")
-        try: past = datetime.strptime(due_raw[:19], "%Y-%m-%d %H:%M:%S") <= now
-        except Exception: past = False
-        try: due_label = datetime.strptime(due_raw[:19], "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y %H:%M")
-        except Exception: due_label = due_raw
-        rec = users.get(r.get("recipient"), {})
-        txt = html.escape(str(r.get("text", ""))).replace("\n", "<br>")
-        text_style = "text-decoration:line-through;color:#7F8C9A;" if past else ""
-        with st.container(border=True):
-            st.markdown(format_created_date(r), unsafe_allow_html=True)
-            _msg_col, _del_col = st.columns([12, 1], gap="small", vertical_alignment="top")
-            with _msg_col:
-                st.markdown(f"<div class='chat-msg chat-msg-other' style='margin:0 0 2px 0;max-width:100%;{text_style}overflow-wrap:anywhere'>{txt}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size:0.75rem;opacity:0.7;margin:6px 0 4px 0;'>Срок: {html.escape(due_label)} · Получатель: {html.escape(str(rec.get('name') or r.get('recipient','—')))}</div>", unsafe_allow_html=True)
-            with _del_col:
-                if st.button("🗑", key=f"rem_del_{r.get('id')}", help="Удалить напоминание"):
-                    st.session_state[f"rem_confirm_del_{r.get('id')}"] = True
-            del_key = f"rem_confirm_del_{r.get('id')}"
-            if st.session_state.get(del_key):
-                st.warning("Удалить это напоминание?")
-                yes, no = st.columns(2)
-                with yes:
-                    if st.button("Удалить", key=f"rem_del_yes_{r.get('id')}", type="primary", use_container_width=True):
-                        store["reminders"] = [x for x in store["reminders"] if x.get("id") != r.get("id")]
-                        st.session_state.pop(del_key, None)
-                        save_data(store)
-                        st.rerun()
-                with no:
-                    if st.button("Отмена", key=f"rem_del_no_{r.get('id')}", use_container_width=True):
-                        st.session_state.pop(del_key, None)
-                        st.rerun()
-    _send_spacer, _send_col, _send_spacer2 = st.columns([1, 2, 1])
-    with _send_col:
-        if st.button("Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
-            _reminder_args = (str(entity_type), str(entity_id), str(entity_label))
-            if _crm_queue_child_open_if_parent_dirty("create_reminder_dialog", _reminder_args):
-                return
-            # The decorated dialog routes into the current workspace when invoked
-            # from a client/deal/task tab; it becomes a regular tab, not a separate modal.
-            create_reminder_dialog(*_reminder_args)
+    with st.container(border=True):
+        store = st.session_state.crm_store
+        store.setdefault("reminders", [])
+        st.markdown("**Напоминания**")
+        items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
+        items.sort(key=lambda r:r.get("due_at", ""))
+        now = moscow_now()
+        users = {u.get("login"):u for u in store.get("users", [])}
+        if not items:
+            st.caption("Напоминаний пока нет")
+        for r in items:
+            due_raw = r.get("due_at", "")
+            try: past = datetime.strptime(due_raw[:19], "%Y-%m-%d %H:%M:%S") <= now
+            except Exception: past = False
+            try: due_label = datetime.strptime(due_raw[:19], "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y %H:%M")
+            except Exception: due_label = due_raw
+            rec = users.get(r.get("recipient"), {})
+            txt = html.escape(str(r.get("text", ""))).replace("\n", "<br>")
+            text_style = "text-decoration:line-through;color:#7F8C9A;" if past else ""
+            with st.container(border=True):
+                st.markdown(format_created_date(r), unsafe_allow_html=True)
+                _msg_col, _del_col = st.columns([12, 1], gap="small", vertical_alignment="top")
+                with _msg_col:
+                    st.markdown(f"<div class='chat-msg chat-msg-other' style='margin:0 0 2px 0;max-width:100%;{text_style}overflow-wrap:anywhere'>{txt}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-size:0.75rem;opacity:0.7;margin:6px 0 4px 0;'>Срок: {html.escape(due_label)} · Получатель: {html.escape(str(rec.get('name') or r.get('recipient','—')))}</div>", unsafe_allow_html=True)
+                with _del_col:
+                    if st.button("🗑", key=f"rem_del_{r.get('id')}", help="Удалить напоминание"):
+                        st.session_state[f"rem_confirm_del_{r.get('id')}"] = True
+                del_key = f"rem_confirm_del_{r.get('id')}"
+                if st.session_state.get(del_key):
+                    st.warning("Удалить это напоминание?")
+                    yes, no = st.columns(2)
+                    with yes:
+                        if st.button("Удалить", key=f"rem_del_yes_{r.get('id')}", type="primary", use_container_width=True):
+                            store["reminders"] = [x for x in store["reminders"] if x.get("id") != r.get("id")]
+                            st.session_state.pop(del_key, None)
+                            save_data(store)
+                            st.rerun()
+                    with no:
+                        if st.button("Отмена", key=f"rem_del_no_{r.get('id')}", use_container_width=True):
+                            st.session_state.pop(del_key, None)
+                            st.rerun()
+        _send_spacer, _send_col, _send_spacer2 = st.columns([1, 2, 1])
+        with _send_col:
+            if st.button("Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
+                _reminder_args = (str(entity_type), str(entity_id), str(entity_label))
+                if _crm_queue_child_open_if_parent_dirty("create_reminder_dialog", _reminder_args):
+                    return
+                # The decorated dialog routes into the current workspace when invoked
+                # from a client/deal/task tab; it becomes a regular tab, not a separate modal.
+                create_reminder_dialog(*_reminder_args)
 
 def process_due_reminders():
     """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
