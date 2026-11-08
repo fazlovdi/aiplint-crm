@@ -17273,10 +17273,72 @@ def _crm_render_workspace_fragment():
                         ]
                         _tabbar_requisites = list(_tabbar_client.get("requisites", []) or [])
 
-                        st.markdown("**Задачи по клиенту**")
+                        # Не дублируем в раскрывающемся списке объекты, которые уже
+                        # открыты во вкладках любого окна. Сверяем стабильные ключи
+                        # объектов, а не подписи кнопок.
+                        _tabbar_open_object_keys = set()
+                        for _open_window in st.session_state.get("_crm_windows", []):
+                            for _open_tab in _open_window.get("tabs", []) or []:
+                                if str(_open_tab.get("name", "")) in (
+                                    "task_detail_dialog", "task_report_dialog", "task_execution_report_dialog",
+                                    "deal_detail_dialog", "deal_calculation_dialog", "client_requisites_view_dialog",
+                                ):
+                                    _tabbar_open_object_keys.add(_crm_workspace_tab_key(_open_tab))
+
                         _tabbar_client_tasks_sorted = sorted(
                             _tabbar_client_tasks, key=lambda t: str(t.get("created_at", "")), reverse=True
                         )
+                        _tabbar_client_tasks_sorted = [
+                            t for t in _tabbar_client_tasks_sorted
+                            if _crm_workspace_tab_key({
+                                "name": "task_detail_dialog",
+                                "args": (t, _tabbar_client, None, f"client_task_{_tabbar_client_id_str}_{t.get('task_number', '')}"),
+                            }) not in _tabbar_open_object_keys
+                        ]
+                        _tabbar_deals_sorted = sorted(
+                            _tabbar_deals, key=lambda d: str(d.get("created_at", "")), reverse=True
+                        )
+                        _tabbar_deals_sorted = [
+                            d for d in _tabbar_deals_sorted
+                            if _crm_workspace_tab_key({
+                                "name": "deal_detail_dialog",
+                                "args": (d, _tabbar_client, st.session_state.get("current_user"), f"deal_{d.get('id')}"),
+                            }) not in _tabbar_open_object_keys
+                        ]
+                        _tabbar_deal_tasks_sorted = sorted(
+                            _tabbar_deal_tasks, key=lambda t: str(t.get("created_at", "")), reverse=True
+                        )
+                        _tabbar_deal_tasks_sorted = [
+                            t for t in _tabbar_deal_tasks_sorted
+                            if _crm_workspace_tab_key({
+                                "name": "task_detail_dialog",
+                                "args": (
+                                    t, _tabbar_client, _tabbar_deals_by_id.get(str(t.get("deal_id"))),
+                                    f"deal_task_{_tabbar_client_id_str}_{t.get('task_number', '')}_{t.get('deal_id', '')}",
+                                ),
+                            }) not in _tabbar_open_object_keys
+                        ]
+                        _tabbar_calculations_sorted = sorted(
+                            _tabbar_calculations,
+                            key=lambda pair: str(pair[1].get("created_at", pair[1].get("updated_at", ""))),
+                            reverse=True,
+                        )
+                        _tabbar_calculations_sorted = [
+                            (d, calc) for d, calc in _tabbar_calculations_sorted
+                            if _crm_workspace_tab_key({
+                                "name": "deal_calculation_dialog",
+                                "args": (str(d.get("id")), str(calc.get("id"))),
+                            }) not in _tabbar_open_object_keys
+                        ]
+                        _tabbar_requisites = [
+                            req for req in _tabbar_requisites
+                            if _crm_workspace_tab_key({
+                                "name": "client_requisites_view_dialog",
+                                "args": (_tabbar_client_id, False, req.get("id")),
+                            }) not in _tabbar_open_object_keys
+                        ]
+
+                        st.markdown("**Задачи по клиенту**")
                         if not _tabbar_client_tasks_sorted:
                             st.caption("Нет задач по клиенту")
                         for _oi, _obj in enumerate(_tabbar_client_tasks_sorted):
@@ -17288,9 +17350,6 @@ def _crm_render_workspace_fragment():
                             st.button(_obj_label, key=f"crm_obj_client_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True, on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "task_detail_dialog", _obj_args))
 
                         st.markdown("**Сделки**")
-                        _tabbar_deals_sorted = sorted(
-                            _tabbar_deals, key=lambda d: str(d.get("created_at", "")), reverse=True
-                        )
                         if not _tabbar_deals_sorted:
                             st.caption("Нет сделок")
                         for _oi, _obj in enumerate(_tabbar_deals_sorted):
@@ -17302,9 +17361,6 @@ def _crm_render_workspace_fragment():
                             st.button(_obj_label, key=f"crm_obj_deal_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True, on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "deal_detail_dialog", _obj_args))
 
                         st.markdown("**Задачи по сделкам**")
-                        _tabbar_deal_tasks_sorted = sorted(
-                            _tabbar_deal_tasks, key=lambda t: str(t.get("created_at", "")), reverse=True
-                        )
                         if not _tabbar_deal_tasks_sorted:
                             st.caption("Нет задач по сделкам")
                         for _oi, _obj in enumerate(_tabbar_deal_tasks_sorted):
@@ -17317,11 +17373,6 @@ def _crm_render_workspace_fragment():
                             st.button(_obj_label, key=f"crm_obj_deal_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True, on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "task_detail_dialog", _obj_args))
 
                         st.markdown("**Расчёты**")
-                        _tabbar_calculations_sorted = sorted(
-                            _tabbar_calculations,
-                            key=lambda pair: str(pair[1].get("created_at", pair[1].get("updated_at", ""))),
-                            reverse=True,
-                        )
                         if not _tabbar_calculations_sorted:
                             st.caption("Нет расчётов")
                         for _oi, (_obj_deal, _obj_calc) in enumerate(_tabbar_calculations_sorted):
