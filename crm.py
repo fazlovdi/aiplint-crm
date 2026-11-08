@@ -9549,6 +9549,7 @@ def client_requisites_view_dialog(client_id, return_to_invoice=False, requisite_
     [class*="st-key-req_view_"] label p {
         color:#313943 !important;
         opacity:1 !important;
+        font-weight:700 !important;
     }
     </style>""", unsafe_allow_html=True)
     labels = [
