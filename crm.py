@@ -3764,6 +3764,24 @@ def render_client_comments_panel(cl):
                 st.warning("Введите текст")
 
 
+def format_change_history_date(value):
+    """Форматирует дату журнала изменений как ДД.ММ.ГГГГ, сохраняя время при наличии."""
+    _value = str(value or "").strip()
+    if not _value:
+        return ""
+    try:
+        _dt = datetime.fromisoformat(_value.replace("Z", "+00:00"))
+        return _dt.strftime("%d.%m.%Y %H:%M") if any(ch in _value for ch in ("T", ":")) else _dt.strftime("%d.%m.%Y")
+    except (ValueError, TypeError, OverflowError):
+        for _fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%d.%m.%Y %H:%M:%S", "%d.%m.%Y %H:%M", "%d.%m.%Y"):
+            try:
+                _dt = datetime.strptime(_value[:19], _fmt)
+                return _dt.strftime("%d.%m.%Y %H:%M") if "%H" in _fmt else _dt.strftime("%d.%m.%Y")
+            except (ValueError, TypeError, OverflowError):
+                continue
+    return _value
+
+
 def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user", local_update=False):
     """Показывает комментарии; удаление только помечает запись и зачеркивает её."""
     st.markdown("""<style>
@@ -12564,7 +12582,10 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _deal_changes = d.get("change_log", [])
                 if _deal_changes:
                     for _chg in reversed(_deal_changes[-20:]):
-                        st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
+                        _chg_date = html.escape(format_change_history_date(_chg.get("date", "")))
+                        _chg_author = html.escape(str(_chg.get("author", "") or ""))
+                        _chg_fields = html.escape(str(_chg.get("fields", "") or ""))
+                        st.markdown(f"<div class='created-date'>{_chg_date} | {_chg_author} — {_chg_fields}</div>", unsafe_allow_html=True)
                 else:
                     st.caption("История изменений появится после редактирования сделки.")
 
@@ -12993,7 +13014,7 @@ def render_client_card_expanded(cl):
                             _client_changes.append(_chg)
                 if _client_changes:
                     for _chg in reversed(_client_changes[-20:]):
-                        _chg_date = html.escape(str(_chg.get("date", "") or ""))
+                        _chg_date = html.escape(format_change_history_date(_chg.get("date", "")))
                         _chg_author = html.escape(str(_chg.get("author", "") or ""))
                         _chg_fields = str(_chg.get("fields", "") or "")
                         # Не показываем технический дамп списка файлов в истории.
