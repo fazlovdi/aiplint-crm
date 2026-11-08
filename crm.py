@@ -17365,7 +17365,10 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_client_objects_add_"] button p {
             font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important; font-weight:400 !important;
         }
-        [class*="st-key-crm_workspace_client_objects_add_"] button svg { display:none !important; }
+        [class*="st-key-crm_workspace_client_objects_add_"] button svg,
+        [class*="st-key-crm_workspace_client_objects_add_"] button [data-testid="stIconMaterial"],
+        [class*="st-key-crm_workspace_client_objects_add_"] button [data-testid*="Icon"],
+        [class*="st-key-crm_workspace_client_objects_add_"] button > span:not([class*="st-emotion-cache"]) { display:none !important; }
         [class*="st-key-crm_obj_add_client_task_"] button,
         [class*="st-key-crm_obj_add_deal_"] button,
         [class*="st-key-crm_obj_add_req_"] button {
