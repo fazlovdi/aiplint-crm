@@ -1548,7 +1548,7 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
     .crm-file-row-name { font-size:.88rem;font-weight:600;color:#253246;overflow-wrap:anywhere;padding:7px 0;line-height:1.25; }
     div[class*="st-key-dl_"] button, div[class*="st-key-dl_req_"] button { min-height:34px!important;height:34px!important;width:38px!important;min-width:38px!important;padding:0!important;border-radius:10px!important;border:1px solid #D7DFEA!important;background:linear-gradient(180deg,#FFFFFF 0%,#F2F5FA 100%)!important;color:#31577D!important;font-size:17px!important;font-weight:700!important;box-shadow:0 1px 3px rgba(30,50,75,.08)!important;transition:all .15s ease!important; }
     div[class*="st-key-dl_"] button:hover, div[class*="st-key-dl_req_"] button:hover { background:#E7F0FA!important;border-color:#A9C3DF!important;transform:translateY(-1px);box-shadow:0 3px 8px rgba(30,50,75,.12)!important; }
-    div[class*="st-key-del_"] button { min-height:32px!important;height:32px!important;padding:0 8px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;font-size:15px!important; }
+    div[class*="st-key-del_"] button { min-height:32px!important;height:32px!important;padding:0 8px!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;font-size:19px!important; }
     div[class*="st-key-del_"] button:hover, div[class*="st-key-del_"] button:focus, div[class*="st-key-del_"] button:active { border:0!important;background:transparent!important;box-shadow:none!important; }
     div[class*="st-key-fdesc_"] input { min-height:34px!important;height:34px!important;padding:7px 10px!important;font-size:.8rem!important;line-height:1.2!important;border-radius:9px!important; }
     div[class*="st-key-fdesc_"] div[data-testid="InputInstructions"] { display:none!important; }
@@ -3358,6 +3358,7 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
             box-shadow: none !important;
             border-radius: 0 !important;
         }}
+        .st-key-reminders_{key_prefix} div[class*="st-key-rem_del_"] button {{ font-size: 19px !important; }}
         </style>""", unsafe_allow_html=True)
         store = st.session_state.crm_store
         store.setdefault("reminders", [])
@@ -3715,6 +3716,7 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
         box-shadow: none !important;
         border-radius: 0 !important;
     }
+    div[class*="st-key-soft_comment_del_"] button { font-size: 19px !important; }
     </style>""", unsafe_allow_html=True)
     if not isinstance(comments, list):
         return
