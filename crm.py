@@ -8786,13 +8786,36 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             (function(){{
               var w=window; try{{if(window.parent&&window.parent!==window)w=window.parent;}}catch(e){{}}
               function setup(){{
+                var popSelector='[class*="st-key-crm_workspace_global_search_{_bottom_scope}"]';
+                var inputSelector='[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"] input';
                 var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
                 if(root){{var input=root.querySelector('input'); if(input){{input.setAttribute('autocomplete','off');input.setAttribute('autocorrect','off');input.setAttribute('autocapitalize','off');input.setAttribute('spellcheck','false');}}}}
                 var closeFlag={str(bool(st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False))).lower()};
                 if(closeFlag){{
-                  var pop=w.document.querySelector('[class*="st-key-crm_workspace_global_search_{_bottom_scope}"]');
+                  var pop=w.document.querySelector(popSelector);
                   var trigger=pop&&pop.querySelector('button');
                   if(trigger && trigger.getAttribute('aria-expanded')==='true') trigger.click();
+                }}
+                if(!w.document.__crmGlobalSearchOutside_{_bottom_scope}){{
+                  w.document.__crmGlobalSearchOutside_{_bottom_scope}=true;
+                  w.document.addEventListener('click',function(ev){{
+                    var pop=w.document.querySelector(popSelector);
+                    var trigger=pop&&pop.querySelector('button');
+                    if(!pop || !trigger || trigger.getAttribute('aria-expanded')!=='true') return;
+                    if(pop.contains(ev.target)) return;
+                    w.setTimeout(function(){{
+                      var currentPop=w.document.querySelector(popSelector);
+                      var currentTrigger=currentPop&&currentPop.querySelector('button');
+                      if(currentTrigger && currentTrigger.getAttribute('aria-expanded')==='true') return;
+                      var input=w.document.querySelector(inputSelector);
+                      if(input && input.value){{
+                        var setter=Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype,'value').set;
+                        setter.call(input,'');
+                        input.dispatchEvent(new w.Event('input',{{bubbles:true}}));
+                        input.dispatchEvent(new w.Event('change',{{bubbles:true}}));
+                      }}
+                    }},80);
+                  }},true);
                 }}
               }}
               setup();
