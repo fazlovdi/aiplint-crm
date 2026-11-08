@@ -3779,7 +3779,16 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             _fd = format_date(t.get('deadline', ''))
             _task_header_row, _task_print_col = st.columns([5, 1])
             with _task_header_row:
-                st.markdown(f"<style>.st-key-task_detail_{key_prefix} h3 {{ margin-top: 0.15rem !important; padding-top: 0 !important; }}</style>", unsafe_allow_html=True)
+                st.markdown(f"""<style>
+                .st-key-task_detail_{key_prefix} h3 {{ margin-top: 0.15rem !important; padding-top: 0 !important; }}
+                .st-key-task_detail_{key_prefix} .created-date {{
+                    display: inline-block !important;
+                    width: fit-content !important;
+                    max-width: 100% !important;
+                    margin-top: 0 !important;
+                    margin-bottom: 0 !important;
+                }}
+                </style>""", unsafe_allow_html=True)
                 st.subheader(_task_header)
                 if t.get("needs_rework") and not t.get("done"):
                     st.markdown('<p style="color: #D32F2F; font-weight: 700; font-size: 0.9rem; margin: 0.1rem 0;">На доработке</p>', unsafe_allow_html=True)
