@@ -13158,12 +13158,12 @@ def render_client_card_expanded(cl):
                         </style>
                         """, unsafe_allow_html=True)
                         if st.button("Удалить клиента", key=_del_cli_btn_key, use_container_width=True, type="primary"):
-                        st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != cl["id"]]
-                        st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
-                        st.session_state.expanded_client_id = None
-                        st.session_state.pop("dialog_client_key", None)
-                        st.session_state["_in_dialog"] = False
-                        commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
+                            st.session_state.crm_store["deals"] = [d for d in st.session_state.crm_store["deals"] if d["client_id"] != cl["id"]]
+                            st.session_state.crm_store["clients"] = [c for c in st.session_state.crm_store["clients"] if c["id"] != cl["id"]]
+                            st.session_state.expanded_client_id = None
+                            st.session_state.pop("dialog_client_key", None)
+                            st.session_state["_in_dialog"] = False
+                            commit_and_rerun(st.session_state.crm_store, "Клиент удалён")
             else:
                 _client_panel_key = f"client_info_panel_{cl['id']}"
                 st.markdown(
