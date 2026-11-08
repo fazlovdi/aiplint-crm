@@ -3744,8 +3744,19 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
         }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown {{
             margin-top: 0 !important;
-            display: flex !important;
-            align-items: center !important;
+        }}
+        .st-key-task_detail_{key_prefix} .stMarkdown:has(.created-date) {{
+            margin-bottom: 0.55rem !important;
+            min-width: 0 !important;
+        }}
+        .st-key-task_detail_{key_prefix} .created-date {{
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            line-height: 1.35 !important;
+            overflow-wrap: anywhere !important;
         }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock:has(button.custom-print-btn) {{
             align-items: flex-start !important;
@@ -3796,11 +3807,13 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 st.markdown(f"""<style>
                 .st-key-task_detail_{key_prefix} h3 {{ margin-top: 0.15rem !important; padding-top: 0 !important; }}
                 .st-key-task_detail_{key_prefix} .created-date {{
-                    display: inline-block !important;
-                    width: fit-content !important;
+                    display: block !important;
+                    width: 100% !important;
                     max-width: 100% !important;
-                    margin-top: 0 !important;
-                    margin-bottom: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    line-height: 1.35 !important;
+                    overflow-wrap: anywhere !important;
                 }}
                 </style>""", unsafe_allow_html=True)
                 st.subheader(_task_header)
@@ -3809,9 +3822,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 st.markdown(format_created_date(t), unsafe_allow_html=True)
             with _task_print_col:
                 render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
-            # Отделяем строку создания/автора от рамки основной информации,
-            # чтобы рамка не заходила на эту строку при плотной вертикальной раскладке.
-            st.markdown('<div style="height:0.45rem;width:100%;clear:both;"></div>', unsafe_allow_html=True)
             with st.container(border=True):
                 if d:
                     _deal_num = d.get('deal_number', d.get('title', ''))
