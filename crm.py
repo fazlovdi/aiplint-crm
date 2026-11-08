@@ -8622,7 +8622,14 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 _global_deals_by_id = {str(_d.get("id")): _d for _d in _global_deals}
 
                 def _global_search_add(_kind, _label, _haystack, _entry, _client_id, _stable_id):
-                    if _global_q in str(_haystack or "").lower():
+                    _hay_text = str(_haystack or "").lower()
+                    _hay_compact = re.sub(r"[\\W_]+", "", _hay_text, flags=re.UNICODE)
+                    _q_compact = re.sub(r"[\\W_]+", "", _global_q, flags=re.UNICODE)
+                    _q_digits = re.sub(r"\\D", "", _global_q)
+                    _hay_digits = re.sub(r"\\D", "", _hay_text)
+                    if (_global_q in _hay_text or
+                            (_q_compact and _q_compact in _hay_compact) or
+                            (len(_q_digits) >= 3 and _q_digits in _hay_digits)):
                         _global_results.append({
                             "kind": _kind, "label": _label, "entry": _entry,
                             "client_id": _client_id, "stable_id": _stable_id,
