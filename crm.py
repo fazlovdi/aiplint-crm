@@ -3961,7 +3961,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2E7D32"
                                     else:
                                         _dl_color = "#2C3E50"
-                                    st.markdown(f"<style>div[class*=\\"st-key-{dl_btn_key}\\"] button,div[class*=\\"st-key-{dl_btn_key}\\"] button *,div[class*=\\"st-key-{dl_btn_key}\\"] button[kind=\\"secondary\\"],div[class*=\\"st-key-{dl_btn_key}\\"] button[kind=\\"secondary\\"] * {{ background:none!important;border:none!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
+                                    st.markdown(f'<style>div[class*="st-key-{dl_btn_key}"] button,div[class*="st-key-{dl_btn_key}"] button *,div[class*="st-key-{dl_btn_key}"] button[kind="secondary"],div[class*="st-key-{dl_btn_key}"] button[kind="secondary"] * {{ background:none!important;border:none!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
                                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                                         _smart_rerun()
@@ -4162,7 +4162,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2E7D32"
                                     else:
                                         _dl_color = "#2C3E50"
-                                    st.markdown(f"<style>div[class*=\\"st-key-{dl_btn_key}\\"] button,div[class*=\\"st-key-{dl_btn_key}\\"] button *,div[class*=\\"st-key-{dl_btn_key}\\"] button[kind=\\"secondary\\"],div[class*=\\"st-key-{dl_btn_key}\\"] button[kind=\\"secondary\\"] * {{ background:none!important;border:none!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>", unsafe_allow_html=True)
+                                    st.markdown(f'<style>div[class*="st-key-{dl_btn_key}"] button,div[class*="st-key-{dl_btn_key}"] button *,div[class*="st-key-{dl_btn_key}"] button[kind="secondary"],div[class*="st-key-{dl_btn_key}"] button[kind="secondary"] * {{ background:none!important;border:none!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
                                     if st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key):
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
                                         _smart_rerun()
