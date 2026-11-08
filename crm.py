@@ -7627,6 +7627,21 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         width:max-content !important; min-width:max-content !important; max-width:none !important;
         align-items:center !important; overflow:visible !important; flex-shrink:0 !important;
     }
+    /* Reserve a dedicated grid track for each close control. Streamlit's
+       horizontal flex layout was squeezing/overlapping the close-button slot
+       once several window items were present, regardless of available width. */
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [data-testid="stHorizontalBlock"] {
+        display:grid !important;
+        grid-template-columns:max-content 27px !important;
+        grid-auto-flow:column !important;
+        align-items:center !important;
+        justify-content:start !important;
+        gap:1px !important;
+        width:max-content !important;
+        min-width:max-content !important;
+        max-width:none !important;
+        overflow:visible !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
     [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] > div,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] > div {
