@@ -16095,19 +16095,19 @@ def _crm_render_workspace_fragment():
             color:#BC1661 !important; font-weight:600 !important;
         }
         [class*="st-key-crm_workspace_client_objects_add_"] {
-            flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important;
+            flex:0 0 36px !important; width:36px !important; min-width:36px !important; max-width:36px !important;
             margin:0 !important; padding:0 !important;
         }
         [class*="st-key-crm_workspace_client_objects_add_"] > div > button,
         [class*="st-key-crm_workspace_client_objects_add_"] button[data-testid^="stPopoverButton"] {
             display:flex !important; box-sizing:border-box !important; align-items:center !important;
-            justify-content:flex-start !important; width:50px !important; min-width:50px !important; max-width:50px !important;
-            height:42px !important; min-height:42px !important; padding:0 0 0 16px !important; margin:0 !important;
+            justify-content:flex-start !important; width:36px !important; min-width:36px !important; max-width:36px !important;
+            height:42px !important; min-height:42px !important; padding:0 0 0 6px !important; margin:0 !important;
             border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important;
-            background:transparent !important; color:#BC1661 !important; font-size:26px !important; font-weight:400 !important;
+            background:transparent !important; color:#BC1661 !important; font-size:24px !important; font-weight:400 !important;
         }
         [class*="st-key-crm_workspace_client_objects_add_"] button p {
-            font-size:26px !important; line-height:1 !important; margin:0 !important; padding:0 !important; font-weight:400 !important;
+            font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important; font-weight:400 !important;
         }
         [class*="st-key-crm_workspace_client_objects_add_"] button svg { display:none !important; }
         [class*="st-key-crm_obj_add_client_task_"] button,
@@ -16173,7 +16173,12 @@ def _crm_render_workspace_fragment():
                     None,
                 )
                 if _tabbar_client is not None:
-                    with st.popover("+", key=f"crm_workspace_client_objects_add_{_crm_active_window['id']}", help="Объекты клиента"):
+                    _tabbar_popover_version_key = f"_crm_workspace_client_objects_popover_version_{_crm_active_window['id']}"
+                    def _crm_bump_client_objects_popover():
+                        st.session_state[_tabbar_popover_version_key] = int(st.session_state.get(_tabbar_popover_version_key, 0) or 0) + 1
+
+                    _tabbar_popover_version = int(st.session_state.get(_tabbar_popover_version_key, 0) or 0)
+                    with st.popover("+", key=f"crm_workspace_client_objects_add_{_crm_active_window['id']}_{_tabbar_popover_version}", help="Объекты клиента"):
                         _tabbar_client_id_str = str(_tabbar_client.get("id"))
                         _tabbar_deals = [
                             d for d in st.session_state.crm_store.get("deals", [])
@@ -16204,6 +16209,8 @@ def _crm_render_workspace_fragment():
                             _obj_label = f"{_obj.get('task_number', 'Задача')} · {_obj.get('type', 'Связаться')}"
                             if st.button(_obj_label, key=f"crm_obj_client_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True):
                                 _obj_args = (_obj, _tabbar_client, None, f"client_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}")
+                                _crm_bump_client_objects_popover()
+                                _crm_bump_client_objects_popover()
                                 task_detail_dialog(*_obj_args)
 
                         st.markdown("**Сделки**")
@@ -16216,6 +16223,7 @@ def _crm_render_workspace_fragment():
                             _obj_label = f"{_obj.get('deal_number', _obj.get('title', 'Сделка'))} · {_obj.get('deal_title', '')}".strip(" ·")
                             if st.button(_obj_label, key=f"crm_obj_deal_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True):
                                 _obj_args = (_obj, _tabbar_client, st.session_state.get("current_user"), f"deal_{_obj.get('id')}")
+                                _crm_bump_client_objects_popover()
                                 deal_detail_dialog(*_obj_args)
 
                         st.markdown("**Задачи по сделкам**")
@@ -16246,6 +16254,7 @@ def _crm_render_workspace_fragment():
                             if _obj_calc.get("deleted"):
                                 _obj_label += " (удалён)"
                             if st.button(_obj_label, key=f"crm_obj_calc_{_crm_active_window['id']}_{_obj_deal.get('id')}_{_obj_calc.get('id', _oi)}", use_container_width=True, disabled=bool(_obj_calc.get("deleted"))):
+                                _crm_bump_client_objects_popover()
                                 deal_calculation_dialog(str(_obj_deal.get("id")), str(_obj_calc.get("id")))
 
                         st.markdown("**Реквизиты**")
@@ -16256,14 +16265,18 @@ def _crm_render_workspace_fragment():
                             if _obj.get("deleted"):
                                 _obj_label += " (удалены)"
                             if st.button(_obj_label, key=f"crm_obj_req_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True, disabled=bool(_obj.get("deleted"))):
+                                _crm_bump_client_objects_popover()
                                 client_requisites_view_dialog(_tabbar_client_id, False, _obj.get("id"))
 
                         st.markdown("---")
                         if st.button("Добавить Задачу по клиенту", key=f"crm_obj_add_client_task_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
+                            _crm_bump_client_objects_popover()
                             client_create_task_dialog(_tabbar_client_id_str)
                         if st.button("Добавить сделку", key=f"crm_obj_add_deal_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
+                            _crm_bump_client_objects_popover()
                             create_deal_dialog(_tabbar_client_id_str)
                         if st.button("Добавить реквизиты", key=f"crm_obj_add_req_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
+                            _crm_bump_client_objects_popover()
                             client_requisites_dialog(_tabbar_client_id, False)
 
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
