@@ -3412,12 +3412,12 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
         </style>""", unsafe_allow_html=True)
         store = st.session_state.crm_store
         store.setdefault("reminders", [])
-        if heading_size:
-            st.markdown(f"<div style='font-size:{heading_size};font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Напоминания</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("**Напоминания**")
         items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
         items.sort(key=lambda r:r.get("due_at", ""))
+        if heading_size:
+            st.markdown(f"<div style='font-size:{heading_size};font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Напоминания ({len(items)})</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"**Напоминания ({len(items)})**")
         now = moscow_now()
         users = {u.get("login"):u for u in store.get("users", [])}
         if not items:
@@ -3690,7 +3690,7 @@ def render_deal_pause_panel(d, deal_id):
 @st.fragment
 def render_deal_comments_panel(d, deal_id):
     with st.container(border=True):
-        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии ({len(d.get('deal_comments', []) or [])})</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
         </style>""", unsafe_allow_html=True)
@@ -3736,7 +3736,7 @@ def render_client_comments_panel(cl):
         unsafe_allow_html=True,
     )
     with st.container(border=True, key=_comments_panel_key):
-        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии ({len(cl.get('client_comments', []) or [])})</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-cli_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
         </style>""", unsafe_allow_html=True)
@@ -9340,7 +9340,7 @@ def render_deal_card_expanded(d, cl):
         st.markdown("---")
         dl_files_col, dl_upload_col = st.columns(2)
         with dl_files_col:
-            st.markdown("**Файлы сделки:**")
+            st.markdown(f"**Файлы сделки ({len(d.get('deal_files', []) or [])}):**")
             render_file_thumbs(d.get("deal_files", []), f"deal_file_{d['id']}", allow_delete=True)
         with dl_upload_col:
             st.markdown("**Загрузить файлы:**")
@@ -9360,8 +9360,8 @@ def render_deal_card_expanded(d, cl):
                         st.rerun()
                 else: st.warning("Выберите файл(ы)")
         st.markdown("---")
+        st.markdown(f"**Комментарии ({len(d.get('deal_comments', []) or [])}):**")
         if d.get("deal_comments"):
-            st.markdown("**Комментарии:**")
             render_soft_delete_comments(d["deal_comments"], f"deal_card_{d['id']}", "time", "author")
         dc_clr_key = f"clr_dc_{d['id']}"
         if st.session_state.get(dc_clr_key):
@@ -11794,7 +11794,8 @@ def render_deal_products_block(d, key_prefix):
         save_data(st.session_state.crm_store)
 
     with st.container(border=True):
-        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Расчёты по сделке</div>", unsafe_allow_html=True)
+        _visible_calculations_count = sum(1 for _calc in calculations if not _calc.get("_draft"))
+        st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Расчёты по сделке ({_visible_calculations_count})</div>", unsafe_allow_html=True)
         if not calculations:
             st.caption("Расчётов пока нет.")
         for idx, calc in enumerate(calculations):
@@ -12514,7 +12515,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             render_deal_comments_panel(d, deal_id)
             st.markdown("---")
             with st.container(border=True):
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы сделки ({len(d.get('deal_files', []) or [])})</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
                 st.markdown("**Загрузить файлы:**")
@@ -12543,7 +12544,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             with st.container(border=True):
                 _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
                 _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Задачи по сделке</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Задачи по сделке ({len(_deal_tasks_list)})</div>", unsafe_allow_html=True)
                 if _deal_tasks_list:
                     for _ti, _task in enumerate(_deal_tasks_list):
                         _task_col, _date_col, _open_col = st.columns([2, 2, 1])
@@ -12834,7 +12835,7 @@ def render_client_card_expanded(cl):
             # Разделитель перед файлами
             st.markdown("---")
             with st.container(border=True):
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы клиента</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы клиента ({len(cl.get('client_files', []) or [])})</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-client_detail_{cl['id']} .st-key-cli_{cl['id']} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
                 st.markdown("**Загрузить файлы:**")
@@ -12946,8 +12947,8 @@ def render_client_card_expanded(cl):
             st.markdown('<hr style="border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;">', unsafe_allow_html=True)
             with st.container(border=True):
                 # Реквизиты для документов — между действиями и историей изменений.
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Реквизиты для документов</div>", unsafe_allow_html=True)
                 _reqs = cl.setdefault("requisites", [])
+                st.markdown(f"<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Реквизиты для документов ({len(_reqs)})</div>", unsafe_allow_html=True)
                 if not _reqs:
                     st.caption("Реквизиты плательщика пока не добавлены.")
                 for _ri, _req in enumerate(_reqs):
