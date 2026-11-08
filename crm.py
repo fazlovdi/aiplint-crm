@@ -3707,10 +3707,11 @@ def render_deal_comments_panel(d, deal_id):
             _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
         if _dcc_clicked:
             if nc.strip():
-                d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
-                d["last_modified"] = now_str()
-                st.session_state[dc_clr_key] = True
-                save_data(st.session_state.crm_store)
+                with st.spinner("Добавляем комментарий…"):
+                    d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
+                    d["last_modified"] = now_str()
+                    st.session_state[dc_clr_key] = True
+                    save_data(st.session_state.crm_store)
                 st.toast("Комментарий добавлен", icon="✅")
                 st.rerun(scope="fragment")
             else:
@@ -3752,10 +3753,11 @@ def render_client_comments_panel(cl):
             _ccc_clicked = st.button("Добавить", key=f"cli_dc_btn_{cl['id']}", use_container_width=True)
         if _ccc_clicked:
             if nci.strip():
-                cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nci.strip()})
-                cl["last_modified"] = now_str()
-                st.session_state[cc_clr_key] = True
-                save_data(st.session_state.crm_store)
+                with st.spinner("Добавляем комментарий…"):
+                    cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nci.strip()})
+                    cl["last_modified"] = now_str()
+                    st.session_state[cc_clr_key] = True
+                    save_data(st.session_state.crm_store)
                 st.toast("Комментарий добавлен", icon="✅")
                 st.rerun(scope="fragment")
             else:
@@ -3783,9 +3785,29 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
     </style>""", unsafe_allow_html=True)
     if not isinstance(comments, list):
         return
-    for _i, _item in enumerate(comments):
-        if not isinstance(_item, dict):
-            continue
+    def _comment_sort_key(_entry):
+        _idx, _comment = _entry
+        _raw_time = str(_comment.get(time_key) or _comment.get("created_at") or _comment.get("timestamp") or "").strip()
+        _parsed = None
+        if _raw_time:
+            try:
+                _parsed = datetime.fromisoformat(_raw_time.replace("Z", "+00:00")).timestamp()
+            except (ValueError, TypeError, OverflowError):
+                for _fmt in ("%d.%m.%Y %H:%M:%S", "%d.%m.%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d.%m.%Y", "%Y-%m-%d"):
+                    try:
+                        _parsed = datetime.strptime(_raw_time[:19], _fmt).timestamp()
+                        break
+                    except (ValueError, TypeError, OverflowError):
+                        continue
+        # If legacy comments have no usable date, keep their existing order.
+        return (1, _parsed, _idx) if _parsed is not None else (0, 0, _idx)
+
+    _ordered_comments = sorted(
+        ((i, item) for i, item in enumerate(comments) if isinstance(item, dict)),
+        key=_comment_sort_key,
+        reverse=True,
+    )
+    for _i, _item in _ordered_comments:
         _author = _item.get(author_key) or _item.get("user") or _item.get("created_by") or ""
         _meta_parts = [str(_item.get(time_key, ""))] if _item.get(time_key) else []
         if _author:
@@ -9330,10 +9352,11 @@ def render_deal_card_expanded(d, cl):
         nc = st.text_input("Добавить комментарий:", key=f"dc_input_{d['id']}")
         if st.button("Добавить", key=f"dc_btn_{d['id']}", use_container_width=True):
             if nc.strip():
-                d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
-                d["last_modified"] = now_str()
-                st.session_state[dc_clr_key] = True
-                commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
+                with st.spinner("Добавляем комментарий…"):
+                    d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
+                    d["last_modified"] = now_str()
+                    st.session_state[dc_clr_key] = True
+                    commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
             else: st.warning("Введите текст")
         st.markdown("---")
         show_edit_deal = st.session_state.get(f"show_edit_deal_{d['id']}", False)
