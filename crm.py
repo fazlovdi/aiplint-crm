@@ -7730,7 +7730,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         # The client picker belongs to the window strip, not the inner tab strip.
         if in_workspace:
                 # Quick client opener: add a client card from the current window tab strip.
-                with st.popover("+", key=f"crm_workspace_add_client_{_bottom_active_window_id}", help="Открыть карточку клиента"):
+                with st.popover("⌄", key=f"crm_workspace_add_client_{_bottom_active_window_id}", help="Открыть карточку клиента"):
                     _picker_query = st.text_input(
                         "Поиск среди клиентов",
                         key=f"crm_workspace_client_picker_search_{_bottom_active_window_id}",
