@@ -11508,93 +11508,94 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _header_deal_status = str(d.get("status", "Новый") or "Новый")
                 st.markdown(f"<div style='text-align:right;font-size:0.95rem;font-weight:650;margin-top:1rem;margin-bottom:0.7rem;'>Статус: {html.escape(_header_deal_status)}</div>", unsafe_allow_html=True)
             st.markdown(format_created_date(d), unsafe_allow_html=True)
-            if d.get("deal_title"):
-                st.markdown(f"**Тема:** {d['deal_title']}")
-            st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
-            st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
-            _real_date_current = parse_optional_date(d.get("real_date", ""))
-            show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
-            if show_edit_deal:
-                _real_date_selected = st.date_input(
-                    "Реальная дата сделки:",
-                    value=_real_date_current,
-                    format="DD.MM.YYYY",
-                    key=f"deal_real_date_detail_{deal_id}",
-                )
-                _crm_mark_widget_changed(f"deal_real_date_detail_{deal_id}", (_real_date_selected.isoformat() if _real_date_selected else "") != str(d.get("real_date") or ""))
-            else:
-                _real_date_display = format_date(d.get("real_date", "")) or "—"
-                st.markdown(
-                    f"<div style='font-size:1rem;line-height:1.5;color:inherit;margin:0 0 0.5rem 0;'><strong>Реальная дата сделки:</strong> {html.escape(str(_real_date_display))}</div>",
-                    unsafe_allow_html=True,
-                )
-                _real_date_selected = _real_date_current
-            ps = d.get("payment_status", "Не оплачено")
-            _ps_widget_key_dd = f"dls_ps_{deal_id}"
-            _ps_model_key_dd = f"_dls_ps_last_model_{deal_id}"
-            if st.session_state.get(_ps_model_key_dd) != ps:
-                st.session_state[_ps_widget_key_dd] = ps if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else "Не оплачено"
-                st.session_state[_ps_model_key_dd] = ps
-            _bank_payment_status = _tochka_bank_payment_status(d)
-            _pay_col, _mgr_col = st.columns(2)
-            with _pay_col:
-                inject_payment_container_css(deal_id, ps)
-                with st.container(key=f"ps_wrap_{deal_id}"):
-                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key_dd)
-                _crm_mark_widget_changed(_ps_widget_key_dd, str(new_ps) != str(ps))
-                if _bank_payment_status and _bank_payment_status != ps:
+            with st.container(border=True):
+                if d.get("deal_title"):
+                    st.markdown(f"**Тема:** {d['deal_title']}")
+                st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
+                st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                _real_date_current = parse_optional_date(d.get("real_date", ""))
+                show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
+                if show_edit_deal:
+                    _real_date_selected = st.date_input(
+                        "Реальная дата сделки:",
+                        value=_real_date_current,
+                        format="DD.MM.YYYY",
+                        key=f"deal_real_date_detail_{deal_id}",
+                    )
+                    _crm_mark_widget_changed(f"deal_real_date_detail_{deal_id}", (_real_date_selected.isoformat() if _real_date_selected else "") != str(d.get("real_date") or ""))
+                else:
+                    _real_date_display = format_date(d.get("real_date", "")) or "—"
                     st.markdown(
-                        f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
+                        f"<div style='font-size:1rem;line-height:1.5;color:inherit;margin:0 0 0.5rem 0;'><strong>Реальная дата сделки:</strong> {html.escape(str(_real_date_display))}</div>",
                         unsafe_allow_html=True,
                     )
-                _update_deal_payment_clicked = st.button("Обновить статус", key=f"dls_update_status_{deal_id}", type="primary", use_container_width=True)
-            with _mgr_col:
-                _crm_deal_responsible_fragment(d, deal_id)
-            if _update_deal_payment_clicked and new_ps != ps:
-                d["payment_status"] = new_ps
-                # Ручное исключение нужно только для намеренного статуса «Не оплачено»
-                # при подтверждённой оплате банка. Другие ручные изменения не отключают автоматику.
-                d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
-                d["last_modified"] = now_str()
-                _sync_deal_board_stage_from_payment(d)
-                commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
-            show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
-            if show_edit_deal:
-                et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
-                _crm_mark_widget_changed(f"dls_et_{deal_id}", str(et) != str(d.get("deal_title", "")))
-                eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
-                _crm_mark_widget_changed(f"dls_eb_{deal_id}", str(eb or "") != (str(d.get("budget", 0)) if d.get("budget", 0) > 0 else ""))
-                _dds_col, _ddc_col = st.columns(2)
-                with _dds_col:
-                    if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
-                        d["deal_title"] = et
-                        d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
-                        _real_date_save = st.session_state.get(f"deal_real_date_detail_{deal_id}", parse_optional_date(d.get("real_date", "")))
-                        d["real_date"] = _real_date_save.isoformat() if _real_date_save else ""
-                        d["last_modified"] = now_str()
-                        d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Тема, бюджет"})
-                        st.session_state[f"dls_show_edit_{deal_id}"] = False
-                        commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
-                with _ddc_col:
-                    if st.button("Отменить", key=f"dls_ec_{deal_id}", use_container_width=True):
-                        st.session_state[f"dls_show_edit_{deal_id}"] = False
-                        st.session_state.pop(f"deal_real_date_detail_{deal_id}", None)
+                    _real_date_selected = _real_date_current
+                ps = d.get("payment_status", "Не оплачено")
+                _ps_widget_key_dd = f"dls_ps_{deal_id}"
+                _ps_model_key_dd = f"_dls_ps_last_model_{deal_id}"
+                if st.session_state.get(_ps_model_key_dd) != ps:
+                    st.session_state[_ps_widget_key_dd] = ps if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else "Не оплачено"
+                    st.session_state[_ps_model_key_dd] = ps
+                _bank_payment_status = _tochka_bank_payment_status(d)
+                _pay_col, _mgr_col = st.columns(2)
+                with _pay_col:
+                    inject_payment_container_css(deal_id, ps)
+                    with st.container(key=f"ps_wrap_{deal_id}"):
+                        new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key_dd)
+                    _crm_mark_widget_changed(_ps_widget_key_dd, str(new_ps) != str(ps))
+                    if _bank_payment_status and _bank_payment_status != ps:
+                        st.markdown(
+                            f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
+                            unsafe_allow_html=True,
+                        )
+                    _update_deal_payment_clicked = st.button("Обновить статус", key=f"dls_update_status_{deal_id}", type="primary", use_container_width=True)
+                with _mgr_col:
+                    _crm_deal_responsible_fragment(d, deal_id)
+                if _update_deal_payment_clicked and new_ps != ps:
+                    d["payment_status"] = new_ps
+                    # Ручное исключение нужно только для намеренного статуса «Не оплачено»
+                    # при подтверждённой оплате банка. Другие ручные изменения не отключают автоматику.
+                    d["payment_status_manual_override"] = bool(new_ps == "Не оплачено" and _bank_payment_status == "Оплачено")
+                    d["last_modified"] = now_str()
+                    _sync_deal_board_stage_from_payment(d)
+                    commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
+                show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
+                if show_edit_deal:
+                    et = st.text_input("Тема:", value=d.get("deal_title", ""), key=f"dls_et_{deal_id}")
+                    _crm_mark_widget_changed(f"dls_et_{deal_id}", str(et) != str(d.get("deal_title", "")))
+                    eb = st.text_input("Бюджет (руб.):", value=str(d.get("budget", 0)) if d.get("budget", 0) > 0 else "", key=f"dls_eb_{deal_id}", placeholder="Введите сумму")
+                    _crm_mark_widget_changed(f"dls_eb_{deal_id}", str(eb or "") != (str(d.get("budget", 0)) if d.get("budget", 0) > 0 else ""))
+                    _dds_col, _ddc_col = st.columns(2)
+                    with _dds_col:
+                        if st.button("Сохранить", key=f"dls_es_{deal_id}", use_container_width=True, type="primary"):
+                            d["deal_title"] = et
+                            d["budget"] = int(eb) if eb and eb.strip().isdigit() else 0
+                            _real_date_save = st.session_state.get(f"deal_real_date_detail_{deal_id}", parse_optional_date(d.get("real_date", "")))
+                            d["real_date"] = _real_date_save.isoformat() if _real_date_save else ""
+                            d["last_modified"] = now_str()
+                            d.setdefault("change_log", []).append({"date": now_str(), "author": st.session_state.get("user_name", st.session_state.get("user_login", "")), "fields": "Тема, бюджет"})
+                            st.session_state[f"dls_show_edit_{deal_id}"] = False
+                            commit_and_rerun(st.session_state.crm_store, "Сделка обновлена")
+                    with _ddc_col:
+                        if st.button("Отменить", key=f"dls_ec_{deal_id}", use_container_width=True):
+                            st.session_state[f"dls_show_edit_{deal_id}"] = False
+                            st.session_state.pop(f"deal_real_date_detail_{deal_id}", None)
+                            _smart_rerun()
+                    if st.session_state.user_role in ("admin", "director"):
+                        st.markdown("---")
+                        _confirm_deal_delete_dialog = st.checkbox("Подтверждаю удаление сделки", key=f"dls_del_confirm_{deal_id}")
+                        if _confirm_deal_delete_dialog and st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True, type="primary"):
+                            st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
+                            st.session_state.pop("dialog_deal_key", None)
+                            st.session_state.pop("_open_created_deal", None)
+                            st.session_state["_in_dialog"] = False
+                            commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
+                else:
+                    pencil_deal_key = f"btn_pencil_deal_{deal_id}"
+                    st.markdown(f"<style>.st-key-{pencil_deal_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                    if st.button("\u270e", key=pencil_deal_key):
+                        st.session_state[f"dls_show_edit_{deal_id}"] = True
                         _smart_rerun()
-                if st.session_state.user_role in ("admin", "director"):
-                    st.markdown("---")
-                    _confirm_deal_delete_dialog = st.checkbox("Подтверждаю удаление сделки", key=f"dls_del_confirm_{deal_id}")
-                    if _confirm_deal_delete_dialog and st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True, type="primary"):
-                        st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
-                        st.session_state.pop("dialog_deal_key", None)
-                        st.session_state.pop("_open_created_deal", None)
-                        st.session_state["_in_dialog"] = False
-                        commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
-            else:
-                pencil_deal_key = f"btn_pencil_deal_{deal_id}"
-                st.markdown(f"<style>.st-key-{pencil_deal_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
-                if st.button("\u270e", key=pencil_deal_key):
-                    st.session_state[f"dls_show_edit_{deal_id}"] = True
-                    _smart_rerun()
             st.markdown("---")
             action_key = f"dls_action_{deal_id}"
             action = st.session_state.get(action_key)
