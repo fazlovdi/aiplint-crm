@@ -8588,6 +8588,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         opacity:1 !important; filter:none !important; transition:background 0.15s ease !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] svg { display:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
         content:"" !important; position:absolute !important; left:12px !important; top:11px !important;
         width:14px !important; height:14px !important; box-sizing:border-box !important;
