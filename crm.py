@@ -3924,7 +3924,21 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                                 if show_edit_dl:
                                     ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
-                                    dl_btn_col1, dl_btn_col2 = st.columns(2)
+                                    dl_btn_col1, dl_btn_col2 = st.columns([1, 1], gap="small")
+                                    st.markdown(f"""<style>
+                                        .st-key-dl_ok_{key_prefix},
+                                        .st-key-dl_cancel_{key_prefix} {{
+                                            min-width: 0 !important;
+                                            width: 100% !important;
+                                        }}
+                                        .st-key-dl_ok_{key_prefix} button,
+                                        .st-key-dl_cancel_{key_prefix} button {{
+                                            width: 100% !important;
+                                            min-width: 100px !important;
+                                            white-space: nowrap !important;
+                                            box-sizing: border-box !important;
+                                        }}
+                                    </style>""", unsafe_allow_html=True)
                                     with dl_btn_col1:
                                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
                                             t["deadline"] = ndd.isoformat()
@@ -4104,7 +4118,21 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 show_edit_dl = st.session_state.get(f"show_edit_dl_{key_prefix}", False)
                                 if show_edit_dl:
                                     ndd = st.date_input("\u0421\u0440\u043e\u043a:", value=parse_deadline(t.get("deadline", "")), format="DD.MM.YYYY", key=f"dl_inline_{key_prefix}")
-                                    dl_btn_col1, dl_btn_col2 = st.columns(2)
+                                    dl_btn_col1, dl_btn_col2 = st.columns([1, 1], gap="small")
+                                    st.markdown(f"""<style>
+                                        .st-key-dl_ok_{key_prefix},
+                                        .st-key-dl_cancel_{key_prefix} {{
+                                            min-width: 0 !important;
+                                            width: 100% !important;
+                                        }}
+                                        .st-key-dl_ok_{key_prefix} button,
+                                        .st-key-dl_cancel_{key_prefix} button {{
+                                            width: 100% !important;
+                                            min-width: 100px !important;
+                                            white-space: nowrap !important;
+                                            box-sizing: border-box !important;
+                                        }}
+                                    </style>""", unsafe_allow_html=True)
                                     with dl_btn_col1:
                                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
                                             t["deadline"] = ndd.isoformat()
