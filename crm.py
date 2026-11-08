@@ -12908,7 +12908,12 @@ def render_client_card_expanded(cl):
                     for _chg in reversed(_client_changes[-20:]):
                         _chg_date = html.escape(str(_chg.get("date", "") or ""))
                         _chg_author = html.escape(str(_chg.get("author", "") or ""))
-                        _chg_fields = html.escape(str(_chg.get("fields", "") or ""))
+                        _chg_fields_raw = str(_chg.get("fields", "") or "")
+                        # Старые записи аудита могли сохранять весь список client_files как сырой Python-список.
+                        # Не показываем эти технические дампы в интерфейсе истории.
+                        if re.match(r"^Client files:\\s*«.*»\\s*→\\s*«\\[", _chg_fields_raw, flags=re.IGNORECASE | re.DOTALL):
+                            _chg_fields_raw = "Изменён список файлов клиента"
+                        _chg_fields = html.escape(_chg_fields_raw)
                         st.markdown(f"<div style='font-size:0.82rem;line-height:1.45;color:#95A5B7;margin-bottom:0.45rem;font-style:normal;white-space:normal;overflow-wrap:anywhere;'>{_chg_date} | {_chg_author} — {_chg_fields}</div>", unsafe_allow_html=True)
                 else:
                     st.caption("История изменений появится после редактирования карточки.")
