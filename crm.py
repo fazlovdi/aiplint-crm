@@ -12690,25 +12690,28 @@ def render_client_card_expanded(cl):
             render_client_comments_panel(cl)
             # Разделитель перед файлами
             st.markdown("---")
-            st.markdown("**Файлы:**")
-            render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True)
-            st.markdown("**Загрузить файлы:**")
-            ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}", accept_multiple_files=True, label_visibility="collapsed")
-            _crm_mark_widget_changed(f"cf_up_{cl['id']}", bool(ucf))
-            _sf_sp1, _sf_btn_col, _sf_sp2 = st.columns([1, 2, 1])
-            with _sf_btn_col:
-                _sf_clicked = st.button("Сохранить файлы", key=f"cf_btn_{cl['id']}", use_container_width=True, disabled=not bool(ucf), type="primary" if ucf else "secondary")
-            if _sf_clicked:
-                if ucf:
-                    with st.spinner("Загрузка файлов..."):
-                        fi_list = save_uploaded_files(ucf, cl["id"], "profile")
-                    if fi_list:
-                        cl.setdefault("client_files", []).extend(normalize_file_list(fi_list))
-                        cl["last_modified"] = now_str()
-                        save_data(st.session_state.crm_store)
-                        st.toast("Файлы сохранены", icon="\U0001F4C1")
-                        st.rerun()
-                else: st.warning("Выберите файл(ы)")
+            with st.container(border=True):
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы клиента</div>", unsafe_allow_html=True)
+                st.markdown(f"<style>.st-key-client_detail_{cl['id']} .st-key-cli_{cl['id']} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
+                render_file_thumbs(cl.get("client_files", []), f"cli_{cl['id']}", allow_delete=True, show_all_button_columns=True, show_all_separator=True, strong_row_separator=True)
+                st.markdown("**Загрузить файлы:**")
+                ucf = st.file_uploader("Выберите файлы:", key=f"cf_up_{cl['id']}", accept_multiple_files=True, label_visibility="collapsed")
+                _crm_mark_widget_changed(f"cf_up_{cl['id']}", bool(ucf))
+                _cf1, _cf_btn, _cf2 = st.columns([1, 2, 1])
+                with _cf_btn:
+                    _cf_clicked = st.button("Загрузить", key=f"cf_btn_{cl['id']}", use_container_width=True, disabled=not bool(ucf), type="primary" if ucf else "secondary")
+                if _cf_clicked:
+                    if ucf:
+                        with st.spinner("Загрузка файлов..."):
+                            fi_list = save_uploaded_files(ucf, cl["id"], "profile")
+                        if fi_list:
+                            cl.setdefault("client_files", []).extend(normalize_file_list(fi_list))
+                            cl["last_modified"] = now_str()
+                            save_data(st.session_state.crm_store)
+                            st.toast("Файлы загружены", icon="📁")
+                            st.rerun()
+                    else:
+                        st.warning("Выберите файл(ы)")
             st.markdown("---")
             # Список задач по клиенту — сразу под блоком файлов
             _client_only_tasks = [t for t in cl.get("tasks", []) if not t.get("deal_id")]
