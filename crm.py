@@ -15743,12 +15743,19 @@ def _crm_render_workspace_fragment():
         .st-key-crm_workspace_backdrop { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(20,24,30,.22) !important; pointer-events: none !important; }
         /* Horizontal tabs with adjacent close controls; minimize stays at top right. */
         [class*="st-key-crm_workspace_tabbar_"] { position:relative !important; width:100% !important; padding:0 104px 0 0 !important; box-sizing:border-box !important; }
+        [class*="st-key-crm_workspace_tabbar_"] {
+            position:relative !important; width:100% !important; min-width:0 !important;
+            overflow:hidden !important; box-sizing:border-box !important;
+            padding-right:100px !important;
+        }
         [class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"] {
             display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
             gap:1px !important; column-gap:1px !important; row-gap:0 !important;
             align-items:center !important; justify-content:flex-start !important;
             border-bottom:0 !important; padding:0.15rem 0 0 !important;
-            width:100% !important; overflow-x:auto !important;
+            width:100% !important; min-width:0 !important; max-width:100% !important;
+            box-sizing:border-box !important; overflow-x:auto !important; overflow-y:hidden !important;
+            scrollbar-width:thin !important;
         }
         /* Each tab container must occupy only its own content width, not share
            the available row width with neighboring tabs. */
@@ -15843,6 +15850,7 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] {
             position:absolute !important; top:0 !important; right:0 !important;
             width:96px !important; min-width:96px !important; z-index:10 !important;
+            margin:0 !important; padding:0 !important; background:#F8F9FA !important;
         }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] .stButton,
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button {
@@ -15891,6 +15899,46 @@ def _crm_render_workspace_fragment():
                         on_click=_crm_workspace_minimize_window_callback,
                         args=(_crm_active_window["id"],),
                     )
+
+            # Drag-to-scroll for the tab strip. Clicks remain clicks unless the
+            # pointer actually moved; after a drag, suppress the synthetic click.
+            components.html("""<script>
+            (() => {
+              try {
+                const doc = window.parent.document;
+                doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"]').forEach(el => {
+                  if (el.dataset.crmDragScrollReady === '1') return;
+                  el.dataset.crmDragScrollReady = '1';
+                  let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
+                  el.addEventListener('pointerdown', e => {
+                    if (e.button !== 0) return;
+                    down = true; moved = false; startX = e.clientX; startScroll = el.scrollLeft;
+                  }, true);
+                  doc.addEventListener('pointermove', e => {
+                    if (!down) return;
+                    const dx = e.clientX - startX;
+                    if (Math.abs(dx) > 4) moved = true;
+                    if (moved) {
+                      el.scrollLeft = startScroll - dx;
+                      el.style.cursor = 'grabbing';
+                    }
+                  }, true);
+                  const endDrag = () => {
+                    if (down && moved) suppressClick = true;
+                    down = false;
+                    el.style.cursor = '';
+                  };
+                  doc.addEventListener('pointerup', endDrag, true);
+                  doc.addEventListener('pointercancel', endDrag, true);
+                  el.addEventListener('click', e => {
+                    if (!suppressClick) return;
+                    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+                    suppressClick = false;
+                  }, true);
+                });
+              } catch (e) {}
+            })();
+            </script>""", height=0, width=0)
 
             with st.container(key=f"crm_workspace_content_{_crm_active_window['id']}"):
                 # Preserve original CRM button sizes, spacing and layout in window contents.
