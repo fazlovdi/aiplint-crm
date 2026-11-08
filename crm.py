@@ -7679,11 +7679,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button p {
         font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
     }
+    [class*="st-key-crm_workspace_main_expand_"] {
+        align-self:end !important;
+        margin-top:0.35rem !important;
+        margin-bottom:0 !important;
+    }
     [class*="st-key-crm_workspace_main_expand_"] button {
         font-size:30px !important; line-height:1 !important;
-        min-width:44px !important; width:44px !important;
-        min-height:44px !important; height:44px !important;
-        padding:0 !important;
+        min-width:40px !important; width:40px !important;
+        min-height:40px !important; height:40px !important;
+        padding:0 !important; margin:0 !important;
     }
     [class*="st-key-crm_workspace_main_expand_"] button p {
         font-size:30px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
