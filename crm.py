@@ -7607,12 +7607,25 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     [class*="st-key-crm_workspace_bottom_"] {
+        position:relative !important;
         display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
         align-items:center !important; justify-content:flex-start !important;
         gap:1px !important; column-gap:1px !important; row-gap:0 !important;
-        width:100% !important; overflow-x:auto !important;
+        width:100% !important; min-width:0 !important; overflow:hidden !important;
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] {
+        width:100% !important; min-width:0 !important; max-width:100% !important;
+        box-sizing:border-box !important; overflow-x:auto !important; overflow-y:hidden !important;
+        scrollbar-width:thin !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) {
+        padding-right:110px !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
+        position:absolute !important; top:0 !important; right:0 !important; z-index:10 !important;
+        margin:0 !important; background:#F5F6F8 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] {
         position:relative !important;
@@ -15906,7 +15919,7 @@ def _crm_render_workspace_fragment():
             (() => {
               try {
                 const doc = window.parent.document;
-                doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"]').forEach(el => {
+                doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"], [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"]').forEach(el => {
                   if (el.dataset.crmDragScrollReady === '1') return;
                   el.dataset.crmDragScrollReady = '1';
                   let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
