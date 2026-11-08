@@ -1537,7 +1537,7 @@ def get_thumbnail_base64(remote_path, size=220):
         return f"data:{mt};base64,{base64.b64encode(fb).decode()}"
 
 
-def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_all_button_columns=False):
+def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_all_button_columns=False, show_all_separator=False):
     """Отображает вложения списком; содержимое загружается только по запросу пользователя."""
     if not files:
         st.caption("Файлов нет")
@@ -1654,6 +1654,8 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
         if _show_all_clicked:
             st.session_state[_show_all_key] = not _show_all
             st.rerun()
+        if show_all_separator:
+            st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:6px 0 5px 0;"></div>', unsafe_allow_html=True)
 
 
 def _task_products_from_calculation(deal, calculation_id):
@@ -11721,7 +11723,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             with st.container(border=True):
                 st.markdown("**Файлы сделки:**")
                 st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
-                render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True)
+                render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True)
                 st.markdown("**Загрузить файлы:**")
                 df_ver = st.session_state.deal_file_uploader_ver.get(f"tab_{deal_id}", 0)
                 udf = st.file_uploader("Выберите файлы:", key=f"dls_up_{deal_id}_{df_ver}", accept_multiple_files=True, label_visibility="collapsed")
