@@ -3327,6 +3327,7 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
                 st.rerun()
 
 
+@st.fragment
 def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_size=None):
     with st.container(border=True):
         store = st.session_state.crm_store
@@ -3368,17 +3369,17 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
                             store["reminders"] = [x for x in store["reminders"] if x.get("id") != r.get("id")]
                             st.session_state.pop(del_key, None)
                             save_data(store)
-                            st.rerun()
+                            st.rerun(scope="fragment")
                     with no:
                         if st.button("Отмена", key=f"rem_del_no_{r.get('id')}", use_container_width=True):
                             st.session_state.pop(del_key, None)
-                            st.rerun()
+                            st.rerun(scope="fragment")
         _send_spacer, _send_col, _send_spacer2 = st.columns([1, 2, 1])
         _rem_form_key = f"rem_inline_open_{key_prefix}"
         with _send_col:
             if st.button("Создать напоминание", key=f"rem_add_{key_prefix}", use_container_width=True):
                 st.session_state[_rem_form_key] = not st.session_state.get(_rem_form_key, False)
-                st.rerun()
+                st.rerun(scope="fragment")
 
         if st.session_state.get(_rem_form_key, False):
             st.markdown("**Новое напоминание**")
@@ -3429,13 +3430,13 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
                             for _k in (text_key, date_key, time_key, recipient_key):
                                 st.session_state.pop(_k, None)
                             st.toast("Напоминание создано", icon="🔔")
-                            st.rerun()
+                            st.rerun(scope="fragment")
             with _cancel_col:
                 if st.button("Отмена", key=f"rem_cancel_inline_{key_suffix}", use_container_width=True):
                     st.session_state[_rem_form_key] = False
                     for _k in (text_key, date_key, time_key, recipient_key):
                         st.session_state.pop(_k, None)
-                    st.rerun()
+                    st.rerun(scope="fragment")
 
 def process_due_reminders():
     """Переводит наступившие напоминания в персональные уведомления; вызывается при каждом запуске приложения."""
