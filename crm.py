@@ -3566,6 +3566,63 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
             st.rerun()
 
 
+@st.fragment
+def render_deal_comments_panel(d, deal_id):
+    with st.container(border=True):
+        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Комментарии</div>", unsafe_allow_html=True)
+        st.markdown("""<style>
+        div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
+        </style>""", unsafe_allow_html=True)
+        if d.get("deal_comments"):
+            render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
+        dc_clr_key = f"dls_clr_dc_{deal_id}"
+        if st.session_state.get(dc_clr_key):
+            st.session_state[f"dls_dc_input_{deal_id}"] = ""
+            st.session_state[dc_clr_key] = False
+        nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+        _crm_mark_widget_changed(f"dls_dc_input_{deal_id}", bool(str(nc or "").strip()))
+        _dcc1, _dcc_btn, _dcc2 = st.columns([1, 2, 1])
+        with _dcc_btn:
+            _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
+        if _dcc_clicked:
+            if nc.strip():
+                d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
+                d["last_modified"] = now_str()
+                st.session_state[dc_clr_key] = True
+                save_data(st.session_state.crm_store)
+                st.toast("Комментарий добавлен", icon="✅")
+                st.rerun(scope="fragment")
+            else:
+                st.warning("Введите текст")
+
+
+@st.fragment
+def render_client_comments_panel(cl):
+    st.markdown("**Комментарии:**")
+    render_soft_delete_comments(cl.get("client_comments", []), f"client_{cl['id']}", "time", "author")
+    if not cl.get("client_comments"):
+        st.caption("Пока нет комментариев")
+    cc_clr_key = f"clr_cc_{cl['id']}"
+    if st.session_state.get(cc_clr_key):
+        st.session_state[f"new_cc_input_{cl['id']}"] = ""
+        st.session_state[cc_clr_key] = False
+    nci = st.text_area("Комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
+    _crm_mark_widget_changed(f"new_cc_input_{cl['id']}", bool(str(nci or "").strip()))
+    _cc_sp1, _cc_btn_col, _cc_sp2 = st.columns([1, 2, 1])
+    with _cc_btn_col:
+        _cc_clicked = st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True)
+    if _cc_clicked:
+        if nci.strip():
+            cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nci.strip()})
+            cl["last_modified"] = now_str()
+            st.session_state[cc_clr_key] = True
+            save_data(st.session_state.crm_store)
+            st.toast("Комментарий добавлен", icon="✅")
+            st.rerun(scope="fragment")
+        else:
+            st.warning("Введите текст")
+
+
 def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user"):
     """Показывает комментарии; удаление только помечает запись и зачеркивает её."""
     if not isinstance(comments, list):
@@ -11791,30 +11848,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
                     st.rerun()
         with right_col:
-            with st.container(border=True):
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Комментарии</div>", unsafe_allow_html=True)
-                st.markdown("""<style>
-                div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
-                </style>""", unsafe_allow_html=True)
-                if d.get("deal_comments"):
-                    render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
-                dc_clr_key = f"dls_clr_dc_{deal_id}"
-                if st.session_state.get(dc_clr_key):
-                    st.session_state[f"dls_dc_input_{deal_id}"] = ""
-                    st.session_state[dc_clr_key] = False
-                nc = st.text_area("Комментарий:", key=f"dls_dc_input_{deal_id}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
-                _crm_mark_widget_changed(f"dls_dc_input_{deal_id}", bool(str(nc or "").strip()))
-                _dcc1, _dcc_btn, _dcc2 = st.columns([1, 2, 1])
-                with _dcc_btn:
-                    _dcc_clicked = st.button("Добавить", key=f"dls_dc_btn_{deal_id}", use_container_width=True)
-                if _dcc_clicked:
-                    if nc.strip():
-                        d.setdefault("deal_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nc.strip()})
-                        d["last_modified"] = now_str()
-                        st.session_state[dc_clr_key] = True
-                        commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
-                    else:
-                        st.warning("Введите текст")
+            render_deal_comments_panel(d, deal_id)
             st.markdown("---")
             with st.container(border=True):
                 st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
@@ -12101,25 +12135,7 @@ def render_client_card_expanded(cl):
             st.markdown("---")
             render_reminders("client", cl.get("id", ""), cl.get("name", "Клиент"), f"client_{cl.get('id')}")
         with _right_col:
-            st.markdown("**Комментарии:**")
-            render_soft_delete_comments(cl.get("client_comments", []), f"client_{cl['id']}", "time", "author")
-            if not cl.get("client_comments"): st.caption("Пока нет комментариев")
-            cc_clr_key = f"clr_cc_{cl['id']}"
-            if st.session_state.get(cc_clr_key):
-                st.session_state[f"new_cc_input_{cl['id']}"] = ""
-                st.session_state[cc_clr_key] = False
-            nci = st.text_area("Комментарий:", key=f"new_cc_input_{cl['id']}", placeholder="Введите новый комментарий...", height=68, label_visibility="collapsed")
-            _crm_mark_widget_changed(f"new_cc_input_{cl['id']}", bool(str(nci or "").strip()))
-            _cc_sp1, _cc_btn_col, _cc_sp2 = st.columns([1, 2, 1])
-            with _cc_btn_col:
-                _cc_clicked = st.button("Добавить комментарий", key=f"cc_btn_{cl['id']}", use_container_width=True)
-            if _cc_clicked:
-                if nci.strip():
-                    cl.setdefault("client_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "author": st.session_state.get("user_name", ""), "text": nci.strip()})
-                    cl["last_modified"] = now_str()
-                    st.session_state[cc_clr_key] = True
-                    commit_and_rerun(st.session_state.crm_store, "Комментарий добавлен")
-                else: st.warning("Введите текст")
+            render_client_comments_panel(cl)
             # Разделитель перед файлами
             st.markdown("---")
             st.markdown("**Файлы:**")
