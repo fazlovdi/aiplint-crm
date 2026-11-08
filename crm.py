@@ -1856,7 +1856,7 @@ def render_print_button(task, cl, tp, fd, key_suffix):
     html_json = json.dumps(html_content).replace('<', '\\u003c')
     safe_key = key_suffix.replace('-', '_').replace('.', '_')
     btn_id = f"print_btn_{safe_key}"
-    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="width:auto;padding:4px 12px;font-size:0.85rem;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
+    st.markdown(f'<button class="custom-print-btn" id="{btn_id}" style="display:table;width:auto;margin-left:auto;margin-right:-0.65rem;padding:4px 12px;font-size:0.85rem;">\U0001F5A8\uFE0F</button>', unsafe_allow_html=True)
     st.components.v1.html(f"""<script>(function() {{ var btn = window.parent.document.getElementById('{btn_id}'); if (!btn) return; var html = {html_json}; btn.addEventListener('click', function() {{ var w = window.open('', '_blank'); if (!w) {{ alert('Разрешите всплывающие окна'); return; }} w.document.open(); w.document.write(html); w.document.close(); w.focus(); setTimeout(function() {{ try {{ w.print(); }} catch(e) {{}} }}, 500); w.onafterprint = function() {{ setTimeout(function() {{ w.close(); }}, 300); }}; }}); }})();</script>""", height=0)
 
 def render_print_file_button(files, key_suffix):
@@ -3932,7 +3932,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     # Поля отправки заказа отображаются и для задачи, привязанной к сделке.
                     # При редактировании их заменяют поля формы выше.
                     if not show_edit_task:
-                        st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 0.8rem 0;"></div>', unsafe_allow_html=True)
+                        st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 1.1rem 0;"></div>', unsafe_allow_html=True)
                         if t.get("products"):
                             st.markdown("**Товары:**")
                             for _product_line in str(t.get("products", "")).splitlines():
@@ -4108,7 +4108,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
                             pass  # Для обычных задач блок статуса доставки не используется
-                    st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 0.8rem 0;"></div>', unsafe_allow_html=True)
+                    st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 1.1rem 0;"></div>', unsafe_allow_html=True)
                     if t.get('products'):
                         st.markdown("**Товары:**")
                         for _product_line in str(t.get("products", "")).splitlines():
