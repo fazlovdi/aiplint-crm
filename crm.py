@@ -8585,7 +8585,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         height:46px !important; min-height:46px !important; padding:0 !important; margin:0 !important;
         border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:none !important;
         background:#BC1661 !important; color:#FFFFFF !important; font-size:0 !important; line-height:1 !important;
-        opacity:0.55 !important; transition:opacity 0.15s ease !important;
+        opacity:0.25 !important; transition:opacity 0.15s ease !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
