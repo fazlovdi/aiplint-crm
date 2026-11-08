@@ -8633,7 +8633,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         if in_workspace:
                 with st.popover("+", key=f"crm_workspace_add_client_{_bottom_active_window_id}", help="Открыть карточку клиента"):
                     _picker_query = st.text_input(
-                        "Поиск среди клиентов",
+                        "Показаны не все клиенты, воспользуйся поиском",
                         key=f"crm_workspace_client_picker_search_{_bottom_active_window_id}",
                         placeholder="Имя, телефон, город…",
                     )
