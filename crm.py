@@ -12098,14 +12098,15 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if _dls_ct_clicked:
                     # Use the workspace registry instead of legacy one-shot dialog flags.
                     deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
-            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
-            st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Внесённые изменения</div>", unsafe_allow_html=True)
-            _deal_changes = d.get("change_log", [])
-            if _deal_changes:
-                for _chg in reversed(_deal_changes[-20:]):
-                    st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
-            else:
-                st.caption("История изменений появится после редактирования сделки.")
+            if st.session_state.get("user_role") in ("admin", "director"):
+                st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Внесённые изменения</div>", unsafe_allow_html=True)
+                _deal_changes = d.get("change_log", [])
+                if _deal_changes:
+                    for _chg in reversed(_deal_changes[-20:]):
+                        st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
+                else:
+                    st.caption("История изменений появится после редактирования сделки.")
 
 
 def render_client_card_expanded(cl):
@@ -12465,14 +12466,15 @@ def render_client_card_expanded(cl):
                     return
                 client_requisites_dialog(*_req_args)
             # История изменений — после реквизитов
-            st.markdown("---")
-            st.markdown("**Внесённые изменения**")
-            _client_changes = cl.get("change_log", [])
-            if _client_changes:
-                for _chg in reversed(_client_changes[-20:]):
-                    st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
-            else:
-                st.caption("История изменений появится после редактирования карточки.")
+            if st.session_state.get("user_role") in ("admin", "director"):
+                st.markdown("---")
+                st.markdown("**Внесённые изменения**")
+                _client_changes = cl.get("change_log", [])
+                if _client_changes:
+                    for _chg in reversed(_client_changes[-20:]):
+                        st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
+                else:
+                    st.caption("История изменений появится после редактирования карточки.")
 
 def render_client_in_tree(cl):
     is_cl_exp = st.session_state.expanded_client_id == cl["id"]
