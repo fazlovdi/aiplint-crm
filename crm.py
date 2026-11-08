@@ -7737,10 +7737,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         placeholder="Имя, телефон, город…",
                     )
                     _picker_clients = list(st.session_state.crm_store.get("clients", []) or [])
-                    _picker_clients.sort(
-                        key=lambda _c: (str(_c.get("last_modified", "") or ""), str(_c.get("created_at", "") or "")),
-                        reverse=True,
-                    )
                     _picker_q = str(_picker_query or "").strip().lower()
                     _picker_digits = re.sub(r"\D", "", _picker_q)
                     if _picker_digits and _picker_digits.startswith(("7", "8")) and len(_picker_digits) > 1:
