@@ -3278,6 +3278,9 @@ def create_reminder_dialog(entity_type, entity_id, entity_label):
 
     logins = [u["login"] for u in users]
     names = {u["login"]: u.get("name") or u["login"] for u in users}
+    st.markdown("""<style>
+    div[class*="st-key-rem_text_"] div[data-testid="InputInstructions"] { display:none!important; }
+    </style>""", unsafe_allow_html=True)
     _rem_text_value = st.text_area("О чём напомнить?", key=text_key, height=68, label_visibility="visible")
     _crm_mark_widget_changed(text_key, bool(str(_rem_text_value or "").strip()))
     c1, c2 = st.columns(2)
@@ -3385,6 +3388,9 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
             date_key = f"rem_date_{key_suffix}"
             time_key = f"rem_time_{key_suffix}"
             recipient_key = f"rem_recipient_{key_suffix}"
+            st.markdown("""<style>
+            div[class*="st-key-rem_text_"] div[data-testid="InputInstructions"] { display:none!important; }
+            </style>""", unsafe_allow_html=True)
             _rem_text_value = st.text_area("О чём напомнить?", key=text_key, height=68)
             c1, c2 = st.columns(2)
             with c1:
@@ -11741,6 +11747,9 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     if _stage_now == "На паузе" and d.get("pause_reason"):
                         st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
                     if _stage_now != "На паузе":
+                        st.markdown("""<style>
+                        div[class*="st-key-dls_pause_reason_"] div[data-testid="InputInstructions"] { display:none!important; }
+                        </style>""", unsafe_allow_html=True)
                         _pause_reason = st.text_area("", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы", label_visibility="collapsed")
                         _crm_mark_widget_changed(f"dls_pause_reason_{deal_id}", bool(str(_pause_reason or "").strip()))
                     else:
