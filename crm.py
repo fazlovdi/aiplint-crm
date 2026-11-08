@@ -5158,12 +5158,25 @@ def save_data(data):
                     old_map = {_item_key(item, i): item for i, item in enumerate(old_items)}
                     new_map = {_item_key(item, i): item for i, item in enumerate(new_items)}
                     added, removed = set(new_map) - set(old_map), set(old_map) - set(new_map)
+                    changed = [key for key in set(old_map) & set(new_map) if old_map[key] != new_map[key]]
                     if added and removed:
                         return f"{noun}: добавлено {len(added)}, удалено {len(removed)}"
                     if added:
                         return f"Добавлен(ы): {noun.lower()}"
                     if removed:
                         return f"Удалён(ы): {noun.lower()}"
+                    if changed:
+                        _deleted_flags = any(
+                            isinstance(new_map[key], dict)
+                            and (new_map[key].get("deleted") or new_map[key].get("is_deleted") or new_map[key].get("deleted_at"))
+                            and not (isinstance(old_map[key], dict) and (old_map[key].get("deleted") or old_map[key].get("is_deleted") or old_map[key].get("deleted_at")))
+                            for key in changed
+                        )
+                        if _deleted_flags and "комментар" in noun:
+                            return "Удалён комментарий"
+                        if "комментар" in noun:
+                            return "Изменён комментарий"
+                        return f"Изменён(ы): {noun.lower()}"
                     return ""
                 _old_clients_audit = _audit_map(latest_data.get("clients", []))
                 _new_clients_audit = _audit_map(merged_data.get("clients", []))
