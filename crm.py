@@ -8520,18 +8520,48 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         flex:0 0 auto !important; flex-shrink:0 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] { flex:0 0 auto !important; width:max-content !important; min-width:max-content !important; }
-    /* Left-align text in buttons inside the client-object dropdown. */
-    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button,
-    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button > div,
-    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button [data-testid="stMarkdownContainer"] {
+    /* Force left alignment for every selectable client object in the add-object popover.
+       Do not depend on Streamlit's popover DOM wrapper: it differs between versions. */
+    [class*="st-key-crm_obj_client_task_"] [data-testid^="stBaseButton-"],
+    [class*="st-key-crm_obj_deal_"] [data-testid^="stBaseButton-"],
+    [class*="st-key-crm_obj_deal_task_"] [data-testid^="stBaseButton-"],
+    [class*="st-key-crm_obj_calc_"] [data-testid^="stBaseButton-"],
+    [class*="st-key-crm_obj_req_"] [data-testid^="stBaseButton-"],
+    [class*="st-key-crm_obj_client_task_"] .stButton > button,
+    [class*="st-key-crm_obj_deal_"] .stButton > button,
+    [class*="st-key-crm_obj_deal_task_"] .stButton > button,
+    [class*="st-key-crm_obj_calc_"] .stButton > button,
+    [class*="st-key-crm_obj_req_"] .stButton > button {
+        display:flex !important;
+        align-items:flex-start !important;
         justify-content:flex-start !important;
         text-align:left !important;
     }
-    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button [data-testid="stMarkdownContainer"],
-    [data-testid="stPopoverBody"] [class*="st-key-crm_obj_"] button p {
+    [class*="st-key-crm_obj_client_task_"] button > div,
+    [class*="st-key-crm_obj_deal_"] button > div,
+    [class*="st-key-crm_obj_deal_task_"] button > div,
+    [class*="st-key-crm_obj_calc_"] button > div,
+    [class*="st-key-crm_obj_req_"] button > div,
+    [class*="st-key-crm_obj_client_task_"] button [data-testid="stMarkdownContainer"],
+    [class*="st-key-crm_obj_deal_"] button [data-testid="stMarkdownContainer"],
+    [class*="st-key-crm_obj_deal_task_"] button [data-testid="stMarkdownContainer"],
+    [class*="st-key-crm_obj_calc_"] button [data-testid="stMarkdownContainer"],
+    [class*="st-key-crm_obj_req_"] button [data-testid="stMarkdownContainer"] {
+        display:block !important;
+        flex:1 1 auto !important;
         width:100% !important;
+        min-width:0 !important;
+        margin:0 !important;
         text-align:left !important;
-        margin-left:0 !important;
+    }
+    [class*="st-key-crm_obj_client_task_"] button p,
+    [class*="st-key-crm_obj_deal_"] button p,
+    [class*="st-key-crm_obj_deal_task_"] button p,
+    [class*="st-key-crm_obj_calc_"] button p,
+    [class*="st-key-crm_obj_req_"] button p {
+        width:100% !important;
+        margin:0 !important;
+        text-align:left !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_restore_"] button { display:flex !important; align-items:center !important; justify-content:center !important; box-sizing:border-box !important; height:42px !important; min-height:42px !important; width:max-content !important; min-width:max-content !important; padding:0.5rem 0.7rem !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
