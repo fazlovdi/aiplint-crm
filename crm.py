@@ -389,14 +389,8 @@ st.markdown("""
         outline: 3px solid rgba(188, 22, 97, 0.28) !important;
         outline-offset: 2px !important;
     }
-    .stButton > button:focus:not(:active) {
-        animation: crm-click-confirm 260ms ease-out;
-    }
-    @keyframes crm-click-confirm {
-        0% { transform: scale(0.975); }
-        65% { transform: scale(1.015); }
-        100% { transform: scale(1); }
-    }
+    /* Не анимируем кнопку после фокуса: анимация transform создавала визуальный след
+       при перерисовке и перестановке кнопок Streamlit. */
     /* Обратная связь и для ссылок: переходы между разделами, ссылки в таблицах и тексте */
     a[href] {
         -webkit-tap-highlight-color: transparent;
