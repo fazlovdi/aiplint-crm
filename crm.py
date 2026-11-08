@@ -3685,7 +3685,7 @@ def render_client_comments_panel(cl):
     st.markdown(
         f"""<style>
         .st-key-{_comments_panel_key} {{ background-color: rgba(59, 130, 246, 0.045) !important; border-radius: 0.5rem !important; }}
-        .st-key-{_comments_panel_key} > div[data-testid="stVerticalBlock"] {{ gap: 0.35rem !important; }}
+        .st-key-{_comments_panel_key} > div[data-testid="stVerticalBlock"] {{ gap: 0.15rem !important; }}
         .st-key-{_comments_panel_key} div[class*="st-key-cli_dc_btn_"] button {{
             min-height: 0 !important;
             height: auto !important;
