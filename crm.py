@@ -4195,6 +4195,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         for _product_line in str(t.get("products", "")).splitlines():
                             if _product_line.strip():
                                 st.markdown(f"- {html.escape(_product_line.strip())}", unsafe_allow_html=True)
+                        if _is_client_samples_task:
+                            st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 1.1rem 0;"></div>', unsafe_allow_html=True)
                     if t.get('type') in ("Отправить заказ", "Отправить образцы"):
                         st.markdown(f"**Город:** {t.get('ship_city', '')}")
                     if t.get('ship_addr'): st.markdown(f"**\u0410\u0434\u0440\u0435\u0441:** {t['ship_addr']}")
