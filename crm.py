@@ -11808,14 +11808,6 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if _dls_ct_clicked:
                     # Use the workspace registry instead of legacy one-shot dialog flags.
                     deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
-            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
-            st.markdown("**Внесённые изменения**")
-            _deal_changes = d.get("change_log", [])
-            if _deal_changes:
-                for _chg in reversed(_deal_changes[-20:]):
-                    st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
-            else:
-                st.caption("История изменений появится после редактирования сделки.")
             # Кнопка паузы/возврата в самом низу правой колонки, по ширине как «Создать напоминание».
             _stage_now = d.get("status", "Новый")
             if _stage_now in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
@@ -11825,7 +11817,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     if _stage_now == "На паузе" and d.get("pause_reason"):
                         st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
                     if _stage_now != "На паузе":
-                        _pause_reason = st.text_area("", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы", label_visibility="collapsed")
+                        _pause_reason = st.text_area("", key=f"dls_pause_reason_{deal_id}", height=90, label_visibility="collapsed")
                         _crm_mark_widget_changed(f"dls_pause_reason_{deal_id}", bool(str(_pause_reason or "").strip()))
                     else:
                         _pause_reason = ""
@@ -11850,6 +11842,15 @@ def render_deal_detail(d, cl, cu, key_prefix):
                             _pause_message = "Сделка поставлена на паузу"
                         d["last_modified"] = now_str()
                         commit_and_rerun(st.session_state.crm_store, _pause_message)
+
+            st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+            st.markdown("**Внесённые изменения**")
+            _deal_changes = d.get("change_log", [])
+            if _deal_changes:
+                for _chg in reversed(_deal_changes[-20:]):
+                    st.markdown(f"<div class='created-date'>{_chg.get('date', '')} | {_chg.get('author', '')} — {_chg.get('fields', '')}</div>", unsafe_allow_html=True)
+            else:
+                st.caption("История изменений появится после редактирования сделки.")
 
 
 def render_client_card_expanded(cl):
