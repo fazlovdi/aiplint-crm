@@ -11578,6 +11578,15 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         st.session_state[f"dls_show_edit_{deal_id}"] = False
                         st.session_state.pop(f"deal_real_date_detail_{deal_id}", None)
                         _smart_rerun()
+                if st.session_state.user_role in ("admin", "director"):
+                    st.markdown("---")
+                    _confirm_deal_delete_dialog = st.checkbox("Подтверждаю удаление сделки", key=f"dls_del_confirm_{deal_id}")
+                    if _confirm_deal_delete_dialog and st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True, type="primary"):
+                        st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
+                        st.session_state.pop("dialog_deal_key", None)
+                        st.session_state.pop("_open_created_deal", None)
+                        st.session_state["_in_dialog"] = False
+                        commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
             else:
                 pencil_deal_key = f"btn_pencil_deal_{deal_id}"
                 st.markdown(f"<style>.st-key-{pencil_deal_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
@@ -11622,15 +11631,6 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _push_dialog_return()
                 st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
                 st.rerun()
-            if st.session_state.user_role in ("admin", "director"):
-                st.markdown("---")
-                _confirm_deal_delete_dialog = st.checkbox("Подтверждаю удаление сделки", key=f"dls_del_confirm_{deal_id}")
-                if _confirm_deal_delete_dialog and st.button("Удалить сделку", key=f"dls_del_{deal_id}", use_container_width=True, type="primary"):
-                    st.session_state.crm_store["deals"] = [x for x in st.session_state.crm_store["deals"] if x["id"] != deal_id]
-                    st.session_state.pop("dialog_deal_key", None)
-                    st.session_state.pop("_open_created_deal", None)
-                    st.session_state["_in_dialog"] = False
-                    commit_and_rerun(st.session_state.crm_store, "Сделка удалена")
             render_reminders("deal", deal_id, f"Сделка №{d.get('deal_number', d.get('title', deal_id))}", f"deal_{key_prefix}")
         with right_col:
             if d.get("deal_comments"):
