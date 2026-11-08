@@ -3310,7 +3310,7 @@ def render_reminders(entity_type, entity_id, entity_label, key_prefix, heading_s
         store = st.session_state.crm_store
         store.setdefault("reminders", [])
         if heading_size:
-            st.markdown(f"<div style='font-size:{heading_size};font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Напоминания</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:{heading_size};font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Напоминания</div>", unsafe_allow_html=True)
         else:
             st.markdown("**Напоминания**")
         items = [r for r in store["reminders"] if r.get("entity_type")==str(entity_type) and str(r.get("entity_id"))==str(entity_id)]
@@ -11012,7 +11012,7 @@ def render_deal_products_block(d, key_prefix):
         save_data(st.session_state.crm_store)
 
     with st.container(border=True):
-        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Расчёты по сделке</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Расчёты по сделке</div>", unsafe_allow_html=True)
         if not calculations:
             st.caption("Расчётов пока нет.")
         for idx, calc in enumerate(calculations):
@@ -11717,7 +11717,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             _stage_now = d.get("status", "Новый")
             if _stage_now in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
                 with st.container(border=True):
-                    st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Постановка на паузу</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Постановка на паузу</div>", unsafe_allow_html=True)
                     st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
                     if _stage_now == "На паузе" and d.get("pause_reason"):
                         st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
@@ -11763,7 +11763,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.rerun()
         with right_col:
             with st.container(border=True):
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Комментарии</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Комментарии</div>", unsafe_allow_html=True)
                 st.markdown("""<style>
                 div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
                 </style>""", unsafe_allow_html=True)
@@ -11788,7 +11788,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         st.warning("Введите текст")
             st.markdown("---")
             with st.container(border=True):
-                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Файлы сделки</div>", unsafe_allow_html=True)
                 st.markdown(f"<style>.st-key-deal_detail_{key_prefix} .st-key-dls_file_{deal_id} {{ margin-left:0!important; justify-content:flex-start!important; text-align:left!important; }}</style>", unsafe_allow_html=True)
                 render_file_thumbs(d.get("deal_files", []), f"dls_file_{deal_id}", allow_delete=True, show_all_button_columns=True, show_all_separator=True)
                 st.markdown("**Загрузить файлы:**")
@@ -11818,7 +11818,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
                 _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
                 if _deal_tasks_list:
-                    st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Задачи по сделке</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Задачи по сделке</div>", unsafe_allow_html=True)
                     for _ti, _task in enumerate(_deal_tasks_list):
                         _task_col, _date_col, _open_col = st.columns([2, 2, 1])
                         with _task_col:
@@ -11851,7 +11851,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     # Use the workspace registry instead of legacy one-shot dialog flags.
                     deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
-            st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.35rem 0;'>Внесённые изменения</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.65rem 0;'>Внесённые изменения</div>", unsafe_allow_html=True)
             _deal_changes = d.get("change_log", [])
             if _deal_changes:
                 for _chg in reversed(_deal_changes[-20:]):
