@@ -7644,6 +7644,29 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:active { color:#8A94A3 !important; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] p { margin:0 !important; padding:0 !important; line-height:1 !important; }
+    /* Keep each taskbar close widget visible and fixed-width independently of its title. */
+    [class*="st-key-crm_workspace_taskbar_close_"] {
+        display:flex !important; flex:0 0 27px !important; flex-grow:0 !important;
+        flex-shrink:0 !important; width:27px !important; min-width:27px !important;
+        max-width:27px !important; visibility:visible !important; opacity:1 !important;
+        overflow:visible !important; margin:0 !important; padding:0 !important;
+    }
+    [class*="st-key-crm_workspace_taskbar_close_"] > div,
+    [class*="st-key-crm_workspace_taskbar_close_"] [data-testid="stButton"] {
+        display:flex !important; flex:0 0 27px !important; width:27px !important;
+        min-width:27px !important; max-width:27px !important; margin:0 !important;
+        padding:0 !important; visibility:visible !important; opacity:1 !important;
+    }
+    [class*="st-key-crm_workspace_taskbar_close_"] button {
+        display:flex !important; box-sizing:border-box !important; flex:0 0 27px !important;
+        width:27px !important; min-width:27px !important; max-width:27px !important;
+        height:30px !important; min-height:30px !important; margin:0 !important;
+        padding:0 !important; align-items:center !important; justify-content:center !important;
+        color:#8A94A3 !important; font-size:18px !important; line-height:1 !important;
+        font-weight:400 !important; border:0 !important; outline:0 !important;
+        box-shadow:none !important; border-radius:0 !important; background:transparent !important;
+        visibility:visible !important; opacity:1 !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
