@@ -7546,6 +7546,16 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
         item for item in windows if str(item.get("id")) != str(window.get("id"))
     ]
     remaining = st.session_state["_crm_windows"]
+
+    # На главном экране крестик только убирает окно из панели.
+    # Не активируем и не разворачиваем другое окно автоматически.
+    if not in_workspace:
+        st.session_state["_crm_active_window_id"] = None
+        st.session_state.pop("_crm_active_dialog", None)
+        _crm_workspace_clear_legacy_dialog_markers()
+        _crm_workspace_queue_save()
+        return
+
     return_window_id = window.get("return_to_window_id")
     next_window = next(
         (item for item in remaining if return_window_id and str(item.get("id")) == str(return_window_id)),
