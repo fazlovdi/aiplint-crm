@@ -3662,6 +3662,13 @@ def render_client_comments_panel(cl):
         st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Комментарии</div>", unsafe_allow_html=True)
         st.markdown("""<style>
         div[class*="st-key-cli_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
+        div[class*="st-key-cli_dc_btn_"] button {
+            width: 100% !important;
+            min-height: 38px !important;
+            height: 38px !important;
+            padding: 0.25rem 0.75rem !important;
+            font-size: 0.875rem !important;
+        }
         </style>""", unsafe_allow_html=True)
         if cl.get("client_comments"):
             render_soft_delete_comments(cl["client_comments"], f"client_{cl['id']}", "time", "author", local_update=True)
