@@ -11560,10 +11560,16 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.markdown(f"<div style='text-align:right;padding-right:0.5rem;font-size:0.95rem;font-weight:650;margin-top:1rem;margin-bottom:0.7rem;'>Статус: {html.escape(_header_deal_status)}</div>", unsafe_allow_html=True)
             st.markdown(format_created_date(d), unsafe_allow_html=True)
             with st.container(border=True):
-                if d.get("deal_title"):
-                    st.markdown(f"**Тема:** {d['deal_title']}")
-                st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
-                st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                _info_topic_col, _info_client_col, _info_budget_col, _info_manager_col = st.columns([1.5, 1.8, 1.1, 2.0], vertical_alignment="center")
+                with _info_topic_col:
+                    if d.get("deal_title"):
+                        st.markdown(f"**Тема:** {d['deal_title']}")
+                with _info_client_col:
+                    st.markdown(f"**Клиент:** {cl.get('name', '—') if cl else '—'}")
+                with _info_budget_col:
+                    st.markdown(f"**Бюджет:** {d.get('budget', 0):,.0f} руб.".replace(",", " "))
+                with _info_manager_col:
+                    _crm_deal_responsible_fragment(d, deal_id)
                 _real_date_current = parse_optional_date(d.get("real_date", ""))
                 show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
                 if show_edit_deal:
@@ -11588,20 +11594,16 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     st.session_state[_ps_widget_key_dd] = ps if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else "Не оплачено"
                     st.session_state[_ps_model_key_dd] = ps
                 _bank_payment_status = _tochka_bank_payment_status(d)
-                _pay_col, _mgr_col = st.columns(2)
-                with _pay_col:
-                    inject_payment_container_css(deal_id, ps)
-                    with st.container(key=f"ps_wrap_{deal_id}"):
-                        new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key_dd)
-                    _crm_mark_widget_changed(_ps_widget_key_dd, str(new_ps) != str(ps))
-                    if _bank_payment_status and _bank_payment_status != ps:
-                        st.markdown(
-                            f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
-                            unsafe_allow_html=True,
-                        )
-                    _update_deal_payment_clicked = st.button("Обновить статус", key=f"dls_update_status_{deal_id}", type="primary", use_container_width=True)
-                with _mgr_col:
-                    _crm_deal_responsible_fragment(d, deal_id)
+                inject_payment_container_css(deal_id, ps)
+                with st.container(key=f"ps_wrap_{deal_id}"):
+                    new_ps = st.selectbox("Статус оплаты:", ["Не оплачено", "Оплачен частично", "Оплачено"], index=["Не оплачено", "Оплачен частично", "Оплачено"].index(ps) if ps in ["Не оплачено", "Оплачен частично", "Оплачено"] else 0, key=_ps_widget_key_dd)
+                _crm_mark_widget_changed(_ps_widget_key_dd, str(new_ps) != str(ps))
+                if _bank_payment_status and _bank_payment_status != ps:
+                    st.markdown(
+                        f"<div style='font-size:0.78rem;color:#7B8490;font-style:italic;margin-top:-0.35rem;'>Внимание: статус CRM не совпадает с данными банка (по данным банка: {html.escape(_bank_payment_status)}).</div>",
+                        unsafe_allow_html=True,
+                    )
+                _update_deal_payment_clicked = st.button("Обновить статус", key=f"dls_update_status_{deal_id}", type="primary", use_container_width=True)
                 if _update_deal_payment_clicked and new_ps != ps:
                     d["payment_status"] = new_ps
                     # Ручное исключение нужно только для намеренного статуса «Не оплачено»
