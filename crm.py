@@ -1655,7 +1655,7 @@ def render_file_thumbs(files, prefix, allow_delete=False, show_desc=True, show_a
             st.session_state[_show_all_key] = not _show_all
             st.rerun()
         if show_all_separator:
-            st.markdown('<div style="border-bottom:1px solid #EDF0F4;margin:6px 0 5px 0;"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="border-bottom:1px solid rgba(49,51,63,0.2);margin:6px 0 5px 0;"></div>', unsafe_allow_html=True)
 
 
 def _task_products_from_calculation(deal, calculation_id):
