@@ -7551,11 +7551,14 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
         (item for item in remaining if return_window_id and str(item.get("id")) == str(return_window_id)),
         None,
     )
-    if next_window is None:
-        next_window = next((item for item in reversed(remaining) if not item.get("minimized")), None)
-    if next_window is None and remaining:
-        next_window = remaining[-1]
-        next_window["minimized"] = False
+    # При закрытии с главной страницы не разворачиваем другое свёрнутое окно.
+    # Внутри рабочего пространства, напротив, переключаемся на следующее окно.
+    if in_workspace:
+        if next_window is None:
+            next_window = next((item for item in reversed(remaining) if not item.get("minimized")), None)
+        if next_window is None and remaining:
+            next_window = remaining[-1]
+            next_window["minimized"] = False
 
     if next_window:
         st.session_state["_crm_active_window_id"] = next_window.get("id")
@@ -7572,13 +7575,12 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
 
     _crm_workspace_clear_legacy_dialog_markers()
     _crm_workspace_queue_save()
-    # При закрытии последнего окна из fragment нужно обновить главную страницу.
-    # В остальных случаях достаточно обычного rerun, инициированного кнопкой.
-    if in_workspace and next_window is None:
-        try:
-            st.rerun(scope="app")
-        except Exception:
-            st.rerun()
+    # Закрытие меняет состав панели: выполняем полный rerun, чтобы
+    # кнопки закрытого окна гарантированно исчезли и не оставались в fragment.
+    try:
+        st.rerun(scope="app")
+    except Exception:
+        st.rerun()
 
 
 def _crm_workspace_render_bottom_panel(in_workspace=False):
@@ -7597,10 +7599,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     _bottom_active_window_id = st.session_state.get("_crm_active_window_id")
     st.markdown("""<style>
     [class*="st-key-crm_workspace_bottom_"] {
-        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+        display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
         align-items:center !important; justify-content:flex-start !important;
-        gap:0 !important; column-gap:0 !important; row-gap:0 !important;
-        width:100% !important; overflow-x:auto !important;
+        gap:4px !important; column-gap:4px !important; row-gap:4px !important;
+        width:100% !important; overflow:visible !important;
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
@@ -7638,7 +7640,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
-    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
+    with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=True, gap=None, horizontal_alignment="left"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         for _w in list(_bottom_windows):
