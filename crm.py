@@ -8070,7 +8070,7 @@ _expandable_windows = [
 if st.session_state.get("active_tab") in ("Клиенты", "Сделки", "Задачи") and _expandable_windows:
     _divider_col, _expand_col = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
     with _divider_col:
-        st.markdown("<div style='height:36px;display:flex;align-items:center;width:100%;'><div style='border-top:1px solid rgba(128,128,128,.35);width:100%;'></div></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:36px;display:flex;align-items:center;width:100%;'><div style='border-top:1px solid rgba(128,128,128,.35);width:100%;transform:translateY(-12px);'></div></div>", unsafe_allow_html=True)
     with _expand_col:
         st.button(
             "⛶",
