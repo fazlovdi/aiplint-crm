@@ -3932,7 +3932,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     # Поля отправки заказа отображаются и для задачи, привязанной к сделке.
                     # При редактировании их заменяют поля формы выше.
                     if not show_edit_task:
-                        st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0;"></div>', unsafe_allow_html=True)
+                        st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 0.8rem 0;"></div>', unsafe_allow_html=True)
                         if t.get("products"):
                             st.markdown("**Товары:**")
                             for _product_line in str(t.get("products", "")).splitlines():
@@ -4108,7 +4108,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
                             pass  # Для обычных задач блок статуса доставки не используется
-                    st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0;"></div>', unsafe_allow_html=True)
+                    st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 0.8rem 0;"></div>', unsafe_allow_html=True)
                     if t.get('products'):
                         st.markdown("**Товары:**")
                         for _product_line in str(t.get("products", "")).splitlines():
