@@ -14629,15 +14629,32 @@ def statistics_dialog(section="Общая статистика"):
 if st.session_state.active_tab == "Клиенты":
     fv = st.session_state.client_form_version
     render_client_form(fv)
-    # Поиск и сортировки в один ряд
+    # Поиск и сортировки в один ряд; крестик расположен поверх поля справа.
     _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
     with _search_col:
-        _search_input_col, _search_clear_col = st.columns([12, 1])
-        with _search_input_col:
+        with st.container(key="client_search_wrap"):
             _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
-        with _search_clear_col:
-            st.markdown("<style>.st-key-client_search_clear button{padding:0!important;min-height:38px!important;font-size:20px!important;line-height:1!important;color:#808B98!important;border:0!important;background:transparent!important;box-shadow:none!important}</style>", unsafe_allow_html=True)
-            st.button("×", key="client_search_clear", help="Очистить поиск", on_click=lambda: st.session_state.__setitem__("search_input_key", ""), use_container_width=True)
+            st.button("×", key="client_search_clear", help="Очистить поиск", on_click=lambda: st.session_state.__setitem__("search_input_key", ""))
+        st.markdown("""
+        <style>
+        .st-key-client_search_wrap { position:relative !important; }
+        .st-key-client_search_wrap .st-key-client_search_clear {
+            position:absolute !important; right:4px !important; top:0 !important;
+            width:34px !important; z-index:5 !important; margin:0 !important;
+        }
+        .st-key-client_search_wrap .st-key-client_search_clear button {
+            width:34px !important; min-width:34px !important;
+            height:38px !important; min-height:38px !important;
+            padding:0 !important; margin:0 !important;
+            font-size:20px !important; line-height:1 !important;
+            color:#808B98 !important; border:0 !important;
+            background:transparent !important; box-shadow:none !important;
+        }
+        .st-key-client_search_wrap .st-key-search_input_key input {
+            padding-right:40px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         sq = (_search_input_now or "").strip().lower()
     with _sort_col:
         sort_options = ["По дате изменения", "По дате создания", "По алфавиту", "По городу"]
