@@ -12792,7 +12792,10 @@ def render_client_card_expanded(cl):
                                 task_detail_dialog(*_task_args)
                 else:
                     st.caption("Задач по клиенту пока нет.")
-                if st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary"):
+                _ct_left, _ct_button, _ct_right = st.columns([1, 2, 1])
+                with _ct_button:
+                    _ct_clicked = st.button("Добавить задачу по клиенту", key=f"rcc_task_{cl['id']}", use_container_width=True, type="primary")
+                if _ct_clicked:
                     _task_args = (str(cl["id"]),)
                     if _crm_queue_child_open_if_parent_dirty("client_create_task_dialog", _task_args):
                         return
@@ -12830,7 +12833,10 @@ def render_client_card_expanded(cl):
                                 deal_detail_dialog(*_deal_args)
                 else:
                     st.caption("Сделок пока нет.")
-                if st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary"):
+                _cd_left, _cd_button, _cd_right = st.columns([1, 2, 1])
+                with _cd_button:
+                    _cd_clicked = st.button("Добавить сделку", key=f"rcc_deal_{cl['id']}", use_container_width=True, type="primary")
+                if _cd_clicked:
                     _deal_args = (str(cl["id"]),)
                     if _crm_queue_child_open_if_parent_dirty("create_deal_dialog", _deal_args):
                         return
@@ -12880,7 +12886,10 @@ def render_client_card_expanded(cl):
                             if st.button("Отмена", key=f"client_req_del_no_{cl['id']}_{_req.get('id',_ri)}", use_container_width=True):
                                 st.session_state.pop(_req_confirm_key, None)
                                 st.rerun()
-                if st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary"):
+                _cr_left, _cr_button, _cr_right = st.columns([1, 2, 1])
+                with _cr_button:
+                    _cr_clicked = st.button("Добавить реквизиты", key=f"client_req_add_{cl['id']}", use_container_width=True, type="primary")
+                if _cr_clicked:
                     _req_args = (cl["id"], False)
                     if _crm_queue_child_open_if_parent_dirty("client_requisites_dialog", _req_args):
                         return
