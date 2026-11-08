@@ -16293,8 +16293,6 @@ def _crm_render_workspace_fragment():
                         client_requisites_dialog(*_pending_args)
 
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
-
-                with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                     st.button(
                         "Свернуть",
                         key=f"crm_workspace_minimize_{_crm_active_window['id']}",
