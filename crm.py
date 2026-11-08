@@ -8572,6 +8572,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
+    [class*="st-key-crm_workspace_global_search_"] { flex:0 0 38px !important; width:38px !important; min-width:38px !important; max-width:38px !important; margin:0 !important; padding:0 !important; }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] { display:flex !important; align-items:center !important; justify-content:center !important; box-sizing:border-box !important; width:36px !important; min-width:36px !important; max-width:36px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#31333F !important; font-size:22px !important; line-height:1 !important; }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { font-size:22px !important; line-height:1 !important; margin:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_add_client_"] { flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important; margin:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_add_client_"] > div > button,
     [class*="st-key-crm_workspace_add_client_"] button[data-testid^="stPopoverButton"] { display:flex !important; box-sizing:border-box !important; align-items:center !important; justify-content:flex-start !important; width:50px !important; min-width:50px !important; max-width:50px !important; height:42px !important; min-height:42px !important; padding:0 0 0 16px !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#BC1661 !important; font-size:26px !important; font-weight:400 !important; }
@@ -8623,10 +8626,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 
                 def _global_search_add(_kind, _label, _haystack, _entry, _client_id, _stable_id):
                     _hay_text = str(_haystack or "").lower()
-                    _hay_compact = re.sub(r"[\\W_]+", "", _hay_text, flags=re.UNICODE)
-                    _q_compact = re.sub(r"[\\W_]+", "", _global_q, flags=re.UNICODE)
-                    _q_digits = re.sub(r"\\D", "", _global_q)
-                    _hay_digits = re.sub(r"\\D", "", _hay_text)
+                    _hay_compact = re.sub(r"[\W_]+", "", _hay_text, flags=re.UNICODE)
+                    _q_compact = re.sub(r"[\W_]+", "", _global_q, flags=re.UNICODE)
+                    _q_digits = re.sub(r"\D", "", _global_q)
+                    _hay_digits = re.sub(r"\D", "", _hay_text)
                     if (_global_q in _hay_text or
                             (_q_compact and _q_compact in _hay_compact) or
                             (len(_q_digits) >= 3 and _q_digits in _hay_digits)):
