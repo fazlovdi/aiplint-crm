@@ -11824,7 +11824,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         with _task_col:
                             _task_number_label = html.escape(str(_task.get("task_number", "")))
                             _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
-                            st.markdown(f"**№ {_task_number_label}** · {_task_type_label}")
+                            st.markdown(f"**№{_task_number_label}** · {_task_type_label}")
                         with _date_col:
                             _created = str(_task.get("created_at", "") or "")
                             try:
