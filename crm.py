@@ -16396,7 +16396,7 @@ def _crm_render_workspace_fragment():
                       controls.style.right = '0';
                       controls.style.top = '0';
                       controls.style.zIndex = '10';
-                      outer.style.paddingRight = '110px';
+                      outer.style.paddingRight = '48px';
                     }
                     attachDrag(outer);
                   });
