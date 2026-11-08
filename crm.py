@@ -3748,14 +3748,23 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             align-items: center !important;
         }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown:has(button.custom-print-btn) {{
+            display: flex !important;
+            align-items: flex-start !important;
+            justify-content: flex-end !important;
             margin: 0 !important;
             padding: 0 !important;
             line-height: 0 !important;
             align-self: start !important;
         }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button.custom-print-btn {{
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-width: 0 !important;
             min-height: 24px !important;
+            width: auto !important;
             height: 24px !important;
+            box-sizing: border-box !important;
             padding: 0 8px !important;
             margin: 0 !important;
             line-height: 1 !important;
@@ -3778,36 +3787,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
             _fd = format_date(t.get('deadline', ''))
             _is_client_samples_task = not d and _tp == "Отправить образцы"
-            # Явно фиксируем отступы заголовка в задаче по клиенту так же,
-            # как они заданы для задачи по сделке. Не затрагиваем цвет и вид кнопки.
-            if not d:
-                st.markdown(f"""<style>
-                .st-key-task_detail_{key_prefix} .created-date {{
-                    display: inline-block !important;
-                    width: fit-content !important;
-                    max-width: 100% !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    line-height: normal !important;
-                }}
-                .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown:has(button.custom-print-btn) {{
-                    display: flex !important;
-                    align-items: flex-start !important;
-                    justify-content: flex-end !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    line-height: 0 !important;
-                }}
-                .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button.custom-print-btn {{
-                    display: table !important;
-                    width: auto !important;
-                    min-height: 24px !important;
-                    height: 24px !important;
-                    margin: 0 0.25rem 0 auto !important;
-                    padding: 4px 12px !important;
-                    line-height: 1 !important;
-                }}
-                </style>""", unsafe_allow_html=True)
             _task_header_row, _task_print_col = st.columns([5, 1])
             with _task_header_row:
                 st.markdown(f"""<style>
