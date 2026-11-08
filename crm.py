@@ -7615,6 +7615,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         background:transparent !important; border:0 !important; border-radius:0 !important;
         padding:0 !important; margin:0 !important; box-sizing:border-box !important;
     }
+    [class*="st-key-crm_workspace_bottom_"] .crm-bottom-scroll-row::-webkit-scrollbar {
+        display:none !important; width:0 !important; height:0 !important;
+    }
     /* Scroll behavior is applied to the detected outer row only by the script below. */
     [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) {
         padding-right:110px !important;
@@ -7790,61 +7793,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               controls.style.zIndex = '10';
               outer.style.paddingRight = '110px';
             }
-            // Draw a dedicated scrollbar so it remains visible even when Chrome hides native bars.
-            panel.style.position = 'relative';
-            // Reserve real layout space under the buttons; stylesheet padding:0!important otherwise overlaps them.
-            panel.style.setProperty('padding-bottom', '13px', 'important');
-            let track = panel.querySelector(':scope > .crm-bottom-visible-track');
-            if (!track) {
-              track = doc.createElement('div');
-              track.className = 'crm-bottom-visible-track';
-              Object.assign(track.style, {
-                position:'absolute', left:'0', right:controls ? '110px' : '0', bottom:'1px',
-                height:'8px', background:'#E1E4E9', borderRadius:'5px',
-                zIndex:'20', cursor:'pointer', overflow:'hidden'
-              });
-              const thumb = doc.createElement('div');
-              thumb.className = 'crm-bottom-visible-thumb';
-              Object.assign(thumb.style, {
-                position:'absolute', left:'0', top:'0', height:'8px',
-                minWidth:'24px', background:'#AAB1BC', borderRadius:'5px', cursor:'grab'
-              });
-              track.appendChild(thumb);
-              panel.appendChild(track);
-              const updateBar = () => {
-                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
-                const ratio = outer.clientWidth / Math.max(1, outer.scrollWidth);
-                thumb.style.width = Math.max(24, Math.min(track.clientWidth, track.clientWidth * ratio)) + 'px';
-                thumb.style.left = (max ? (outer.scrollLeft / max) * Math.max(0, track.clientWidth - thumb.offsetWidth) : 0) + 'px';
-                track.style.display = max > 1 ? 'block' : 'none';
-              };
-              outer.addEventListener('scroll', updateBar, {passive:true});
-              track.addEventListener('pointerdown', e => {
-                if (e.target === thumb) return;
-                const rect = track.getBoundingClientRect();
-                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
-                outer.scrollLeft = ((e.clientX - rect.left) / Math.max(1, track.clientWidth)) * max;
-              });
-              let thumbDown = false, thumbX = 0, thumbScroll = 0;
-              thumb.addEventListener('pointerdown', e => {
-                e.preventDefault(); e.stopPropagation();
-                thumbDown = true; thumbX = e.clientX; thumbScroll = outer.scrollLeft;
-                thumb.setPointerCapture?.(e.pointerId);
-                thumb.style.cursor = 'grabbing';
-              });
-              thumb.addEventListener('pointermove', e => {
-                if (!thumbDown) return;
-                const max = Math.max(0, outer.scrollWidth - outer.clientWidth);
-                const trackRange = Math.max(1, track.clientWidth - thumb.offsetWidth);
-                outer.scrollLeft = thumbScroll + (e.clientX - thumbX) / trackRange * max;
-              });
-              const endThumb = () => { thumbDown = false; thumb.style.cursor = 'grab'; };
-              thumb.addEventListener('pointerup', endThumb);
-              thumb.addEventListener('pointercancel', endThumb);
-              new ResizeObserver(updateBar).observe(outer);
-              updateBar();
-            }
-            track.style.right = controls ? '110px' : '0';
+            // No visible scrollbar: keep only left-mouse drag scrolling.
+            panel.querySelectorAll(':scope > .crm-bottom-visible-track').forEach(track => track.remove());
+            panel.style.removeProperty('padding-bottom');
+            outer.style.setProperty('scrollbar-width', 'none', 'important');
+            outer.style.setProperty('-ms-overflow-style', 'none', 'important');
+            outer.style.setProperty('overflow-x', 'auto', 'important');
+            outer.style.setProperty('overflow-y', 'hidden', 'important');
+            outer.style.setProperty('padding-right', controls ? '110px' : '0', 'important');
+            // Remove custom scrollbar leftovers from prior renders.
+            doc.querySelectorAll('.crm-bottom-visible-track, .crm-bottom-visible-thumb').forEach(node => node.remove());
           });
         };
         scan();
