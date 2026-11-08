@@ -11501,10 +11501,12 @@ def render_deal_detail(d, cl, cu, key_prefix):
         left_col, right_col = st.columns(2)
         with left_col:
             num = d.get("deal_number", d.get("title", ""))
-            head = f"**{num}**"
-            if d.get("deal_title"):
-                head += f" — {d['deal_title']}"
-            st.markdown(f"<div style='font-size:1.35rem;font-weight:750;margin-top:0.8rem;margin-bottom:0.7rem;'>{num}</div>", unsafe_allow_html=True)
+            head_col, status_col = st.columns([2.2, 1])
+            with head_col:
+                st.markdown(f"<div style='font-size:1.35rem;font-weight:750;margin-top:0.8rem;margin-bottom:0.7rem;'>{html.escape(str(num))}</div>", unsafe_allow_html=True)
+            with status_col:
+                _header_deal_status = str(d.get("status", "Новый") or "Новый")
+                st.markdown(f"<div style='text-align:right;font-size:0.95rem;font-weight:650;margin-top:1rem;margin-bottom:0.7rem;'>Статус: {html.escape(_header_deal_status)}</div>", unsafe_allow_html=True)
             st.markdown(format_created_date(d), unsafe_allow_html=True)
             if d.get("deal_title"):
                 st.markdown(f"**Тема:** {d['deal_title']}")
@@ -11605,7 +11607,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                     d["last_modified"] = now_str()
                     commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
             elif current_status in ("В работе", "Оплачено"):
-                st.markdown(f"<div style='font-size:1rem;font-weight:600;margin:0.4rem 0;'>Статус: {html.escape(current_status)}</div>", unsafe_allow_html=True)
+                pass
             elif current_status in ("Сделка закрыта", "Архив"):
                 if st.button("Вернуть в работу", key=f"dls_reopen_{deal_id}", use_container_width=True):
                     d["status"] = "В работе"
@@ -11621,17 +11623,20 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 st.markdown(f"**Отчёт:** {d.get('archive_report')}")
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
+            render_reminders("deal", deal_id, f"Сделка №{d.get('deal_number', d.get('title', deal_id))}", f"deal_{key_prefix}")
             # Кнопки завершения и архивации доступны в любой колонке/статусе сделки.
             st.markdown("---")
-            if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
-                _push_dialog_return()
-                st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
-                st.rerun()
-            if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
-                _push_dialog_return()
-                st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
-                st.rerun()
-            render_reminders("deal", deal_id, f"Сделка №{d.get('deal_number', d.get('title', deal_id))}", f"deal_{key_prefix}")
+            _close_deal_col, _archive_deal_col = st.columns(2)
+            with _close_deal_col:
+                if st.button("Успешно завершена", key=f"dls_close_{deal_id}", use_container_width=True, type="primary"):
+                    _push_dialog_return()
+                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "close"}
+                    st.rerun()
+            with _archive_deal_col:
+                if st.button("В архив", key=f"dls_arch_{deal_id}", use_container_width=True):
+                    _push_dialog_return()
+                    st.session_state["dialog_deal_report"] = {"deal_id": deal_id, "action": "archive"}
+                    st.rerun()
         with right_col:
             if d.get("deal_comments"):
                 st.markdown("**Комментарии:**")
