@@ -438,8 +438,8 @@ st.markdown("""
         background: #a31353 !important; background-color: #a31353 !important;
     }
 
-    [data-testid="InputInstructions"][data-crm-search-hint] { color: transparent !important; position: relative !important; }
-    [data-testid="InputInstructions"][data-crm-search-hint]::after { content: attr(data-crm-search-hint); color: #808B98 !important; font-size: 0.75rem !important; position: absolute; left: 0; top: 0; white-space: nowrap; }
+    [data-testid="InputInstructions"][data-crm-search-hint] { font-size: 0 !important; }
+    [data-testid="InputInstructions"][data-crm-search-hint]::after { content: attr(data-crm-search-hint); color: #808B98 !important; font-size: 0.75rem !important; position: static !important; display: inline-block; white-space: nowrap; }
 </style>
 """, unsafe_allow_html=True)
 
