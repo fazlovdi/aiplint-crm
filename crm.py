@@ -16973,7 +16973,7 @@ def _crm_workspace_close_tab_callback(window_id, tab_index, force=False):
 # Изолируем рабочее пространство во фрагмент Streamlit: переключение вкладок и
 # локальные изменения внутри открытого окна не должны заново выполнять всю CRM.
 def _crm_queue_client_object_add(window_id, dialog_name, dialog_args):
-    """Queue an add-dialog request from the client-object popover before rerender."""
+    """Queue a dialog request from the client-object popover before rerender."""
     st.session_state[f"_crm_client_objects_pending_open_{window_id}"] = (dialog_name, dialog_args)
     version_key = f"_crm_workspace_client_objects_popover_version_{window_id}"
     st.session_state[version_key] = int(st.session_state.get(version_key, 0) or 0) + 1
@@ -16996,6 +16996,14 @@ def _crm_render_workspace_fragment():
                 create_deal_dialog(*_pending_args)
             elif _pending_name == "client_requisites_dialog":
                 client_requisites_dialog(*_pending_args)
+            elif _pending_name == "task_detail_dialog":
+                task_detail_dialog(*_pending_args)
+            elif _pending_name == "deal_detail_dialog":
+                deal_detail_dialog(*_pending_args)
+            elif _pending_name == "deal_calculation_dialog":
+                deal_calculation_dialog(*_pending_args)
+            elif _pending_name == "client_requisites_view_dialog":
+                client_requisites_view_dialog(*_pending_args)
             try:
                 st.rerun(scope="fragment")
             except (TypeError, ValueError):
@@ -17272,11 +17280,12 @@ def _crm_render_workspace_fragment():
                         if not _tabbar_client_tasks_sorted:
                             st.caption("Нет задач по клиенту")
                         for _oi, _obj in enumerate(_tabbar_client_tasks_sorted):
-                            _obj_label = f"Задача №{_obj.get('task_number', '')}"
-                            if st.button(_obj_label, key=f"crm_obj_client_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True):
-                                _obj_args = (_obj, _tabbar_client, None, f"client_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}")
-                                _crm_bump_client_objects_popover()
-                                task_detail_dialog(*_obj_args)
+                            _task_number = str(_obj.get("task_number", "") or "")
+                            _task_number_label = _task_number if _task_number.startswith("№") else f"№{_task_number}"
+                            _task_type_label = str(_obj.get("task_type") or _obj.get("type") or _obj.get("text") or "").strip()
+                            _obj_label = f"{_task_number_label} · {_task_type_label}".strip(" ·")
+                            _obj_args = (_obj, _tabbar_client, None, f"client_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}")
+                            st.button(_obj_label, key=f"crm_obj_client_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True, on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "task_detail_dialog", _obj_args))
 
                         st.markdown("**Сделки**")
                         _tabbar_deals_sorted = sorted(
@@ -17285,11 +17294,12 @@ def _crm_render_workspace_fragment():
                         if not _tabbar_deals_sorted:
                             st.caption("Нет сделок")
                         for _oi, _obj in enumerate(_tabbar_deals_sorted):
-                            _obj_label = f"{_obj.get('deal_number', _obj.get('title', 'Сделка'))} · {_obj.get('deal_title', '')}".strip(" ·")
-                            if st.button(_obj_label, key=f"crm_obj_deal_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True):
-                                _obj_args = (_obj, _tabbar_client, st.session_state.get("current_user"), f"deal_{_obj.get('id')}")
-                                _crm_bump_client_objects_popover()
-                                deal_detail_dialog(*_obj_args)
+                            _deal_number = str(_obj.get("deal_number") or _obj.get("title") or _obj.get("id") or "")
+                            _deal_number_label = _deal_number if _deal_number.startswith("№") else f"№{_deal_number}"
+                            _deal_topic_label = str(_obj.get("deal_title") or _obj.get("topic") or "").strip()
+                            _obj_label = f"{_deal_number_label} · {_deal_topic_label}".strip(" ·")
+                            _obj_args = (_obj, _tabbar_client, st.session_state.get("current_user"), f"deal_{_obj.get('id')}")
+                            st.button(_obj_label, key=f"crm_obj_deal_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True, on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "deal_detail_dialog", _obj_args))
 
                         st.markdown("**Задачи по сделкам**")
                         _tabbar_deal_tasks_sorted = sorted(
@@ -17299,12 +17309,12 @@ def _crm_render_workspace_fragment():
                             st.caption("Нет задач по сделкам")
                         for _oi, _obj in enumerate(_tabbar_deal_tasks_sorted):
                             _obj_deal = _tabbar_deals_by_id.get(str(_obj.get("deal_id")))
-                            _obj_deal_label = str((_obj_deal or {}).get("deal_number") or (_obj_deal or {}).get("title") or "Сделка")
-                            _obj_label = f"Задача №{_obj.get('task_number', '')} · {_obj_deal_label}"
-                            if st.button(_obj_label, key=f"crm_obj_deal_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True):
-                                _obj_args = (_obj, _tabbar_client, _obj_deal, f"deal_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}_{(_obj_deal or {}).get('id', '')}")
-                                _crm_bump_client_objects_popover()
-                                task_detail_dialog(*_obj_args)
+                            _task_number = str(_obj.get("task_number", "") or "")
+                            _task_number_label = _task_number if _task_number.startswith("№") else f"№{_task_number}"
+                            _task_type_label = str(_obj.get("task_type") or _obj.get("type") or _obj.get("text") or "").strip()
+                            _obj_label = f"{_task_number_label} · {_task_type_label}".strip(" ·")
+                            _obj_args = (_obj, _tabbar_client, _obj_deal, f"deal_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}_{(_obj_deal or {}).get('id', '')}")
+                            st.button(_obj_label, key=f"crm_obj_deal_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True, on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "task_detail_dialog", _obj_args))
 
                         st.markdown("**Расчёты**")
                         _tabbar_calculations_sorted = sorted(
@@ -17315,13 +17325,11 @@ def _crm_render_workspace_fragment():
                         if not _tabbar_calculations_sorted:
                             st.caption("Нет расчётов")
                         for _oi, (_obj_deal, _obj_calc) in enumerate(_tabbar_calculations_sorted):
-                            _obj_deal_label = str(_obj_deal.get("deal_number") or _obj_deal.get("title") or "Сделка")
-                            _obj_label = f"{_obj_deal_label} · {_obj_calc.get('name', 'Расчёт')}"
+                            _obj_deal_number = str(_obj_deal.get("deal_number") or _obj_deal.get("title") or _obj_deal.get("id") or "")
+                            _obj_label = _obj_deal_number if _obj_deal_number.startswith("№") else f"№{_obj_deal_number}"
                             if _obj_calc.get("deleted"):
                                 _obj_label += " (удалён)"
-                            if st.button(_obj_label, key=f"crm_obj_calc_{_crm_active_window['id']}_{_obj_deal.get('id')}_{_obj_calc.get('id', _oi)}", use_container_width=True, disabled=bool(_obj_calc.get("deleted"))):
-                                _crm_bump_client_objects_popover()
-                                deal_calculation_dialog(str(_obj_deal.get("id")), str(_obj_calc.get("id")))
+                            st.button(_obj_label, key=f"crm_obj_calc_{_crm_active_window['id']}_{_obj_deal.get('id')}_{_obj_calc.get('id', _oi)}", use_container_width=True, disabled=bool(_obj_calc.get("deleted")), on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "deal_calculation_dialog", (str(_obj_deal.get("id")), str(_obj_calc.get("id")))))
 
                         st.markdown("**Реквизиты**")
                         if not _tabbar_requisites:
@@ -17330,9 +17338,7 @@ def _crm_render_workspace_fragment():
                             _obj_label = str(_obj.get("legal_name") or "Реквизиты без названия")
                             if _obj.get("deleted"):
                                 _obj_label += " (удалены)"
-                            if st.button(_obj_label, key=f"crm_obj_req_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True, disabled=bool(_obj.get("deleted"))):
-                                _crm_bump_client_objects_popover()
-                                client_requisites_view_dialog(_tabbar_client_id, False, _obj.get("id"))
+                            st.button(_obj_label, key=f"crm_obj_req_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True, disabled=bool(_obj.get("deleted")), on_click=_crm_queue_client_object_add, args=(_crm_active_window["id"], "client_requisites_view_dialog", (_tabbar_client_id, False, _obj.get("id"))))
 
                         st.markdown("---")
                         st.button(
