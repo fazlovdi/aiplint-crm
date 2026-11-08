@@ -7850,20 +7850,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         _crm_workspace_open_dialog(_add_client_entry)
                         st.rerun()
 
-        _has_minimized_restore_window = any(
-            w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
-            for w in _all_bottom_windows
-        )
-        if not in_workspace and _has_minimized_restore_window:
-            with st.container(key="crm_workspace_main_expand_wrap"):
-                st.button(
-                    "⛶",
-                    key=f"crm_workspace_main_expand_{_bottom_scope}",
-                    help="Развернуть последнее свёрнутое окно",
-                    on_click=_crm_workspace_restore_last_window_callback,
-                    type="tertiary",
-                    use_container_width=False,
-                )
 
     # Attach scrolling to both copies of the window strip (main page and workspace).
     components.html("""<script>
@@ -7928,14 +7914,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               .sort((a, b) => a.querySelectorAll('[data-testid="stHorizontalBlock"]').length - b.querySelectorAll('[data-testid="stHorizontalBlock"]').length)[0];
             if (!outer) return;
             attach(outer);
-            const controls = panel.querySelector('[class*="st-key-crm_workspace_main_expand_wrap"]');
-            if (controls) {
-              controls.style.position = 'absolute';
-              controls.style.right = '0';
-              controls.style.top = '0';
-              controls.style.zIndex = '10';
-              outer.style.paddingRight = '64px';
-            }
             // No visible scrollbar: keep only left-mouse drag scrolling.
             panel.querySelectorAll(':scope > .crm-bottom-visible-track').forEach(track => track.remove());
             panel.style.removeProperty('padding-bottom');
@@ -7943,7 +7921,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             outer.style.setProperty('-ms-overflow-style', 'none', 'important');
             outer.style.setProperty('overflow-x', 'auto', 'important');
             outer.style.setProperty('overflow-y', 'hidden', 'important');
-            outer.style.setProperty('padding-right', controls ? '64px' : '0', 'important');
+            outer.style.setProperty('padding-right', '0', 'important');
             // Remove custom scrollbar leftovers from prior renders.
             doc.querySelectorAll('.crm-bottom-visible-track, .crm-bottom-visible-thumb').forEach(node => node.remove());
           });
@@ -8042,7 +8020,27 @@ with nc6:
         on_click=_crm_select_main_tab,
         args=("Товары и прайс",),
     )
-st.markdown("---")
+# Разделитель над панелью окон; кнопка восстановления находится справа на той же строке
+# и показывается только в основных разделах «Клиенты», «Сделки» и «Задачи».
+_expandable_windows = [
+    w for w in st.session_state.get("_crm_windows", [])
+    if w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
+]
+if st.session_state.get("active_tab") in ("Клиенты", "Сделки", "Задачи") and _expandable_windows:
+    _divider_col, _expand_col = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
+    with _divider_col:
+        st.markdown("<div style='border-top:1px solid rgba(128,128,128,.35);width:100%;margin:0.8rem 0 0.8rem 0;'></div>", unsafe_allow_html=True)
+    with _expand_col:
+        st.button(
+            "⛶",
+            key=f"crm_workspace_main_expand_{st.session_state.get('active_tab')}",
+            help="Развернуть последнее свёрнутое окно",
+            on_click=_crm_workspace_restore_last_window_callback,
+            type="tertiary",
+            use_container_width=True,
+        )
+else:
+    st.markdown("---")
 
 # На главном экране панель окон расположена сразу под навигацией CRM.
 _crm_nav_active_id = st.session_state.get("_crm_active_window_id")
