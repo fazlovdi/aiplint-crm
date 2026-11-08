@@ -3747,6 +3747,19 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             display: flex !important;
             align-items: center !important;
         }}
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown:has(button.custom-print-btn) {{
+            margin: 0 !important;
+            padding: 0 !important;
+            line-height: 0 !important;
+            align-self: start !important;
+        }}
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button.custom-print-btn {{
+            min-height: 24px !important;
+            height: 24px !important;
+            padding: 0 8px !important;
+            margin: 0 !important;
+            line-height: 1 !important;
+        }}
         /* Remove top gap in right column */
         .st-key-task_detail_{key_prefix} > div > div:nth-child(2) > div > div:first-child {{
             margin-top: 0 !important;
