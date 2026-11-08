@@ -7671,6 +7671,10 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
+    [class*="st-key-crm_workspace_add_client_"] { flex:0 0 auto !important; width:34px !important; min-width:34px !important; max-width:34px !important; margin:0 !important; padding:0 !important; }
+    [class*="st-key-crm_workspace_add_client_"] > div > button,
+    [class*="st-key-crm_workspace_add_client_"] button[data-testid^="stPopoverButton"] { display:flex !important; align-items:center !important; justify-content:center !important; width:34px !important; min-width:34px !important; max-width:34px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#BC1661 !important; font-size:22px !important; font-weight:400 !important; }
+    [class*="st-key-crm_workspace_add_client_"] button svg { display:none !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:focus,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button:active { color:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
@@ -7722,6 +7726,76 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                         on_click=_crm_workspace_close_window_callback,
                         args=(_w.get("id"), in_workspace),
                     )
+
+        # The client picker belongs to the window strip, not the inner tab strip.
+        if in_workspace:
+                # Quick client opener: add a client card from the current window tab strip.
+                with st.popover("+", key=f"crm_workspace_add_client_{_crm_active_window['id']}", help="Открыть карточку клиента"):
+                    _picker_query = st.text_input(
+                        "Поиск среди клиентов",
+                        key=f"crm_workspace_client_picker_search_{_crm_active_window['id']}",
+                        placeholder="Имя, телефон, город…",
+                    )
+                    _picker_clients = list(st.session_state.crm_store.get("clients", []) or [])
+                    _picker_clients.sort(
+                        key=lambda _c: (str(_c.get("last_modified", "") or ""), str(_c.get("created_at", "") or "")),
+                        reverse=True,
+                    )
+                    _picker_q = str(_picker_query or "").strip().lower()
+                    _picker_digits = re.sub(r"\D", "", _picker_q)
+                    if _picker_digits and _picker_digits.startswith(("7", "8")) and len(_picker_digits) > 1:
+                        _picker_digits = _picker_digits[1:]
+                    _picker_matches = []
+                    for _picker_client in _picker_clients:
+                        _picker_phone_values = [str(_picker_client.get("phone", "") or "")]
+                        _picker_phone_values.extend(
+                            str(_p.get("phone", "") or "")
+                            for _p in (_picker_client.get("extra_phones", []) or [])
+                            if isinstance(_p, dict)
+                        )
+                        _picker_text_values = [
+                            str(_picker_client.get(_field, "") or "")
+                            for _field in ("name", "city", "phone", "email", "address", "base_comment", "promo_code", "source")
+                        ]
+                        _picker_text_values.extend(
+                            str(_p.get("name", "") or "")
+                            for _p in (_picker_client.get("extra_phones", []) or [])
+                            if isinstance(_p, dict)
+                        )
+                        _picker_text = " ".join(_picker_text_values).lower()
+                        _picker_phone_digits = " ".join(re.sub(r"\D", "", _p) for _p in _picker_phone_values)
+                        if _picker_q and _picker_q not in _picker_text and not (_picker_digits and _picker_digits in _picker_phone_digits):
+                            continue
+                        _picker_matches.append(_picker_client)
+                    _picker_shown = _picker_matches if _picker_q else _picker_matches[:10]
+                    if not _picker_shown:
+                        st.caption("Совпадений не найдено")
+                    else:
+                        st.caption(f"Найдено: {len(_picker_matches)}" if _picker_q else "Последние изменённые клиенты")
+                        for _picker_client in _picker_shown:
+                            _picker_client_id = _picker_client.get("id")
+                            _picker_name = str(_picker_client.get("name", "Без названия") or "Без названия")
+                            _picker_phone = str(_picker_client.get("phone", "") or "")
+                            _picker_label = _picker_name + (f" · {_picker_phone}" if _picker_phone else "")
+                            if st.button(
+                                _picker_label,
+                                key=f"crm_workspace_pick_client_{_crm_active_window['id']}_{_picker_client_id}",
+                                use_container_width=True,
+                            ):
+                                _picker_entry = {
+                                    "name": "client_detail_dialog",
+                                    "title": "Карточка клиента",
+                                    "width": "large",
+                                    "args": (_picker_client_id,),
+                                    "kwargs": {},
+                                    "signature": (
+                                        _crm_dialog_signature_value((_picker_client_id,)),
+                                        _crm_dialog_signature_value({}),
+                                    ),
+                                }
+                                _crm_workspace_open_dialog(_picker_entry, client_id=_picker_client_id)
+                                st.rerun()
+    
 
     # Attach scrolling to both copies of the window strip (main page and workspace).
     components.html("""<script>
@@ -16016,72 +16090,6 @@ def _crm_render_workspace_fragment():
                                 on_click=_crm_workspace_close_tab_callback,
                                 args=(_crm_active_window.get("id"), _i),
                             )
-                # Quick client opener: add a client card from the current window tab strip.
-                with st.popover("+", key=f"crm_workspace_add_client_{_crm_active_window['id']}", help="Открыть карточку клиента"):
-                    _picker_query = st.text_input(
-                        "Поиск среди клиентов",
-                        key=f"crm_workspace_client_picker_search_{_crm_active_window['id']}",
-                        placeholder="Имя, телефон, город…",
-                    )
-                    _picker_clients = list(st.session_state.crm_store.get("clients", []) or [])
-                    _picker_clients.sort(
-                        key=lambda _c: (str(_c.get("last_modified", "") or ""), str(_c.get("created_at", "") or "")),
-                        reverse=True,
-                    )
-                    _picker_q = str(_picker_query or "").strip().lower()
-                    _picker_digits = re.sub(r"\D", "", _picker_q)
-                    if _picker_digits and _picker_digits.startswith(("7", "8")) and len(_picker_digits) > 1:
-                        _picker_digits = _picker_digits[1:]
-                    _picker_matches = []
-                    for _picker_client in _picker_clients:
-                        _picker_phone_values = [str(_picker_client.get("phone", "") or "")]
-                        _picker_phone_values.extend(
-                            str(_p.get("phone", "") or "")
-                            for _p in (_picker_client.get("extra_phones", []) or [])
-                            if isinstance(_p, dict)
-                        )
-                        _picker_text_values = [
-                            str(_picker_client.get(_field, "") or "")
-                            for _field in ("name", "city", "phone", "email", "address", "base_comment", "promo_code", "source")
-                        ]
-                        _picker_text_values.extend(
-                            str(_p.get("name", "") or "")
-                            for _p in (_picker_client.get("extra_phones", []) or [])
-                            if isinstance(_p, dict)
-                        )
-                        _picker_text = " ".join(_picker_text_values).lower()
-                        _picker_phone_digits = " ".join(re.sub(r"\D", "", _p) for _p in _picker_phone_values)
-                        if _picker_q and _picker_q not in _picker_text and not (_picker_digits and _picker_digits in _picker_phone_digits):
-                            continue
-                        _picker_matches.append(_picker_client)
-                    _picker_shown = _picker_matches if _picker_q else _picker_matches[:10]
-                    if not _picker_shown:
-                        st.caption("Совпадений не найдено")
-                    else:
-                        st.caption(f"Найдено: {len(_picker_matches)}" if _picker_q else "Последние изменённые клиенты")
-                        for _picker_client in _picker_shown:
-                            _picker_client_id = _picker_client.get("id")
-                            _picker_name = str(_picker_client.get("name", "Без названия") or "Без названия")
-                            _picker_phone = str(_picker_client.get("phone", "") or "")
-                            _picker_label = _picker_name + (f" · {_picker_phone}" if _picker_phone else "")
-                            if st.button(
-                                _picker_label,
-                                key=f"crm_workspace_pick_client_{_crm_active_window['id']}_{_picker_client_id}",
-                                use_container_width=True,
-                            ):
-                                _picker_entry = {
-                                    "name": "client_detail_dialog",
-                                    "title": "Карточка клиента",
-                                    "width": "large",
-                                    "args": (_picker_client_id,),
-                                    "kwargs": {},
-                                    "signature": (
-                                        _crm_dialog_signature_value((_picker_client_id,)),
-                                        _crm_dialog_signature_value({}),
-                                    ),
-                                }
-                                _crm_workspace_open_dialog(_picker_entry, client_id=_picker_client_id)
-                                st.rerun()
 
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                     st.button(
