@@ -8877,8 +8877,8 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                   try {{
                     var root=w.document.querySelector('[class*="st-key-crm_workspace_global_search_input_{_bottom_scope}"]');
                     if(!root) return;
-                    root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function(el){
- if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');{
+                    root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function(el){{
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
 
                       ['title','aria-label'].forEach(function(attr){{
                         var value=el.getAttribute(attr);
