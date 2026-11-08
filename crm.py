@@ -7688,6 +7688,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_taskbar_close_"] button,
     [class*="st-key-crm_workspace_taskbar_close_"] button p { color:#BC1661 !important; font-size:18px !important; line-height:1 !important; }
     [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
+    /* Prevent a transient doubled close glyph during Streamlit's rerender after click. */
+    [class*="st-key-crm_workspace_taskbar_close_"] button,
+    [class*="st-key-crm_workspace_taskbar_close_"] button::before,
+    [class*="st-key-crm_workspace_taskbar_close_"] button::after {
+        animation:none !important; transition:none !important;
+    }
+    [class*="st-key-crm_workspace_taskbar_close_"] button::before,
+    [class*="st-key-crm_workspace_taskbar_close_"] button::after {
+        content:none !important; display:none !important;
+    }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
         .crm-bottom-scroll-row {
