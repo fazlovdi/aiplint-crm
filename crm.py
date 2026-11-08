@@ -12080,7 +12080,7 @@ def render_client_form(fv):
         for w in st.session_state.get("_crm_windows", [])
     )
     if _has_minimized_client_window:
-        _add_client_col, _expand_client_col = st.columns([1, 1], gap="small")
+        _add_client_col, _expand_client_col = st.columns([10, 1], gap="small")
     else:
         _add_client_col = st.container()
         _expand_client_col = None
@@ -12088,12 +12088,12 @@ def render_client_form(fv):
         _add_client_clicked = st.button("Добавить клиента", key=f"add_client_btn_top_{fv}", type="primary", use_container_width=False)
     if _expand_client_col is not None:
         with _expand_client_col:
-            st.button(
+            st.container(horizontal=True, horizontal_alignment="right").button(
                 "Развернуть",
                 key="crm_workspace_main_expand",
                 help="Вернуть последнее окно клиентов",
                 on_click=_crm_workspace_restore_last_window_callback,
-                type="secondary",
+                type="tertiary",
                 use_container_width=False,
             )
     if _add_client_clicked:
