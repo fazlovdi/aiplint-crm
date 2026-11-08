@@ -3567,6 +3567,48 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
 
 
 @st.fragment
+def render_deal_pause_panel(d, deal_id):
+    _stage_now = d.get("status", "Новый")
+    if _stage_now not in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
+        return
+    with st.container(border=True):
+        st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Постановка на паузу</div>", unsafe_allow_html=True)
+        st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
+        if _stage_now == "На паузе" and d.get("pause_reason"):
+            st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
+        if _stage_now != "На паузе":
+            st.markdown("""<style>
+            div[class*="st-key-dls_pause_reason_"] div[data-testid="InputInstructions"] { display:none!important; }
+            </style>""", unsafe_allow_html=True)
+            _pause_reason = st.text_area("", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы", label_visibility="collapsed")
+            _crm_mark_widget_changed(f"dls_pause_reason_{deal_id}", bool(str(_pause_reason or "").strip()))
+        else:
+            _pause_reason = ""
+        _pause_spacer1, _pause_btn_col, _pause_spacer2 = st.columns([1, 2, 1])
+        with _pause_btn_col:
+            if _stage_now == "На паузе":
+                _pause_action_clicked = st.button("Вернуть в работу", key=f"dls_unpause_{deal_id}", use_container_width=True)
+            else:
+                _pause_action_clicked = st.button("Поставить на паузу", key=f"dls_pause_{deal_id}", use_container_width=True)
+        if _pause_action_clicked:
+            if _stage_now == "На паузе":
+                d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
+                d.pop("paused_from_status", None)
+                _pause_message = "Сделка возвращена из паузы"
+            elif not _pause_reason.strip():
+                st.warning("Укажите причину, прежде чем поставить сделку на паузу.")
+                return
+            else:
+                d["paused_from_status"] = _stage_now
+                d["pause_reason"] = _pause_reason.strip()
+                d["status"] = "На паузе"
+                _pause_message = "Сделка поставлена на паузу"
+            d["last_modified"] = now_str()
+            save_data(st.session_state.crm_store)
+            st.toast(_pause_message, icon="✅")
+            st.rerun(scope="fragment")
+
+@st.fragment
 def render_deal_comments_panel(d, deal_id):
     with st.container(border=True):
         st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Комментарии</div>", unsafe_allow_html=True)
@@ -3574,7 +3616,7 @@ def render_deal_comments_panel(d, deal_id):
         div[class*="st-key-dls_dc_input_"] div[data-testid="InputInstructions"] { display:none!important; }
         </style>""", unsafe_allow_html=True)
         if d.get("deal_comments"):
-            render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author")
+            render_soft_delete_comments(d["deal_comments"], f"deal_{deal_id}", "time", "author", local_update=True)
         dc_clr_key = f"dls_clr_dc_{deal_id}"
         if st.session_state.get(dc_clr_key):
             st.session_state[f"dls_dc_input_{deal_id}"] = ""
@@ -3599,7 +3641,7 @@ def render_deal_comments_panel(d, deal_id):
 @st.fragment
 def render_client_comments_panel(cl):
     st.markdown("**Комментарии:**")
-    render_soft_delete_comments(cl.get("client_comments", []), f"client_{cl['id']}", "time", "author")
+    render_soft_delete_comments(cl.get("client_comments", []), f"client_{cl['id']}", "time", "author", local_update=True)
     if not cl.get("client_comments"):
         st.caption("Пока нет комментариев")
     cc_clr_key = f"clr_cc_{cl['id']}"
@@ -3623,7 +3665,7 @@ def render_client_comments_panel(cl):
             st.warning("Введите текст")
 
 
-def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user"):
+def render_soft_delete_comments(comments, key_prefix, time_key="time", author_key="user", local_update=False):
     """Показывает комментарии; удаление только помечает запись и зачеркивает её."""
     if not isinstance(comments, list):
         return
@@ -3654,11 +3696,19 @@ def render_soft_delete_comments(comments, key_prefix, time_key="time", author_ke
                     _item["deleted_at"] = now_str()
                     _item["deleted_by"] = st.session_state.get("user_name", st.session_state.get("user_login", ""))
                     st.session_state.pop(_ck, None)
-                    commit_and_rerun(st.session_state.crm_store, "Комментарий зачёркнут")
+                    if local_update:
+                        save_data(st.session_state.crm_store)
+                        st.toast("Комментарий зачёркнут", icon="✅")
+                        st.rerun(scope="fragment")
+                    else:
+                        commit_and_rerun(st.session_state.crm_store, "Комментарий зачёркнут")
             with _no:
                 if st.button("Отмена", key=f"soft_comment_no_{key_prefix}_{_i}"):
                     st.session_state.pop(_ck, None)
-                    st.rerun()
+                    if local_update:
+                        st.rerun(scope="fragment")
+                    else:
+                        st.rerun()
 
 def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
     # Всегда работаем с актуальным объектом из основного хранилища.
@@ -11796,43 +11846,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
                 if d.get("archive_files"):
                     render_file_thumbs(d["archive_files"], f"dls_af_{deal_id}")
             render_reminders("deal", deal_id, f"Сделка №{d.get('deal_number', d.get('title', deal_id))}", f"deal_{key_prefix}", heading_size="1.05rem")
-            # Блок постановки на паузу под напоминаниями в левой колонке.
-            _stage_now = d.get("status", "Новый")
-            if _stage_now in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
-                with st.container(border=True):
-                    st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Постановка на паузу</div>", unsafe_allow_html=True)
-                    st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
-                    if _stage_now == "На паузе" and d.get("pause_reason"):
-                        st.markdown(f"<div style='font-size:0.9rem;color:#505866;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
-                    if _stage_now != "На паузе":
-                        st.markdown("""<style>
-                        div[class*="st-key-dls_pause_reason_"] div[data-testid="InputInstructions"] { display:none!important; }
-                        </style>""", unsafe_allow_html=True)
-                        _pause_reason = st.text_area("", key=f"dls_pause_reason_{deal_id}", height=90, placeholder="Укажите причину паузы", label_visibility="collapsed")
-                        _crm_mark_widget_changed(f"dls_pause_reason_{deal_id}", bool(str(_pause_reason or "").strip()))
-                    else:
-                        _pause_reason = ""
-                    _pause_spacer1, _pause_btn_col, _pause_spacer2 = st.columns([1, 2, 1])
-                    with _pause_btn_col:
-                        if _stage_now == "На паузе":
-                            _pause_action_clicked = st.button("Вернуть в работу", key=f"dls_unpause_{deal_id}", use_container_width=True)
-                        else:
-                            _pause_action_clicked = st.button("Поставить на паузу", key=f"dls_pause_{deal_id}", use_container_width=True)
-                    if _pause_action_clicked:
-                        if _stage_now == "На паузе":
-                            d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
-                            d.pop("paused_from_status", None)
-                            _pause_message = "Сделка возвращена из паузы"
-                        elif not _pause_reason.strip():
-                            st.warning("Укажите причину, прежде чем поставить сделку на паузу.")
-                            st.stop()
-                        else:
-                            d["paused_from_status"] = _stage_now
-                            d["pause_reason"] = _pause_reason.strip()
-                            d["status"] = "На паузе"
-                            _pause_message = "Сделка поставлена на паузу"
-                        d["last_modified"] = now_str()
-                        commit_and_rerun(st.session_state.crm_store, _pause_message)
+            render_deal_pause_panel(d, deal_id)
 
             # Кнопки завершения и архивации доступны в любой колонке/статусе сделки.
             st.markdown("---")
