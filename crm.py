@@ -7679,9 +7679,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button p {
         font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
     }
-    div[data-testid="stVerticalBlock"] > div:has(div[style*="height:36px;display:flex;align-items:center;width:100%"]) {
-        margin-bottom:-8px !important;
-    }
     [class*="st-key-crm_workspace_main_expand_"] {
         align-self:center !important;
         margin:0 !important;
@@ -8073,7 +8070,7 @@ _expandable_windows = [
 if st.session_state.get("active_tab") in ("Клиенты", "Сделки", "Задачи") and _expandable_windows:
     _divider_col, _expand_col = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
     with _divider_col:
-        st.markdown("<div style='height:36px;display:flex;align-items:center;width:100%;'><div style='border-top:1px solid rgba(128,128,128,.35);width:100%;transform:translateY(-12px);'></div></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:20px;display:flex;align-items:center;width:100%;'><div style='border-top:1px solid rgba(128,128,128,.35);width:100%;transform:translateY(-16px);'></div></div>", unsafe_allow_html=True)
     with _expand_col:
         st.button(
             "⛶",
