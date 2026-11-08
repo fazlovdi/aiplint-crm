@@ -5153,7 +5153,7 @@ def save_data(data):
                     new_items = new_items if isinstance(new_items, list) else []
                     def _item_key(item, index):
                         if isinstance(item, dict):
-                            return str(item.get("id") or item.get("file_hash") or item.get("name") or item.get("file_name") or item.get("time") or item.get("created_at") or index)
+                            return str(item.get("id") or item.get("file_hash") or item.get("name") or item.get("file_name") or (str(item.get("time", "")) + "|" + str(item.get("author") or item.get("user") or "") + "|" + str(item.get("text") or "")) or item.get("created_at") or index)
                         return str(item)
                     old_map = {_item_key(item, i): item for i, item in enumerate(old_items)}
                     new_map = {_item_key(item, i): item for i, item in enumerate(new_items)}
