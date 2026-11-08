@@ -12903,18 +12903,21 @@ def render_client_card_expanded(cl):
             if st.session_state.get("user_role") in ("admin", "director"):
                 st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
                 st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Внесённые изменения</div>", unsafe_allow_html=True)
-                _client_changes = cl.get("change_log", [])
+                _client_for_history = next(
+                    (item for item in st.session_state.crm_store.get("clients", [])
+                     if str(item.get("id", "")) == str(cl.get("id", ""))),
+                    cl,
+                )
+                _client_changes = _client_for_history.get("change_log", []) or cl.get("change_log", [])
                 if _client_changes:
                     for _chg in reversed(_client_changes[-20:]):
-                        _chg_date = html.escape(str(_chg.get("date", "") or ""))
-                        _chg_author = html.escape(str(_chg.get("author", "") or ""))
-                        _chg_fields_raw = str(_chg.get("fields", "") or "")
-                        # Старые записи аудита могли сохранять весь список client_files как сырой Python-список.
-                        # Не показываем эти технические дампы в интерфейсе истории.
-                        if re.match(r"^Client files:\\s*«.*»\\s*→\\s*«\\[", _chg_fields_raw, flags=re.IGNORECASE | re.DOTALL):
-                            _chg_fields_raw = "Изменён список файлов клиента"
-                        _chg_fields = html.escape(_chg_fields_raw)
-                        st.markdown(f"<div style='font-size:0.82rem;line-height:1.45;color:#95A5B7;margin-bottom:0.45rem;font-style:normal;white-space:normal;overflow-wrap:anywhere;'>{_chg_date} | {_chg_author} — {_chg_fields}</div>", unsafe_allow_html=True)
+                        _chg_date = str(_chg.get("date", "") or "")
+                        _chg_author = str(_chg.get("author", "") or "")
+                        _chg_fields = str(_chg.get("fields", "") or "")
+                        # Не показываем технический дамп списка файлов в истории.
+                        if re.match(r"^Client files:\\s*«.*»\\s*→\\s*«\\[", _chg_fields, flags=re.IGNORECASE | re.DOTALL):
+                            _chg_fields = "Изменён список файлов клиента"
+                        st.markdown(f"**{_chg_date}** | {_chg_author} — {_chg_fields}")
                 else:
                     st.caption("История изменений появится после редактирования карточки.")
 
