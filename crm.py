@@ -7614,7 +7614,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     }
     /* Scroll behavior is applied to the detected outer row only by the script below. */
     [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) {
-        padding-right:48px !important;
+        padding-right:64px !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
         position:absolute !important; top:0 !important; right:0 !important; z-index:10 !important;
@@ -7854,7 +7854,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             w.get("minimized") and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))
             for w in _all_bottom_windows
         )
-        if _has_minimized_restore_window:
+        if not in_workspace and _has_minimized_restore_window:
             with st.container(key="crm_workspace_main_expand_wrap"):
                 st.button(
                     "⛶",
@@ -7934,7 +7934,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
               controls.style.right = '0';
               controls.style.top = '0';
               controls.style.zIndex = '10';
-              outer.style.paddingRight = '48px';
+              outer.style.paddingRight = '64px';
             }
             // No visible scrollbar: keep only left-mouse drag scrolling.
             panel.querySelectorAll(':scope > .crm-bottom-visible-track').forEach(track => track.remove());
@@ -7943,7 +7943,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             outer.style.setProperty('-ms-overflow-style', 'none', 'important');
             outer.style.setProperty('overflow-x', 'auto', 'important');
             outer.style.setProperty('overflow-y', 'hidden', 'important');
-            outer.style.setProperty('padding-right', controls ? '48px' : '0', 'important');
+            outer.style.setProperty('padding-right', controls ? '64px' : '0', 'important');
             // Remove custom scrollbar leftovers from prior renders.
             doc.querySelectorAll('.crm-bottom-visible-track, .crm-bottom-visible-thumb').forEach(node => node.remove());
           });
