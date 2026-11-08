@@ -427,6 +427,19 @@ st.markdown("""
             animation: none !important;
         }
     }
+    /* Навигация и крестики окон не используют transform-анимацию:
+       при Streamlit rerun она создаёт кратковременный визуальный дубль. */
+    .st-key-crm_main_tab_clients button,
+    .st-key-crm_main_tab_deals button,
+    .st-key-crm_main_tab_tasks button,
+    .st-key-crm_main_tab_internal button,
+    .st-key-crm_main_tab_suppliers button,
+    .st-key-crm_main_tab_products button,
+    [class*="st-key-crm_workspace_taskbar_close_"] button,
+    [class*="st-key-crm_workspace_taskbar_close_"] button:active {
+        transform: none !important;
+        transition: none !important;
+    }
     /* PIN login button must keep the requested burgundy color regardless of browser theme. */
     .st-key-remembered_pin_login_btn button,
     .st-key-remembered_pin_login_form button[kind="primary"] {
@@ -7846,6 +7859,7 @@ nc1, nc2, nc3, nc4, nc5, nc6 = st.columns(6)
 with nc1:
     st.button(
         "Клиенты",
+        key="crm_main_tab_clients",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Клиенты" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7855,6 +7869,7 @@ with nc2:
     _deals_label = f"Сделки ({_new_deals_count})" if _new_deals_count > 0 else "Сделки"
     st.button(
         _deals_label,
+        key="crm_main_tab_deals",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Сделки" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7864,6 +7879,7 @@ with nc3:
     _tasks_label = f"Задачи ({_new_tasks_count})" if _new_tasks_count > 0 else "Задачи"
     st.button(
         _tasks_label,
+        key="crm_main_tab_tasks",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Задачи" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7873,6 +7889,7 @@ with nc4:
     _it_label = f"Внутренние ({_new_it_count})" if _new_it_count > 0 else "Внутренние"
     st.button(
         _it_label,
+        key="crm_main_tab_internal",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Внутренние задачи" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7881,6 +7898,7 @@ with nc4:
 with nc5:
     st.button(
         "Поставщики",
+        key="crm_main_tab_suppliers",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Поставщики" else "secondary",
         on_click=_crm_select_main_tab,
@@ -7889,6 +7907,7 @@ with nc5:
 with nc6:
     st.button(
         "Товары и прайс",
+        key="crm_main_tab_products",
         use_container_width=True,
         type="primary" if st.session_state.active_tab == "Товары и прайс" else "secondary",
         on_click=_crm_select_main_tab,
