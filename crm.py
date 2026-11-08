@@ -13143,23 +13143,9 @@ def render_client_card_expanded(cl):
                         max-height: none !important;
                         overflow: visible !important;
                     }}
-                    .st-key-{_del_cli_btn_key} button,
-                    .st-key-{_del_cli_btn_key} button[kind="primary"] {{
-                        display: flex !important;
+                    .st-key-{_del_cli_btn_key} button {{
                         visibility: visible !important;
                         opacity: 1 !important;
-                        color: #FFFFFF !important;
-                        background: #bc1661 !important;
-                        border: 1px solid #bc1661 !important;
-                        min-height: 40px !important;
-                        height: auto !important;
-                        width: 100% !important;
-                    }}
-                    .st-key-{_del_cli_btn_key} button p,
-                    .st-key-{_del_cli_btn_key} button span {{
-                        visibility: visible !important;
-                        opacity: 1 !important;
-                        color: #FFFFFF !important;
                     }}
                     </style>
                     """, unsafe_allow_html=True)
