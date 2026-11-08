@@ -13695,7 +13695,7 @@ def client_tasks_dialog(cl_id):
             _done = t.get("done", False)
             _icon = "\u2705" if _done else "\u23f3"
             _deal_num = d.get("deal_number", d.get("title", ""))
-            _label = f"{_icon} Задача \u2116{t.get('task_number', '')} — {t.get('text', '')} | {_fd} | {_deal_num}"
+            _label = f"{_icon} Задача \u2116{t.get('task_number', '')} — {t.get('text', '')} | {_fd} | 🔢 {_deal_num}"
             _bg, _bc = "#F5F6F8", "#C9CFD7"
             if not _done:
                 if is_task_overdue(t): _bg, _bc = "#FFEBEE", "#C62828"
