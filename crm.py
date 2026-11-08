@@ -8585,18 +8585,18 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         height:46px !important; min-height:46px !important; padding:0 !important; margin:0 !important;
         border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:none !important;
         background:rgba(188,22,97,0.25) !important; color:#FFFFFF !important; font-size:0 !important; line-height:1 !important;
-        transition:background 0.15s ease !important;
+        opacity:1 !important; filter:none !important; transition:background 0.15s ease !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
         content:"" !important; position:absolute !important; left:12px !important; top:11px !important;
         width:14px !important; height:14px !important; box-sizing:border-box !important;
-        border:2.5px solid #FFFFFF !important; border-radius:50% !important;
+        border:2.5px solid #FFFFFF !important; border-radius:50% !important; opacity:1 !important; filter:none !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::after {
         content:"" !important; position:absolute !important; left:26px !important; top:26px !important;
         width:8px !important; height:2.5px !important; background:#FFFFFF !important;
-        border-radius:2px !important; transform:rotate(45deg) !important; transform-origin:left center !important;
+        border-radius:2px !important; opacity:1 !important; filter:none !important; transform:rotate(45deg) !important; transform-origin:left center !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:hover,
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:focus,
