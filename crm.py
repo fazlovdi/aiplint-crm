@@ -7680,18 +7680,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         font-size:24px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
     }
     [class*="st-key-crm_workspace_main_expand_"] {
-        align-self:end !important;
-        margin-top:0.35rem !important;
-        margin-bottom:0 !important;
+        align-self:center !important;
+        margin:0 !important;
     }
     [class*="st-key-crm_workspace_main_expand_"] button {
-        font-size:30px !important; line-height:1 !important;
-        min-width:40px !important; width:40px !important;
-        min-height:40px !important; height:40px !important;
+        font-size:27px !important; line-height:1 !important;
+        min-width:36px !important; width:36px !important;
+        min-height:36px !important; height:36px !important;
         padding:0 !important; margin:0 !important;
     }
     [class*="st-key-crm_workspace_main_expand_"] button p {
-        font-size:30px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
+        font-size:27px !important; line-height:1 !important; margin:0 !important; padding:0 !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:hover,
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:focus,
@@ -8071,7 +8070,7 @@ _expandable_windows = [
 if st.session_state.get("active_tab") in ("Клиенты", "Сделки", "Задачи") and _expandable_windows:
     _divider_col, _expand_col = st.columns([0.94, 0.06], gap="small", vertical_alignment="center")
     with _divider_col:
-        st.markdown("<div style='border-top:1px solid rgba(128,128,128,.35);width:100%;margin:0.8rem 0 0.8rem 0;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:36px;display:flex;align-items:center;width:100%;'><div style='border-top:1px solid rgba(128,128,128,.35);width:100%;'></div></div>", unsafe_allow_html=True)
     with _expand_col:
         st.button(
             "⛶",
