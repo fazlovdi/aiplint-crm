@@ -7691,12 +7691,20 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; outline:0 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) { border-color:#BC1661 !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"]:has([data-testid="stBaseButton-primary"]) [class*="st-key-crm_workspace_restore_"] button { color:#BC1661 !important; }
-        /* Final sizing overrides: the window list scrolls, fixed controls do not. */
-    [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"] {
-        width:100% !important; min-width:0 !important; max-width:100% !important;
+        /* Only the panel's outer row scrolls. Inner rows keep their original sizing. */
+    [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"] {
+        display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+        flex:1 1 auto !important; width:0 !important; min-width:0 !important; max-width:100% !important;
         overflow-x:auto !important; overflow-y:hidden !important; box-sizing:border-box !important;
+        scrollbar-width:thin !important;
     }
-    [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) [data-testid="stHorizontalBlock"] {
+    [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"]::-webkit-scrollbar {
+        height:8px !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"]::-webkit-scrollbar-thumb {
+        background:#AAB1BC !important; border-radius:8px !important;
+    }
+    [class*="st-key-crm_workspace_bottom_"]:has([class*="st-key-crm_workspace_main_expand_wrap"]) > [data-testid="stHorizontalBlock"] {
         padding-right:110px !important;
     }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
@@ -15930,7 +15938,7 @@ def _crm_render_workspace_fragment():
             (() => {
               try {
                 const doc = window.parent.document;
-                doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"], [class*="st-key-crm_workspace_bottom_"] [data-testid="stHorizontalBlock"]').forEach(el => {
+                doc.querySelectorAll('[class*="st-key-crm_workspace_tabbar_"] [data-testid="stHorizontalBlock"], [class*="st-key-crm_workspace_bottom_"] > [data-testid="stHorizontalBlock"]').forEach(el => {
                   if (el.dataset.crmDragScrollReady === '1') return;
                   el.dataset.crmDragScrollReady = '1';
                   let down = false, moved = false, startX = 0, startScroll = 0, suppressClick = false;
