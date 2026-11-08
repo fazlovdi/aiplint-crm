@@ -9537,6 +9537,20 @@ def client_requisites_view_dialog(client_id, return_to_invoice=False, requisite_
                     _pop_dialog_return()
                     st.rerun()
     st.caption("Сохранённые реквизиты · режим просмотра")
+    # Поля остаются только для чтения, но текст должен быть контрастным и хорошо читаемым.
+    st.markdown("""<style>
+    [class*="st-key-req_view_"] input:disabled {
+        color:#313943 !important;
+        -webkit-text-fill-color:#313943 !important;
+        opacity:1 !important;
+        background-color:#FFFFFF !important;
+    }
+    [class*="st-key-req_view_"] label,
+    [class*="st-key-req_view_"] label p {
+        color:#313943 !important;
+        opacity:1 !important;
+    }
+    </style>""", unsafe_allow_html=True)
     labels = [
         ("legal_name", "Наименование юр. лица / ФИО плательщика"),
         ("payer_type", "Тип плательщика"),
