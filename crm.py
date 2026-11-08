@@ -11772,38 +11772,39 @@ def render_deal_detail(d, cl, cu, key_prefix):
             st.markdown("---")
             render_deal_products_block(d, key_prefix)
             st.markdown("---")
-            _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
-            _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
-            if _deal_tasks_list:
-                st.markdown("**Задачи по сделке**")
-                for _ti, _task in enumerate(_deal_tasks_list):
-                    _task_col, _date_col, _open_col = st.columns([2, 2, 1])
-                    with _task_col:
-                        _task_number_label = html.escape(str(_task.get("task_number", "")))
-                        _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
-                        st.markdown(f"**{_task_number_label}** · {_task_type_label}")
-                    with _date_col:
-                        _created = str(_task.get("created_at", "") or "")
-                        try:
-                            _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
-                            _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
-                        except Exception:
-                            _created_label = f"Создано {_created}" if _created else "Создано —"
-                        st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
-                    with _open_col:
-                        if st.button("Открыть", key=f"deal_task_open_{deal_id}_{_ti}", use_container_width=True):
-                            # Open the exact task as a workspace tab in this deal's client window.
-                            _task_client = cl or get_client_by_id(d.get("client_id"))
-                            task_detail_dialog(
-                                _task, _task_client, d,
-                                f"deal_task_{deal_id}_{_task.get('task_number', '')}"
-                            )
-            else:
-                st.caption("Задач по сделке пока нет.")
-            _dls_ct_key = f"dls_show_ct_{deal_id}"
-            if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
-                # Use the workspace registry instead of legacy one-shot dialog flags.
-                deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
+            with st.container(border=True):
+                _deal_tasks_list = [task for task in (cl.get("tasks", []) if cl else []) if str(task.get("deal_id", "")) == str(deal_id)]
+                _deal_tasks_list.sort(key=lambda task: task.get("created_at", ""), reverse=True)
+                if _deal_tasks_list:
+                    st.markdown("**Задачи по сделке**")
+                    for _ti, _task in enumerate(_deal_tasks_list):
+                        _task_col, _date_col, _open_col = st.columns([2, 2, 1])
+                        with _task_col:
+                            _task_number_label = html.escape(str(_task.get("task_number", "")))
+                            _task_type_label = html.escape(str(_task.get("type", "Связаться") or "Связаться"))
+                            st.markdown(f"**{_task_number_label}** · {_task_type_label}")
+                        with _date_col:
+                            _created = str(_task.get("created_at", "") or "")
+                            try:
+                                _created_dt = datetime.strptime(_created[:19], "%Y-%m-%d %H:%M:%S")
+                                _created_label = _created_dt.strftime("Создано %d.%m.%Y, %H:%M")
+                            except Exception:
+                                _created_label = f"Создано {_created}" if _created else "Создано —"
+                            st.markdown(f"<div style='font-size:0.82rem;font-style:italic;color:#7B8490;'>{html.escape(_created_label)}</div>", unsafe_allow_html=True)
+                        with _open_col:
+                            if st.button("Открыть", key=f"deal_task_open_{deal_id}_{_ti}", use_container_width=True):
+                                # Open the exact task as a workspace tab in this deal's client window.
+                                _task_client = cl or get_client_by_id(d.get("client_id"))
+                                task_detail_dialog(
+                                    _task, _task_client, d,
+                                    f"deal_task_{deal_id}_{_task.get('task_number', '')}"
+                                )
+                else:
+                    st.caption("Задач по сделке пока нет.")
+                _dls_ct_key = f"dls_show_ct_{deal_id}"
+                if st.button("Создать задачу по сделке", key=f"dls_btn_ct_detail_{deal_id}", use_container_width=True, type="primary"):
+                    # Use the workspace registry instead of legacy one-shot dialog flags.
+                    deal_create_task_dialog(str(deal_id), str(d.get("client_id", "")))
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             st.markdown("**Внесённые изменения**")
             _deal_changes = d.get("change_log", [])
