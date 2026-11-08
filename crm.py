@@ -16229,6 +16229,20 @@ def _crm_render_workspace_fragment():
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button p {
             margin:0 !important; padding:0 !important; font-size:27px !important; line-height:1 !important;
         }
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button p {
+            color:transparent !important; font-size:0 !important;
+        }
+        [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button::before {
+            content:"";
+            display:block;
+            width:24px;
+            height:24px;
+            flex:0 0 24px;
+            background-repeat:no-repeat;
+            background-position:center;
+            background-size:contain;
+            background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='%23808B98' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5 L18 18 M9 18 H18 V9 M43 5 L30 18 M30 9 V18 H39 M5 43 L18 30 M9 30 H18 V39 M43 43 L30 30 M30 39 V30 H39'/%3E%3C/svg%3E");
+        }
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button:hover,
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button:focus,
         [class*="st-key-crm_workspace_tabbar_"] [class*="st-key-crm_workspace_minimize_wrap"] button:active {
@@ -16401,7 +16415,7 @@ def _crm_render_workspace_fragment():
 
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                     st.button(
-                        "−",
+                        " ",
                         key=f"crm_workspace_minimize_{_crm_active_window['id']}",
                         help="Свернуть окно",
                         on_click=_crm_workspace_minimize_window_callback,
