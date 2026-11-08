@@ -3747,17 +3747,21 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             display: flex !important;
             align-items: center !important;
         }}
+        .st-key-task_detail_{key_prefix} .stHorizontalBlock:has(button.custom-print-btn) {{
+            align-items: flex-start !important;
+        }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown:has(button.custom-print-btn) {{
             display: flex !important;
+            width: 100% !important;
             align-items: flex-start !important;
             justify-content: flex-end !important;
             margin: 0 !important;
             padding: 0 !important;
             line-height: 0 !important;
-            align-self: start !important;
+            align-self: flex-start !important;
         }}
         .st-key-task_detail_{key_prefix} .stHorizontalBlock .stMarkdown button.custom-print-btn {{
-            display: flex !important;
+            display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             min-width: 0 !important;
@@ -3766,7 +3770,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             height: 24px !important;
             box-sizing: border-box !important;
             padding: 0 8px !important;
-            margin: 0 !important;
+            margin: 0 0.25rem 0 0 !important;
             line-height: 1 !important;
         }}
         /* Remove top gap in right column */
@@ -3805,6 +3809,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 st.markdown(format_created_date(t), unsafe_allow_html=True)
             with _task_print_col:
                 render_print_button(t, cl, _tp, _fd, f"td_{key_prefix}")
+            # Отделяем строку создания/автора от рамки основной информации,
+            # чтобы рамка не заходила на эту строку при плотной вертикальной раскладке.
+            st.markdown('<div style="height:0.45rem;width:100%;clear:both;"></div>', unsafe_allow_html=True)
             with st.container(border=True):
                 if d:
                     _deal_num = d.get('deal_number', d.get('title', ''))
