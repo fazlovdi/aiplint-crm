@@ -11023,7 +11023,7 @@ def render_deal_products_block(d, key_prefix):
             if calc.get("deleted"):
                 deleted_col, restore_col = st.columns([3.2, 1.0])
                 with deleted_col:
-                    _deleted_calc_name = re.sub(r"^Расчёт\s*№?\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                    _deleted_calc_name = re.sub(r"^Расчёт\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
                     _deleted_calc_date = str(calc.get("created_at") or "")[:19]
                     try:
                         _deleted_calc_date = datetime.strptime(_deleted_calc_date, "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y")
@@ -11051,7 +11051,7 @@ def render_deal_products_block(d, key_prefix):
             _calc_paid_badge = _calculation_payment_badge(calc)
             name_col, total_col, edit_col, delete_col = st.columns([3.0, 1.4, 1.0, 1.0])
             with name_col:
-                _calc_display_name = re.sub(r"^Расчёт\s*№?\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
+                _calc_display_name = re.sub(r"^Расчёт\s*", "", str(calc.get("name", "Расчёт")), flags=re.IGNORECASE)
                 _calc_created_raw = str(calc.get("created_at") or "")[:19]
                 _calc_created_display = ""
                 for _calc_date_format in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
