@@ -16143,6 +16143,107 @@ def _crm_render_workspace_fragment():
                                 args=(_crm_active_window.get("id"), _i),
                             )
 
+                # Быстрый переход к объектам текущего клиента — рядом с внутренними вкладками.
+                _tabbar_client_id = _crm_active_window.get("client_id")
+                _tabbar_client = next(
+                    (c for c in st.session_state.crm_store.get("clients", [])
+                     if str(c.get("id")) == str(_tabbar_client_id)),
+                    None,
+                )
+                if _tabbar_client is not None:
+                    with st.popover("+", key=f"crm_workspace_client_objects_add_{_crm_active_window['id']}", help="Объекты клиента"):
+                        _tabbar_client_id_str = str(_tabbar_client.get("id"))
+                        _tabbar_deals = [
+                            d for d in st.session_state.crm_store.get("deals", [])
+                            if str(d.get("client_id", "")) == _tabbar_client_id_str
+                        ]
+                        _tabbar_deals_by_id = {str(d.get("id")): d for d in _tabbar_deals}
+                        _tabbar_client_tasks = [
+                            t for t in (_tabbar_client.get("tasks", []) or [])
+                            if not t.get("deal_id")
+                        ]
+                        _tabbar_deal_tasks = [
+                            t for t in (_tabbar_client.get("tasks", []) or [])
+                            if t.get("deal_id") and str(t.get("deal_id")) in _tabbar_deals_by_id
+                        ]
+                        _tabbar_calculations = [
+                            (d, c) for d in _tabbar_deals
+                            for c in (d.get("calculations", []) or [])
+                        ]
+                        _tabbar_requisites = list(_tabbar_client.get("requisites", []) or [])
+
+                        st.markdown("**Задачи по клиенту**")
+                        _tabbar_client_tasks_sorted = sorted(
+                            _tabbar_client_tasks, key=lambda t: str(t.get("created_at", "")), reverse=True
+                        )
+                        if not _tabbar_client_tasks_sorted:
+                            st.caption("Нет задач по клиенту")
+                        for _oi, _obj in enumerate(_tabbar_client_tasks_sorted):
+                            _obj_label = f"{_obj.get('task_number', 'Задача')} · {_obj.get('type', 'Связаться')}"
+                            if st.button(_obj_label, key=f"crm_obj_client_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True):
+                                _obj_args = (_obj, _tabbar_client, None, f"client_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}")
+                                task_detail_dialog(*_obj_args)
+
+                        st.markdown("**Сделки**")
+                        _tabbar_deals_sorted = sorted(
+                            _tabbar_deals, key=lambda d: str(d.get("created_at", "")), reverse=True
+                        )
+                        if not _tabbar_deals_sorted:
+                            st.caption("Нет сделок")
+                        for _oi, _obj in enumerate(_tabbar_deals_sorted):
+                            _obj_label = f"{_obj.get('deal_number', _obj.get('title', 'Сделка'))} · {_obj.get('deal_title', '')}".strip(" ·")
+                            if st.button(_obj_label, key=f"crm_obj_deal_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True):
+                                _obj_args = (_obj, _tabbar_client, st.session_state.get("current_user"), f"deal_{_obj.get('id')}")
+                                deal_detail_dialog(*_obj_args)
+
+                        st.markdown("**Задачи по сделкам**")
+                        _tabbar_deal_tasks_sorted = sorted(
+                            _tabbar_deal_tasks, key=lambda t: str(t.get("created_at", "")), reverse=True
+                        )
+                        if not _tabbar_deal_tasks_sorted:
+                            st.caption("Нет задач по сделкам")
+                        for _oi, _obj in enumerate(_tabbar_deal_tasks_sorted):
+                            _obj_deal = _tabbar_deals_by_id.get(str(_obj.get("deal_id")))
+                            _obj_deal_label = str((_obj_deal or {}).get("deal_number") or (_obj_deal or {}).get("title") or "Сделка")
+                            _obj_label = f"{_obj.get('task_number', 'Задача')} · {_obj.get('type', 'Связаться')} · {_obj_deal_label}"
+                            if st.button(_obj_label, key=f"crm_obj_deal_task_{_crm_active_window['id']}_{_obj.get('id', _obj.get('task_number', _oi))}", use_container_width=True):
+                                _obj_args = (_obj, _tabbar_client, _obj_deal, f"deal_task_{_tabbar_client_id_str}_{_obj.get('task_number', '')}_{(_obj_deal or {}).get('id', '')}")
+                                task_detail_dialog(*_obj_args)
+
+                        st.markdown("**Расчёты**")
+                        _tabbar_calculations_sorted = sorted(
+                            _tabbar_calculations,
+                            key=lambda pair: str(pair[1].get("created_at", pair[1].get("updated_at", ""))),
+                            reverse=True,
+                        )
+                        if not _tabbar_calculations_sorted:
+                            st.caption("Нет расчётов")
+                        for _oi, (_obj_deal, _obj_calc) in enumerate(_tabbar_calculations_sorted):
+                            _obj_deal_label = str(_obj_deal.get("deal_number") or _obj_deal.get("title") or "Сделка")
+                            _obj_label = f"{_obj_deal_label} · {_obj_calc.get('name', 'Расчёт')}"
+                            if _obj_calc.get("deleted"):
+                                _obj_label += " (удалён)"
+                            if st.button(_obj_label, key=f"crm_obj_calc_{_crm_active_window['id']}_{_obj_deal.get('id')}_{_obj_calc.get('id', _oi)}", use_container_width=True, disabled=bool(_obj_calc.get("deleted"))):
+                                deal_calculation_dialog(str(_obj_deal.get("id")), str(_obj_calc.get("id")))
+
+                        st.markdown("**Реквизиты**")
+                        if not _tabbar_requisites:
+                            st.caption("Нет реквизитов")
+                        for _oi, _obj in enumerate(_tabbar_requisites):
+                            _obj_label = str(_obj.get("legal_name") or "Реквизиты без названия")
+                            if _obj.get("deleted"):
+                                _obj_label += " (удалены)"
+                            if st.button(_obj_label, key=f"crm_obj_req_{_crm_active_window['id']}_{_obj.get('id', _oi)}", use_container_width=True, disabled=bool(_obj.get("deleted"))):
+                                client_requisites_view_dialog(_tabbar_client_id, False, _obj.get("id"))
+
+                        st.markdown("---")
+                        if st.button("Добавить Задачу по клиенту", key=f"crm_obj_add_client_task_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
+                            client_create_task_dialog(_tabbar_client_id_str)
+                        if st.button("Добавить сделку", key=f"crm_obj_add_deal_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
+                            create_deal_dialog(_tabbar_client_id_str)
+                        if st.button("Добавить реквизиты", key=f"crm_obj_add_req_{_crm_active_window['id']}", type="tertiary", use_container_width=True):
+                            client_requisites_dialog(_tabbar_client_id, False)
+
                 with st.container(key=f"crm_workspace_minimize_wrap_{_crm_active_window['id']}"):
                     st.button(
                         "Свернуть",
