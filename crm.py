@@ -8940,7 +8940,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 st.text_input(
                     "Вопрос AI",
                     key=_ai_key,
-                    placeholder="✨ Спросить AI…",
+                    placeholder="Посоветоваться с Яшей…",
                     label_visibility="collapsed",
                 )
                 if st.button("Спросить AI", key=f"crm_workspace_ai_send_{_bottom_scope}", use_container_width=True):
