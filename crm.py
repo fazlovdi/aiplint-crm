@@ -9034,6 +9034,43 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             if st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False):
                 st.session_state[f"crm_workspace_global_search_close_{_bottom_scope}"] = False
 
+        # Отдельный интерфейс AI-помощника. На этом этапе без вызовов Gemini.
+        with st.popover("✨", key=f"crm_workspace_ai_assistant_{_bottom_scope}", help="AI-помощник Айплинт"):
+            st.markdown("### ✨ AI-помощник Айплинт")
+            st.caption("Задавай вопросы обычным языком — например, о расчёте материала или продукции.")
+            _ai_key = f"crm_workspace_ai_prompt_{_bottom_scope}"
+            _ai_submit_key = f"crm_workspace_ai_submitted_{_bottom_scope}"
+            _ai_prompt = st.text_area(
+                "Запрос к AI",
+                key=_ai_key,
+                placeholder="Например: посчитай, сколько плинтуса нужно на квартиру 100 м²…",
+                label_visibility="collapsed",
+                height=100,
+            )
+            st.caption("Примеры запросов")
+            st.markdown(
+                "- Рассчитай предварительное количество плинтуса для квартиры 100 м²\n"
+                "- Объясни разницу между магнитным плинтусом и Айплинт Slim\n"
+                "- Помоги подготовить ответ клиенту"
+            )
+            if st.button("Спросить AI", key=f"crm_workspace_ai_send_{_bottom_scope}", type="primary", use_container_width=True):
+                if str(_ai_prompt or "").strip():
+                    st.session_state[_ai_submit_key] = str(_ai_prompt).strip()
+                    st.rerun()
+                else:
+                    st.info("Сначала введи вопрос.")
+            _ai_submitted = str(st.session_state.get(_ai_submit_key, "") or "").strip()
+            if _ai_submitted:
+                st.divider()
+                st.markdown("**Ты:**")
+                st.write(_ai_submitted)
+                st.markdown("**AI-помощник:**")
+                st.info("Интерфейс готов. На следующем этапе подключим Gemini API, чтобы здесь отображались реальные ответы и продолжалась история диалога.")
+                if st.button("Новый вопрос", key=f"crm_workspace_ai_new_{_bottom_scope}"):
+                    st.session_state[_ai_submit_key] = ""
+                    st.session_state[_ai_key] = ""
+                    st.rerun()
+
         for _w in list(_bottom_windows):
             _window_id = str(_w.get("id"))
             _is_statistics_window = any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
