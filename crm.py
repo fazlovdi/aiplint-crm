@@ -9875,7 +9875,9 @@ def render_deal_standalone(d, cl, cu):
     deal_id = d["id"]
     dl_tasks = [t for t in (cl.get("tasks", []) if cl else []) if t.get("deal_id") == deal_id]
     client_name = cl.get("name", "—") if cl else "—"
-    num = d.get("deal_number", d.get("title", ""))
+    num = str(d.get("deal_number", d.get("title", "")) or "")
+    num = re.sub(r"^\s*сделка\s*[:№#-]?\s*", "", num, flags=re.IGNORECASE).strip()
+    num = num.lstrip("№").strip()
     deal_topic = " ".join(str(d.get("deal_title", "") or "").split())
     # В колонках доски показываем только номер, клиента и тему; длинную тему
     # обрезаем заранее, чтобы она всегда занимала одну строку.
