@@ -4442,19 +4442,25 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.session_state[f"show_edit_task_{key_prefix}"] = True
                         _smart_rerun()
             render_reminders("task", t.get("task_number", t.get("id", "")), _task_header, f"task_{key_prefix}")
-            # Кнопка «Взять в работу» размещается над статусом в блоке сведений.
+            # Форма отчёта заранее находится в DOM задачи; раскрытие выполняется JS без Streamlit rerun.
             tk_done = t.get("done", False)
             if not tk_done:
-                show_key = f"show_complete_{key_prefix}"
-                if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
-                    st.session_state["dialog_task_completion"] = {
-                        "client_id": cl.get("id"),
-                        "task_number": t.get("task_number"),
-                        "key_prefix": key_prefix,
-                    }
-                    st.session_state[show_key] = False
-                    _smart_rerun()
-                if st.session_state.get(show_key, False):
+                _report_dom_suffix = re.sub(r"[^A-Za-z0-9_]", "_", str(key_prefix))
+                report_container_key = f"task_completion_inline_{_report_dom_suffix}"
+                report_button_id = f"task_completion_toggle_{_report_dom_suffix}"
+                report_storage_key = f"crm_task_report_open_{_report_dom_suffix}"
+                st.markdown(
+                    f'<style>.st-key-{report_container_key}{{display:none;}} '
+                    '#'+report_button_id+'{display:block;width:100%;padding:0.55rem 1rem;border:0;border-radius:0.5rem;'
+                    'background:#BC1661;color:#fff;font-weight:600;cursor:pointer;margin:0.35rem 0 0.6rem 0;} '
+                    '#'+report_button_id+':hover{filter:brightness(0.94);}</style>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f'<button type="button" id="{report_button_id}">Выполнить задачу</button>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(key=report_container_key):
                     rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
                     uf_ver = st.session_state.get(f"uf_ver_{key_prefix}", 0)
                     uf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b/\u0444\u043e\u0442\u043e \u043e\u0442\u0447\u0435\u0442\u0430:", key=f"uf_{key_prefix}_{uf_ver}", accept_multiple_files=True)
@@ -4507,6 +4513,44 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"cancel_complete_{key_prefix}", use_container_width=True):
                             st.session_state[show_key] = False
                             _smart_rerun()
+                st.components.v1.html(f"""<script>
+                (function() {{
+                    var w = window.parent, doc = w.document;
+                    var buttonId = {json.dumps(report_button_id)};
+                    var containerClass = {json.dumps("st-key-" + report_container_key)};
+                    var storageKey = {json.dumps(report_storage_key)};
+                    var cancelClass = {json.dumps("st-key-cancel_complete_" + _report_dom_suffix)};
+                    function sync() {{
+                        var b = doc.getElementById(buttonId);
+                        var box = doc.querySelector('.' + containerClass);
+                        if (!b || !box) return;
+                        var open = false;
+                        try {{ open = w.sessionStorage.getItem(storageKey) === '1'; }} catch(e) {{}}
+                        box.style.display = open ? 'block' : 'none';
+                        b.textContent = open ? 'Свернуть отчёт' : 'Выполнить задачу';
+                        if (!b.__crmToggleBound) {{
+                            b.__crmToggleBound = true;
+                            b.addEventListener('click', function(e) {{
+                                e.preventDefault();
+                                var show = box.style.display === 'none' || w.getComputedStyle(box).display === 'none';
+                                box.style.display = show ? 'block' : 'none';
+                                try {{ w.sessionStorage.setItem(storageKey, show ? '1' : '0'); }} catch(e) {{}}
+                                b.textContent = show ? 'Свернуть отчёт' : 'Выполнить задачу';
+                            }});
+                        }}
+                        var cancelWrap = doc.querySelector('.' + cancelClass);
+                        var cancelBtn = cancelWrap && cancelWrap.querySelector('button');
+                        if (cancelBtn && !cancelBtn.__crmReportCancelBound) {{
+                            cancelBtn.__crmReportCancelBound = true;
+                            cancelBtn.addEventListener('click', function() {{
+                                try {{ w.sessionStorage.setItem(storageKey, '0'); }} catch(e) {{}}
+                            }}, true);
+                        }}
+                    }}
+                    sync();
+                    setTimeout(sync, 50);
+                }})();
+                </script>""", height=0)
             else:
                 if t.get("needs_rework"):
                     st.markdown('<span class="reworkbadge" style="display:inline-block;background:#D32F2F;color:white;font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:99px;text-transform:uppercase;">\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435</span>', unsafe_allow_html=True)
