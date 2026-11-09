@@ -4431,6 +4431,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             render_reminders("task", t.get("task_number", t.get("id", "")), _task_header, f"task_{key_prefix}")
             # Кнопка «Взять в работу» размещается над статусом в блоке сведений.
             tk_done = t.get("done", False)
+            if not tk_done:
                 show_key = f"show_complete_{key_prefix}"
                 if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                     st.session_state["dialog_task_completion"] = {
