@@ -15943,7 +15943,6 @@ def statistics_dialog(section="Общая статистика"):
         </script>""", height=0)
 
 
-@st.fragment(run_every="3s")
 def _crm_render_active_section_fragment():
     """Рендерит только активный рабочий раздел и тихо проверяет свежесть базы."""
     _active_section = str(st.session_state.get("active_tab", "") or "")
