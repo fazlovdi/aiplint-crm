@@ -15955,9 +15955,6 @@ def _crm_render_active_section_fragment():
                 "section": _active_section,
                 "reason": "active section fragment refresh",
             })
-    try:
-    except Exception:
-        raise
 
     if st.session_state.active_tab == "Клиенты":
         fv = st.session_state.client_form_version
