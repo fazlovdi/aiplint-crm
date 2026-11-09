@@ -10133,7 +10133,8 @@ def _make_commercial_offer_pdf(deal, client, calc):
         table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell)] + [""]*(len(headers)-2))
     total=sum(r['amount'] for r in rows)
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
-    total_row=[""]*len(headers); total_row[-2]=Paragraph("ИТОГО ЗА ТОВАРЫ:",cell); total_row[-1]=Paragraph(_money(total),cell); table_data.append(total_row)
+    total_label = Paragraph("ИТОГО:<br/><font size='7'><i>(расчёт предварительный, точная стоимость будет известна при отправке)</i></font>", ParagraphStyle("OfferTotalLabel", parent=cell, leading=9))
+    total_row=[""]*len(headers); total_row[-2]=total_label; total_row[-1]=Paragraph(_money(total),cell); table_data.append(total_row)
     if show_discount:
         widths=[8*mm,43*mm,15*mm,43*mm,12*mm,19*mm,13*mm,22*mm,13*mm,22*mm]
     else:
@@ -10145,23 +10146,15 @@ def _make_commercial_offer_pdf(deal, client, calc):
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ("BACKGROUND",(0,last_row),(-1,last_row),colors.HexColor("#FCEEF4")),("FONTNAME",(0,last_row),(-1,last_row),bold),
-        ("SPAN",(0,last_row),(len(headers)-3,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT")]
+        ("SPAN",(0,last_row),(len(headers)-2,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT")]
     tbl.setStyle(TableStyle(tbl_style))
     flow += [tbl]
     if delivery:
         delivery_text = Paragraph(
-            f"Доставка (расчёт предварительный, точная стоимость будет известна при отправке): <b>{_money(delivery)} рублей</b>",
-            ParagraphStyle("OfferDeliveryNote", parent=body, fontSize=8, leading=11, spaceAfter=0)
+            f"Доставка: <b>{_money(delivery)} рублей</b>",
+            ParagraphStyle("OfferDeliveryNote", parent=body, fontSize=8, leading=11, spaceAfter=0, alignment=0)
         )
-        delivery_block = Table([[delivery_text]], colWidths=[sum(widths)])
-        delivery_block.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#F8F8FA")),
-            ("BOX",(0,0),(-1,-1),0.5,colors.HexColor("#E5A8C4")),
-            ("LEFTPADDING",(0,0),(-1,-1),7),("RIGHTPADDING",(0,0),(-1,-1),7),
-            ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),
-            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ]))
-        flow += [Spacer(1,3*mm), delivery_block]
+        flow += [Spacer(1,2*mm), delivery_text]
     flow += [PageBreak(), Spacer(1,20*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
              Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
              Spacer(1,2*mm), Paragraph("4. ПОДПИСЬ И ПЕЧАТЬ ПОСТАВЩИКА", h)]
