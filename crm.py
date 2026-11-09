@@ -4521,6 +4521,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     var containerClass = {json.dumps("st-key-" + report_container_key)};
                     var storageKey = {json.dumps(report_storage_key)};
                     var cancelClass = {json.dumps("st-key-cancel_complete_" + _report_dom_suffix)};
+                    var confirmClass = {json.dumps("st-key-go_" + _report_dom_suffix)};
+                    var uploaderClass = {json.dumps("st-key-uf_" + _report_dom_suffix + "_" + str(uf_ver))};
+                    var uploadStorageKey = {json.dumps("crm_task_report_uploading_" + _report_dom_suffix)};
                     function sync() {{
                         var b = doc.getElementById(buttonId);
                         var box = doc.querySelector('.' + containerClass);
@@ -4539,6 +4542,37 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 b.textContent = show ? 'Свернуть отчёт' : 'Выполнить задачу';
                             }});
                         }}
+                        // Блокируем подтверждение, пока Streamlit не завершил загрузку выбранных файлов.
+                        var confirmWrap = doc.querySelector('.' + confirmClass);
+                        var confirmBtn = confirmWrap && confirmWrap.querySelector('button');
+                        var uploader = doc.querySelector('.' + uploaderClass);
+                        if (confirmBtn && uploader) {{
+                            var fileInput = uploader.querySelector('input[type="file"]');
+                            if (fileInput && !fileInput.__crmUploadBound) {{
+                                fileInput.__crmUploadBound = true;
+                                fileInput.addEventListener('change', function() {{
+                                    if (fileInput.files && fileInput.files.length) {{
+                                        try {{ w.sessionStorage.setItem(uploadStorageKey, String(fileInput.files.length)); }} catch(e) {{}}
+                                        confirmBtn.disabled = true;
+                                    }}
+                                }});
+                            }}
+                            var expectedCount = 0;
+                            try {{ expectedCount = parseInt(w.sessionStorage.getItem(uploadStorageKey) || '0', 10) || 0; }} catch(e) {{}}
+                            var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"]');
+                            var uploadedRows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
+                            var selectedCount = fileInput && fileInput.files ? fileInput.files.length : 0;
+                            var requiredCount = Math.max(expectedCount, selectedCount);
+                            var uploading = !!progress || (requiredCount > 0 && uploadedRows.length < requiredCount);
+                            if (uploading) {{
+                                confirmBtn.disabled = true;
+                                confirmBtn.setAttribute('aria-busy', 'true');
+                            }} else {{
+                                confirmBtn.disabled = false;
+                                confirmBtn.removeAttribute('aria-busy');
+                                try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                            }}
+                        }}
                         var cancelWrap = doc.querySelector('.' + cancelClass);
                         var cancelBtn = cancelWrap && cancelWrap.querySelector('button');
                         if (cancelBtn && !cancelBtn.__crmReportCancelBound) {{
@@ -4550,6 +4584,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     }}
                     sync();
                     setTimeout(sync, 50);
+                    var observer = new MutationObserver(sync);
+                    observer.observe(doc.body, {{childList: true, subtree: true}});
+                    setInterval(sync, 250);
                 }})();
                 </script>""", height=0)
             else:
