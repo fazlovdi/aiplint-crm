@@ -4178,6 +4178,19 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _smart_rerun()
 
                     with _status_inner:
+                        if not t.get("done", False) and not t.get("in_work", False):
+                            if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
+                                # Для общей неназначенной задачи ответственным становится тот, кто первым взял её в работу.
+                                if not t.get("manager"):
+                                    t["manager"] = cu
+                                    t["delegated_to"] = cu
+                                t["in_work"] = True
+                                t["last_modified"] = now_str()
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                save_data(st.session_state.crm_store)
+                                st.toast("Задача взята в работу", icon="✅")
+                                st.rerun()
                         if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
@@ -4416,23 +4429,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         st.session_state[f"show_edit_task_{key_prefix}"] = True
                         _smart_rerun()
             render_reminders("task", t.get("task_number", t.get("id", "")), _task_header, f"task_{key_prefix}")
-            # Action buttons in left column (below task info)
-            st.markdown("---")
+            # Кнопка «Взять в работу» размещается над статусом в блоке сведений.
             tk_done = t.get("done", False)
-            if not tk_done:
-                if not t.get("in_work"):
-                    if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
-                        # Для общей неназначенной задачи ответственным становится тот, кто первым взял её в работу.
-                        if not t.get("manager"):
-                            t["manager"] = cu
-                            t["delegated_to"] = cu
-                        t["in_work"] = True
-                        t["last_modified"] = now_str()
-                        cl["last_modified"] = now_str()
-                        if d: d["last_modified"] = now_str()
-                        save_data(st.session_state.crm_store)
-                        st.toast("Задача взята в работу", icon="✅")
-                        st.rerun()
                 show_key = f"show_complete_{key_prefix}"
                 if st.button("\u0412\u044b\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0443", key=f"btn_complete_{key_prefix}", type="primary", use_container_width=True):
                     st.session_state["dialog_task_completion"] = {
