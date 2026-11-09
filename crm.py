@@ -4645,81 +4645,83 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                 else:
                     st.success("\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u0430")
         with right_col:
-            # Comments block (now above files) — no gap at top
-            st.markdown(f"**Комментарии задачи ({active_item_count(t.get('task_comments', []))}):**")
-            if t.get("task_comments"):
-                render_soft_delete_comments(t["task_comments"], f"task_{key_prefix}", "time", "user")
-            tc_clr_key = f"clr_tc_{key_prefix}"
-            if st.session_state.get(tc_clr_key):
-                st.session_state[f"tc_input_{key_prefix}"] = ""
-                st.session_state[tc_clr_key] = False
-            ntc = st.text_input("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"tc_input_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439...")
-            _crm_mark_widget_changed(f"tc_input_{key_prefix}", bool(str(ntc or "").strip()))
-            if st.button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", key=f"tc_btn_{key_prefix}", use_container_width=True):
-                if ntc.strip():
-                    t.setdefault("task_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
-                    t["last_modified"] = now_str()
-                    st.session_state[tc_clr_key] = True
-                    commit_and_rerun(st.session_state.crm_store, "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
-                else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442")
-            st.markdown("---")
-            # Files block (now below comments)
-            st.markdown(f"**Файлы задачи ({active_item_count(t.get('task_files', []))}):**")
-            if t.get("task_files"):
-                render_file_thumbs(t["task_files"], f"{key_prefix}_files")
-            st.markdown("**Добавить файлы в задачу:**")
-            _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
-            ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
-            _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
-            _task_file_upload_col, _task_file_pick_col = st.columns(2)
-            with _task_file_upload_col:
-                if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True, disabled=not bool(ntf_existing), type="primary" if ntf_existing else "secondary"):
-                    if ntf_existing:
-                        with st.spinner("Загрузка файлов..."):
-                            fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
-                        if fi_list:
-                            t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
-                            t["last_modified"] = now_str()
-                            cl["last_modified"] = now_str()
-                            if d: d["last_modified"] = now_str()
-                            st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
-                            commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
-                    else: st.warning("Выберите файл(ы)")
-            with _task_file_pick_col:
-                if st.button("Выбрать из загруженных", key=f"task_pick_existing_btn_{key_prefix}", use_container_width=True):
-                    _pick_key = f"task_pick_existing_open_{key_prefix}"
-                    st.session_state[_pick_key] = not st.session_state.get(_pick_key, False)
-            if st.session_state.get(f"task_pick_existing_open_{key_prefix}", False):
-                _source_task_files = (d or {}).get("deal_files", []) if d else cl.get("client_files", [])
-                _source_task_files = [f for f in (_source_task_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
-                _task_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_source_task_files)}
-                if _task_file_options:
-                    _picked_task_file_keys = st.multiselect("Файлы из карточки клиента:" if not d else "Файлы из окна сделки:", list(_task_file_options), key=f"task_pick_existing_select_{key_prefix}")
-                    if st.button("Прикрепить выбранные", key=f"task_pick_existing_apply_{key_prefix}", use_container_width=True, type="primary"):
-                        _already_hashes = {str(f.get("file_hash", "") or f.get("file_path", "")) for f in t.get("task_files", []) if isinstance(f, dict)}
-                        _added = []
-                        for _picked_key in _picked_task_file_keys:
-                            _picked_file = dict(_task_file_options[_picked_key])
-                            _identity = str(_picked_file.get("file_hash", "") or _picked_file.get("file_path", "") or _picked_file.get("path", ""))
-                            if _identity and _identity not in _already_hashes:
-                                if not _picked_file.get("file_path") and _picked_file.get("path"):
-                                    _picked_file["file_path"] = _picked_file["path"]
-                                if not _picked_file.get("file_name") and _picked_file.get("name"):
-                                    _picked_file["file_name"] = _picked_file["name"]
-                                _added.append(_picked_file)
-                                _already_hashes.add(_identity)
-                        if _added:
-                            t.setdefault("task_files", []).extend(_added)
-                            t["last_modified"] = now_str()
-                            cl["last_modified"] = now_str()
-                            if d: d["last_modified"] = now_str()
-                            st.session_state[f"task_pick_existing_open_{key_prefix}"] = False
-                            commit_and_rerun(st.session_state.crm_store, "Файлы прикреплены к задаче")
-                        else:
-                            st.info("Выберите файлы, которые ещё не прикреплены к задаче.")
-                else:
-                    st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
-
+            with st.container(border=True):
+                # Comments block (now above files) — no gap at top
+                st.markdown(f"**Комментарии задачи ({active_item_count(t.get('task_comments', []))}):**")
+                if t.get("task_comments"):
+                    render_soft_delete_comments(t["task_comments"], f"task_{key_prefix}", "time", "user")
+                tc_clr_key = f"clr_tc_{key_prefix}"
+                if st.session_state.get(tc_clr_key):
+                    st.session_state[f"tc_input_{key_prefix}"] = ""
+                    st.session_state[tc_clr_key] = False
+                ntc = st.text_input("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439:", key=f"tc_input_{key_prefix}", placeholder="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439...")
+                _crm_mark_widget_changed(f"tc_input_{key_prefix}", bool(str(ntc or "").strip()))
+                if st.button("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", key=f"tc_btn_{key_prefix}", use_container_width=True):
+                    if ntc.strip():
+                        t.setdefault("task_comments", []).append({"time": moscow_now().strftime("%d.%m.%Y %H:%M"), "text": ntc.strip(), "user": st.session_state.get("user_name", "")})
+                        t["last_modified"] = now_str()
+                        st.session_state[tc_clr_key] = True
+                        commit_and_rerun(st.session_state.crm_store, "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
+                    else: st.warning("\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043a\u0441\u0442")
+                st.markdown("---")
+            with st.container(border=True):
+                # Files block (now below comments)
+                st.markdown(f"**Файлы задачи ({active_item_count(t.get('task_files', []))}):**")
+                if t.get("task_files"):
+                    render_file_thumbs(t["task_files"], f"{key_prefix}_files")
+                st.markdown("**Добавить файлы в задачу:**")
+                _tu_ver = st.session_state.get(f"task_upload_ver_{key_prefix}", 0)
+                ntf_existing = st.file_uploader("Выберите файлы:", key=f"task_upload_{key_prefix}_{_tu_ver}", accept_multiple_files=True, label_visibility="collapsed")
+                _crm_mark_widget_changed(f"task_upload_{key_prefix}_{_tu_ver}", bool(ntf_existing))
+                _task_file_upload_col, _task_file_pick_col = st.columns(2)
+                with _task_file_upload_col:
+                    if st.button("Загрузить", key=f"task_upload_btn_{key_prefix}", use_container_width=True, disabled=not bool(ntf_existing), type="primary" if ntf_existing else "secondary"):
+                        if ntf_existing:
+                            with st.spinner("Загрузка файлов..."):
+                                fi_list = save_uploaded_files(ntf_existing, (d["client_id"] if d else cl["id"]), "task_file")
+                            if fi_list:
+                                t.setdefault("task_files", []).extend(normalize_file_list(fi_list))
+                                t["last_modified"] = now_str()
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
+                                commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
+                        else: st.warning("Выберите файл(ы)")
+                with _task_file_pick_col:
+                    if st.button("Выбрать из загруженных", key=f"task_pick_existing_btn_{key_prefix}", use_container_width=True):
+                        _pick_key = f"task_pick_existing_open_{key_prefix}"
+                        st.session_state[_pick_key] = not st.session_state.get(_pick_key, False)
+                if st.session_state.get(f"task_pick_existing_open_{key_prefix}", False):
+                    _source_task_files = (d or {}).get("deal_files", []) if d else cl.get("client_files", [])
+                    _source_task_files = [f for f in (_source_task_files or []) if isinstance(f, dict) and (f.get("file_path") or f.get("path"))]
+                    _task_file_options = {f"{i+1}. {f.get('file_name') or f.get('name') or os.path.basename(str(f.get('file_path') or f.get('path') or 'Файл'))} · {i}": f for i, f in enumerate(_source_task_files)}
+                    if _task_file_options:
+                        _picked_task_file_keys = st.multiselect("Файлы из карточки клиента:" if not d else "Файлы из окна сделки:", list(_task_file_options), key=f"task_pick_existing_select_{key_prefix}")
+                        if st.button("Прикрепить выбранные", key=f"task_pick_existing_apply_{key_prefix}", use_container_width=True, type="primary"):
+                            _already_hashes = {str(f.get("file_hash", "") or f.get("file_path", "")) for f in t.get("task_files", []) if isinstance(f, dict)}
+                            _added = []
+                            for _picked_key in _picked_task_file_keys:
+                                _picked_file = dict(_task_file_options[_picked_key])
+                                _identity = str(_picked_file.get("file_hash", "") or _picked_file.get("file_path", "") or _picked_file.get("path", ""))
+                                if _identity and _identity not in _already_hashes:
+                                    if not _picked_file.get("file_path") and _picked_file.get("path"):
+                                        _picked_file["file_path"] = _picked_file["path"]
+                                    if not _picked_file.get("file_name") and _picked_file.get("name"):
+                                        _picked_file["file_name"] = _picked_file["name"]
+                                    _added.append(_picked_file)
+                                    _already_hashes.add(_identity)
+                            if _added:
+                                t.setdefault("task_files", []).extend(_added)
+                                t["last_modified"] = now_str()
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                st.session_state[f"task_pick_existing_open_{key_prefix}"] = False
+                                commit_and_rerun(st.session_state.crm_store, "Файлы прикреплены к задаче")
+                            else:
+                                st.info("Выберите файлы, которые ещё не прикреплены к задаче.")
+                    else:
+                        st.caption("В карточке клиента/сделке пока нет загруженных файлов.")
+    
 def _task_is_ready_to_ship(task):
     """Единый признак задачи, готовой к отправке: статус отправки или старое булево поле."""
     if not isinstance(task, dict):
