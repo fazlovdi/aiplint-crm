@@ -8945,7 +8945,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                 st.text_input(
                     "Вопрос AI",
                     key=_ai_key,
-                    placeholder="Посоветоваться с Яшей…",
+                    placeholder="✨ Посоветоваться с Яшей…",
                     label_visibility="collapsed",
                     on_change=_submit_ai_prompt,
                 )
