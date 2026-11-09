@@ -10133,7 +10133,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
         table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell)] + [""]*(len(headers)-2))
     total=sum(r['amount'] for r in rows)
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
-    total_row=[""]*len(headers); total_row[-2]=Paragraph("ИТОГО ЗА ТОВАРЫ:",cell); total_row[-1]=Paragraph(_money(total),cell); table_data.append(total_row)
+    total_row=[""]*len(headers); total_row[-2]=Paragraph("ИТОГО:",cell); total_row[-1]=Paragraph(_money(total),cell); table_data.append(total_row)
     if show_discount:
         widths=[8*mm,43*mm,15*mm,43*mm,12*mm,19*mm,13*mm,22*mm,13*mm,22*mm]
     else:
