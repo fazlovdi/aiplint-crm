@@ -15943,1446 +15943,1458 @@ def statistics_dialog(section="Общая статистика"):
         </script>""", height=0)
 
 
-def _crm_render_active_section_fragment():
-    """Рендерит только активный рабочий раздел и тихо проверяет свежесть базы."""
-    _active_section = str(st.session_state.get("active_tab", "") or "")
-    _login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-    if _login and _active_section not in ("Главная", "Главная страница", ""):
-        if _crm_refresh_store_if_clean():
-            _crm_log("DATABASE_AUTO_REFRESH", {
-                "revision": int(st.session_state.get("crm_base_revision", 0) or 0),
-                "section": _active_section,
-                "reason": "active section fragment refresh",
-            })
+if st.session_state.active_tab == "Клиенты":
+    fv = st.session_state.client_form_version
+    render_client_form(fv)
+    # Поиск и сортировки в один ряд; крестик расположен поверх поля справа.
+    _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
+    with _search_col:
+        with st.container(key="client_search_wrap"):
+            _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
+            st.button("×", key="client_search_clear", help="Очистить поиск", on_click=lambda: st.session_state.__setitem__("search_input_key", ""))
+        st.markdown("""
+        <style>
+        .st-key-client_search_wrap { position:relative !important; }
+        .st-key-client_search_wrap .st-key-client_search_clear {
+            position:absolute !important; right:4px !important; top:0 !important;
+            width:34px !important; z-index:5 !important; margin:0 !important;
+        }
+        .st-key-client_search_wrap .st-key-client_search_clear button {
+            width:34px !important; min-width:34px !important;
+            height:38px !important; min-height:38px !important;
+            padding:0 !important; margin:0 !important;
+            font-size:20px !important; line-height:1 !important;
+            color:#808B98 !important; border:0 !important;
+            background:transparent !important; box-shadow:none !important;
+        }
+        .st-key-client_search_wrap .st-key-search_input_key input {
+            padding-right:40px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        # Переименовываем стандартную подсказку Streamlit только у поля поиска клиентов.
+        st.components.v1.html("""<script>
+        (function () {
+          var w = window;
+          try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
+          function renameSearchHint() {
+            try {
+              var root = w.document.querySelector('.st-key-search_input_key');
+              if (!root) return;
+              root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
 
-    if st.session_state.active_tab == "Клиенты":
-        fv = st.session_state.client_form_version
-        render_client_form(fv)
-        # Поиск и сортировки в один ряд; крестик расположен поверх поля справа.
-        _search_col, _sort_col, _sort_cat_col = st.columns([3, 2, 2])
-        with _search_col:
-            with st.container(key="client_search_wrap"):
-                _search_input_now = st.text_input("Поиск", key="search_input_key", placeholder="Поиск...", label_visibility="collapsed")
-                st.button("×", key="client_search_clear", help="Очистить поиск", on_click=lambda: st.session_state.__setitem__("search_input_key", ""))
-            st.markdown("""
-            <style>
-            .st-key-client_search_wrap { position:relative !important; }
-            .st-key-client_search_wrap .st-key-client_search_clear {
-                position:absolute !important; right:4px !important; top:0 !important;
-                width:34px !important; z-index:5 !important; margin:0 !important;
-            }
-            .st-key-client_search_wrap .st-key-client_search_clear button {
-                width:34px !important; min-width:34px !important;
-                height:38px !important; min-height:38px !important;
-                padding:0 !important; margin:0 !important;
-                font-size:20px !important; line-height:1 !important;
-                color:#808B98 !important; border:0 !important;
-                background:transparent !important; box-shadow:none !important;
-            }
-            .st-key-client_search_wrap .st-key-search_input_key input {
-                padding-right:40px !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            # Переименовываем стандартную подсказку Streamlit только у поля поиска клиентов.
+                ['title', 'aria-label'].forEach(function (attr) {
+                  var value = el.getAttribute(attr);
+                  if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) {
+                    el.setAttribute(attr, 'Нажми Ввод для поиска');
+                  }
+                });
+              });
+            } catch (e) {}
+          }
+          renameSearchHint();
+          try {
+            var observer = new w.MutationObserver(renameSearchHint);
+            observer.observe(w.document.body, { childList: true, subtree: true, characterData: true, attributes: true });
+          } catch (e) {}
+        })();
+        </script>""", height=0)
+        sq = (_search_input_now or "").strip().lower()
+    with _sort_col:
+        sort_options = ["По дате изменения", "По дате создания", "По алфавиту", "По городу"]
+        sort_mode = st.selectbox("Сортировка", sort_options, key="client_sort_select", label_visibility="collapsed")
+        st.session_state.client_sort_mode = sort_mode
+    with _sort_cat_col:
+        cat_options = ["Все"] + CATEGORIES
+        ctf = st.selectbox("Категория", cat_options, index=0, key="cat_filter", label_visibility="collapsed")
+    all_clients = st.session_state.crm_store["clients"]
+    fcl = []
+    sd = re.sub(r"\D", "", sq)
+    if sd and sd[0] in ("7", "8") and len(sd) > 1: sd = sd[1:]
+    for cl in all_clients:
+        if ctf != "Все" and cl.get("category", "Не определён") != ctf: continue
+        if sq:
+            ct = f"{cl['name']} {cl.get('city','')} {cl.get('phone','')} {cl.get('email','')} {cl.get('address','')} {cl.get('base_comment','')}".lower()
+            mb = sq in ct
+            acd = re.sub(r"\D", "", cl['phone'])
+            for p in cl.get("extra_phones", []):
+                acd += " " + re.sub(r"\D", "", p["phone"])
+                ct += " " + p["name"].lower()
+            mp = sd and (sd in acd)
+            if not (mb or mp or sq in ct): continue
+        fcl.append(cl)
+    # Сортировка
+    if sort_mode == "По дате изменения":
+        fcl.sort(key=lambda c: c.get("last_modified", ""), reverse=True)
+    elif sort_mode == "По дате создания":
+        fcl.sort(key=lambda c: c.get("created_at", ""), reverse=True)
+    elif sort_mode == "По алфавиту":
+        fcl.sort(key=lambda c: c.get("name", "").lower())
+    elif sort_mode == "По городу":
+        fcl.sort(key=lambda c: (c.get("city", "") or "").strip().lower())
+
+    # Постраничный вывод: создаём элементы интерфейса только для текущей страницы,
+    # а поиск и сортировка по-прежнему применяются ко всей базе.
+    _client_page_size = 50
+    _client_page_signature = f"{sq}|{ctf}|{sort_mode}|{len(fcl)}"
+    if st.session_state.get("_client_page_signature") != _client_page_signature:
+        st.session_state["_client_page_signature"] = _client_page_signature
+        st.session_state["_client_page"] = 0
+    _client_page_count = max(1, (len(fcl) + _client_page_size - 1) // _client_page_size)
+    _client_page = min(max(0, int(st.session_state.get("_client_page", 0))), _client_page_count - 1)
+    st.session_state["_client_page"] = _client_page
+    if all_clients:
+        _pg_left, _pg_info, _pg_right = st.columns([1, 4, 1])
+        with _pg_left:
+            if st.button("← Назад", key="clients_page_prev", disabled=_client_page <= 0, use_container_width=True):
+                st.session_state["_client_page"] = _client_page - 1
+                st.rerun()
+        with _pg_info:
+            _first_client_num = _client_page * _client_page_size + 1 if fcl else 0
+            _last_client_num = min((_client_page + 1) * _client_page_size, len(fcl))
+            st.markdown(f"<div style='text-align:center;padding:7px 0;color:#5A6B7D;font-size:.9rem;'>Клиенты {_first_client_num}–{_last_client_num} из {len(fcl)} · Страница {_client_page + 1} из {_client_page_count}</div>", unsafe_allow_html=True)
+        with _pg_right:
+            if st.button("Вперёд →", key="clients_page_next", disabled=_client_page >= _client_page_count - 1, use_container_width=True):
+                st.session_state["_client_page"] = _client_page + 1
+                st.rerun()
+        _visible_clients = fcl[_client_page * _client_page_size:(_client_page + 1) * _client_page_size]
+    else:
+        _visible_clients = []
+    if all_clients:
+        # Индексируем сделки один раз: не просматриваем всю базу для каждого клиента.
+        _clients_deals_by_id = {}
+        for _deal_item in st.session_state.crm_store.get("deals", []):
+            _clients_deals_by_id.setdefault(_deal_item.get("client_id"), []).append(_deal_item)
+
+        # Карточки клиентов в том же визуальном стиле, что и задачи/сделки:
+        # пастельный фон, тонкая рамка, цветной акцент слева и компактные метаданные.
+        _client_cards_css = []
+        for _style_client in _visible_clients:
+            _style_id = _style_client["id"]
+            _style_deals = _clients_deals_by_id.get(_style_id, [])
+            _style_active_deals = any(_sd.get("status", "Новый") in ("Новый", "В работе") for _sd in _style_deals)
+            _style_tasks = _style_client.get("tasks", [])
+            _style_overdue_tasks = any(not _st.get("done") and is_task_overdue(_st) for _st in _style_tasks)
+            _style_active_tasks = any(not _st.get("done") for _st in _style_tasks)
+            _style_accent = "#C62828" if _style_overdue_tasks else ("#4CAF50" if _style_active_tasks or _style_active_deals else "#AAB4C0")
+            _style_bg = "#F8FAFC" if _style_accent == "#AAB4C0" else ("#FFF8F8" if _style_accent == "#C62828" else "#F5FBF6")
+            _client_cards_css.append(f"""
+            .st-key-client_card_{_style_id} {{
+                background:{_style_bg}!important; border:1px solid #E0E6EF!important;
+                border-left:4px solid {_style_accent}!important; border-radius:9px!important;
+                padding:0.45rem 0.7rem 0.25rem 0.7rem!important; margin:0.35rem 0!important;
+                box-shadow:0 1px 2px rgba(30,45,65,0.04)!important;
+            }}
+            .st-key-client_card_{_style_id} .stButton > button {{
+                min-height:35px!important; height:auto!important; padding:0.3rem 0.35rem!important;
+                border-radius:6px!important; white-space:normal!important;
+            }}
+            .st-key-client_name_{_style_id} button {{
+                background:transparent!important; border:0!important; box-shadow:none!important;
+                color:#2C3E50!important; font-weight:700!important; font-size:0.94rem!important;
+                text-align:left!important; justify-content:flex-start!important; padding:0.15rem 0!important;
+            }}
+            .st-key-client_name_{_style_id} button:hover {{ color:#BC1661!important; }}
+            .st-key-client_deals_{_style_id}, .st-key-client_tasks_{_style_id} {{
+                display:flex!important; justify-content:center!important; align-items:center!important;
+            }}
+            .st-key-client_deals_{_style_id} [data-testid='stButton'], .st-key-client_tasks_{_style_id} [data-testid='stButton'] {{
+                width:100%!important; display:flex!important; justify-content:center!important;
+            }}
+            .st-key-client_deals_{_style_id} button,.st-key-client_tasks_{_style_id} button {{
+                width:100%!important; margin:0 auto!important; background:rgba(255,255,255,0.65)!important; border:1px solid #E0E6EF!important;
+                box-shadow:none!important; font-weight:700!important; font-size:0.82rem!important;
+            }}
+            .st-key-client_deals_{_style_id} button {{ color:{'#2E7D32' if _style_active_deals else '#526174'}!important; }}
+            .st-key-client_tasks_{_style_id} button {{ color:{'#C62828' if _style_overdue_tasks else ('#2E7D32' if _style_active_tasks else '#526174')}!important; }}
+            .st-key-client_deals_{_style_id} button:hover,.st-key-client_tasks_{_style_id} button:hover {{ border-color:#BC1661!important; }}
+            """)
+        if _client_cards_css:
+            st.markdown("<style>" + "".join(_client_cards_css) + "</style>", unsafe_allow_html=True)
+
+        # Единая шапка колонок для всего списка клиентов.
+        # Используем CSS sticky непосредственно на контейнере Streamlit:
+        # JS внутри st.components.v1.html работает в sandboxed iframe и не может
+        # надёжно управлять DOM родительской страницы.
+        st.markdown("""<style>
+        .st-key-clients_columns_header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 99999 !important;
+            background: #FFFFFF !important;
+            border-bottom: 1px solid #DCE2EA !important;
+            padding: 0.28rem 0 !important;
+            margin-top: 0.15rem !important;
+            box-shadow: 0 4px 7px rgba(30,45,65,0.12) !important;
+            box-sizing: border-box !important;
+        }
+        .st-key-clients_columns_header p { margin: 0 !important; }
+        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] { height:100% !important; }
+        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div {
+            min-height: 30px !important; height:100% !important;
+            display:flex !important; align-items:center !important; justify-content:center !important;
+        }
+        .st-key-clients_columns_header [data-testid='stHorizontalBlock'] {
+            align-items: stretch !important;
+        }
+        .st-key-clients_columns_header [data-testid='stColumn'] {
+            display:flex !important; align-items:center !important; justify-content:center !important;
+        }
+        .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div > div {
+            width:100% !important; text-align:center !important;
+        }
+        /* Кнопки счётчиков строго по центру тех же колонок, что и заголовки. */
+        .st-key-client_deals_ [data-testid='stButton'] { width:100%; }
+        </style>""", unsafe_allow_html=True)
+        with st.container(key="clients_columns_header"):
+            _h_main, _h_city, _h_phone, _h_category, _h_deals, _h_tasks, _h_sum = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
+            with _h_main: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:left;padding:.2rem 0'>Клиент</div>", unsafe_allow_html=True)
+            with _h_city: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
+            with _h_phone: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
+            with _h_category: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
+            with _h_deals: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-4px)'>Сделки</div>", unsafe_allow_html=True)
+            with _h_tasks: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Задачи</div>", unsafe_allow_html=True)
+            with _h_sum: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Сумма сделок</div>", unsafe_allow_html=True)
+
+        for cl in _visible_clients:
+            cl_deals = _clients_deals_by_id.get(cl["id"], [])
+            cl_tasks_all = cl.get("tasks", [])
+            deals_sum = sum(d.get("budget", 0) for d in cl_deals)
+            has_active_deals = any(d.get("status", "Новый") in ("Новый", "В работе") for d in cl_deals)
+            has_overdue_tasks = any(not t.get("done") and is_task_overdue(t) for t in cl_tasks_all)
+            has_active_tasks = any(not t.get("done") for t in cl_tasks_all)
+            _cid = cl["id"]
+            with st.container(key=f"client_card_{_cid}"):
+                _main_col, _city_col, _phone_col, _category_col, _deals_col, _tasks_col, _sum_col = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
+                with _main_col:
+                    with st.container(key=f"client_name_{_cid}"):
+                        if st.button(cl.get("name", "Без названия"), key=f"tbl_name_{_cid}", use_container_width=True):
+                            st.session_state["dialog_client_key"] = _cid
+                with _city_col:
+                    st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('city', '') or '—'))}</div>", unsafe_allow_html=True)
+                with _phone_col:
+                    st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('phone', '') or '—'))}</div>", unsafe_allow_html=True)
+                with _category_col:
+                    st.markdown(f"<div style='font-size:.78rem;color:#526174;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('category', 'Не определён') or 'Не определён'))}</div>", unsafe_allow_html=True)
+                with _deals_col:
+                    with st.container(key=f"client_deals_{_cid}"):
+                        if st.button(str(len(cl_deals)), key=f"tbl_deals_btn_{_cid}", use_container_width=True):
+                            st.session_state["dialog_client_deals_key"] = _cid
+                with _tasks_col:
+                    with st.container(key=f"client_tasks_{_cid}"):
+                        if st.button(str(len(cl_tasks_all)), key=f"tbl_tasks_{_cid}", use_container_width=True):
+                            st.session_state["dialog_client_tasks_key"] = _cid
+                with _sum_col:
+                    _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
+                    st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:center;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
+    else:
+        st.info("База клиентов пуста. Создайте первого клиента.")
+    # Показ диалогов
+    # Dialog dispatching — only one dialog at a time to prevent stacking
+    _dlg_cdt_deal = st.session_state.get("dialog_create_deal_task_deal_id")
+    _dlg_cct = st.session_state.get("dialog_create_client_task_client_id")
+    _dlg_ccdt = st.session_state.get("dialog_create_client_task_deal_select_cl_id")
+    _dlg_create_deal = st.session_state.get("dialog_create_deal_from_client")
+    _dialog_deal_task_key = st.session_state.get("dialog_deal_task_key")
+    _dialog_client_key = st.session_state.get("dialog_client_key")
+    _dialog_cd_key = st.session_state.get("dialog_client_deals_key")
+    _dialog_ct_key = st.session_state.get("dialog_client_tasks_key")
+    _dialog_deal_key = st.session_state.get("dialog_deal_key")
+    _dialog_task_key = st.session_state.get("dialog_task_key")
+    _dialog_task_number = st.session_state.get("dialog_task_number")
+    _dialog_task_client_id = st.session_state.get("dialog_task_client_id")
+    _dialog_task_deal_id = st.session_state.get("dialog_task_deal_id")
+    _deal_report_dialog = st.session_state.get("dialog_deal_report")
+    
+    _task_completion_state = st.session_state.get("dialog_task_completion")
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    _req_view_state = st.session_state.get("dialog_client_requisites_view")
+    _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
+    _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
+    _client_tab_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
+    _client_tab_calc_id = st.session_state.get("dialog_calculation_calc_id")
+    # Расчёт — дочернее окно сделки. Оно должно иметь приоритет над карточкой
+    # клиента/сделки, иначе старое состояние родительского окна перехватывает rerun.
+    if _req_view_state:
+        client_requisites_view_dialog(_req_view_state.get("client_id"), bool(_req_view_state.get("return_to_invoice")), _req_view_state.get("requisite_id"))
+    elif _client_tab_calc_deal_id and _client_tab_calc_id:
+        _client_tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_client_tab_calc_deal_id)), None)
+        _client_tab_calc = next((c for c in (_client_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_client_tab_calc_id) and not c.get("deleted")), None)
+        if _client_tab_calc_deal and _client_tab_calc:
+            # Consume the one-shot legacy request before opening the workspace tab.
+            # Leaving these IDs in session_state causes every later button click to
+            # dispatch the calculation dialog again and steal the interaction.
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+            deal_calculation_dialog(_client_tab_calc_deal_id, _client_tab_calc_id)
+        else:
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+    elif _req_dialog_client_id:
+        client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
+    elif _invoice_dialog_state:
+        invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
+    elif _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _task_completion_state:
+        task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
+    elif _deal_report_dialog:
+        deal_report_dialog(_deal_report_dialog.get("deal_id"), _deal_report_dialog.get("action", "close"))
+    elif _dlg_cdt_deal:
+        _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
+        deal_create_task_dialog(_dlg_cdt_deal, _cdt_client_id)
+    elif _dialog_task_key and _dialog_task_number and _dialog_task_client_id:
+        _target_client = get_client_by_id(_dialog_task_client_id)
+        _target_task = None
+        _target_deal = None
+        if _target_client:
+            for _candidate_task in _target_client.get("tasks", []):
+                if str(_candidate_task.get("task_number", "")) == str(_dialog_task_number) and str(_candidate_task.get("deal_id", "") or "") == str(_dialog_task_deal_id or ""):
+                    _target_task = _candidate_task
+                    break
+            if _target_task and _target_task.get("deal_id"):
+                _target_deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id", "")) == str(_target_task.get("deal_id", ""))), None)
+        if _target_task and _target_client:
+            task_detail_dialog(_target_task, _target_client, _target_deal, _dialog_task_key)
+        else:
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("dialog_task_number", None)
+            st.session_state.pop("dialog_task_client_id", None)
+            st.session_state.pop("dialog_task_deal_id", None)
+            st.warning("Не удалось найти выбранную задачу. Обновите список и попробуйте ещё раз.")
+    elif _dialog_client_key and st.session_state.get("_dialog_return_stack"):
+        client_detail_dialog(_dialog_client_key)
+    elif _dlg_cct:
+        client_create_task_dialog(_dlg_cct)
+    elif _dlg_ccdt:
+        client_create_deal_task_dialog(_dlg_ccdt)
+    elif _dlg_create_deal:
+        create_deal_dialog(_dlg_create_deal)
+    elif _dialog_deal_task_key and st.session_state.active_tab == "Клиенты":
+        _found = False
+        for _cl in st.session_state.crm_store.get("clients", []):
+            if _found: break
+            for _dd in st.session_state.crm_store.get("deals", []):
+                if _dd.get("client_id") == _cl["id"]:
+                    _deal_tasks = [t for t in _cl.get("tasks", []) if t.get("deal_id") == _dd["id"]]
+                    for dti, _tk in enumerate(_deal_tasks):
+                        _expected_key = f"dls_dl_{_dd['id']}_{dti}"
+                        if _dialog_deal_task_key == _expected_key:
+                            _deal = _dd
+                            task_detail_dialog(_tk, _cl, _deal, _dialog_deal_task_key)
+                            _found = True
+                            break
+                    if _found: break
+    elif st.session_state.get("_open_created_task"):
+        _created_tk = st.session_state["_open_created_task"]
+        for _cl in st.session_state.crm_store.get("clients", []):
+            for _tk in _cl.get("tasks", []):
+                if _tk is _created_tk or _tk.get("task_number") == _created_tk.get("task_number"):
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, f"created_{_tk.get('task_number', '')}")
+                    break
+    elif _dialog_task_key and st.session_state.get("dialog_client_tasks_key"):
+        _found = False
+        for _cl in st.session_state.crm_store.get("clients", []):
+            if _found: break
+            for _ti, _tk in enumerate(_cl.get("tasks", [])):
+                _tk_keys = []
+                _client_tasks = [t for t in _cl.get("tasks", []) if not t.get("deal_id")]
+                _cl_deals_list = [d for d in st.session_state.crm_store.get("deals", []) if d.get("client_id") == _cl["id"]]
+                _deal_tasks_list = []
+                for _dd in _cl_deals_list:
+                    for _tt in _cl.get("tasks", []):
+                        if _tt.get("deal_id") == _dd["id"]:
+                            _deal_tasks_list.append(_tt)
+                for cti, _ in enumerate(_client_tasks):
+                    _tk_keys.append(f"ct_cl_{_cl['id']}_{cti}")
+                for dti, _ in enumerate(_deal_tasks_list):
+                    _tk_keys.append(f"ct_dl_{_cl['id']}_{dti}")
+                if _dialog_task_key in _tk_keys:
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, _dialog_task_key)
+                    _found = True
+                    break
+    elif st.session_state.get("_open_created_deal"):
+        for _d in st.session_state.crm_store.get("deals", []):
+            if _d["id"] == st.session_state["_open_created_deal"]:
+                _cl = get_client_by_id(_d.get("client_id"))
+                deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
+                break
+    elif _dialog_client_key:
+        client_detail_dialog(_dialog_client_key)
+    elif not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")) and _dialog_deal_key and st.session_state.active_tab == "Клиенты":
+        for _d in st.session_state.crm_store.get("deals", []):
+            if _d["id"] == _dialog_deal_key:
+                _cl = get_client_by_id(_d.get("client_id"))
+                deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
+                break
+    elif _dialog_cd_key:
+        client_deals_dialog(_dialog_cd_key)
+    elif _dialog_ct_key:
+        client_tasks_dialog(_dialog_ct_key)
+
+elif st.session_state.active_tab == "Сделки":
+    all_deals = st.session_state.crm_store.get("deals", [])
+    cid_map = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
+    # Compute sums
+    work_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "В работе")
+    closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта" and str(d.get("closed_date", ""))[:7] == moscow_now().strftime("%Y-%m"))
+    closed_all_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта")
+    # Sum metrics (no heading)
+    mcols = st.columns(3 if st.session_state.get("user_role") == "admin" else 2)
+    with mcols[0]:
+        st.metric("Сумма сделок в работе", f"{work_sum:,.0f} руб.".replace(",", " "))
+    with mcols[1]:
+        st.metric("Сумма успешно завершенных сделок за месяц", f"{closed_sum:,.0f} руб.".replace(",", " "))
+    if st.session_state.get("user_role") == "admin":
+        with mcols[2]:
+            st.metric("Сумма успешно завершенных сделок за весь период", f"{closed_all_sum:,.0f} руб.".replace(",", " "))
+    # Collapsed sections for closed and archive at top
+    with st.expander(f"Успешно завершены ({sum(1 for d in all_deals if d.get('status') == 'Сделка закрыта')})", expanded=False):
+        closed_search = st.text_input("Поиск среди завершённых:", key="deal_closed_search", placeholder="Введите текст...").strip().lower()
+        closed_deals = [d for d in all_deals if d.get("status") == "Сделка закрыта"]
+        if closed_search:
+            closed_deals = [d for d in closed_deals if closed_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
+        closed_deals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
+        if closed_deals:
+            for d in closed_deals:
+                render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+        else:
+            st.caption("Завершённых сделок нет.")
+    with st.expander(f"Архив ({sum(1 for d in all_deals if d.get('status') == 'Архив')})", expanded=False):
+        arch_search = st.text_input("Поиск среди архива:", key="deal_arch_search", placeholder="Введите текст...").strip().lower()
+        arch_deals = [d for d in all_deals if d.get("status") == "Архив"]
+        if arch_search:
+            arch_deals = [d for d in arch_deals if arch_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
+        arch_deals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
+        if arch_deals:
+            for d in arch_deals:
+                render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+        else:
+            st.caption("Архив пуст.")
+    # Search + manager filter — same style as Clients tab
+    with st.container(key="deals_sticky_header"):
+        fc1, fc2, fc3 = st.columns([3, 2.4, 2])
+        with fc1:
+            _deal_search_now = st.text_input("Поиск", key="deal_tab_search", placeholder="Поиск...", label_visibility="collapsed")
             st.components.v1.html("""<script>
             (function () {
               var w = window;
               try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
-              function renameSearchHint() {
+              function renameHint() {
                 try {
-                  var root = w.document.querySelector('.st-key-search_input_key');
+                  var root = w.document.querySelector('.st-key-deal_tab_search');
                   if (!root) return;
                   root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
-     if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
 
                     ['title', 'aria-label'].forEach(function (attr) {
                       var value = el.getAttribute(attr);
-                      if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) {
-                        el.setAttribute(attr, 'Нажми Ввод для поиска');
-                      }
+                      if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
                     });
                   });
                 } catch (e) {}
               }
-              renameSearchHint();
-              try {
-                var observer = new w.MutationObserver(renameSearchHint);
-                observer.observe(w.document.body, { childList: true, subtree: true, characterData: true, attributes: true });
-              } catch (e) {}
+              renameHint();
+              try { new w.MutationObserver(renameHint).observe(w.document.body, {childList:true,subtree:true,characterData:true,attributes:true}); } catch (e) {}
             })();
             </script>""", height=0)
-            sq = (_search_input_now or "").strip().lower()
-        with _sort_col:
-            sort_options = ["По дате изменения", "По дате создания", "По алфавиту", "По городу"]
-            sort_mode = st.selectbox("Сортировка", sort_options, key="client_sort_select", label_visibility="collapsed")
-            st.session_state.client_sort_mode = sort_mode
-        with _sort_cat_col:
-            cat_options = ["Все"] + CATEGORIES
-            ctf = st.selectbox("Категория", cat_options, index=0, key="cat_filter", label_visibility="collapsed")
-        all_clients = st.session_state.crm_store["clients"]
-        fcl = []
-        sd = re.sub(r"\D", "", sq)
-        if sd and sd[0] in ("7", "8") and len(sd) > 1: sd = sd[1:]
-        for cl in all_clients:
-            if ctf != "Все" and cl.get("category", "Не определён") != ctf: continue
-            if sq:
-                ct = f"{cl['name']} {cl.get('city','')} {cl.get('phone','')} {cl.get('email','')} {cl.get('address','')} {cl.get('base_comment','')}".lower()
-                mb = sq in ct
-                acd = re.sub(r"\D", "", cl['phone'])
-                for p in cl.get("extra_phones", []):
-                    acd += " " + re.sub(r"\D", "", p["phone"])
-                    ct += " " + p["name"].lower()
-                mp = sd and (sd in acd)
-                if not (mb or mp or sq in ct): continue
-            fcl.append(cl)
-        # Сортировка
-        if sort_mode == "По дате изменения":
-            fcl.sort(key=lambda c: c.get("last_modified", ""), reverse=True)
-        elif sort_mode == "По дате создания":
-            fcl.sort(key=lambda c: c.get("created_at", ""), reverse=True)
-        elif sort_mode == "По алфавиту":
-            fcl.sort(key=lambda c: c.get("name", "").lower())
-        elif sort_mode == "По городу":
-            fcl.sort(key=lambda c: (c.get("city", "") or "").strip().lower())
 
-        # Постраничный вывод: создаём элементы интерфейса только для текущей страницы,
-        # а поиск и сортировка по-прежнему применяются ко всей базе.
-        _client_page_size = 50
-        _client_page_signature = f"{sq}|{ctf}|{sort_mode}|{len(fcl)}"
-        if st.session_state.get("_client_page_signature") != _client_page_signature:
-            st.session_state["_client_page_signature"] = _client_page_signature
-            st.session_state["_client_page"] = 0
-        _client_page_count = max(1, (len(fcl) + _client_page_size - 1) // _client_page_size)
-        _client_page = min(max(0, int(st.session_state.get("_client_page", 0))), _client_page_count - 1)
-        st.session_state["_client_page"] = _client_page
-        if all_clients:
-            _pg_left, _pg_info, _pg_right = st.columns([1, 4, 1])
-            with _pg_left:
-                if st.button("← Назад", key="clients_page_prev", disabled=_client_page <= 0, use_container_width=True):
-                    st.session_state["_client_page"] = _client_page - 1
-                    st.rerun()
-            with _pg_info:
-                _first_client_num = _client_page * _client_page_size + 1 if fcl else 0
-                _last_client_num = min((_client_page + 1) * _client_page_size, len(fcl))
-                st.markdown(f"<div style='text-align:center;padding:7px 0;color:#5A6B7D;font-size:.9rem;'>Клиенты {_first_client_num}–{_last_client_num} из {len(fcl)} · Страница {_client_page + 1} из {_client_page_count}</div>", unsafe_allow_html=True)
-            with _pg_right:
-                if st.button("Вперёд →", key="clients_page_next", disabled=_client_page >= _client_page_count - 1, use_container_width=True):
-                    st.session_state["_client_page"] = _client_page + 1
-                    st.rerun()
-            _visible_clients = fcl[_client_page * _client_page_size:(_client_page + 1) * _client_page_size]
-        else:
-            _visible_clients = []
-        if all_clients:
-            # Индексируем сделки один раз: не просматриваем всю базу для каждого клиента.
-            _clients_deals_by_id = {}
-            for _deal_item in st.session_state.crm_store.get("deals", []):
-                _clients_deals_by_id.setdefault(_deal_item.get("client_id"), []).append(_deal_item)
-
-            # Карточки клиентов в том же визуальном стиле, что и задачи/сделки:
-            # пастельный фон, тонкая рамка, цветной акцент слева и компактные метаданные.
-            _client_cards_css = []
-            for _style_client in _visible_clients:
-                _style_id = _style_client["id"]
-                _style_deals = _clients_deals_by_id.get(_style_id, [])
-                _style_active_deals = any(_sd.get("status", "Новый") in ("Новый", "В работе") for _sd in _style_deals)
-                _style_tasks = _style_client.get("tasks", [])
-                _style_overdue_tasks = any(not _st.get("done") and is_task_overdue(_st) for _st in _style_tasks)
-                _style_active_tasks = any(not _st.get("done") for _st in _style_tasks)
-                _style_accent = "#C62828" if _style_overdue_tasks else ("#4CAF50" if _style_active_tasks or _style_active_deals else "#AAB4C0")
-                _style_bg = "#F8FAFC" if _style_accent == "#AAB4C0" else ("#FFF8F8" if _style_accent == "#C62828" else "#F5FBF6")
-                _client_cards_css.append(f"""
-                .st-key-client_card_{_style_id} {{
-                    background:{_style_bg}!important; border:1px solid #E0E6EF!important;
-                    border-left:4px solid {_style_accent}!important; border-radius:9px!important;
-                    padding:0.45rem 0.7rem 0.25rem 0.7rem!important; margin:0.35rem 0!important;
-                    box-shadow:0 1px 2px rgba(30,45,65,0.04)!important;
-                }}
-                .st-key-client_card_{_style_id} .stButton > button {{
-                    min-height:35px!important; height:auto!important; padding:0.3rem 0.35rem!important;
-                    border-radius:6px!important; white-space:normal!important;
-                }}
-                .st-key-client_name_{_style_id} button {{
-                    background:transparent!important; border:0!important; box-shadow:none!important;
-                    color:#2C3E50!important; font-weight:700!important; font-size:0.94rem!important;
-                    text-align:left!important; justify-content:flex-start!important; padding:0.15rem 0!important;
-                }}
-                .st-key-client_name_{_style_id} button:hover {{ color:#BC1661!important; }}
-                .st-key-client_deals_{_style_id}, .st-key-client_tasks_{_style_id} {{
-                    display:flex!important; justify-content:center!important; align-items:center!important;
-                }}
-                .st-key-client_deals_{_style_id} [data-testid='stButton'], .st-key-client_tasks_{_style_id} [data-testid='stButton'] {{
-                    width:100%!important; display:flex!important; justify-content:center!important;
-                }}
-                .st-key-client_deals_{_style_id} button,.st-key-client_tasks_{_style_id} button {{
-                    width:100%!important; margin:0 auto!important; background:rgba(255,255,255,0.65)!important; border:1px solid #E0E6EF!important;
-                    box-shadow:none!important; font-weight:700!important; font-size:0.82rem!important;
-                }}
-                .st-key-client_deals_{_style_id} button {{ color:{'#2E7D32' if _style_active_deals else '#526174'}!important; }}
-                .st-key-client_tasks_{_style_id} button {{ color:{'#C62828' if _style_overdue_tasks else ('#2E7D32' if _style_active_tasks else '#526174')}!important; }}
-                .st-key-client_deals_{_style_id} button:hover,.st-key-client_tasks_{_style_id} button:hover {{ border-color:#BC1661!important; }}
-                """)
-            if _client_cards_css:
-                st.markdown("<style>" + "".join(_client_cards_css) + "</style>", unsafe_allow_html=True)
-
-            # Единая шапка колонок для всего списка клиентов.
-            # Используем CSS sticky непосредственно на контейнере Streamlit:
-            # JS внутри st.components.v1.html работает в sandboxed iframe и не может
-            # надёжно управлять DOM родительской страницы.
-            st.markdown("""<style>
-            .st-key-clients_columns_header {
-                position: sticky !important;
-                top: 0 !important;
-                z-index: 99999 !important;
-                background: #FFFFFF !important;
-                border-bottom: 1px solid #DCE2EA !important;
-                padding: 0.28rem 0 !important;
-                margin-top: 0.15rem !important;
-                box-shadow: 0 4px 7px rgba(30,45,65,0.12) !important;
-                box-sizing: border-box !important;
-            }
-            .st-key-clients_columns_header p { margin: 0 !important; }
-            .st-key-clients_columns_header [data-testid='stMarkdownContainer'] { height:100% !important; }
-            .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div {
-                min-height: 30px !important; height:100% !important;
-                display:flex !important; align-items:center !important; justify-content:center !important;
-            }
-            .st-key-clients_columns_header [data-testid='stHorizontalBlock'] {
-                align-items: stretch !important;
-            }
-            .st-key-clients_columns_header [data-testid='stColumn'] {
-                display:flex !important; align-items:center !important; justify-content:center !important;
-            }
-            .st-key-clients_columns_header [data-testid='stMarkdownContainer'] > div > div {
-                width:100% !important; text-align:center !important;
-            }
-            /* Кнопки счётчиков строго по центру тех же колонок, что и заголовки. */
-            .st-key-client_deals_ [data-testid='stButton'] { width:100%; }
-            </style>""", unsafe_allow_html=True)
-            with st.container(key="clients_columns_header"):
-                _h_main, _h_city, _h_phone, _h_category, _h_deals, _h_tasks, _h_sum = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
-                with _h_main: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:left;padding:.2rem 0'>Клиент</div>", unsafe_allow_html=True)
-                with _h_city: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Город</div>", unsafe_allow_html=True)
-                with _h_phone: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Телефон</div>", unsafe_allow_html=True)
-                with _h_category: st.markdown("<div style='width:100%;font-weight:700;font-size:.78rem;color:#526174;text-align:center;padding:.2rem 0'>Категория</div>", unsafe_allow_html=True)
-                with _h_deals: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-4px)'>Сделки</div>", unsafe_allow_html=True)
-                with _h_tasks: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Задачи</div>", unsafe_allow_html=True)
-                with _h_sum: st.markdown("<div style='width:100%;font-weight:700;font-size:.75rem;color:#2C3E50;text-align:center;padding:.2rem 0;transform:translateX(-15px)'>Сумма сделок</div>", unsafe_allow_html=True)
-
-            for cl in _visible_clients:
-                cl_deals = _clients_deals_by_id.get(cl["id"], [])
-                cl_tasks_all = cl.get("tasks", [])
-                deals_sum = sum(d.get("budget", 0) for d in cl_deals)
-                has_active_deals = any(d.get("status", "Новый") in ("Новый", "В работе") for d in cl_deals)
-                has_overdue_tasks = any(not t.get("done") and is_task_overdue(t) for t in cl_tasks_all)
-                has_active_tasks = any(not t.get("done") for t in cl_tasks_all)
-                _cid = cl["id"]
-                with st.container(key=f"client_card_{_cid}"):
-                    _main_col, _city_col, _phone_col, _category_col, _deals_col, _tasks_col, _sum_col = st.columns([3.4, 1.35, 1.65, 1.35, 0.8, 0.8, 1.5], gap="small")
-                    with _main_col:
-                        with st.container(key=f"client_name_{_cid}"):
-                            if st.button(cl.get("name", "Без названия"), key=f"tbl_name_{_cid}", use_container_width=True):
-                                st.session_state["dialog_client_key"] = _cid
-                    with _city_col:
-                        st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('city', '') or '—'))}</div>", unsafe_allow_html=True)
-                    with _phone_col:
-                        st.markdown(f"<div style='font-size:.78rem;color:#68778A;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('phone', '') or '—'))}</div>", unsafe_allow_html=True)
-                    with _category_col:
-                        st.markdown(f"<div style='font-size:.78rem;color:#526174;padding-top:.55rem;text-align:center;overflow-wrap:anywhere'>{html.escape(str(cl.get('category', 'Не определён') or 'Не определён'))}</div>", unsafe_allow_html=True)
-                    with _deals_col:
-                        with st.container(key=f"client_deals_{_cid}"):
-                            if st.button(str(len(cl_deals)), key=f"tbl_deals_btn_{_cid}", use_container_width=True):
-                                st.session_state["dialog_client_deals_key"] = _cid
-                    with _tasks_col:
-                        with st.container(key=f"client_tasks_{_cid}"):
-                            if st.button(str(len(cl_tasks_all)), key=f"tbl_tasks_{_cid}", use_container_width=True):
-                                st.session_state["dialog_client_tasks_key"] = _cid
-                    with _sum_col:
-                        _sum_str = f"{deals_sum:,.0f} руб.".replace(",", " ")
-                        st.markdown(f"<div style='font-size:.84rem;font-weight:750;color:#2C3E50;text-align:center;padding-top:.15rem;white-space:nowrap'>{_sum_str}</div>", unsafe_allow_html=True)
-        else:
-            st.info("База клиентов пуста. Создайте первого клиента.")
-        # Показ диалогов
-        # Dialog dispatching — only one dialog at a time to prevent stacking
-        _dlg_cdt_deal = st.session_state.get("dialog_create_deal_task_deal_id")
-        _dlg_cct = st.session_state.get("dialog_create_client_task_client_id")
-        _dlg_ccdt = st.session_state.get("dialog_create_client_task_deal_select_cl_id")
-        _dlg_create_deal = st.session_state.get("dialog_create_deal_from_client")
-        _dialog_deal_task_key = st.session_state.get("dialog_deal_task_key")
-        _dialog_client_key = st.session_state.get("dialog_client_key")
-        _dialog_cd_key = st.session_state.get("dialog_client_deals_key")
-        _dialog_ct_key = st.session_state.get("dialog_client_tasks_key")
-        _dialog_deal_key = st.session_state.get("dialog_deal_key")
-        _dialog_task_key = st.session_state.get("dialog_task_key")
-        _dialog_task_number = st.session_state.get("dialog_task_number")
-        _dialog_task_client_id = st.session_state.get("dialog_task_client_id")
-        _dialog_task_deal_id = st.session_state.get("dialog_task_deal_id")
-        _deal_report_dialog = st.session_state.get("dialog_deal_report")
-        
-        _task_completion_state = st.session_state.get("dialog_task_completion")
-        _pending_reminder = st.session_state.get("_pending_reminder_dialog")
-        _req_view_state = st.session_state.get("dialog_client_requisites_view")
-        _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
-        _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
-        _client_tab_calc_deal_id = st.session_state.get("dialog_calculation_deal_id")
-        _client_tab_calc_id = st.session_state.get("dialog_calculation_calc_id")
-        # Расчёт — дочернее окно сделки. Оно должно иметь приоритет над карточкой
-        # клиента/сделки, иначе старое состояние родительского окна перехватывает rerun.
-        if _req_view_state:
-            client_requisites_view_dialog(_req_view_state.get("client_id"), bool(_req_view_state.get("return_to_invoice")), _req_view_state.get("requisite_id"))
-        elif _client_tab_calc_deal_id and _client_tab_calc_id:
-            _client_tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_client_tab_calc_deal_id)), None)
-            _client_tab_calc = next((c for c in (_client_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_client_tab_calc_id) and not c.get("deleted")), None)
-            if _client_tab_calc_deal and _client_tab_calc:
-                # Consume the one-shot legacy request before opening the workspace tab.
-                # Leaving these IDs in session_state causes every later button click to
-                # dispatch the calculation dialog again and steal the interaction.
-                st.session_state.pop("dialog_calculation_deal_id", None)
-                st.session_state.pop("dialog_calculation_calc_id", None)
-                deal_calculation_dialog(_client_tab_calc_deal_id, _client_tab_calc_id)
-            else:
-                st.session_state.pop("dialog_calculation_deal_id", None)
-                st.session_state.pop("dialog_calculation_calc_id", None)
-        elif _req_dialog_client_id:
-            client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
-        elif _invoice_dialog_state:
-            invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
-        elif _pending_reminder:
-            create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
-        elif _task_completion_state:
-            task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
-        elif _deal_report_dialog:
-            deal_report_dialog(_deal_report_dialog.get("deal_id"), _deal_report_dialog.get("action", "close"))
-        elif _dlg_cdt_deal:
-            _cdt_client_id = st.session_state.get("dialog_create_deal_task_client_id")
-            deal_create_task_dialog(_dlg_cdt_deal, _cdt_client_id)
-        elif _dialog_task_key and _dialog_task_number and _dialog_task_client_id:
-            _target_client = get_client_by_id(_dialog_task_client_id)
-            _target_task = None
-            _target_deal = None
-            if _target_client:
-                for _candidate_task in _target_client.get("tasks", []):
-                    if str(_candidate_task.get("task_number", "")) == str(_dialog_task_number) and str(_candidate_task.get("deal_id", "") or "") == str(_dialog_task_deal_id or ""):
-                        _target_task = _candidate_task
-                        break
-                if _target_task and _target_task.get("deal_id"):
-                    _target_deal = next((x for x in st.session_state.crm_store.get("deals", []) if str(x.get("id", "")) == str(_target_task.get("deal_id", ""))), None)
-            if _target_task and _target_client:
-                task_detail_dialog(_target_task, _target_client, _target_deal, _dialog_task_key)
-            else:
-                st.session_state.pop("dialog_task_key", None)
-                st.session_state.pop("dialog_task_number", None)
-                st.session_state.pop("dialog_task_client_id", None)
-                st.session_state.pop("dialog_task_deal_id", None)
-                st.warning("Не удалось найти выбранную задачу. Обновите список и попробуйте ещё раз.")
-        elif _dialog_client_key and st.session_state.get("_dialog_return_stack"):
-            client_detail_dialog(_dialog_client_key)
-        elif _dlg_cct:
-            client_create_task_dialog(_dlg_cct)
-        elif _dlg_ccdt:
-            client_create_deal_task_dialog(_dlg_ccdt)
-        elif _dlg_create_deal:
-            create_deal_dialog(_dlg_create_deal)
-        elif _dialog_deal_task_key and st.session_state.active_tab == "Клиенты":
-            _found = False
-            for _cl in st.session_state.crm_store.get("clients", []):
-                if _found: break
-                for _dd in st.session_state.crm_store.get("deals", []):
-                    if _dd.get("client_id") == _cl["id"]:
-                        _deal_tasks = [t for t in _cl.get("tasks", []) if t.get("deal_id") == _dd["id"]]
-                        for dti, _tk in enumerate(_deal_tasks):
-                            _expected_key = f"dls_dl_{_dd['id']}_{dti}"
-                            if _dialog_deal_task_key == _expected_key:
-                                _deal = _dd
-                                task_detail_dialog(_tk, _cl, _deal, _dialog_deal_task_key)
-                                _found = True
-                                break
-                        if _found: break
-        elif st.session_state.get("_open_created_task"):
-            _created_tk = st.session_state["_open_created_task"]
-            for _cl in st.session_state.crm_store.get("clients", []):
-                for _tk in _cl.get("tasks", []):
-                    if _tk is _created_tk or _tk.get("task_number") == _created_tk.get("task_number"):
-                        _deal = None
-                        for _d in st.session_state.crm_store.get("deals", []):
-                            if _d["id"] == _tk.get("deal_id"):
-                                _deal = _d
-                                break
-                        task_detail_dialog(_tk, _cl, _deal, f"created_{_tk.get('task_number', '')}")
-                        break
-        elif _dialog_task_key and st.session_state.get("dialog_client_tasks_key"):
-            _found = False
-            for _cl in st.session_state.crm_store.get("clients", []):
-                if _found: break
-                for _ti, _tk in enumerate(_cl.get("tasks", [])):
-                    _tk_keys = []
-                    _client_tasks = [t for t in _cl.get("tasks", []) if not t.get("deal_id")]
-                    _cl_deals_list = [d for d in st.session_state.crm_store.get("deals", []) if d.get("client_id") == _cl["id"]]
-                    _deal_tasks_list = []
-                    for _dd in _cl_deals_list:
-                        for _tt in _cl.get("tasks", []):
-                            if _tt.get("deal_id") == _dd["id"]:
-                                _deal_tasks_list.append(_tt)
-                    for cti, _ in enumerate(_client_tasks):
-                        _tk_keys.append(f"ct_cl_{_cl['id']}_{cti}")
-                    for dti, _ in enumerate(_deal_tasks_list):
-                        _tk_keys.append(f"ct_dl_{_cl['id']}_{dti}")
-                    if _dialog_task_key in _tk_keys:
-                        _deal = None
-                        for _d in st.session_state.crm_store.get("deals", []):
-                            if _d["id"] == _tk.get("deal_id"):
-                                _deal = _d
-                                break
-                        task_detail_dialog(_tk, _cl, _deal, _dialog_task_key)
-                        _found = True
-                        break
-        elif st.session_state.get("_open_created_deal"):
-            for _d in st.session_state.crm_store.get("deals", []):
-                if _d["id"] == st.session_state["_open_created_deal"]:
-                    _cl = get_client_by_id(_d.get("client_id"))
-                    deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
-                    break
-        elif _dialog_client_key:
-            client_detail_dialog(_dialog_client_key)
-        elif not (st.session_state.get("dialog_deal_report") or st.session_state.get("dialog_create_deal_task_deal_id")) and _dialog_deal_key and st.session_state.active_tab == "Клиенты":
-            for _d in st.session_state.crm_store.get("deals", []):
-                if _d["id"] == _dialog_deal_key:
-                    _cl = get_client_by_id(_d.get("client_id"))
-                    deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
-                    break
-        elif _dialog_cd_key:
-            client_deals_dialog(_dialog_cd_key)
-        elif _dialog_ct_key:
-            client_tasks_dialog(_dialog_ct_key)
-
-    elif st.session_state.active_tab == "Сделки":
-        all_deals = st.session_state.crm_store.get("deals", [])
-        cid_map = {c["id"]: c for c in st.session_state.crm_store.get("clients", [])}
-        # Compute sums
-        work_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "Новый") == "В работе")
-        closed_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта" and str(d.get("closed_date", ""))[:7] == moscow_now().strftime("%Y-%m"))
-        closed_all_sum = sum(d.get("budget", 0) for d in all_deals if d.get("status", "") == "Сделка закрыта")
-        # Sum metrics (no heading)
-        mcols = st.columns(3 if st.session_state.get("user_role") == "admin" else 2)
-        with mcols[0]:
-            st.metric("Сумма сделок в работе", f"{work_sum:,.0f} руб.".replace(",", " "))
-        with mcols[1]:
-            st.metric("Сумма успешно завершенных сделок за месяц", f"{closed_sum:,.0f} руб.".replace(",", " "))
-        if st.session_state.get("user_role") == "admin":
-            with mcols[2]:
-                st.metric("Сумма успешно завершенных сделок за весь период", f"{closed_all_sum:,.0f} руб.".replace(",", " "))
-        # Collapsed sections for closed and archive at top
-        with st.expander(f"Успешно завершены ({sum(1 for d in all_deals if d.get('status') == 'Сделка закрыта')})", expanded=False):
-            closed_search = st.text_input("Поиск среди завершённых:", key="deal_closed_search", placeholder="Введите текст...").strip().lower()
-            closed_deals = [d for d in all_deals if d.get("status") == "Сделка закрыта"]
-            if closed_search:
-                closed_deals = [d for d in closed_deals if closed_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
-            closed_deals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
-            if closed_deals:
-                for d in closed_deals:
-                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-            else:
-                st.caption("Завершённых сделок нет.")
-        with st.expander(f"Архив ({sum(1 for d in all_deals if d.get('status') == 'Архив')})", expanded=False):
-            arch_search = st.text_input("Поиск среди архива:", key="deal_arch_search", placeholder="Введите текст...").strip().lower()
-            arch_deals = [d for d in all_deals if d.get("status") == "Архив"]
-            if arch_search:
-                arch_deals = [d for d in arch_deals if arch_search in f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cid_map.get(d.get('client_id'), {}) or {}).get('name', '')}".lower()]
-            arch_deals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
-            if arch_deals:
-                for d in arch_deals:
-                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-            else:
-                st.caption("Архив пуст.")
-        # Search + manager filter — same style as Clients tab
-        with st.container(key="deals_sticky_header"):
-            fc1, fc2, fc3 = st.columns([3, 2.4, 2])
-            with fc1:
-                _deal_search_now = st.text_input("Поиск", key="deal_tab_search", placeholder="Поиск...", label_visibility="collapsed")
-                st.components.v1.html("""<script>
-                (function () {
-                  var w = window;
-                  try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
-                  function renameHint() {
-                    try {
-                      var root = w.document.querySelector('.st-key-deal_tab_search');
-                      if (!root) return;
-                      root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
-     if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
-
-                        ['title', 'aria-label'].forEach(function (attr) {
-                          var value = el.getAttribute(attr);
-                          if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
-                        });
-                      });
-                    } catch (e) {}
-                  }
-                  renameHint();
-                  try { new w.MutationObserver(renameHint).observe(w.document.body, {childList:true,subtree:true,characterData:true,attributes:true}); } catch (e) {}
-                })();
-                </script>""", height=0)
-
-                deal_search = (_deal_search_now or "").strip().lower()
-            with fc2:
-                deal_sort_mode = st.selectbox(
-                    "Сортировка", ["По дате создания", "По дате изменения", "По номеру сделки"],
-                    index=1, key="deal_tab_sort", label_visibility="collapsed"
-                )
-            with fc3:
-                _deal_mgr_list = ["Все"] + get_managers_list()
-                _cu_name_deal = st.session_state.get("user_name", "")
-                _default_idx_deal = 0
-                if _cu_name_deal and _cu_name_deal in _deal_mgr_list:
-                    _default_idx_deal = _deal_mgr_list.index(_cu_name_deal)
-                mgr_filter = st.selectbox("Ответственный", _deal_mgr_list, index=_default_idx_deal, key="deal_tab_mgr", label_visibility="collapsed")
-        st.components.v1.html('''<script>
-    (function(){
-      var w=window;
-      try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}
-      var sel='.st-key-deals_sticky_header';
-      function init(){
-        var el=w.document.querySelector(sel);
-        if(!el){setTimeout(init,200);return;}
-        var ph=w.document.createElement('div');
-        ph.className='deals-sticky-placeholder';
-        el.parentNode.insertBefore(ph,el);
-        var fixed=false;
-        var origTop=0;
-        function measure(){
-          var r=el.getBoundingClientRect();
-          origTop=r.top+w.scrollY;
-        }
-        function onScroll(){
-          if(fixed){
-            if(w.scrollY<origTop-1){
-              el.classList.remove('deals-sticky-fixed');
-              ph.style.height='0px';
-              fixed=false;
-            }
-          } else {
-            var r=el.getBoundingClientRect();
-            if(r.top<0){
-              measure();
-              el.classList.add('deals-sticky-fixed');
-              ph.style.height=r.height+'px';
-              fixed=true;
-            }
-          }
-        }
-        w.addEventListener('scroll',onScroll,{passive:true});
-        setTimeout(measure,500);
-        setTimeout(onScroll,600);
-      }
-      init();
-    })();
-    </script>''', height=0)
-        # Пять активных колонок: новые, в работе, ожидание оплаты, оплачено, на паузе.
-        fdeals = []
-        _board_stage_changed = False
-        for d in all_deals:
-            _old_board_stage = d.get("status", "Новый")
-            _sync_deal_board_stage_from_payment(d)
-            if d.get("status", "Новый") != _old_board_stage:
-                _board_stage_changed = True
-            s = d.get("status", "Новый")
-            if s not in ("Новый", "В работе", "Ожидание оплаты", "Оплачено", "На паузе"):
-                continue
-            cl = cid_map.get(d.get("client_id"))
-            if mgr_filter != "Все" and d.get("manager", "") != mgr_filter:
-                continue
-            if deal_search:
-                hay = f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cl.get('name', '') if cl else '')}".lower()
-                if deal_search not in hay:
-                    continue
-            fdeals.append(d)
-        if _board_stage_changed:
-            save_data(st.session_state.crm_store)
-        if deal_sort_mode == "По дате создания":
-            fdeals.sort(key=lambda d: str(d.get("created_at") or ""), reverse=True)
-        elif deal_sort_mode == "По номеру сделки":
-            fdeals.sort(key=lambda d: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", str(d.get("deal_number") or d.get("title") or ""))], reverse=False)
-        else:
-            fdeals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
-        new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
-        work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
-        waiting_payment_deals = [d for d in fdeals if d.get("status", "") == "Ожидание оплаты"]
-        paid_deals = [d for d in fdeals if d.get("status", "") == "Оплачено"]
-        paused_deals = [d for d in fdeals if d.get("status", "") == "На паузе"]
-        st.markdown("""<style>
-        /* Визуальная система доски сделок повторяет доску задач. */
-        .st-key-deals_col_new, .st-key-deals_col_work, .st-key-deals_col_waiting,
-        .st-key-deals_col_paid, .st-key-deals_col_paused {
-            background: #F8FAFC !important;
-            border: 1px solid #E2E8F0 !important;
-            border-radius: 12px !important;
-            padding: 0.7rem 0.65rem 0.8rem 0.65rem !important;
-            min-height: 150px !important;
-            box-shadow: 0 1px 2px rgba(30,45,65,0.025) !important;
-        }
-        .st-key-deals_col_new h3, .st-key-deals_col_work h3,
-        .st-key-deals_col_waiting h3, .st-key-deals_col_paid h3,
-        .st-key-deals_col_paused h3 {
-            color: #344256 !important;
-            font-size: 0.98rem !important;
-            font-weight: 700 !important;
-            letter-spacing: -0.015em !important;
-            line-height: 1.35 !important;
-            padding-bottom: 0.55rem !important;
-            margin-bottom: 0.6rem !important;
-            border-bottom: 1px solid #E5EAF0 !important;
-        }
-        .st-key-deals_col_new [data-testid="stCaptionContainer"],
-        .st-key-deals_col_work [data-testid="stCaptionContainer"],
-        .st-key-deals_col_waiting [data-testid="stCaptionContainer"],
-        .st-key-deals_col_paid [data-testid="stCaptionContainer"],
-        .st-key-deals_col_paused [data-testid="stCaptionContainer"] {
-            color: #8492A6 !important;
-            font-size: 0.82rem !important;
-        }
-        </style>""", unsafe_allow_html=True)
-        col_new, col_work, col_waiting, col_paid, col_paused = st.columns(5, gap="small")
-        with col_new:
-            with st.container(key="deals_col_new", border=True):
-                st.subheader(f"Новые ({len(new_deals)})")
-                if new_deals:
-                    for d in new_deals:
-                        render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-                else:
-                    st.caption("Новых сделок нет.")
-        with col_work:
-            with st.container(key="deals_col_work", border=True):
-                st.subheader(f"В работе ({len(work_deals)})")
-                if work_deals:
-                    for d in work_deals:
-                        render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-                else:
-                    st.caption("Сделок в работе нет.")
-        with col_waiting:
-            with st.container(key="deals_col_waiting", border=True):
-                st.subheader(f"Ожидание оплаты ({len(waiting_payment_deals)})")
-                if waiting_payment_deals:
-                    for d in waiting_payment_deals:
-                        render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-                else:
-                    st.caption("Сделок в ожидании оплаты нет.")
-        with col_paid:
-            with st.container(key="deals_col_paid", border=True):
-                st.subheader(f"Оплачено ({len(paid_deals)})")
-                if paid_deals:
-                    for d in paid_deals:
-                        render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-                else:
-                    st.caption("Оплаченных сделок нет.")
-        with col_paused:
-            with st.container(key="deals_col_paused", border=True):
-                st.subheader(f"На паузе ({len(paused_deals)})")
-                if paused_deals:
-                    for d in paused_deals:
-                        render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
-                else:
-                    st.caption("Сделок на паузе нет.")
-        # Единая диспетчеризация окон сделок: сначала дочернее окно, затем карточка сделки.
-        # Streamlit должен отрисовать только один @st.dialog за один проход.
-        _dialog_deal_key = st.session_state.get("dialog_deal_key")
-        _created_deal_id = st.session_state.get("_open_created_deal")
-        _active_deal_dialog_id = _dialog_deal_key or _created_deal_id
-        _deal_report_state = st.session_state.get("dialog_deal_report")
-        _deal_task_dialog_id = st.session_state.get("dialog_create_deal_task_deal_id")
-        _dialog_task_number = st.session_state.get("dialog_task_number")
-        _dialog_task_client_id = st.session_state.get("dialog_task_client_id")
-        _dialog_task_deal_id = st.session_state.get("dialog_task_deal_id")
-        _dialog_task_key = st.session_state.get("dialog_task_key")
-
-        _task_completion_state = st.session_state.get("dialog_task_completion")
-        _pending_reminder = st.session_state.get("_pending_reminder_dialog")
-        _req_view_state = st.session_state.get("dialog_client_requisites_view")
-        _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
-        _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
-        _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
-        _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
-        # На вкладке «Сделки» дочерние окна должны иметь приоритет над карточкой сделки.
-        # Иначе после нажатия «Сформировать счёт» старый dialog_deal_key открывает сделку.
-        if _req_view_state:
-            client_requisites_view_dialog(_req_view_state.get("client_id"), bool(_req_view_state.get("return_to_invoice")), _req_view_state.get("requisite_id"))
-        elif _req_dialog_client_id:
-            client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
-        elif _invoice_dialog_state:
-            invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
-        elif _dialog_calculation_deal_id and _dialog_calculation_calc_id:
-            _tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_dialog_calculation_deal_id)), None)
-            _tab_calc = next((c for c in (_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_dialog_calculation_calc_id) and not c.get("deleted")), None)
-            if _tab_calc_deal and _tab_calc:
-                # Consume this one-shot request; otherwise it is replayed on every rerun.
-                st.session_state.pop("dialog_calculation_deal_id", None)
-                st.session_state.pop("dialog_calculation_calc_id", None)
-                deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
-            else:
-                st.session_state.pop("dialog_calculation_deal_id", None)
-                st.session_state.pop("dialog_calculation_calc_id", None)
-                _active = st.session_state.get("_crm_active_dialog") or {}
-                if _active.get("name") == "deal_calculation_dialog":
-                    st.session_state.pop("_crm_active_dialog", None)
-        elif _pending_reminder:
-            create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
-        elif _task_completion_state:
-            task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
-        elif _deal_report_state:
-            deal_report_dialog(_deal_report_state.get("deal_id"), _deal_report_state.get("action", "close"))
-        elif _deal_task_dialog_id:
-            _task_client_id = st.session_state.get("dialog_create_deal_task_client_id")
-            deal_create_task_dialog(_deal_task_dialog_id, _task_client_id)
-        elif _dialog_task_key and _dialog_task_number and _dialog_task_client_id:
-            _target_client = get_client_by_id(_dialog_task_client_id)
-            _target_task = None
-            _target_deal = None
-            if _target_client:
-                for _candidate_task in _target_client.get("tasks", []):
-                    if (str(_candidate_task.get("task_number", "")) == str(_dialog_task_number)
-                            and str(_candidate_task.get("deal_id", "") or "") == str(_dialog_task_deal_id or "")):
-                        _target_task = _candidate_task
-                        break
-            if _target_task:
-                if _target_task.get("deal_id"):
-                    _target_deal = next((x for x in st.session_state.crm_store.get("deals", [])
-                                         if str(x.get("id", "")) == str(_target_task.get("deal_id", ""))), None)
-                task_detail_dialog(_target_task, _target_client, _target_deal, _dialog_task_key)
-            else:
-                st.session_state.pop("dialog_task_key", None)
-                st.session_state.pop("dialog_task_number", None)
-                st.session_state.pop("dialog_task_client_id", None)
-                st.session_state.pop("dialog_task_deal_id", None)
-                st.warning("Не удалось найти выбранную задачу. Обновите список и попробуйте ещё раз.")
-        elif _active_deal_dialog_id and not st.session_state.get("dialog_client_key"):
-            for _d in st.session_state.crm_store.get("deals", []):
-                if _d["id"] == _active_deal_dialog_id:
-                    _cl = cid_map.get(_d.get("client_id"))
-                    deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
-                    break
-
-    elif st.session_state.active_tab == "Товары и прайс":
-        st.markdown("## Товары и прайс")
-        st.caption("Редактирование каталога применяется к новым добавлениям товаров. Цены уже сохранённых позиций в сделках не меняются.")
-        _is_catalog_admin = st.session_state.get("user_role") == "admin"
-        _catalog = st.session_state.crm_store.setdefault("products", copy.deepcopy(DEFAULT_PRODUCT_CATALOG))
-        # Ensure older catalog rows expose the Characteristics column in the editor.
-        for _product_row in _catalog:
-            _product_row.setdefault("characteristics", "")
-        if _is_catalog_admin:
-            st.info("Изменяйте текущие цены, добавляйте новые товары и снимайте позиции с продажи через флажок «Активен». Удалять товар не нужно: архивные позиции остаются в истории сделок.")
-            _edited_catalog = st.data_editor(
-                _catalog,
-                key="products_catalog_editor_v2",
-                num_rows="dynamic",
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "id": st.column_config.TextColumn("ID", help="Служебный идентификатор; для новых товаров можно оставить пустым"),
-                    "sku": st.column_config.TextColumn("Артикул"),
-                    "name": st.column_config.TextColumn("Наименование", required=True),
-                    "characteristics": st.column_config.TextColumn("Характеристики"),
-                    "unit": st.column_config.TextColumn("Ед. изм.", required=True),
-                    "price": st.column_config.NumberColumn("Цена, ₽", min_value=0, step=10, format="%.2f", required=True),
-                    "note": st.column_config.TextColumn("Примечание"),
-                    "active": st.column_config.CheckboxColumn("Активен", default=True),
-                },
+            deal_search = (_deal_search_now or "").strip().lower()
+        with fc2:
+            deal_sort_mode = st.selectbox(
+                "Сортировка", ["По дате создания", "По дате изменения", "По номеру сделки"],
+                index=1, key="deal_tab_sort", label_visibility="collapsed"
             )
-            if st.button("Сохранить прайс", key="save_products_catalog", type="primary", use_container_width=True):
-                _rows = _edited_catalog.to_dict("records") if hasattr(_edited_catalog, "to_dict") else list(_edited_catalog)
-                _old_catalog_by_id = {str(x.get("id", x.get("sku", ""))): x for x in st.session_state.crm_store.get("products", [])}
-                _clean_rows = []
-                _price_changes = []
-                _seen_ids = set()
-                for _i, _row in enumerate(_rows):
-                    _raw_name = _row.get("name", "")
-                    _name = "" if _raw_name is None or str(_raw_name).strip().lower() in ("nan", "none") else str(_raw_name).strip()
-                    if not _name:
-                        continue
-                    _raw_sku = _row.get("sku", "")
-                    _sku = "" if _raw_sku is None or str(_raw_sku).strip().lower() in ("nan", "none") else str(_raw_sku).strip()
-                    _raw_id = _row.get("id", "")
-                    _pid = str((_raw_id if _raw_id is not None and str(_raw_id).strip().lower() not in ("nan", "none") else "") or _sku or uuid.uuid4()).strip()
-                    if _pid in _seen_ids:
-                        _pid = f"{_pid}-{uuid.uuid4().hex[:6]}"
-                    _seen_ids.add(_pid)
-                    try:
-                        _price = float(_row.get("price", 0) or 0)
-                        if _price != _price: _price = 0.0
-                        _price = max(0.0, _price)
-                    except (TypeError, ValueError): _price = 0.0
-                    _old_product = _old_catalog_by_id.get(_pid)
-                    if _old_product is not None:
-                        try: _old_price = float(_old_product.get("price", 0) or 0)
-                        except (TypeError, ValueError): _old_price = 0.0
-                        if round(_old_price, 2) != round(_price, 2):
-                            _price_changes.append({"date":now_str(),"product_id":_pid,"sku":_sku,"name":_name,"old_price":_old_price,"new_price":_price,"author":st.session_state.get("user_name", st.session_state.get("user_login", ""))})
-                    _clean_rows.append({"id":_pid,"sku":_sku,"name":_name,"characteristics":str(_row.get("characteristics", "") or ""),"unit":str(_row.get("unit", "шт.") or "шт."),"price":_price,"note":str(_row.get("note", "") or ""),"active":bool(_row.get("active", True))})
-                st.session_state.crm_store["products"] = _clean_rows
-                st.session_state.crm_store.setdefault("product_price_history", []).extend(_price_changes)
-                save_data(st.session_state.crm_store)
-                st.toast("Прайс сохранён", icon="✅")
-                st.rerun()
-            with st.expander("История изменения цен", expanded=False):
-                _price_history = list(reversed(st.session_state.crm_store.get("product_price_history", [])[-100:]))
-                if _price_history:
-                    st.dataframe(_price_history, use_container_width=True, hide_index=True)
-                else:
-                    st.caption("Изменений цен пока нет.")
-        else:
-            st.dataframe(_catalog, use_container_width=True, hide_index=True)
-            st.caption("Изменять прайс может администратор CRM. Обратитесь к нему, если нужно обновить цену или добавить товар.")
-
-    elif st.session_state.active_tab == "Задачи":
-        now_time = moscow_now()
-        # Верхняя шапка раздела задач: современный компактный стиль без изменения общей навигации CRM.
-        st.markdown("""
-        <style>
-        .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0; padding: 0; border:0; }
-        .tasks-page-title-row, .tasks-page-title, .tasks-page-subtitle, .tasks-page-mark { display:none !important; }
-        div[data-testid="stTabs"] { margin-top:0.1rem; }
-        div[data-testid="stTabs"] > div[role="tablist"] { gap:0.35rem; border-bottom:1px solid #E3E8EF; padding:0.15rem 0 0.45rem 0; }
-        div[data-testid="stTabs"] button[role="tab"] { border:1px solid #E0E6EF; border-radius:9px 9px 0 0; padding:0.55rem 1.15rem; color:#65758B; font-weight:600; background:rgba(255,255,255,0.55); }
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.055) !important; }
-        div[data-testid="stTabs"] button[role="tab"] p { font-size:0.92rem; }
-        .st-key-task_search_input input { min-height:44px; border-radius:9px !important; }
-        .st-key-task_filter_mgr [data-testid="stSelectbox"] > div > div { min-height:44px; border-radius:9px !important; }
-        .st-key-task_search_input, .st-key-task_filter_mgr { padding-top:0.1rem; }
-        .tasks-filter-caption { color:#8A97A8; font-size:0.74rem; font-weight:650; text-transform:uppercase; letter-spacing:0.055em; margin:0.05rem 0 0.2rem 0.1rem; }
-        @media (min-width: 900px) {
-          div[data-testid="stTabs"] button[role="tab"] { min-width:118px; }
+        with fc3:
+            _deal_mgr_list = ["Все"] + get_managers_list()
+            _cu_name_deal = st.session_state.get("user_name", "")
+            _default_idx_deal = 0
+            if _cu_name_deal and _cu_name_deal in _deal_mgr_list:
+                _default_idx_deal = _deal_mgr_list.index(_cu_name_deal)
+            mgr_filter = st.selectbox("Ответственный", _deal_mgr_list, index=_default_idx_deal, key="deal_tab_mgr", label_visibility="collapsed")
+    st.components.v1.html('''<script>
+(function(){
+  var w=window;
+  try{if(window.parent&&window.parent!==window)w=window.parent;}catch(e){}
+  var sel='.st-key-deals_sticky_header';
+  function init(){
+    var el=w.document.querySelector(sel);
+    if(!el){setTimeout(init,200);return;}
+    var ph=w.document.createElement('div');
+    ph.className='deals-sticky-placeholder';
+    el.parentNode.insertBefore(ph,el);
+    var fixed=false;
+    var origTop=0;
+    function measure(){
+      var r=el.getBoundingClientRect();
+      origTop=r.top+w.scrollY;
+    }
+    function onScroll(){
+      if(fixed){
+        if(w.scrollY<origTop-1){
+          el.classList.remove('deals-sticky-fixed');
+          ph.style.height='0px';
+          fixed=false;
         }
-        </style>
-        """, unsafe_allow_html=True)
-        plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
-        with plan_sub1:
-            col_sq, col_sort, col_mf = st.columns([3.2, 2.4, 1.8], gap="small")
-            with col_sq:
-                _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="⌕  Поиск по задачам...", label_visibility="collapsed")
-                st.components.v1.html("""<script>
-                (function () {
-                  var w = window;
-                  try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
-                  function renameHint() {
-                    try {
-                      var root = w.document.querySelector('.st-key-task_search_input');
-                      if (!root) return;
-                      root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
-     if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
+      } else {
+        var r=el.getBoundingClientRect();
+        if(r.top<0){
+          measure();
+          el.classList.add('deals-sticky-fixed');
+          ph.style.height=r.height+'px';
+          fixed=true;
+        }
+      }
+    }
+    w.addEventListener('scroll',onScroll,{passive:true});
+    setTimeout(measure,500);
+    setTimeout(onScroll,600);
+  }
+  init();
+})();
+</script>''', height=0)
+    # Пять активных колонок: новые, в работе, ожидание оплаты, оплачено, на паузе.
+    fdeals = []
+    _board_stage_changed = False
+    for d in all_deals:
+        _old_board_stage = d.get("status", "Новый")
+        _sync_deal_board_stage_from_payment(d)
+        if d.get("status", "Новый") != _old_board_stage:
+            _board_stage_changed = True
+        s = d.get("status", "Новый")
+        if s not in ("Новый", "В работе", "Ожидание оплаты", "Оплачено", "На паузе"):
+            continue
+        cl = cid_map.get(d.get("client_id"))
+        if mgr_filter != "Все" and d.get("manager", "") != mgr_filter:
+            continue
+        if deal_search:
+            hay = f"{d.get('deal_number', '')} {d.get('deal_title', '')} {d.get('title', '')} {(cl.get('name', '') if cl else '')}".lower()
+            if deal_search not in hay:
+                continue
+        fdeals.append(d)
+    if _board_stage_changed:
+        save_data(st.session_state.crm_store)
+    if deal_sort_mode == "По дате создания":
+        fdeals.sort(key=lambda d: str(d.get("created_at") or ""), reverse=True)
+    elif deal_sort_mode == "По номеру сделки":
+        fdeals.sort(key=lambda d: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", str(d.get("deal_number") or d.get("title") or ""))], reverse=False)
+    else:
+        fdeals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
+    new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
+    work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
+    waiting_payment_deals = [d for d in fdeals if d.get("status", "") == "Ожидание оплаты"]
+    paid_deals = [d for d in fdeals if d.get("status", "") == "Оплачено"]
+    paused_deals = [d for d in fdeals if d.get("status", "") == "На паузе"]
+    st.markdown("""<style>
+    /* Визуальная система доски сделок повторяет доску задач. */
+    .st-key-deals_col_new, .st-key-deals_col_work, .st-key-deals_col_waiting,
+    .st-key-deals_col_paid, .st-key-deals_col_paused {
+        background: #F8FAFC !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        padding: 0.7rem 0.65rem 0.8rem 0.65rem !important;
+        min-height: 150px !important;
+        box-shadow: 0 1px 2px rgba(30,45,65,0.025) !important;
+    }
+    .st-key-deals_col_new h3, .st-key-deals_col_work h3,
+    .st-key-deals_col_waiting h3, .st-key-deals_col_paid h3,
+    .st-key-deals_col_paused h3 {
+        color: #344256 !important;
+        font-size: 0.98rem !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.015em !important;
+        line-height: 1.35 !important;
+        padding-bottom: 0.55rem !important;
+        margin-bottom: 0.6rem !important;
+        border-bottom: 1px solid #E5EAF0 !important;
+    }
+    .st-key-deals_col_new [data-testid="stCaptionContainer"],
+    .st-key-deals_col_work [data-testid="stCaptionContainer"],
+    .st-key-deals_col_waiting [data-testid="stCaptionContainer"],
+    .st-key-deals_col_paid [data-testid="stCaptionContainer"],
+    .st-key-deals_col_paused [data-testid="stCaptionContainer"] {
+        color: #8492A6 !important;
+        font-size: 0.82rem !important;
+    }
+    </style>""", unsafe_allow_html=True)
+    col_new, col_work, col_waiting, col_paid, col_paused = st.columns(5, gap="small")
+    with col_new:
+        with st.container(key="deals_col_new", border=True):
+            st.subheader(f"Новые ({len(new_deals)})")
+            if new_deals:
+                for d in new_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Новых сделок нет.")
+    with col_work:
+        with st.container(key="deals_col_work", border=True):
+            st.subheader(f"В работе ({len(work_deals)})")
+            if work_deals:
+                for d in work_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Сделок в работе нет.")
+    with col_waiting:
+        with st.container(key="deals_col_waiting", border=True):
+            st.subheader(f"Ожидание оплаты ({len(waiting_payment_deals)})")
+            if waiting_payment_deals:
+                for d in waiting_payment_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Сделок в ожидании оплаты нет.")
+    with col_paid:
+        with st.container(key="deals_col_paid", border=True):
+            st.subheader(f"Оплачено ({len(paid_deals)})")
+            if paid_deals:
+                for d in paid_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Оплаченных сделок нет.")
+    with col_paused:
+        with st.container(key="deals_col_paused", border=True):
+            st.subheader(f"На паузе ({len(paused_deals)})")
+            if paused_deals:
+                for d in paused_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Сделок на паузе нет.")
+    # Единая диспетчеризация окон сделок: сначала дочернее окно, затем карточка сделки.
+    # Streamlit должен отрисовать только один @st.dialog за один проход.
+    _dialog_deal_key = st.session_state.get("dialog_deal_key")
+    _created_deal_id = st.session_state.get("_open_created_deal")
+    _active_deal_dialog_id = _dialog_deal_key or _created_deal_id
+    _deal_report_state = st.session_state.get("dialog_deal_report")
+    _deal_task_dialog_id = st.session_state.get("dialog_create_deal_task_deal_id")
+    _dialog_task_number = st.session_state.get("dialog_task_number")
+    _dialog_task_client_id = st.session_state.get("dialog_task_client_id")
+    _dialog_task_deal_id = st.session_state.get("dialog_task_deal_id")
+    _dialog_task_key = st.session_state.get("dialog_task_key")
 
-                        ['title', 'aria-label'].forEach(function (attr) {
-                          var value = el.getAttribute(attr);
-                          if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
-                        });
-                      });
-                    } catch (e) {}
-                  }
-                  renameHint();
-                  try { new w.MutationObserver(renameHint).observe(w.document.body, {childList:true,subtree:true,characterData:true,attributes:true}); } catch (e) {}
-                })();
-                </script>""", height=0)
+    _task_completion_state = st.session_state.get("dialog_task_completion")
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    _req_view_state = st.session_state.get("dialog_client_requisites_view")
+    _req_dialog_client_id = st.session_state.get("dialog_client_requisites_client_id")
+    _invoice_dialog_state = st.session_state.get("dialog_invoice_request")
+    _dialog_calculation_deal_id = st.session_state.get("dialog_calculation_deal_id")
+    _dialog_calculation_calc_id = st.session_state.get("dialog_calculation_calc_id")
+    # На вкладке «Сделки» дочерние окна должны иметь приоритет над карточкой сделки.
+    # Иначе после нажатия «Сформировать счёт» старый dialog_deal_key открывает сделку.
+    if _req_view_state:
+        client_requisites_view_dialog(_req_view_state.get("client_id"), bool(_req_view_state.get("return_to_invoice")), _req_view_state.get("requisite_id"))
+    elif _req_dialog_client_id:
+        client_requisites_dialog(_req_dialog_client_id, bool(st.session_state.get("dialog_client_requisites_return_to_invoice", False)))
+    elif _invoice_dialog_state:
+        invoice_document_dialog(_invoice_dialog_state.get("deal_id"), _invoice_dialog_state.get("calc_id"))
+    elif _dialog_calculation_deal_id and _dialog_calculation_calc_id:
+        _tab_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_dialog_calculation_deal_id)), None)
+        _tab_calc = next((c for c in (_tab_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_dialog_calculation_calc_id) and not c.get("deleted")), None)
+        if _tab_calc_deal and _tab_calc:
+            # Consume this one-shot request; otherwise it is replayed on every rerun.
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+            deal_calculation_dialog(_dialog_calculation_deal_id, _dialog_calculation_calc_id)
+        else:
+            st.session_state.pop("dialog_calculation_deal_id", None)
+            st.session_state.pop("dialog_calculation_calc_id", None)
+            _active = st.session_state.get("_crm_active_dialog") or {}
+            if _active.get("name") == "deal_calculation_dialog":
+                st.session_state.pop("_crm_active_dialog", None)
+    elif _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _task_completion_state:
+        task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
+    elif _deal_report_state:
+        deal_report_dialog(_deal_report_state.get("deal_id"), _deal_report_state.get("action", "close"))
+    elif _deal_task_dialog_id:
+        _task_client_id = st.session_state.get("dialog_create_deal_task_client_id")
+        deal_create_task_dialog(_deal_task_dialog_id, _task_client_id)
+    elif _dialog_task_key and _dialog_task_number and _dialog_task_client_id:
+        _target_client = get_client_by_id(_dialog_task_client_id)
+        _target_task = None
+        _target_deal = None
+        if _target_client:
+            for _candidate_task in _target_client.get("tasks", []):
+                if (str(_candidate_task.get("task_number", "")) == str(_dialog_task_number)
+                        and str(_candidate_task.get("deal_id", "") or "") == str(_dialog_task_deal_id or "")):
+                    _target_task = _candidate_task
+                    break
+        if _target_task:
+            if _target_task.get("deal_id"):
+                _target_deal = next((x for x in st.session_state.crm_store.get("deals", [])
+                                     if str(x.get("id", "")) == str(_target_task.get("deal_id", ""))), None)
+            task_detail_dialog(_target_task, _target_client, _target_deal, _dialog_task_key)
+        else:
+            st.session_state.pop("dialog_task_key", None)
+            st.session_state.pop("dialog_task_number", None)
+            st.session_state.pop("dialog_task_client_id", None)
+            st.session_state.pop("dialog_task_deal_id", None)
+            st.warning("Не удалось найти выбранную задачу. Обновите список и попробуйте ещё раз.")
+    elif _active_deal_dialog_id and not st.session_state.get("dialog_client_key"):
+        for _d in st.session_state.crm_store.get("deals", []):
+            if _d["id"] == _active_deal_dialog_id:
+                _cl = cid_map.get(_d.get("client_id"))
+                deal_detail_dialog(_d, _cl, cu, f"deal_{_d['id']}")
+                break
 
-                task_search = (_task_search_now or "").strip().lower()
-            with col_sort:
-                task_sort_mode = st.selectbox(
-                    "Сортировка", ["По дате создания", "По дате изменения", "По номеру задачи"],
-                    index=1, key="task_tab_sort", label_visibility="collapsed"
-                )
-            with col_mf:
-                _task_mgr_list = ["Все"] + get_managers_list()
-                _cu_name_task = st.session_state.get("user_name", "")
-                _default_idx_task = 0
-                if _cu_name_task and _cu_name_task in _task_mgr_list:
-                    _default_idx_task = _task_mgr_list.index(_cu_name_task)
-                mf = st.selectbox("Ответственный", _task_mgr_list, index=_default_idx_task, key="task_filter_mgr", label_visibility="collapsed", help="Показать задачи выбранного ответственного")
-            di = {d["id"]: d for d in st.session_state.crm_store.get("deals", [])}
-            aat = []
-            new_tasks = []
-            review_tasks = []
-            for cl in st.session_state.crm_store.get("clients", []):
-                for ti, tk in enumerate(cl.get("tasks", [])):
-                    tm = tk.get("manager", "")
-                    dtm = tk.get("delegated_to", "")
-                    _is_review = tk.get("done", False) and not tk.get("reviewed", False)
-                    if _is_review:
-                        _tcb = tk.get("created_by", "")
-                        _tcb_name = ""
-                        if _tcb:
-                            _u = get_user_by_login(_tcb)
-                            if _u: _tcb_name = _u.get("name", _u.get("login", _tcb))
-                            else: _tcb_name = _tcb
-                        if mf != "Все":
-                            if st.session_state.user_role != "admin" and _tcb != st.session_state.get("user_login", "") and _tcb_name != mf: continue
-                        elif mf != "Все":
-                            if _tcb_name != mf and _tcb != mf: continue
+elif st.session_state.active_tab == "Товары и прайс":
+    st.markdown("## Товары и прайс")
+    st.caption("Редактирование каталога применяется к новым добавлениям товаров. Цены уже сохранённых позиций в сделках не меняются.")
+    _is_catalog_admin = st.session_state.get("user_role") == "admin"
+    _catalog = st.session_state.crm_store.setdefault("products", copy.deepcopy(DEFAULT_PRODUCT_CATALOG))
+    # Ensure older catalog rows expose the Characteristics column in the editor.
+    for _product_row in _catalog:
+        _product_row.setdefault("characteristics", "")
+    if _is_catalog_admin:
+        st.info("Изменяйте текущие цены, добавляйте новые товары и снимайте позиции с продажи через флажок «Активен». Удалять товар не нужно: архивные позиции остаются в истории сделок.")
+        _edited_catalog = st.data_editor(
+            _catalog,
+            key="products_catalog_editor_v2",
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "id": st.column_config.TextColumn("ID", help="Служебный идентификатор; для новых товаров можно оставить пустым"),
+                "sku": st.column_config.TextColumn("Артикул"),
+                "name": st.column_config.TextColumn("Наименование", required=True),
+                "characteristics": st.column_config.TextColumn("Характеристики"),
+                "unit": st.column_config.TextColumn("Ед. изм.", required=True),
+                "price": st.column_config.NumberColumn("Цена, ₽", min_value=0, step=10, format="%.2f", required=True),
+                "note": st.column_config.TextColumn("Примечание"),
+                "active": st.column_config.CheckboxColumn("Активен", default=True),
+            },
+        )
+        if st.button("Сохранить прайс", key="save_products_catalog", type="primary", use_container_width=True):
+            _rows = _edited_catalog.to_dict("records") if hasattr(_edited_catalog, "to_dict") else list(_edited_catalog)
+            _old_catalog_by_id = {str(x.get("id", x.get("sku", ""))): x for x in st.session_state.crm_store.get("products", [])}
+            _clean_rows = []
+            _price_changes = []
+            _seen_ids = set()
+            for _i, _row in enumerate(_rows):
+                _raw_name = _row.get("name", "")
+                _name = "" if _raw_name is None or str(_raw_name).strip().lower() in ("nan", "none") else str(_raw_name).strip()
+                if not _name:
+                    continue
+                _raw_sku = _row.get("sku", "")
+                _sku = "" if _raw_sku is None or str(_raw_sku).strip().lower() in ("nan", "none") else str(_raw_sku).strip()
+                _raw_id = _row.get("id", "")
+                _pid = str((_raw_id if _raw_id is not None and str(_raw_id).strip().lower() not in ("nan", "none") else "") or _sku or uuid.uuid4()).strip()
+                if _pid in _seen_ids:
+                    _pid = f"{_pid}-{uuid.uuid4().hex[:6]}"
+                _seen_ids.add(_pid)
+                try:
+                    _price = float(_row.get("price", 0) or 0)
+                    if _price != _price: _price = 0.0
+                    _price = max(0.0, _price)
+                except (TypeError, ValueError): _price = 0.0
+                _old_product = _old_catalog_by_id.get(_pid)
+                if _old_product is not None:
+                    try: _old_price = float(_old_product.get("price", 0) or 0)
+                    except (TypeError, ValueError): _old_price = 0.0
+                    if round(_old_price, 2) != round(_price, 2):
+                        _price_changes.append({"date":now_str(),"product_id":_pid,"sku":_sku,"name":_name,"old_price":_old_price,"new_price":_price,"author":st.session_state.get("user_name", st.session_state.get("user_login", ""))})
+                _clean_rows.append({"id":_pid,"sku":_sku,"name":_name,"characteristics":str(_row.get("characteristics", "") or ""),"unit":str(_row.get("unit", "шт.") or "шт."),"price":_price,"note":str(_row.get("note", "") or ""),"active":bool(_row.get("active", True))})
+            st.session_state.crm_store["products"] = _clean_rows
+            st.session_state.crm_store.setdefault("product_price_history", []).extend(_price_changes)
+            save_data(st.session_state.crm_store)
+            st.toast("Прайс сохранён", icon="✅")
+            st.rerun()
+        with st.expander("История изменения цен", expanded=False):
+            _price_history = list(reversed(st.session_state.crm_store.get("product_price_history", [])[-100:]))
+            if _price_history:
+                st.dataframe(_price_history, use_container_width=True, hide_index=True)
+            else:
+                st.caption("Изменений цен пока нет.")
+    else:
+        st.dataframe(_catalog, use_container_width=True, hide_index=True)
+        st.caption("Изменять прайс может администратор CRM. Обратитесь к нему, если нужно обновить цену или добавить товар.")
+
+elif st.session_state.active_tab == "Задачи":
+    now_time = moscow_now()
+    # Верхняя шапка раздела задач: современный компактный стиль без изменения общей навигации CRM.
+    st.markdown("""
+    <style>
+    .tasks-page-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin: 0; padding: 0; border:0; }
+    .tasks-page-title-row, .tasks-page-title, .tasks-page-subtitle, .tasks-page-mark { display:none !important; }
+    div[data-testid="stTabs"] { margin-top:0.1rem; }
+    div[data-testid="stTabs"] > div[role="tablist"] { gap:0.35rem; border-bottom:1px solid #E3E8EF; padding:0.15rem 0 0.45rem 0; }
+    div[data-testid="stTabs"] button[role="tab"] { border:1px solid #E0E6EF; border-radius:9px 9px 0 0; padding:0.55rem 1.15rem; color:#65758B; font-weight:600; background:rgba(255,255,255,0.55); }
+    div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] { color:#BC1661 !important; border-color:#F0C5D8 !important; border-bottom:3px solid #BC1661 !important; background:rgba(188,22,97,0.055) !important; }
+    div[data-testid="stTabs"] button[role="tab"] p { font-size:0.92rem; }
+    .st-key-task_search_input input { min-height:44px; border-radius:9px !important; }
+    .st-key-task_filter_mgr [data-testid="stSelectbox"] > div > div { min-height:44px; border-radius:9px !important; }
+    .st-key-task_search_input, .st-key-task_filter_mgr { padding-top:0.1rem; }
+    .tasks-filter-caption { color:#8A97A8; font-size:0.74rem; font-weight:650; text-transform:uppercase; letter-spacing:0.055em; margin:0.05rem 0 0.2rem 0.1rem; }
+    @media (min-width: 900px) {
+      div[data-testid="stTabs"] button[role="tab"] { min-width:118px; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    plan_sub1, plan_sub2 = st.tabs(["Активные", "Архив"])
+    with plan_sub1:
+        col_sq, col_sort, col_mf = st.columns([3.2, 2.4, 1.8], gap="small")
+        with col_sq:
+            _task_search_now = st.text_input("Поиск", key="task_search_input", placeholder="⌕  Поиск по задачам...", label_visibility="collapsed")
+            st.components.v1.html("""<script>
+            (function () {
+              var w = window;
+              try { if (window.parent && window.parent !== window) w = window.parent; } catch (e) {}
+              function renameHint() {
+                try {
+                  var root = w.document.querySelector('.st-key-task_search_input');
+                  if (!root) return;
+                  root.querySelectorAll('[data-testid="InputInstructions"], [title], [aria-label]').forEach(function (el) {
+ if (el.matches('[data-testid="InputInstructions"]') && /press\\s+enter\\s+to\\s+apply/i.test(el.textContent || '') && !el.hasAttribute('data-crm-search-hint')) el.setAttribute('data-crm-search-hint', 'Нажми Ввод для поиска');
+
+                    ['title', 'aria-label'].forEach(function (attr) {
+                      var value = el.getAttribute(attr);
+                      if (value && /press\\s+enter\\s+to\\s+apply/i.test(value)) el.setAttribute(attr, 'Нажми Ввод для поиска');
+                    });
+                  });
+                } catch (e) {}
+              }
+              renameHint();
+              try { new w.MutationObserver(renameHint).observe(w.document.body, {childList:true,subtree:true,characterData:true,attributes:true}); } catch (e) {}
+            })();
+            </script>""", height=0)
+
+            task_search = (_task_search_now or "").strip().lower()
+        with col_sort:
+            task_sort_mode = st.selectbox(
+                "Сортировка", ["По дате создания", "По дате изменения", "По номеру задачи"],
+                index=1, key="task_tab_sort", label_visibility="collapsed"
+            )
+        with col_mf:
+            _task_mgr_list = ["Все"] + get_managers_list()
+            _cu_name_task = st.session_state.get("user_name", "")
+            _default_idx_task = 0
+            if _cu_name_task and _cu_name_task in _task_mgr_list:
+                _default_idx_task = _task_mgr_list.index(_cu_name_task)
+            mf = st.selectbox("Ответственный", _task_mgr_list, index=_default_idx_task, key="task_filter_mgr", label_visibility="collapsed", help="Показать задачи выбранного ответственного")
+        di = {d["id"]: d for d in st.session_state.crm_store.get("deals", [])}
+        aat = []
+        new_tasks = []
+        review_tasks = []
+        for cl in st.session_state.crm_store.get("clients", []):
+            for ti, tk in enumerate(cl.get("tasks", [])):
+                tm = tk.get("manager", "")
+                dtm = tk.get("delegated_to", "")
+                _is_review = tk.get("done", False) and not tk.get("reviewed", False)
+                if _is_review:
+                    _tcb = tk.get("created_by", "")
+                    _tcb_name = ""
+                    if _tcb:
+                        _u = get_user_by_login(_tcb)
+                        if _u: _tcb_name = _u.get("name", _u.get("login", _tcb))
+                        else: _tcb_name = _tcb
+                    if mf != "Все":
+                        if st.session_state.user_role != "admin" and _tcb != st.session_state.get("user_login", "") and _tcb_name != mf: continue
+                    elif mf != "Все":
+                        if _tcb_name != mf and _tcb != mf: continue
+                else:
+                    if mf == "Мои задачи":
+                        if tm and tm != cu and dtm != cu: continue
+                    elif mf != "Все":
+                        # Неназначенные задачи видны всем: любой пользователь может взять их в работу.
+                        if tm and tm != mf and dtm != mf: continue
+                if task_search:
+                    search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
+                    if task_search not in search_text: continue
+                task_deal = di.get(tk.get("deal_id"))
+                mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
+                entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
+                if tk.get("done", False) and not tk.get("reviewed", False):
+                    review_tasks.append(entry)
+                elif not tk.get("done", False):
+                    if not tk.get("in_work", False):
+                        new_tasks.append(entry)
                     else:
-                        if mf == "Мои задачи":
-                            if tm and tm != cu and dtm != cu: continue
-                        elif mf != "Все":
-                            # Неназначенные задачи видны всем: любой пользователь может взять их в работу.
-                            if tm and tm != mf and dtm != mf: continue
-                    if task_search:
-                        search_text = f"{tk.get('text', '')} {tk.get('task_number', '')} {cl.get('name', '')} {cl.get('phone', '')} {tk.get('products', '')} {tk.get('ship_addr', '')} {tk.get('receiver', '')}".lower()
-                        if task_search not in search_text: continue
-                    task_deal = di.get(tk.get("deal_id"))
-                    mdt = task_deal.get("deal_number", task_deal["title"]) if task_deal else ""
-                    entry = {"client_id": cl["id"], "client_name": cl["name"], "client_phone": cl["phone"], "deal_title": mdt, "sort_date": get_task_sort_date(tk), "deadline_str": tk.get("deadline", ""), "type": tk.get("type", "Связаться"), "text": tk.get("text", ""), "task_obj": tk, "task_idx": ti, "client_obj": cl}
-                    if tk.get("done", False) and not tk.get("reviewed", False):
-                        review_tasks.append(entry)
-                    elif not tk.get("done", False):
-                        if not tk.get("in_work", False):
-                            new_tasks.append(entry)
-                        else:
-                            aat.append(entry)
-            # Сортировка по выбору пользователя применяется внутри каждой колонки;
-            # дедлайн по-прежнему определяет колонку «На сегодня»/«Предстоящие».
-            def _task_sort_key(entry):
-                task = entry["task_obj"]
-                if task_sort_mode == "По дате создания":
-                    return str(task.get("created_at") or "")
-                if task_sort_mode == "По номеру задачи":
-                    return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
-                return str(task.get("last_modified") or task.get("created_at") or "")
-            _sort_reverse = task_sort_mode != "По номеру задачи"
-            aat.sort(key=_task_sort_key, reverse=_sort_reverse)
-            new_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
-            review_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
-            tt_list = [t for t in aat if t["sort_date"] <= now_time.date()]
-            ft_list = [t for t in aat if t["sort_date"] > now_time.date()]
-            def render_task_block(t, sk):
-                task = t["task_obj"]
-                cl = t["client_obj"]
-                tp = task.get("type", "Связаться")
-                io_ = is_task_overdue(task)
-                fd = format_date(t["deadline_str"])
-                task_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
-                if task.get("needs_rework"): tk_bg, tk_bc = "#FFEBEE", "#D32F2F"
-                elif io_: tk_bg, tk_bc = "#FFEBEE", "#C62828"
-                elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
-                else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
-                exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
-                if _task_is_ready_to_ship(task) and not task.get('done', False): exp_label = '✅ ' + exp_label + ' | Готово к отправке'
-                _rework_css = ""
-                if task.get('needs_rework'):
-                    _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-                st.markdown(f"""<style>
-                .st-key-tb_wrap_{task_key} button {{
-                    background-color: {tk_bg} !important;
-                    color: #2C3E50 !important;
-                    border: 1px solid {tk_bc} !important;
-                    border-left: 4px solid {tk_bc} !important;
-                    border-radius: 9px !important;
-                    padding: 0.55rem 0.7rem !important;
-                    min-height: 66px !important;
-                    height: auto !important;
-                    box-shadow: 0 1px 2px rgba(30, 45, 65, 0.05) !important;
-                    transition: box-shadow 0.15s ease, border-color 0.15s ease !important;
-                }}
-                .st-key-tb_wrap_{task_key} button p {{
-                    font-size: 0.86rem !important;
-                    line-height: 1.42 !important;
-                    font-weight: 500 !important;
-                    text-align: left !important;
-                    white-space: normal !important;
-                }}
-                .st-key-tb_wrap_{task_key} button:hover {{
-                    box-shadow: 0 3px 9px rgba(30, 45, 65, 0.12) !important;
-                    border-color: {tk_bc} !important;
-                }}
-                {_rework_css}
-                </style>""", unsafe_allow_html=True)
-                with st.container(key=f"tb_wrap_{task_key}"):
-                    if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
-                        # Open through the workspace host so an already-open task tab
-                        # is activated instead of being sent to the legacy dialog dispatcher.
-                        _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
-                                               if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
-                        if _task_deal_obj is not None:
-                            _deal_entry = {
-                                "name": "deal_detail_dialog",
-                                "title": f"Сделка {_task_deal_obj.get('deal_number', _task_deal_obj.get('title', ''))}",
-                                "width": "large",
-                                "args": (_task_deal_obj, cl, st.session_state.get("user_name", ""), f"task_parent_{_task_deal_obj.get('id')}"),
-                                "kwargs": {},
-                            }
-                            _deal_entry["signature"] = (
-                                _crm_dialog_signature_value(_deal_entry["args"]),
-                                _crm_dialog_signature_value(_deal_entry["kwargs"]),
-                            )
-                            _task_window = _crm_workspace_open_dialog(_deal_entry, client_id=cl.get("id"))
-                        _task_entry = {
-                            "name": "task_detail_dialog",
-                            "title": f"Задача №{task.get('task_number', '')}",
+                        aat.append(entry)
+        # Сортировка по выбору пользователя применяется внутри каждой колонки;
+        # дедлайн по-прежнему определяет колонку «На сегодня»/«Предстоящие».
+        def _task_sort_key(entry):
+            task = entry["task_obj"]
+            if task_sort_mode == "По дате создания":
+                return str(task.get("created_at") or "")
+            if task_sort_mode == "По номеру задачи":
+                return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
+            return str(task.get("last_modified") or task.get("created_at") or "")
+        _sort_reverse = task_sort_mode != "По номеру задачи"
+        aat.sort(key=_task_sort_key, reverse=_sort_reverse)
+        new_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
+        review_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
+        tt_list = [t for t in aat if t["sort_date"] <= now_time.date()]
+        ft_list = [t for t in aat if t["sort_date"] > now_time.date()]
+        def render_task_block(t, sk):
+            task = t["task_obj"]
+            cl = t["client_obj"]
+            tp = task.get("type", "Связаться")
+            io_ = is_task_overdue(task)
+            fd = format_date(t["deadline_str"])
+            task_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
+            if task.get("needs_rework"): tk_bg, tk_bc = "#FFEBEE", "#D32F2F"
+            elif io_: tk_bg, tk_bc = "#FFEBEE", "#C62828"
+            elif task.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
+            else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
+            exp_label = f"Задача №{task.get('task_number', '')} {fd} — {t['client_name']} — {t['text']}"
+            if _task_is_ready_to_ship(task) and not task.get('done', False): exp_label = '✅ ' + exp_label + ' | Готово к отправке'
+            _rework_css = ""
+            if task.get('needs_rework'):
+                _rework_css = f".st-key-tb_wrap_{task_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
+            st.markdown(f"""<style>
+            .st-key-tb_wrap_{task_key} button {{
+                background-color: {tk_bg} !important;
+                color: #2C3E50 !important;
+                border: 1px solid {tk_bc} !important;
+                border-left: 4px solid {tk_bc} !important;
+                border-radius: 9px !important;
+                padding: 0.55rem 0.7rem !important;
+                min-height: 66px !important;
+                height: auto !important;
+                box-shadow: 0 1px 2px rgba(30, 45, 65, 0.05) !important;
+                transition: box-shadow 0.15s ease, border-color 0.15s ease !important;
+            }}
+            .st-key-tb_wrap_{task_key} button p {{
+                font-size: 0.86rem !important;
+                line-height: 1.42 !important;
+                font-weight: 500 !important;
+                text-align: left !important;
+                white-space: normal !important;
+            }}
+            .st-key-tb_wrap_{task_key} button:hover {{
+                box-shadow: 0 3px 9px rgba(30, 45, 65, 0.12) !important;
+                border-color: {tk_bc} !important;
+            }}
+            {_rework_css}
+            </style>""", unsafe_allow_html=True)
+            with st.container(key=f"tb_wrap_{task_key}"):
+                if st.button(exp_label, key=f"tb_btn_{task_key}", use_container_width=True):
+                    # Open through the workspace host so an already-open task tab
+                    # is activated instead of being sent to the legacy dialog dispatcher.
+                    _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
+                                           if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
+                    if _task_deal_obj is not None:
+                        _deal_entry = {
+                            "name": "deal_detail_dialog",
+                            "title": f"Сделка {_task_deal_obj.get('deal_number', _task_deal_obj.get('title', ''))}",
                             "width": "large",
-                            "args": (task, cl, _task_deal_obj, task_key),
+                            "args": (_task_deal_obj, cl, st.session_state.get("user_name", ""), f"task_parent_{_task_deal_obj.get('id')}"),
                             "kwargs": {},
                         }
-                        _task_entry["signature"] = (
-                            _crm_dialog_signature_value(_task_entry["args"]),
-                            _crm_dialog_signature_value(_task_entry["kwargs"]),
+                        _deal_entry["signature"] = (
+                            _crm_dialog_signature_value(_deal_entry["args"]),
+                            _crm_dialog_signature_value(_deal_entry["kwargs"]),
                         )
-                        # Use the exact window selected by the dispatcher. Looking it up
-                        # again by client_id can select a different window for the same client.
-                        _task_window = _crm_workspace_open_dialog(_task_entry, client_id=cl.get("id"))
-                        # Activate the requested task tab in that exact window.
-                        if _task_window is not None:
+                        _task_window = _crm_workspace_open_dialog(_deal_entry, client_id=cl.get("id"))
+                    _task_entry = {
+                        "name": "task_detail_dialog",
+                        "title": f"Задача №{task.get('task_number', '')}",
+                        "width": "large",
+                        "args": (task, cl, _task_deal_obj, task_key),
+                        "kwargs": {},
+                    }
+                    _task_entry["signature"] = (
+                        _crm_dialog_signature_value(_task_entry["args"]),
+                        _crm_dialog_signature_value(_task_entry["kwargs"]),
+                    )
+                    # Use the exact window selected by the dispatcher. Looking it up
+                    # again by client_id can select a different window for the same client.
+                    _task_window = _crm_workspace_open_dialog(_task_entry, client_id=cl.get("id"))
+                    # Activate the requested task tab in that exact window.
+                    if _task_window is not None:
+                        _task_window["minimized"] = False
+                        st.session_state["_crm_active_window_id"] = _task_window.get("id")
+                    if _task_window is not None:
+                        _task_tab_key = _crm_workspace_tab_key(_task_entry)
+                        _task_tab_index = next((i for i, tab in enumerate(_task_window.get("tabs", []))
+                                                if _crm_workspace_tab_key(tab) == _task_tab_key), None)
+                        if _task_tab_index is not None:
+                            _task_window["active_tab"] = _task_tab_index
                             _task_window["minimized"] = False
                             st.session_state["_crm_active_window_id"] = _task_window.get("id")
-                        if _task_window is not None:
-                            _task_tab_key = _crm_workspace_tab_key(_task_entry)
-                            _task_tab_index = next((i for i, tab in enumerate(_task_window.get("tabs", []))
-                                                    if _crm_workspace_tab_key(tab) == _task_tab_key), None)
-                            if _task_tab_index is not None:
-                                _task_window["active_tab"] = _task_tab_index
-                                _task_window["minimized"] = False
-                                st.session_state["_crm_active_window_id"] = _task_window.get("id")
-                                st.session_state["_crm_active_dialog"] = _task_window["tabs"][_task_tab_index]
-                        st.rerun()
-                    render_scroll_restore(f"tb_{task_key}")
-            col_new, col_today, col_future, col_review = st.columns(4)
-            with col_new:
-                with st.container(border=True):
-                    st.subheader(f"Новые ({len(new_tasks)})")
-                    if new_tasks:
-                        for t in new_tasks: render_task_block(t, "new")
-                    else: st.caption("Новых задач нет.")
-            with col_today:
-                with st.container(border=True):
-                    _today_head, _today_print_col = st.columns([5, 1])
-                    with _today_head:
-                        st.subheader(f"На сегодня ({len(tt_list)})")
-                    with _today_print_col:
-                        if st.button("", key="print_today_tasks_btn", icon=":material/print:", type="secondary"):
-                            _print_rows = []
-                            for _pt in tt_list:
-                                _ptask = _pt["task_obj"]
-                                _pt_comments = []
-                                for _ptc in (_ptask.get("task_comments", []) or []):
-                                    if isinstance(_ptc, dict) and not _ptc.get("deleted") and str(_ptc.get("text", "") or "").strip():
-                                        _pt_meta = " · ".join(str(_ptc.get(k, "")) for k in ("time", "date", "user", "author") if _ptc.get(k))
-                                        _pt_comments.append((f"{_pt_meta}: " if _pt_meta else "") + str(_ptc.get("text", "")))
-                                _print_rows.append(
-                                    "<tr>"
-                                    f"<td>{html.escape(str(_ptask.get('task_number', '') or ''))}</td>"
-                                    f"<td>{html.escape(str(_pt.get('client_name', '') or ''))}</td>"
-                                    f"<td>{html.escape(str(_ptask.get('products', '') or '')).replace(chr(10), '<br>')}</td>"
-                                    f"<td>{html.escape(str(_ptask.get('task_comment', '') or _ptask.get('text', '') or '')).replace(chr(10), '<br>')}</td>"
-                                    f"<td>{html.escape(chr(10).join(_pt_comments)).replace(chr(10), '<br>')}</td>"
-                                    f"<td>{html.escape(str(_ptask.get('ship_method', 'Не выбрано') or 'Не выбрано'))}{(' / ' + html.escape(str(_ptask.get('ship_city', '') or '').strip())) if str(_ptask.get('ship_city', '') or '').strip() else ''}</td>"
-                                    f"<td>{html.escape(str(_ptask.get('tk_num', '') or ''))}</td>"
-                                    "<td class='notes'></td>"
-                                    "</tr>"
-                                )
-                            _print_date = moscow_now().strftime("%d.%m.%Y")
-                            _print_html = f'''<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Задачи на сегодня</title><style>
-                            @page {{ size: A4 landscape; margin: 10mm; }}
-                            body {{ font-family: Arial, sans-serif; color: #111; margin: 0; }}
-                            h2 {{ font-size: 18px; margin: 0 0 4px; }}
-                            .meta {{ font-size: 11px; margin-bottom: 12px; }}
-                            table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }}
-                            th, td {{ border: 1px solid #555; padding: 6px; vertical-align: top; overflow-wrap: anywhere; }}
-                            th {{ background: #eee; text-align: left; }}
-                            th:nth-child(1) {{ width: 8%; }} th:nth-child(2) {{ width: 14%; }}
-                            th:nth-child(3) {{ width: 17%; }} th:nth-child(4) {{ width: 15%; }}
-                            th:nth-child(5) {{ width: 15%; }} th:nth-child(6) {{ width: 10%; }}
-                            th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
-                            td.notes {{ height: 28px; }}
-                            @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
-                            .torg12-page {{ page-break-before: always; break-before: page; page: torg12; width:100%; }} .torg12-page img {{ display:block; width:100%; height:auto; max-height:185mm; object-fit:contain; }} .torg12-page iframe {{ width:100%;height:95vh;border:0; }} @page torg12 {{ size:A4 landscape; margin:5mm; }}
-                            </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
-                            <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
-                            <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
-                            {''.join(_torg12_print_section(_pt['task_obj'], copies=2) for _pt in tt_list)}
-                            <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
-                            components.html(_print_html, height=0, width=0)
-                    if tt_list:
-                        for t in tt_list: render_task_block(t, "today")
-                    else: st.success("Все задачи на сегодня закрыты.")
-            with col_future:
-                with st.container(border=True):
-                    st.subheader(f"Предстоящие ({len(ft_list)})")
-                    if ft_list:
-                        for t in ft_list: render_task_block(t, "future")
-                    else: st.caption("План на будущие дни пуст.")
-            with col_review:
-                with st.container(border=True):
-                    st.subheader(f"На проверке ({len(review_tasks)})")
-                    if review_tasks:
-                        for t in review_tasks: render_task_block(t, "review")
-                    else: st.caption("Задач на проверке нет.")
-        with plan_sub2:
-            archived_tasks = []
-            for cl in st.session_state.crm_store.get("clients", []):
-                for ti, tk in enumerate(cl.get("tasks", [])):
-                    if tk.get("done", False) and tk.get("reviewed", False):
-                        archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
-            def _archived_task_sort_key(entry):
-                task = entry["task_obj"]
-                if task_sort_mode == "По дате создания":
-                    return str(task.get("created_at") or "")
-                if task_sort_mode == "По номеру задачи":
-                    return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
-                return str(task.get("last_modified") or task.get("created_at") or "")
-            archived_tasks.sort(key=_archived_task_sort_key, reverse=(task_sort_mode != "По номеру задачи"))
-            if archived_tasks:
-                for at in archived_tasks[:50]:
-                    task = at["task_obj"]
-                    cl = at["client_obj"]
-                    task_key = f"arch_{at['task_idx']}_{cl['id']}"
-                    exp_label = f"✅ Задача №{task.get('task_number', '')} — {at['client_name']} — {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
-                    st.markdown(f"<style>.st-key-arch_wrap_{task_key} button {{ text-align: left !important; justify-content: flex-start !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
-                    with st.container(key=f"arch_wrap_{task_key}"):
-                        if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True):
-                            st.session_state["dialog_task_key"] = task_key
-                            st.rerun()
-            else:
-                st.caption("Архив пуст.")
-        # Completion report dialog takes precedence over task details to avoid nested dialogs.
-        _task_completion_state = st.session_state.get("dialog_task_completion")
-        _dialog_key = st.session_state.get("dialog_task_key")
-        _pending_reminder = st.session_state.get("_pending_reminder_dialog")
-        if _pending_reminder:
-            create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
-        elif _task_completion_state:
-            task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
-        # Show created task dialog if requested
-        elif st.session_state.get("_open_created_task"):
-            _created_tk = st.session_state["_open_created_task"]
-            for _cl in st.session_state.crm_store.get("clients", []):
-                for _tk in _cl.get("tasks", []):
-                    if _tk is _created_tk or _tk.get("task_number") == _created_tk.get("task_number"):
-                        _deal = None
-                        for _d in st.session_state.crm_store.get("deals", []):
-                            if _d["id"] == _tk.get("deal_id"):
-                                _deal = _d
-                                break
-                        task_detail_dialog(_tk, _cl, _deal, f"created_{_tk.get('task_number', '')}")
-                        break
-        # Show task detail dialog if requested
-        elif _dialog_key:
-            _found = False
-            for _cl in st.session_state.crm_store.get("clients", []):
-                if _found: break
-                for _ti, _tk in enumerate(_cl.get("tasks", [])):
-                    _tk_keys = [f"tb_new_{_cl['id']}_{_ti}", f"tb_today_{_cl['id']}_{_ti}", f"tb_future_{_cl['id']}_{_ti}", f"tb_review_{_cl['id']}_{_ti}", f"arch_{_ti}_{_cl['id']}"]
-                    if _dialog_key in _tk_keys:
-                        _deal = None
-                        for _d in st.session_state.crm_store.get("deals", []):
-                            if _d["id"] == _tk.get("deal_id"):
-                                _deal = _d
-                                break
-                        task_detail_dialog(_tk, _cl, _deal, _dialog_key)
-                        _found = True
-                        break
-
-    elif st.session_state.active_tab == "Внутренние задачи":
-        internal_tasks = st.session_state.crm_store.setdefault("internal_tasks", [])
-        _cu = st.session_state.user_name
-        _cu_login = st.session_state.get("user_login", "")
-        _is_admin = st.session_state.user_role == "admin"
-
-        # Create form — button like "Добавить клиента"
-        show_it_key = "show_it_form"
-        if st.button("Создать внутреннюю задачу", key="btn_new_it", type="primary", use_container_width=False):
-            st.session_state[show_it_key] = True
-            st.rerun()
-        if st.session_state.get(show_it_key, False):
-            create_internal_task_dialog()
-
-        st.markdown("---")
-
-        # Active / Archive tabs
-        it_plan_sub1, it_plan_sub2 = st.tabs(["Активные", "Архив"])
-
-        with it_plan_sub1:
-            # Search (left) + sort by responsible (right) — same style as Clients tab
-            _it_search_col, _it_mgr_col = st.columns([3, 2])
-            with _it_search_col:
-                _it_search_input_now = st.text_input("Поиск", key="it_search_input", placeholder="Поиск...", label_visibility="collapsed")
-                it_search = (_it_search_input_now or "").strip().lower()
-            with _it_mgr_col:
-                _mgr_list = ["Все"] + get_managers_list()
-                _cu_name = st.session_state.get("user_name", "")
-                _default_idx = 0
-                if _cu_name and _cu_name in _mgr_list:
-                    _default_idx = _mgr_list.index(_cu_name)
-                it_mf = st.selectbox("Ответственный", _mgr_list, index=_default_idx, key="it_filter_mgr", label_visibility="collapsed")
-
-            # Filter tasks
-            it_new = []
-            it_work = []
-            it_review = []
-            for it in internal_tasks:
-                _status = it.get("it_status", "new")
-                if it.get("done") and it.get("reviewed", False):
-                    continue
-                # Неназначенные задачи доступны всем сотрудникам, даже при фильтре по ответственному.
-                if it_mf != "Все" and it.get("manager", "") and it.get("manager", "") != it_mf:
-                    continue
-                if it_search:
-                    _hay = f"{it.get('text', '')} {it.get('manager', '')} {it.get('comment', '')}".lower()
-                    if it_search not in _hay:
-                        continue
-                if _status == "review" or (it.get("done") and not it.get("reviewed", False)):
-                    it_review.append(it)
-                elif _status == "in_work" or it.get("in_work", False):
-                    it_work.append(it)
-                else:
-                    it_new.append(it)
-
-            it_new.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
-            it_work.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
-            it_review.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
-
-            # 3 columns: Новые, В работе, На проверке
-            it_col_new, it_col_work, it_col_review = st.columns(3)
-            with it_col_new:
-                with st.container(border=True):
-                    st.subheader(f"Новые ({len(it_new)})")
-                    if it_new:
-                        for it in it_new:
-                            _it_key = f"it_card_{it['id']}"
-                            _it_bg = "#E3F2FD"
-                            _it_bc = "#2196F3"
-                            _it_rework_css = ""
-                            if it.get("needs_rework", False):
-                                _it_rework_css = f".st-key-{_it_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
-                            st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }} {_it_rework_css}</style>", unsafe_allow_html=True)
-                            with st.container(key=_it_key):
-                                _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
-                                if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
-                                    st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
-                                    st.rerun()
-                    else:
-                        st.caption("Новых задач нет.")
-
-            with it_col_work:
-                with st.container(border=True):
-                    st.subheader(f"В работе ({len(it_work)})")
-                    if it_work:
-                        for it in it_work:
-                            _it_key = f"it_card_{it['id']}"
-                            _it_bg = "#E8F5E9"
-                            _it_bc = "#4CAF50"
-                            st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
-                            with st.container(key=_it_key):
-                                _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
-                                if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
-                                    st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
-                                    st.rerun()
-                    else:
-                        st.caption("Задач в работе нет.")
-
-            with it_col_review:
-                with st.container(border=True):
-                    st.subheader(f"На проверке ({len(it_review)})")
-                    if it_review:
-                        for it in it_review:
-                            _it_key = f"it_card_{it['id']}"
-                            _it_bg = "#FFF8E1"
-                            _it_bc = "#FF9800"
-                            st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
-                            with st.container(key=_it_key):
-                                _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
-                                if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
-                                    st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
-                                    st.rerun()
-                    else:
-                        st.caption("Задач на проверке нет.")
-
-        with it_plan_sub2:
-            archived_it = [it for it in internal_tasks if it.get("reviewed", False) or it.get("it_status") == "archived"]
-            archived_it.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
-            if archived_it:
-                for it in archived_it[:50]:
-                    _it_key = f"it_arch_{it['id']}"
-                    _label = f"✅ Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
-                    st.markdown(f"<style>.st-key-{_it_key} button {{ text-align: left !important; justify-content: flex-start !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
-                    with st.container(key=_it_key):
-                        if st.button(_label, key=f"it_arch_btn_{it['id']}", use_container_width=True):
-                            st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
-                            st.rerun()
-            else:
-                st.caption("Архив пуст.")
-
-        # Trigger internal task dialog
-        _dialog_it_key = st.session_state.get("dialog_it_key")
-        _pending_reminder = st.session_state.get("_pending_reminder_dialog")
-        if _pending_reminder:
-            create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
-        elif _dialog_it_key is not None:
-            internal_task_detail_dialog(_dialog_it_key)
-
-
-    elif st.session_state.active_tab == "Поставщики":
-        st.markdown("### Поставщики")
-        suppliers = st.session_state.crm_store.setdefault("suppliers", [])
-
-        show_sup_key = "show_sup_form"
-        if render_centered_button("Добавить поставщика", key="btn_new_sup"):
-            st.session_state[show_sup_key] = not st.session_state.get(show_sup_key, False)
-            st.rerun()
-        if st.session_state.get(show_sup_key, False):
+                            st.session_state["_crm_active_dialog"] = _task_window["tabs"][_task_tab_index]
+                    st.rerun()
+                render_scroll_restore(f"tb_{task_key}")
+        col_new, col_today, col_future, col_review = st.columns(4)
+        with col_new:
             with st.container(border=True):
-                sup_name = st.text_input("Название / Имя:", key="sup_name")
-                sup_phone = st.text_input("Телефон:", key="sup_phone")
-                sup_email = st.text_input("Email:", key="sup_email")
-                sup_address = st.text_input("Адрес:", key="sup_address")
-                sup_category = st.text_input("Категория товаров:", key="sup_category", placeholder="Что поставляет")
-                sup_comment = st.text_area("Комментарии:", key="sup_comment")
-                if st.button("Сохранить", key="sup_go", use_container_width=True, type="primary"):
-                    if not sup_name.strip():
-                        st.warning("Введите название")
-                    else:
-                        new_sup = {
-                            "id": (max([s.get("id", 0) for s in suppliers], default=0)) + 1,
-                            "name": sup_name.strip(),
-                            "phone": format_phone(sup_phone) if sup_phone else "",
-                            "email": sup_email.strip(),
-                            "address": sup_address.strip(),
-                            "category": sup_category.strip(),
-                            "comment": sup_comment.strip(),
-                            "created_at": now_str(),
-                            "last_modified": now_str()
-                        }
-                        suppliers.append(new_sup)
-                        st.session_state[show_sup_key] = False
-                        commit_and_rerun(st.session_state.crm_store, "Поставщик добавлен")
-
-        st.markdown("---")
-        sup_search = st.text_input("Поиск поставщика:", key="sup_search", placeholder="По названию, телефону, категории...").strip().lower()
-
-        filtered_sup = []
-        for s in suppliers:
-            if sup_search:
-                st_text = f"{s.get('name', '')} {s.get('phone', '')} {s.get('email', '')} {s.get('category', '')} {s.get('comment', '')}".lower()
-                if sup_search not in st_text: continue
-            filtered_sup.append(s)
-        filtered_sup.sort(key=lambda s: s.get("name", "").lower())
-
-        if filtered_sup:
-            for s in filtered_sup:
-                sup_key = f"sup_{s['id']}"
-                sup_exp = st.session_state.expanded_task_key == sup_key
-                sup_label = f"{s.get('name', 'Без названия')} — {s.get('phone', '—')} | {s.get('category', '—')}"
-                sup_selected = sup_exp
-                sup_border = "#2196F3" if sup_selected else "#DCE0E5"
-                sup_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if sup_selected else ""
-                st.markdown(f"<style>.st-key-sup_wrap_{s['id']} button {{ background-color: #FFFFFF !important; color: #2C3E50 !important; border: 2px solid {sup_border} !important; border-radius: 10px !important; {sup_shadow} }}</style>", unsafe_allow_html=True)
-                with st.container(key=f"sup_wrap_{s['id']}"):
-                    if st.button(sup_label, key=f"sup_card_{s['id']}", use_container_width=True, type="primary" if sup_exp else "secondary"):
-                        if sup_exp:
-                            st.session_state.expanded_task_key = None
-                            save_scroll_and_rerun()
-                        else:
-                            st.session_state.expanded_task_key = sup_key
-                            st.rerun()
-                    if not sup_exp:
-                        render_scroll_restore(f"sup_{s['id']}")
-                if sup_exp:
-                    with st.container(border=True):
-                        st.markdown(f"**{s.get('name', '')}**")
-                        st.markdown(format_created_date(s), unsafe_allow_html=True)
-                        if s.get("phone"):
-                            render_phone_inline(s["phone"], f"sup_{s['id']}")
-                        info_c, comm_c = st.columns(2)
-                        with info_c:
-                            st.markdown(f"**Email:** {s.get('email', '—')}")
-                            st.markdown(f"**Адрес:** {s.get('address', '—')}")
-                            st.markdown(f"**Категория:** {s.get('category', '—')}")
-                        with comm_c:
-                            if s.get("comment"):
-                                st.markdown(f"**Комментарий:** {s['comment']}")
-                            else:
-                                st.caption("Комментариев нет")
-                        st.markdown("---")
-                        show_sup_edit = f"show_sup_edit_{s['id']}"
-                        if st.button("Редактировать" if not st.session_state.get(show_sup_edit, False) else "Скрыть", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
-                            st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
-                            st.rerun()
-                        if st.session_state.get(show_sup_edit, False):
-                            with st.container(border=True):
-                                esn = st.text_input("Название:", value=s.get("name", ""), key=f"esn_{s['id']}")
-                                esp = st.text_input("Телефон:", value=s.get("phone", ""), key=f"esp_{s['id']}")
-                                ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
-                                esa = st.text_input("Адрес:", value=s.get("address", ""), key=f"esa_{s['id']}")
-                                esc = st.text_input("Категория:", value=s.get("category", ""), key=f"esc_{s['id']}")
-                                escom = st.text_area("Комментарий:", value=s.get("comment", ""), key=f"escom_{s['id']}")
-                                if st.button("Сохранить", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
-                                    s["name"] = esn.strip()
-                                    s["phone"] = format_phone(esp) if esp else ""
-                                    s["email"] = ese.strip()
-                                    s["address"] = esa.strip()
-                                    s["category"] = esc.strip()
-                                    s["comment"] = escom.strip()
-                                    s["last_modified"] = now_str()
-                                    st.session_state[show_sup_edit] = False
-                                    commit_and_rerun(st.session_state.crm_store, "Поставщик обновлён")
-                        if st.session_state.user_role == "admin":
-                            st.markdown("---")
-                            if st.button("Удалить поставщика", key=f"sup_del_{s['id']}", use_container_width=True):
-                                st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
-                                st.session_state.expanded_task_key = None
-                                commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
-                        render_reminders("supplier", s.get("id", ""), s.get("name", "Поставщик"), f"supplier_{s.get('id')}")
+                st.subheader(f"Новые ({len(new_tasks)})")
+                if new_tasks:
+                    for t in new_tasks: render_task_block(t, "new")
+                else: st.caption("Новых задач нет.")
+        with col_today:
+            with st.container(border=True):
+                _today_head, _today_print_col = st.columns([5, 1])
+                with _today_head:
+                    st.subheader(f"На сегодня ({len(tt_list)})")
+                with _today_print_col:
+                    if st.button("", key="print_today_tasks_btn", icon=":material/print:", type="secondary"):
+                        _print_rows = []
+                        for _pt in tt_list:
+                            _ptask = _pt["task_obj"]
+                            _pt_comments = []
+                            for _ptc in (_ptask.get("task_comments", []) or []):
+                                if isinstance(_ptc, dict) and not _ptc.get("deleted") and str(_ptc.get("text", "") or "").strip():
+                                    _pt_meta = " · ".join(str(_ptc.get(k, "")) for k in ("time", "date", "user", "author") if _ptc.get(k))
+                                    _pt_comments.append((f"{_pt_meta}: " if _pt_meta else "") + str(_ptc.get("text", "")))
+                            _print_rows.append(
+                                "<tr>"
+                                f"<td>{html.escape(str(_ptask.get('task_number', '') or ''))}</td>"
+                                f"<td>{html.escape(str(_pt.get('client_name', '') or ''))}</td>"
+                                f"<td>{html.escape(str(_ptask.get('products', '') or '')).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(str(_ptask.get('task_comment', '') or _ptask.get('text', '') or '')).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(chr(10).join(_pt_comments)).replace(chr(10), '<br>')}</td>"
+                                f"<td>{html.escape(str(_ptask.get('ship_method', 'Не выбрано') or 'Не выбрано'))}{(' / ' + html.escape(str(_ptask.get('ship_city', '') or '').strip())) if str(_ptask.get('ship_city', '') or '').strip() else ''}</td>"
+                                f"<td>{html.escape(str(_ptask.get('tk_num', '') or ''))}</td>"
+                                "<td class='notes'></td>"
+                                "</tr>"
+                            )
+                        _print_date = moscow_now().strftime("%d.%m.%Y")
+                        _print_html = f'''<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Задачи на сегодня</title><style>
+                        @page {{ size: A4 landscape; margin: 10mm; }}
+                        body {{ font-family: Arial, sans-serif; color: #111; margin: 0; }}
+                        h2 {{ font-size: 18px; margin: 0 0 4px; }}
+                        .meta {{ font-size: 11px; margin-bottom: 12px; }}
+                        table {{ width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }}
+                        th, td {{ border: 1px solid #555; padding: 6px; vertical-align: top; overflow-wrap: anywhere; }}
+                        th {{ background: #eee; text-align: left; }}
+                        th:nth-child(1) {{ width: 8%; }} th:nth-child(2) {{ width: 14%; }}
+                        th:nth-child(3) {{ width: 17%; }} th:nth-child(4) {{ width: 15%; }}
+                        th:nth-child(5) {{ width: 15%; }} th:nth-child(6) {{ width: 10%; }}
+                        th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
+                        td.notes {{ height: 28px; }}
+                        @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
+                        .torg12-page {{ page-break-before: always; break-before: page; page: torg12; width:100%; }} .torg12-page img {{ display:block; width:100%; height:auto; max-height:185mm; object-fit:contain; }} .torg12-page iframe {{ width:100%;height:95vh;border:0; }} @page torg12 {{ size:A4 landscape; margin:5mm; }}
+                        </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
+                        <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
+                        <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
+                        {''.join(_torg12_print_section(_pt['task_obj'], copies=2) for _pt in tt_list)}
+                        <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
+                        components.html(_print_html, height=0, width=0)
+                if tt_list:
+                    for t in tt_list: render_task_block(t, "today")
+                else: st.success("Все задачи на сегодня закрыты.")
+        with col_future:
+            with st.container(border=True):
+                st.subheader(f"Предстоящие ({len(ft_list)})")
+                if ft_list:
+                    for t in ft_list: render_task_block(t, "future")
+                else: st.caption("План на будущие дни пуст.")
+        with col_review:
+            with st.container(border=True):
+                st.subheader(f"На проверке ({len(review_tasks)})")
+                if review_tasks:
+                    for t in review_tasks: render_task_block(t, "review")
+                else: st.caption("Задач на проверке нет.")
+    with plan_sub2:
+        archived_tasks = []
+        for cl in st.session_state.crm_store.get("clients", []):
+            for ti, tk in enumerate(cl.get("tasks", [])):
+                if tk.get("done", False) and tk.get("reviewed", False):
+                    archived_tasks.append({"client_name": cl["name"], "task_obj": tk, "client_obj": cl, "task_idx": ti})
+        def _archived_task_sort_key(entry):
+            task = entry["task_obj"]
+            if task_sort_mode == "По дате создания":
+                return str(task.get("created_at") or "")
+            if task_sort_mode == "По номеру задачи":
+                return [(0, int(x)) if x.isdigit() else (1, x.lower()) for x in re.split(r"(\d+)", str(task.get("task_number") or ""))]
+            return str(task.get("last_modified") or task.get("created_at") or "")
+        archived_tasks.sort(key=_archived_task_sort_key, reverse=(task_sort_mode != "По номеру задачи"))
+        if archived_tasks:
+            for at in archived_tasks[:50]:
+                task = at["task_obj"]
+                cl = at["client_obj"]
+                task_key = f"arch_{at['task_idx']}_{cl['id']}"
+                exp_label = f"✅ Задача №{task.get('task_number', '')} — {at['client_name']} — {task.get('text', '')} | {format_date(task.get('deadline', ''))}"
+                st.markdown(f"<style>.st-key-arch_wrap_{task_key} button {{ text-align: left !important; justify-content: flex-start !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
+                with st.container(key=f"arch_wrap_{task_key}"):
+                    if st.button(exp_label, key=f"arch_btn_{task_key}", use_container_width=True):
+                        st.session_state["dialog_task_key"] = task_key
+                        st.rerun()
         else:
-            st.info("Поставщиков нет. Добавьте первого.")
-
-    # Supplier cards are inline, so their reminder dialog is dispatched at the script root.
-    if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("active_tab") == "Поставщики":
-        _pending_reminder = st.session_state["_pending_reminder_dialog"]
+            st.caption("Архив пуст.")
+    # Completion report dialog takes precedence over task details to avoid nested dialogs.
+    _task_completion_state = st.session_state.get("dialog_task_completion")
+    _dialog_key = st.session_state.get("dialog_task_key")
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    if _pending_reminder:
         create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _task_completion_state:
+        task_completion_report_dialog(_task_completion_state.get("client_id"), _task_completion_state.get("task_number"), _task_completion_state.get("key_prefix", "task"))
+    # Show created task dialog if requested
+    elif st.session_state.get("_open_created_task"):
+        _created_tk = st.session_state["_open_created_task"]
+        for _cl in st.session_state.crm_store.get("clients", []):
+            for _tk in _cl.get("tasks", []):
+                if _tk is _created_tk or _tk.get("task_number") == _created_tk.get("task_number"):
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, f"created_{_tk.get('task_number', '')}")
+                    break
+    # Show task detail dialog if requested
+    elif _dialog_key:
+        _found = False
+        for _cl in st.session_state.crm_store.get("clients", []):
+            if _found: break
+            for _ti, _tk in enumerate(_cl.get("tasks", [])):
+                _tk_keys = [f"tb_new_{_cl['id']}_{_ti}", f"tb_today_{_cl['id']}_{_ti}", f"tb_future_{_cl['id']}_{_ti}", f"tb_review_{_cl['id']}_{_ti}", f"arch_{_ti}_{_cl['id']}"]
+                if _dialog_key in _tk_keys:
+                    _deal = None
+                    for _d in st.session_state.crm_store.get("deals", []):
+                        if _d["id"] == _tk.get("deal_id"):
+                            _deal = _d
+                            break
+                    task_detail_dialog(_tk, _cl, _deal, _dialog_key)
+                    _found = True
+                    break
 
-    # Рабочее пространство уже восстановлено до первого рендеринга панели окон.
+elif st.session_state.active_tab == "Внутренние задачи":
+    internal_tasks = st.session_state.crm_store.setdefault("internal_tasks", [])
+    _cu = st.session_state.user_name
+    _cu_login = st.session_state.get("user_login", "")
+    _is_admin = st.session_state.user_role == "admin"
 
-    # Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
-    # действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
-    if not st.session_state.get("_crm_dialog_requested_this_run", False):
-        # Legacy actions must still be dispatched when a workspace is already open.
-        # The previous `and not _crm_windows` guard silently disabled requisites,
-        # invoice and calculation buttons as soon as the first workspace existed.
-        _global_req_view_state = st.session_state.pop("dialog_client_requisites_view", None)
-        _global_req_dialog_client_id = st.session_state.pop("dialog_client_requisites_client_id", None)
-        _global_req_return_to_invoice = bool(st.session_state.pop("dialog_client_requisites_return_to_invoice", False))
-        _global_invoice_dialog_state = st.session_state.pop("dialog_invoice_request", None)
-        _global_calc_deal_id = st.session_state.pop("dialog_calculation_deal_id", None)
-        _global_calc_id = st.session_state.pop("dialog_calculation_calc_id", None)
-        if _global_req_view_state:
-            client_requisites_view_dialog(_global_req_view_state.get("client_id"), bool(_global_req_view_state.get("return_to_invoice")), _global_req_view_state.get("requisite_id"))
-        elif _global_req_dialog_client_id:
-            client_requisites_dialog(_global_req_dialog_client_id, _global_req_return_to_invoice)
-        elif _global_invoice_dialog_state:
-            invoice_document_dialog(_global_invoice_dialog_state.get("deal_id"), _global_invoice_dialog_state.get("calc_id"))
-        elif _global_calc_deal_id and _global_calc_id:
-            _global_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_global_calc_deal_id)), None)
-            _global_calc = next((c for c in (_global_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_global_calc_id) and not c.get("deleted")), None)
-            if _global_calc_deal and _global_calc:
-                deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
+    # Create form — button like "Добавить клиента"
+    show_it_key = "show_it_form"
+    if st.button("Создать внутреннюю задачу", key="btn_new_it", type="primary", use_container_width=False):
+        st.session_state[show_it_key] = True
+        st.rerun()
+    if st.session_state.get(show_it_key, False):
+        create_internal_task_dialog()
 
-    def _crm_workspace_close_tab_callback(window_id, tab_index, force=False):
-        """Close a tab only after any unsaved edit has been explicitly handled."""
-        windows = st.session_state.get("_crm_windows", [])
-        window = next((w for w in windows if str(w.get("id")) == str(window_id)), None)
-        if window is None:
-            return
-        tabs = window.get("tabs", [])
-        if not (0 <= int(tab_index) < len(tabs)):
-            return
-        closing_tab = tabs[int(tab_index)]
-        if not force and _crm_workspace_tab_has_unsaved(closing_tab):
-            _crm_workspace_prompt_close(window, int(tab_index), "tab")
-            return
-        if closing_tab.get("name") == "notifications_dialog":
-            st.session_state["show_notifications_dialog"] = False
-            st.session_state.pop("_crm_return_to_notifications", None)
-            preferred_id = window.get("return_to_window_id")
+    st.markdown("---")
+
+    # Active / Archive tabs
+    it_plan_sub1, it_plan_sub2 = st.tabs(["Активные", "Архив"])
+
+    with it_plan_sub1:
+        # Search (left) + sort by responsible (right) — same style as Clients tab
+        _it_search_col, _it_mgr_col = st.columns([3, 2])
+        with _it_search_col:
+            _it_search_input_now = st.text_input("Поиск", key="it_search_input", placeholder="Поиск...", label_visibility="collapsed")
+            it_search = (_it_search_input_now or "").strip().lower()
+        with _it_mgr_col:
+            _mgr_list = ["Все"] + get_managers_list()
+            _cu_name = st.session_state.get("user_name", "")
+            _default_idx = 0
+            if _cu_name and _cu_name in _mgr_list:
+                _default_idx = _mgr_list.index(_cu_name)
+            it_mf = st.selectbox("Ответственный", _mgr_list, index=_default_idx, key="it_filter_mgr", label_visibility="collapsed")
+
+        # Filter tasks
+        it_new = []
+        it_work = []
+        it_review = []
+        for it in internal_tasks:
+            _status = it.get("it_status", "new")
+            if it.get("done") and it.get("reviewed", False):
+                continue
+            # Неназначенные задачи доступны всем сотрудникам, даже при фильтре по ответственному.
+            if it_mf != "Все" and it.get("manager", "") and it.get("manager", "") != it_mf:
+                continue
+            if it_search:
+                _hay = f"{it.get('text', '')} {it.get('manager', '')} {it.get('comment', '')}".lower()
+                if it_search not in _hay:
+                    continue
+            if _status == "review" or (it.get("done") and not it.get("reviewed", False)):
+                it_review.append(it)
+            elif _status == "in_work" or it.get("in_work", False):
+                it_work.append(it)
+            else:
+                it_new.append(it)
+
+        it_new.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
+        it_work.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
+        it_review.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
+
+        # 3 columns: Новые, В работе, На проверке
+        it_col_new, it_col_work, it_col_review = st.columns(3)
+        with it_col_new:
+            with st.container(border=True):
+                st.subheader(f"Новые ({len(it_new)})")
+                if it_new:
+                    for it in it_new:
+                        _it_key = f"it_card_{it['id']}"
+                        _it_bg = "#E3F2FD"
+                        _it_bc = "#2196F3"
+                        _it_rework_css = ""
+                        if it.get("needs_rework", False):
+                            _it_rework_css = f".st-key-{_it_key} button::after {{ content: 'На доработке'; display: block; color: #D32F2F; font-weight: 700; font-size: 0.8rem; margin-top: 4px; }}"
+                        st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }} {_it_rework_css}</style>", unsafe_allow_html=True)
+                        with st.container(key=_it_key):
+                            _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
+                            if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
+                                st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
+                                st.rerun()
+                else:
+                    st.caption("Новых задач нет.")
+
+        with it_col_work:
+            with st.container(border=True):
+                st.subheader(f"В работе ({len(it_work)})")
+                if it_work:
+                    for it in it_work:
+                        _it_key = f"it_card_{it['id']}"
+                        _it_bg = "#E8F5E9"
+                        _it_bc = "#4CAF50"
+                        st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
+                        with st.container(key=_it_key):
+                            _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
+                            if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
+                                st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
+                                st.rerun()
+                else:
+                    st.caption("Задач в работе нет.")
+
+        with it_col_review:
+            with st.container(border=True):
+                st.subheader(f"На проверке ({len(it_review)})")
+                if it_review:
+                    for it in it_review:
+                        _it_key = f"it_card_{it['id']}"
+                        _it_bg = "#FFF8E1"
+                        _it_bc = "#FF9800"
+                        st.markdown(f"<style>.st-key-{_it_key} button {{ background-color: {_it_bg} !important; color: #2C3E50 !important; border: 2px solid {_it_bc} !important; border-radius: 10px !important; text-align: left !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
+                        with st.container(key=_it_key):
+                            _label = f"Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
+                            if st.button(_label, key=f"it_btn_{it['id']}", use_container_width=True):
+                                st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
+                                st.rerun()
+                else:
+                    st.caption("Задач на проверке нет.")
+
+    with it_plan_sub2:
+        archived_it = [it for it in internal_tasks if it.get("reviewed", False) or it.get("it_status") == "archived"]
+        archived_it.sort(key=lambda t: t.get("last_modified", ""), reverse=True)
+        if archived_it:
+            for it in archived_it[:50]:
+                _it_key = f"it_arch_{it['id']}"
+                _label = f"✅ Задача №{it['id']} — {it.get('text', '')} | {it.get('manager', '—')}"
+                st.markdown(f"<style>.st-key-{_it_key} button {{ text-align: left !important; justify-content: flex-start !important; white-space: normal !important; height: auto !important; }}</style>", unsafe_allow_html=True)
+                with st.container(key=_it_key):
+                    if st.button(_label, key=f"it_arch_btn_{it['id']}", use_container_width=True):
+                        st.session_state["dialog_it_key"] = _safe_id(it.get("id", 0))
+                        st.rerun()
+        else:
+            st.caption("Архив пуст.")
+
+    # Trigger internal task dialog
+    _dialog_it_key = st.session_state.get("dialog_it_key")
+    _pending_reminder = st.session_state.get("_pending_reminder_dialog")
+    if _pending_reminder:
+        create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+    elif _dialog_it_key is not None:
+        internal_task_detail_dialog(_dialog_it_key)
+
+
+elif st.session_state.active_tab == "Поставщики":
+    st.markdown("### Поставщики")
+    suppliers = st.session_state.crm_store.setdefault("suppliers", [])
+
+    show_sup_key = "show_sup_form"
+    if render_centered_button("Добавить поставщика", key="btn_new_sup"):
+        st.session_state[show_sup_key] = not st.session_state.get(show_sup_key, False)
+        st.rerun()
+    if st.session_state.get(show_sup_key, False):
+        with st.container(border=True):
+            sup_name = st.text_input("Название / Имя:", key="sup_name")
+            sup_phone = st.text_input("Телефон:", key="sup_phone")
+            sup_email = st.text_input("Email:", key="sup_email")
+            sup_address = st.text_input("Адрес:", key="sup_address")
+            sup_category = st.text_input("Категория товаров:", key="sup_category", placeholder="Что поставляет")
+            sup_comment = st.text_area("Комментарии:", key="sup_comment")
+            if st.button("Сохранить", key="sup_go", use_container_width=True, type="primary"):
+                if not sup_name.strip():
+                    st.warning("Введите название")
+                else:
+                    new_sup = {
+                        "id": (max([s.get("id", 0) for s in suppliers], default=0)) + 1,
+                        "name": sup_name.strip(),
+                        "phone": format_phone(sup_phone) if sup_phone else "",
+                        "email": sup_email.strip(),
+                        "address": sup_address.strip(),
+                        "category": sup_category.strip(),
+                        "comment": sup_comment.strip(),
+                        "created_at": now_str(),
+                        "last_modified": now_str()
+                    }
+                    suppliers.append(new_sup)
+                    st.session_state[show_sup_key] = False
+                    commit_and_rerun(st.session_state.crm_store, "Поставщик добавлен")
+
+    st.markdown("---")
+    sup_search = st.text_input("Поиск поставщика:", key="sup_search", placeholder="По названию, телефону, категории...").strip().lower()
+
+    filtered_sup = []
+    for s in suppliers:
+        if sup_search:
+            st_text = f"{s.get('name', '')} {s.get('phone', '')} {s.get('email', '')} {s.get('category', '')} {s.get('comment', '')}".lower()
+            if sup_search not in st_text: continue
+        filtered_sup.append(s)
+    filtered_sup.sort(key=lambda s: s.get("name", "").lower())
+
+    if filtered_sup:
+        for s in filtered_sup:
+            sup_key = f"sup_{s['id']}"
+            sup_exp = st.session_state.expanded_task_key == sup_key
+            sup_label = f"{s.get('name', 'Без названия')} — {s.get('phone', '—')} | {s.get('category', '—')}"
+            sup_selected = sup_exp
+            sup_border = "#2196F3" if sup_selected else "#DCE0E5"
+            sup_shadow = "box-shadow: 0 0 0 2px rgba(33,150,243,0.3);" if sup_selected else ""
+            st.markdown(f"<style>.st-key-sup_wrap_{s['id']} button {{ background-color: #FFFFFF !important; color: #2C3E50 !important; border: 2px solid {sup_border} !important; border-radius: 10px !important; {sup_shadow} }}</style>", unsafe_allow_html=True)
+            with st.container(key=f"sup_wrap_{s['id']}"):
+                if st.button(sup_label, key=f"sup_card_{s['id']}", use_container_width=True, type="primary" if sup_exp else "secondary"):
+                    if sup_exp:
+                        st.session_state.expanded_task_key = None
+                        save_scroll_and_rerun()
+                    else:
+                        st.session_state.expanded_task_key = sup_key
+                        st.rerun()
+                if not sup_exp:
+                    render_scroll_restore(f"sup_{s['id']}")
+            if sup_exp:
+                with st.container(border=True):
+                    st.markdown(f"**{s.get('name', '')}**")
+                    st.markdown(format_created_date(s), unsafe_allow_html=True)
+                    if s.get("phone"):
+                        render_phone_inline(s["phone"], f"sup_{s['id']}")
+                    info_c, comm_c = st.columns(2)
+                    with info_c:
+                        st.markdown(f"**Email:** {s.get('email', '—')}")
+                        st.markdown(f"**Адрес:** {s.get('address', '—')}")
+                        st.markdown(f"**Категория:** {s.get('category', '—')}")
+                    with comm_c:
+                        if s.get("comment"):
+                            st.markdown(f"**Комментарий:** {s['comment']}")
+                        else:
+                            st.caption("Комментариев нет")
+                    st.markdown("---")
+                    show_sup_edit = f"show_sup_edit_{s['id']}"
+                    if st.button("Редактировать" if not st.session_state.get(show_sup_edit, False) else "Скрыть", key=f"sup_edit_toggle_{s['id']}", use_container_width=True):
+                        st.session_state[show_sup_edit] = not st.session_state.get(show_sup_edit, False)
+                        st.rerun()
+                    if st.session_state.get(show_sup_edit, False):
+                        with st.container(border=True):
+                            esn = st.text_input("Название:", value=s.get("name", ""), key=f"esn_{s['id']}")
+                            esp = st.text_input("Телефон:", value=s.get("phone", ""), key=f"esp_{s['id']}")
+                            ese = st.text_input("Email:", value=s.get("email", ""), key=f"ese_{s['id']}")
+                            esa = st.text_input("Адрес:", value=s.get("address", ""), key=f"esa_{s['id']}")
+                            esc = st.text_input("Категория:", value=s.get("category", ""), key=f"esc_{s['id']}")
+                            escom = st.text_area("Комментарий:", value=s.get("comment", ""), key=f"escom_{s['id']}")
+                            if st.button("Сохранить", key=f"es_save_{s['id']}", type="primary", use_container_width=True):
+                                s["name"] = esn.strip()
+                                s["phone"] = format_phone(esp) if esp else ""
+                                s["email"] = ese.strip()
+                                s["address"] = esa.strip()
+                                s["category"] = esc.strip()
+                                s["comment"] = escom.strip()
+                                s["last_modified"] = now_str()
+                                st.session_state[show_sup_edit] = False
+                                commit_and_rerun(st.session_state.crm_store, "Поставщик обновлён")
+                    if st.session_state.user_role == "admin":
+                        st.markdown("---")
+                        if st.button("Удалить поставщика", key=f"sup_del_{s['id']}", use_container_width=True):
+                            st.session_state.crm_store["suppliers"] = [x for x in suppliers if x["id"] != s["id"]]
+                            st.session_state.expanded_task_key = None
+                            commit_and_rerun(st.session_state.crm_store, "Поставщик удалён")
+                    render_reminders("supplier", s.get("id", ""), s.get("name", "Поставщик"), f"supplier_{s.get('id')}")
+    else:
+        st.info("Поставщиков нет. Добавьте первого.")
+
+# Supplier cards are inline, so their reminder dialog is dispatched at the script root.
+if st.session_state.get("_pending_reminder_dialog") and st.session_state.get("active_tab") == "Поставщики":
+    _pending_reminder = st.session_state["_pending_reminder_dialog"]
+    create_reminder_dialog(_pending_reminder["entity_type"], _pending_reminder["entity_id"], _pending_reminder["entity_label"])
+
+# Рабочее пространство уже восстановлено до первого рендеринга панели окон.
+
+# Глобальная диспетчеризация legacy-маркеров: сохраняем совместимость с существующими
+# действиями CRM, но каждое окно отображается вкладкой в рабочем пространстве.
+if not st.session_state.get("_crm_dialog_requested_this_run", False):
+    # Legacy actions must still be dispatched when a workspace is already open.
+    # The previous `and not _crm_windows` guard silently disabled requisites,
+    # invoice and calculation buttons as soon as the first workspace existed.
+    _global_req_view_state = st.session_state.pop("dialog_client_requisites_view", None)
+    _global_req_dialog_client_id = st.session_state.pop("dialog_client_requisites_client_id", None)
+    _global_req_return_to_invoice = bool(st.session_state.pop("dialog_client_requisites_return_to_invoice", False))
+    _global_invoice_dialog_state = st.session_state.pop("dialog_invoice_request", None)
+    _global_calc_deal_id = st.session_state.pop("dialog_calculation_deal_id", None)
+    _global_calc_id = st.session_state.pop("dialog_calculation_calc_id", None)
+    if _global_req_view_state:
+        client_requisites_view_dialog(_global_req_view_state.get("client_id"), bool(_global_req_view_state.get("return_to_invoice")), _global_req_view_state.get("requisite_id"))
+    elif _global_req_dialog_client_id:
+        client_requisites_dialog(_global_req_dialog_client_id, _global_req_return_to_invoice)
+    elif _global_invoice_dialog_state:
+        invoice_document_dialog(_global_invoice_dialog_state.get("deal_id"), _global_invoice_dialog_state.get("calc_id"))
+    elif _global_calc_deal_id and _global_calc_id:
+        _global_calc_deal = next((d for d in st.session_state.crm_store.get("deals", []) if str(d.get("id")) == str(_global_calc_deal_id)), None)
+        _global_calc = next((c for c in (_global_calc_deal or {}).get("calculations", []) if str(c.get("id")) == str(_global_calc_id) and not c.get("deleted")), None)
+        if _global_calc_deal and _global_calc:
+            deal_calculation_dialog(_global_calc_deal_id, _global_calc_id)
+
+def _crm_workspace_close_tab_callback(window_id, tab_index, force=False):
+    """Close a tab only after any unsaved edit has been explicitly handled."""
+    windows = st.session_state.get("_crm_windows", [])
+    window = next((w for w in windows if str(w.get("id")) == str(window_id)), None)
+    if window is None:
+        return
+    tabs = window.get("tabs", [])
+    if not (0 <= int(tab_index) < len(tabs)):
+        return
+    closing_tab = tabs[int(tab_index)]
+    if not force and _crm_workspace_tab_has_unsaved(closing_tab):
+        _crm_workspace_prompt_close(window, int(tab_index), "tab")
+        return
+    if closing_tab.get("name") == "notifications_dialog":
+        st.session_state["show_notifications_dialog"] = False
+        st.session_state.pop("_crm_return_to_notifications", None)
+        preferred_id = window.get("return_to_window_id")
+        st.session_state["_crm_windows"] = [w for w in windows if str(w.get("id")) != str(window_id)]
+        remaining = st.session_state["_crm_windows"]
+        next_window = next((w for w in remaining if preferred_id and str(w.get("id")) == str(preferred_id)), None)
+        if next_window is None:
+            next_window = next((w for w in reversed(remaining) if not w.get("minimized")), None)
+        if next_window is None and remaining:
+            next_window = remaining[-1]
+        if next_window:
+            next_window["minimized"] = False
+            st.session_state["_crm_active_window_id"] = next_window.get("id")
+            next_tabs = next_window.get("tabs", [])
+            next_index = max(0, min(int(next_window.get("active_tab", 0) or 0), len(next_tabs)-1)) if next_tabs else -1
+            if next_index >= 0:
+                next_window["active_tab"] = next_index
+                st.session_state["_crm_active_dialog"] = next_tabs[next_index]
+            else:
+                st.session_state.pop("_crm_active_dialog", None)
+        else:
+            st.session_state["_crm_active_window_id"] = None
+            st.session_state.pop("_crm_active_dialog", None)
+    else:
+        if closing_tab.get("name") == "add_client_dialog":
+            closing_args = closing_tab.get("args", ()) or ()
+            if closing_args:
+                st.session_state[f"show_add_client_dialog_{closing_args[0]}"] = False
+        tabs.pop(int(tab_index))
+        if not tabs:
             st.session_state["_crm_windows"] = [w for w in windows if str(w.get("id")) != str(window_id)]
-            remaining = st.session_state["_crm_windows"]
-            next_window = next((w for w in remaining if preferred_id and str(w.get("id")) == str(preferred_id)), None)
-            if next_window is None:
-                next_window = next((w for w in reversed(remaining) if not w.get("minimized")), None)
-            if next_window is None and remaining:
-                next_window = remaining[-1]
-            if next_window:
+            next_window = next((w for w in reversed(st.session_state["_crm_windows"]) if not w.get("minimized")), None)
+            if next_window is None and st.session_state["_crm_windows"]:
+                next_window = st.session_state["_crm_windows"][-1]
                 next_window["minimized"] = False
+            if next_window:
                 st.session_state["_crm_active_window_id"] = next_window.get("id")
                 next_tabs = next_window.get("tabs", [])
                 next_index = max(0, min(int(next_window.get("active_tab", 0) or 0), len(next_tabs)-1)) if next_tabs else -1
@@ -17395,43 +17407,15 @@ def _crm_render_active_section_fragment():
                 st.session_state["_crm_active_window_id"] = None
                 st.session_state.pop("_crm_active_dialog", None)
         else:
-            if closing_tab.get("name") == "add_client_dialog":
-                closing_args = closing_tab.get("args", ()) or ()
-                if closing_args:
-                    st.session_state[f"show_add_client_dialog_{closing_args[0]}"] = False
-            tabs.pop(int(tab_index))
-            if not tabs:
-                st.session_state["_crm_windows"] = [w for w in windows if str(w.get("id")) != str(window_id)]
-                next_window = next((w for w in reversed(st.session_state["_crm_windows"]) if not w.get("minimized")), None)
-                if next_window is None and st.session_state["_crm_windows"]:
-                    next_window = st.session_state["_crm_windows"][-1]
-                    next_window["minimized"] = False
-                if next_window:
-                    st.session_state["_crm_active_window_id"] = next_window.get("id")
-                    next_tabs = next_window.get("tabs", [])
-                    next_index = max(0, min(int(next_window.get("active_tab", 0) or 0), len(next_tabs)-1)) if next_tabs else -1
-                    if next_index >= 0:
-                        next_window["active_tab"] = next_index
-                        st.session_state["_crm_active_dialog"] = next_tabs[next_index]
-                    else:
-                        st.session_state.pop("_crm_active_dialog", None)
-                else:
-                    st.session_state["_crm_active_window_id"] = None
-                    st.session_state.pop("_crm_active_dialog", None)
-            else:
-                active_index = int(window.get("active_tab", 0) or 0)
-                new_active = active_index - 1 if int(tab_index) < active_index else min(int(tab_index), len(tabs)-1) if int(tab_index) == active_index else active_index
-                new_active = max(0, min(new_active, len(tabs)-1))
-                window["active_tab"] = new_active
-                st.session_state["_crm_active_window_id"] = window.get("id")
-                st.session_state["_crm_active_dialog"] = tabs[new_active]
-        _crm_workspace_clear_legacy_dialog_markers()
-        _crm_workspace_queue_save()
+            active_index = int(window.get("active_tab", 0) or 0)
+            new_active = active_index - 1 if int(tab_index) < active_index else min(int(tab_index), len(tabs)-1) if int(tab_index) == active_index else active_index
+            new_active = max(0, min(new_active, len(tabs)-1))
+            window["active_tab"] = new_active
+            st.session_state["_crm_active_window_id"] = window.get("id")
+            st.session_state["_crm_active_dialog"] = tabs[new_active]
+    _crm_workspace_clear_legacy_dialog_markers()
+    _crm_workspace_queue_save()
 
-
-
-
-_crm_render_active_section_fragment()
 
 # Изолируем рабочее пространство во фрагмент Streamlit: переключение вкладок и
 # локальные изменения внутри открытого окна не должны заново выполнять всю CRM.
@@ -17991,6 +17975,34 @@ def _crm_render_workspace_fragment():
     # When no expanded workspace is open, the same panel is rendered under the main CRM navigation.
 
     # Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
+
+
+@st.fragment(run_every="3s")
+def _crm_live_data_refresh_fragment():
+    """Тихо обновляет рабочие разделы из SQLite при изменениях другой сессии."""
+    try:
+        _active_section = str(st.session_state.get("active_tab", "") or "")
+        # Главную страницу отдельно не обновляем.
+        if not _active_section or _active_section in ("Главная", "Главная страница"):
+            return
+        _login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+        if not _login:
+            return
+        # Существующая проверка не допускает перезапись локальных несохранённых правок.
+        if _crm_refresh_store_if_clean():
+            _crm_log("DATABASE_AUTO_REFRESH", {
+                "revision": int(st.session_state.get("crm_base_revision", 0) or 0),
+                "section": _active_section,
+                "reason": "periodic silent refresh",
+            })
+            st.rerun(scope="app")
+    except Exception as _refresh_exc:
+        _crm_log("DATABASE_AUTO_REFRESH_ERROR", {
+            "section": str(st.session_state.get("active_tab", "") or ""),
+        }, exc=_refresh_exc, remote=False)
+
+
+_crm_live_data_refresh_fragment()
 
 
 @st.fragment(run_every="3s")
