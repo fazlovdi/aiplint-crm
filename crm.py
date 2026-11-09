@@ -12849,6 +12849,14 @@ def render_deal_detail(d, cl, cu, key_prefix):
                         _sync_deal_board_stage_from_payment(d)
                         commit_and_rerun(st.session_state.crm_store, "Статус оплаты обновлён")
                 with _info_right_col:
+                    # Для новой сделки действие располагается непосредственно над ответственным.
+                    if str(d.get("status", "Новый") or "Новый") == "Новый":
+                        if st.button("Взять в работу", key=f"dls_take_{deal_id}", use_container_width=True, type="primary"):
+                            d["status"] = "В работе"
+                            if not d.get("manager"):
+                                d["manager"] = cu
+                            d["last_modified"] = now_str()
+                            commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
                     _crm_deal_responsible_fragment(d, deal_id)
                 show_edit_deal = st.session_state.get(f"dls_show_edit_{deal_id}", False)
                 if show_edit_deal:
@@ -12892,12 +12900,7 @@ def render_deal_detail(d, cl, cu, key_prefix):
             action = st.session_state.get(action_key)
             current_status = d.get("status", "Новый")
             if current_status == "Новый":
-                if st.button("Взять в работу", key=f"dls_take_{deal_id}", use_container_width=True, type="primary"):
-                    d["status"] = "В работе"
-                    if not d.get("manager"):
-                        d["manager"] = cu
-                    d["last_modified"] = now_str()
-                    commit_and_rerun(st.session_state.crm_store, "Сделка взята в работу")
+                pass  # Кнопка «Взять в работу» находится над ответственным.
             elif current_status in ("В работе", "Оплачено"):
                 pass
             elif current_status in ("Сделка закрыта", "Архив"):
