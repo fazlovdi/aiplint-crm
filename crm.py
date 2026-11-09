@@ -9913,6 +9913,8 @@ def render_deal_standalone(d, cl, cu):
         text-align: left !important;
     }}
     .st-key-dls_wrap_{deal_id} button p {{
+        margin: 0 !important;
+        padding: 0 !important;
         font-size: 0.86rem !important;
         line-height: 1.3 !important;
         font-weight: 500 !important;
