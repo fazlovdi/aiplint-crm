@@ -10146,7 +10146,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ("BACKGROUND",(0,last_row),(-1,last_row),colors.HexColor("#FCEEF4")),("FONTNAME",(0,last_row),(-1,last_row),bold),
-        ("SPAN",(0,last_row),(len(headers)-2,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT")]
+        ("SPAN",(0,last_row),(len(headers)-2,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT"),("ALIGN",(0,last_row),(len(headers)-2,last_row),"LEFT")]
     tbl.setStyle(TableStyle(tbl_style))
     flow += [tbl]
     if delivery:
