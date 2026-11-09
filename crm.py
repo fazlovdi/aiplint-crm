@@ -4521,8 +4521,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     var containerClass = {json.dumps("st-key-" + report_container_key)};
                     var storageKey = {json.dumps(report_storage_key)};
                     var cancelClass = {json.dumps("st-key-cancel_complete_" + _report_dom_suffix)};
-                    var confirmClass = {json.dumps("st-key-go_" + _report_dom_suffix)};
-                    var uploaderClass = {json.dumps("st-key-uf_" + _report_dom_suffix + "_" + str(uf_ver))};
+                    var confirmClass = {json.dumps("st-key-go_" + str(key_prefix))};
+                    var uploaderClass = {json.dumps("st-key-uf_" + str(key_prefix) + "_" + str(uf_ver))};
                     var uploadStorageKey = {json.dumps("crm_task_report_uploading_" + _report_dom_suffix)};
                     function sync() {{
                         var b = doc.getElementById(buttonId);
@@ -4543,9 +4543,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             }});
                         }}
                         // Блокируем подтверждение, пока Streamlit не завершил загрузку выбранных файлов.
-                        var confirmWrap = doc.querySelector('.' + confirmClass);
+                        var confirmWrap = doc.getElementsByClassName(confirmClass)[0];
                         var confirmBtn = confirmWrap && confirmWrap.querySelector('button');
-                        var uploader = doc.querySelector('.' + uploaderClass);
+                        var uploader = doc.getElementsByClassName(uploaderClass)[0];
                         if (confirmBtn && uploader) {{
                             var fileInput = uploader.querySelector('input[type="file"]');
                             if (fileInput && !fileInput.__crmUploadBound) {{
