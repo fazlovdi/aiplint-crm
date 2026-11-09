@@ -9876,13 +9876,12 @@ def render_deal_standalone(d, cl, cu):
     dl_tasks = [t for t in (cl.get("tasks", []) if cl else []) if t.get("deal_id") == deal_id]
     client_name = cl.get("name", "—") if cl else "—"
     num = d.get("deal_number", d.get("title", ""))
-    parts = [str(num), client_name]
-    if d.get("deal_title"):
-        parts.append(d["deal_title"])
-    parts.append(f"{d.get('budget', 0):,.0f} руб.".replace(",", " "))
-    parts.append(f"Ответственный: {d.get('manager', '—')}")
-    parts.append(f"Задач: {len(dl_tasks)}")
-    label = " | ".join(parts)
+    deal_topic = " ".join(str(d.get("deal_title", "") or "").split())
+    # В колонках доски показываем только номер, клиента и тему; длинную тему
+    # обрезаем заранее, чтобы она всегда занимала одну строку.
+    if len(deal_topic) > 25:
+        deal_topic = deal_topic[:24].rstrip() + "…"
+    label = f"№{num}  \n{client_name}  \n{deal_topic or 'Без темы'}"
     # Карточки сделок оформлены в том же компактном стиле, что и карточки задач:
     # пастельный фон, тонкая рамка и цветная полоса слева.
     _deal_status = d.get("status", "Новый")
@@ -9913,10 +9912,11 @@ def render_deal_standalone(d, cl, cu):
     }}
     .st-key-dls_wrap_{deal_id} button p {{
         font-size: 0.86rem !important;
-        line-height: 1.42 !important;
+        line-height: 1.3 !important;
         font-weight: 500 !important;
         text-align: left !important;
-        white-space: normal !important;
+        white-space: pre-line !important;
+        overflow: hidden !important;
     }}
     .st-key-dls_wrap_{deal_id} button:hover {{
         box-shadow: 0 3px 9px rgba(30,45,65,0.12) !important;
