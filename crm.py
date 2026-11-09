@@ -10133,8 +10133,13 @@ def _make_commercial_offer_pdf(deal, client, calc):
         table_data.append([Paragraph("—",cell), Paragraph("Товары не добавлены в расчёт",cell)] + [""]*(len(headers)-2))
     total=sum(r['amount'] for r in rows)
     delivery=max(0.0,float(calc.get("delivery_amount",0) or 0))
+    delivery_row_idx = None
     if delivery:
-        delivery_row=[""]*len(headers); delivery_row[1]=Paragraph("Доставка",cell); delivery_row[-1]=Paragraph(_money(delivery),cell); table_data.append(delivery_row)
+        delivery_row_idx = len(table_data)
+        delivery_row=[""]*len(headers)
+        delivery_row[0]=Paragraph("Доставка (стоимость предварительная, точная будет известна при отправке)",cell)
+        delivery_row[-1]=Paragraph(_money(delivery),cell)
+        table_data.append(delivery_row)
     total_row=[""]*len(headers); total_row[-2]=Paragraph("ИТОГО:",cell); total_row[-1]=Paragraph(_money(total+delivery),cell); table_data.append(total_row)
     if show_discount:
         widths=[8*mm,43*mm,15*mm,43*mm,12*mm,19*mm,13*mm,22*mm,13*mm,22*mm]
@@ -10148,6 +10153,8 @@ def _make_commercial_offer_pdf(deal, client, calc):
         ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
         ("BACKGROUND",(0,last_row),(-1,last_row),colors.HexColor("#FCEEF4")),("FONTNAME",(0,last_row),(-1,last_row),bold),
         ("SPAN",(0,last_row),(len(headers)-3,last_row)),("ALIGN",(len(headers)-2,1),(-1,-1),"RIGHT")]
+    if delivery_row_idx is not None:
+        tbl_style.append(("SPAN",(0,delivery_row_idx),(len(headers)-2,delivery_row_idx)))
     tbl.setStyle(TableStyle(tbl_style))
     flow += [tbl, PageBreak(), Spacer(1,20*mm), Paragraph("3. ДОПОЛНИТЕЛЬНЫЕ УСЛОВИЯ И ХАРАКТЕРИСТИКИ", h),
              Paragraph("• Условия оплаты: 100%.<br/>• Сроки поставки: отгрузка в течение 3 рабочих дней с момента поступления оплаты на расчётный счёт Поставщика.<br/>• При отгрузке предоставляется комплект закрывающих документов (УПД, товарная накладная), а также сертификаты соответствия на продукцию.", body),
