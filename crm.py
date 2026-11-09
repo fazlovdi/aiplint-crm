@@ -4531,7 +4531,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         var open = false;
                         try {{ open = w.sessionStorage.getItem(storageKey) === '1'; }} catch(e) {{}}
                         box.style.display = open ? 'block' : 'none';
-                        b.textContent = open ? 'Свернуть отчёт' : 'Выполнить задачу';
+                        var expectedLabel = open ? 'Свернуть отчёт' : 'Выполнить задачу';
+                        if (b.textContent !== expectedLabel) b.textContent = expectedLabel;
                         if (!b.__crmToggleBound) {{
                             b.__crmToggleBound = true;
                             b.addEventListener('click', function(e) {{
@@ -4539,7 +4540,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 var show = box.style.display === 'none' || w.getComputedStyle(box).display === 'none';
                                 box.style.display = show ? 'block' : 'none';
                                 try {{ w.sessionStorage.setItem(storageKey, show ? '1' : '0'); }} catch(e) {{}}
-                                b.textContent = show ? 'Свернуть отчёт' : 'Выполнить задачу';
+                                var nextLabel = show ? 'Свернуть отчёт' : 'Выполнить задачу';
+                                if (b.textContent !== nextLabel) b.textContent = nextLabel;
                             }});
                         }}
                         // Блокируем подтверждение, пока Streamlit не завершил загрузку выбранных файлов.
@@ -4584,9 +4586,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     }}
                     sync();
                     setTimeout(sync, 50);
-                    var observer = new MutationObserver(sync);
-                    observer.observe(doc.body, {{childList: true, subtree: true}});
-                    setInterval(sync, 250);
+                    setTimeout(sync, 250);
+                    setTimeout(sync, 750);
+                    setTimeout(sync, 1500);
                 }})();
                 </script>""", height=0)
             else:
