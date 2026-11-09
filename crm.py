@@ -10150,7 +10150,7 @@ def _make_commercial_offer_pdf(deal, client, calc):
     flow += [tbl]
     if delivery:
         delivery_text = Paragraph(
-            f"Доставка <font size='7'><i>(расчёт предварительный, точная стоимость будет известна при отправке)</i></font>: <b>{_money(delivery)} рублей</b>",
+            f"Доставка <font size='8'><i>(расчёт предварительный, точная стоимость будет известна при отправке)</i></font>: <b>{_money(delivery)} рублей</b>",
             ParagraphStyle("OfferDeliveryNote", parent=body, spaceAfter=0, alignment=0)
         )
         flow += [Spacer(1,2*mm), delivery_text]
