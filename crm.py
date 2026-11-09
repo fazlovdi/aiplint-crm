@@ -12632,7 +12632,7 @@ def deal_calculation_dialog(deal_id, calc_id):
         pmap = {str(p.get("id", p.get("sku", ""))): p for p in active_products_row}
         # Артикул и единица измерения показываются отдельными компактными колонками,
         # как в прайсе. Они берутся из карточки товара и не редактируются в расчёте.
-        # Порядок колонок: артикул, товар, цвет/RAL, единица измерения, количество, скидка, цена.
+        # Порядок колонок: артикул, товар, цвет/RAL, уплотнитель, единица измерения, количество, скидка, цена.
         cols = st.columns([1.05, 2.8, 1.55, 1.15, 0.62, 0.72, 0.72, 0.78])
         with cols[0]:
             st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem'>Артикул</div>", unsafe_allow_html=True)
@@ -12643,14 +12643,20 @@ def deal_calculation_dialog(deal_id, calc_id):
                 on_change=lambda: st.session_state.__setitem__(dirty_key, True))
             _crm_mark_widget_changed(pid_key, str(st.session_state.get(pid_key, current_pid)) != str(_original_item.get("product_id", current_pid)))
         product = pmap[selected_pid]
+        price_key = f"{key}_{row_id}_price"
+        if price_key not in st.session_state:
+            st.session_state[price_key] = float(item.get("unit_price", product.get("price", 0)) or 0)
+        with cols[2]:
+            st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"{key}_{row_id}_color", placeholder="RAL / цвет", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
+            _crm_mark_widget_changed(f"{key}_{row_id}_color", str(st.session_state.get(f"{key}_{row_id}_color", item.get("color_ral", ""))) != str(_original_item.get("color_ral", "")))
         _gasket_key = f"{key}_{row_id}_rubber_gasket"
         _gasket_eligible = str(selected_pid) in {"APLNT1050", "APLNT1051", "APLNT1052", "APLNT1053"}
-        with cols[2]:
+        with cols[3]:
             if _gasket_eligible:
                 if _gasket_key not in st.session_state:
                     st.session_state[_gasket_key] = bool(item.get("rubber_gasket", False))
                 st.checkbox(
-                    "Резиновый уплотнитель",
+                    "Уплотнитель",
                     key=_gasket_key,
                     on_change=lambda: st.session_state.__setitem__(dirty_key, True),
                 )
@@ -12659,12 +12665,6 @@ def deal_calculation_dialog(deal_id, calc_id):
                 item["rubber_gasket"] = False
                 st.session_state.pop(_gasket_key, None)
                 st.markdown("<div style='height:1.8rem'></div>", unsafe_allow_html=True)
-        price_key = f"{key}_{row_id}_price"
-        if price_key not in st.session_state:
-            st.session_state[price_key] = float(item.get("unit_price", product.get("price", 0)) or 0)
-        with cols[3]:
-            st.text_input("Цвет/RAL", value=str(item.get("color_ral", "")), key=f"{key}_{row_id}_color", placeholder="RAL / цвет", on_change=lambda: st.session_state.__setitem__(dirty_key, True))
-            _crm_mark_widget_changed(f"{key}_{row_id}_color", str(st.session_state.get(f"{key}_{row_id}_color", item.get("color_ral", ""))) != str(_original_item.get("color_ral", "")))
         with cols[4]:
             st.markdown("<div style='font-size:0.72rem;color:#718096;margin:0.2rem 0 0.35rem'>Ед.</div>", unsafe_allow_html=True)
             st.markdown(f"<div style='font-size:0.78rem;font-weight:600;padding-top:0.15rem'>{product.get('unit', item.get('unit', 'шт.'))}</div>", unsafe_allow_html=True)
