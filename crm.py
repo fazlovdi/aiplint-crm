@@ -4445,6 +4445,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
             # Форма отчёта заранее находится в DOM задачи; раскрытие выполняется JS без Streamlit rerun.
             tk_done = t.get("done", False)
             if not tk_done:
+                show_key = f"show_complete_{key_prefix}"
                 _report_dom_suffix = re.sub(r"[^A-Za-z0-9_]", "_", str(key_prefix))
                 report_container_key = f"task_completion_inline_{_report_dom_suffix}"
                 report_button_id = f"task_completion_toggle_{_report_dom_suffix}"
