@@ -4395,6 +4395,19 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _smart_rerun()
 
                     with _status_inner:
+                        if not t.get("done", False) and not t.get("in_work", False):
+                            if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
+                                # Для общей неназначенной задачи ответственным становится тот, кто первым взял её в работу.
+                                if not t.get("manager"):
+                                    t["manager"] = cu
+                                    t["delegated_to"] = cu
+                                t["in_work"] = True
+                                t["last_modified"] = now_str()
+                                cl["last_modified"] = now_str()
+                                if d: d["last_modified"] = now_str()
+                                save_data(st.session_state.crm_store)
+                                st.toast("Задача взята в работу", icon="✅")
+                                st.rerun()
                         if show_shipping_status and _tp in ("Отправить заказ", "Отправить образцы"):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
