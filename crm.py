@@ -8937,19 +8937,18 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             with _ai_col:
                 _ai_key = f"crm_workspace_ai_prompt_{_bottom_scope}"
                 _ai_submit_key = f"crm_workspace_ai_submitted_{_bottom_scope}"
+                def _submit_ai_prompt():
+                    _ai_value = str(st.session_state.get(_ai_key, "") or "").strip()
+                    if _ai_value:
+                        st.session_state[_ai_submit_key] = _ai_value
+
                 st.text_input(
                     "Вопрос AI",
                     key=_ai_key,
                     placeholder="Посоветоваться с Яшей…",
                     label_visibility="collapsed",
+                    on_change=_submit_ai_prompt,
                 )
-                if st.button("Спросить AI", key=f"crm_workspace_ai_send_{_bottom_scope}", use_container_width=True):
-                    _ai_value = str(st.session_state.get(_ai_key, "") or "").strip()
-                    if _ai_value:
-                        st.session_state[_ai_submit_key] = _ai_value
-                        st.rerun()
-                    else:
-                        st.info("Сначала введи вопрос.")
             _ai_submitted = str(st.session_state.get(f"crm_workspace_ai_submitted_{_bottom_scope}", "") or "").strip()
             if _ai_submitted:
                 with st.container(border=True):
