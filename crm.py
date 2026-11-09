@@ -11562,19 +11562,36 @@ def _deal_has_active_payment_document(deal):
     return False
 
 
+def _deal_has_commercial_offer(deal):
+    """True, если в сделке сохранено сформированное коммерческое предложение."""
+    for doc in deal.get("generated_documents", []) or []:
+        if not doc.get("deleted") and doc.get("kind") == "Коммерческое предложение":
+            return True
+    for calc in deal.get("calculations", []) or []:
+        for doc in calc.get("generated_documents", []) or []:
+            if not doc.get("deleted") and doc.get("kind") == "Коммерческое предложение":
+                return True
+    return False
+
+
 def _sync_deal_board_stage_from_payment(deal):
-    """Синхронизирует колонку сделки с оплатой и наличием выставленных документов, сохраняя паузу и финальные этапы."""
+    """Синхронизирует этап сделки по КП/счёту, не пропуская этап «Новый» до явного взятия в работу."""
     status = deal.get("status", "Новый")
-    if status in ("На паузе", "Сделка закрыта", "Архив"):
+    if status in ("Новый", "На паузе", "Сделка закрыта", "Архив"):
         return
     payment_status = deal.get("payment_status", "Не оплачено")
     has_payment_document = _deal_has_active_payment_document(deal)
+    has_offer = _deal_has_commercial_offer(deal)
     if payment_status == "Оплачено":
-        if status in ("Новый", "В работе", "Ожидание оплаты", "Оплачено"):
+        if status in ("В работе", "Отправлено КП", "Ожидание оплаты", "Оплачено"):
             deal["status"] = "Оплачено"
-    elif has_payment_document and status in ("Новый", "В работе", "Ожидание оплаты", "Оплачено"):
+    elif has_payment_document and status in ("В работе", "Отправлено КП", "Ожидание оплаты", "Оплачено"):
         deal["status"] = "Ожидание оплаты"
+    elif has_offer and not has_payment_document and status in ("В работе", "Отправлено КП"):
+        deal["status"] = "Отправлено КП"
     elif status == "Оплачено":
+        deal["status"] = "В работе"
+    elif status == "Отправлено КП" and not has_offer:
         deal["status"] = "В работе"
 
 
@@ -13513,7 +13530,7 @@ def render_client_in_tree(cl):
                     deals = st.session_state.crm_store.get("deals", [])
                     did = f"deal_{moscow_now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
                     dn = generate_deal_number()
-                    new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "В работе", "manager": cd_mgr or "", "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "real_date": cd_real_date.isoformat() if cd_real_date else "", "change_log": [], "deal_chat": []}
+                    new_deal = {"id": did, "client_id": cl["id"], "title": dn, "deal_number": dn, "deal_title": cd_title.strip(), "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0, "status": "Новый", "manager": cd_mgr or "", "deal_comments": [], "deal_files": [], "payment_status": cd_ps, "close_files": [], "archive_files": [], "last_modified": now_str(), "created_at": now_str(), "created_by": st.session_state.get("user_login", ""), "real_date": cd_real_date.isoformat() if cd_real_date else "", "change_log": [], "deal_chat": []}
                     st.session_state.crm_store.setdefault("deals", []).append(new_deal)
                     cl["last_modified"] = now_str()
                     st.session_state[show_cd_key] = False
@@ -14521,7 +14538,7 @@ def create_deal_dialog(cl_id):
         dn = generate_deal_number()
         new_deal = {"id": did, "client_id": cl_id, "title": dn, "deal_number": dn, "deal_title": cd_title.strip(),
                     "budget": int(cd_budget) if cd_budget and cd_budget.strip().isdigit() else 0,
-                    "status": "В работе", "manager": cd_mgr or "", "payment_status": cd_ps,
+                    "status": "Новый", "manager": cd_mgr or "", "payment_status": cd_ps,
                         "deal_comments": ([{"time": now_str(), "text": cd_comment.strip()}] if cd_comment.strip() else []), "deal_files": (normalize_file_list(save_uploaded_files(cd_files, cl_id, "deal_file")) if cd_files else []), "close_files": [], "archive_files": [],
                         "last_modified": now_str(), "created_at": now_str(),
                         "created_by": st.session_state.get("user_login", ""), "real_date": cd_real_date.isoformat() if cd_real_date else "", "change_log": [], "deal_chat": []}
@@ -16464,7 +16481,7 @@ elif st.session_state.active_tab == "Сделки":
   init();
 })();
 </script>''', height=0)
-    # Пять активных колонок: новые, в работе, ожидание оплаты, оплачено, на паузе.
+    # Шесть колонок: новые, в работе, отправлено КП, ожидание оплаты, оплачено, на паузе.
     fdeals = []
     _board_stage_changed = False
     for d in all_deals:
@@ -16473,7 +16490,7 @@ elif st.session_state.active_tab == "Сделки":
         if d.get("status", "Новый") != _old_board_stage:
             _board_stage_changed = True
         s = d.get("status", "Новый")
-        if s not in ("Новый", "В работе", "Ожидание оплаты", "Оплачено", "На паузе"):
+        if s not in ("Новый", "В работе", "Отправлено КП", "Ожидание оплаты", "Оплачено", "На паузе"):
             continue
         cl = cid_map.get(d.get("client_id"))
         if mgr_filter != "Все" and d.get("manager", "") != mgr_filter:
@@ -16493,12 +16510,13 @@ elif st.session_state.active_tab == "Сделки":
         fdeals.sort(key=lambda d: str(d.get("last_modified") or d.get("created_at") or ""), reverse=True)
     new_deals = [d for d in fdeals if d.get("status", "Новый") == "Новый"]
     work_deals = [d for d in fdeals if d.get("status", "") == "В работе"]
+    offer_sent_deals = [d for d in fdeals if d.get("status", "") == "Отправлено КП"]
     waiting_payment_deals = [d for d in fdeals if d.get("status", "") == "Ожидание оплаты"]
     paid_deals = [d for d in fdeals if d.get("status", "") == "Оплачено"]
     paused_deals = [d for d in fdeals if d.get("status", "") == "На паузе"]
     st.markdown("""<style>
     /* Визуальная система доски сделок повторяет доску задач. */
-    .st-key-deals_col_new, .st-key-deals_col_work, .st-key-deals_col_waiting,
+    .st-key-deals_col_new, .st-key-deals_col_work, .st-key-deals_col_offer, .st-key-deals_col_waiting,
     .st-key-deals_col_paid, .st-key-deals_col_paused {
         background: #F8FAFC !important;
         border: 1px solid #E2E8F0 !important;
@@ -16507,9 +16525,8 @@ elif st.session_state.active_tab == "Сделки":
         min-height: 150px !important;
         box-shadow: 0 1px 2px rgba(30,45,65,0.025) !important;
     }
-    .st-key-deals_col_new h3, .st-key-deals_col_work h3,
-    .st-key-deals_col_waiting h3, .st-key-deals_col_paid h3,
-    .st-key-deals_col_paused h3 {
+    .st-key-deals_col_new h3, .st-key-deals_col_work h3, .st-key-deals_col_offer h3,
+    .st-key-deals_col_waiting h3, .st-key-deals_col_paid h3, .st-key-deals_col_paused h3 {
         color: #344256 !important;
         font-size: 0.98rem !important;
         font-weight: 700 !important;
@@ -16521,6 +16538,7 @@ elif st.session_state.active_tab == "Сделки":
     }
     .st-key-deals_col_new [data-testid="stCaptionContainer"],
     .st-key-deals_col_work [data-testid="stCaptionContainer"],
+    .st-key-deals_col_offer [data-testid="stCaptionContainer"],
     .st-key-deals_col_waiting [data-testid="stCaptionContainer"],
     .st-key-deals_col_paid [data-testid="stCaptionContainer"],
     .st-key-deals_col_paused [data-testid="stCaptionContainer"] {
@@ -16528,7 +16546,7 @@ elif st.session_state.active_tab == "Сделки":
         font-size: 0.82rem !important;
     }
     </style>""", unsafe_allow_html=True)
-    col_new, col_work, col_waiting, col_paid, col_paused = st.columns(5, gap="small")
+    col_new, col_work, col_offer, col_waiting, col_paid, col_paused = st.columns(6, gap="small")
     with col_new:
         with st.container(key="deals_col_new", border=True):
             st.subheader(f"Новые ({len(new_deals)})")
@@ -16545,6 +16563,14 @@ elif st.session_state.active_tab == "Сделки":
                     render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
             else:
                 st.caption("Сделок в работе нет.")
+    with col_offer:
+        with st.container(key="deals_col_offer", border=True):
+            st.subheader(f"Отправлено КП ({len(offer_sent_deals)})")
+            if offer_sent_deals:
+                for d in offer_sent_deals:
+                    render_deal_standalone(d, cid_map.get(d.get("client_id")), cu)
+            else:
+                st.caption("Сделок с отправленным КП нет.")
     with col_waiting:
         with st.container(key="deals_col_waiting", border=True):
             st.subheader(f"Ожидание оплаты ({len(waiting_payment_deals)})")
