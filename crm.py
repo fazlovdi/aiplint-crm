@@ -4919,9 +4919,8 @@ SQLITE_FILE = FILE_NAME + ".sqlite3"
 _sqlite_init_lock = threading.Lock()
 
 def _sqlite_connect():
-    conn = sqlite3.connect(SQLITE_FILE, timeout=30, isolation_level=None)
-    conn.execute("PRAGMA busy_timeout = 30000")
-    conn.execute("PRAGMA journal_mode = WAL")
+    conn = sqlite3.connect(SQLITE_FILE, timeout=10, isolation_level=None)
+    conn.execute("PRAGMA busy_timeout = 10000")
     conn.execute("PRAGMA synchronous = FULL")
     return conn
 
@@ -18049,7 +18048,7 @@ def _crm_render_workspace_fragment():
     # Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
 
 
-@st.fragment(run_every="3s")
+@st.fragment(run_every="10s")
 def _crm_live_data_refresh_fragment():
     """Тихо обновляет рабочие разделы из SQLite при изменениях другой сессии."""
     try:
@@ -18077,7 +18076,7 @@ def _crm_live_data_refresh_fragment():
 _crm_live_data_refresh_fragment()
 
 
-@st.fragment(run_every="3s")
+@st.fragment(run_every="10s")
 def _crm_live_change_notice_fragment():
     """Собирает уведомления отдельно для каждой открытой вкладки рабочего пространства."""
     try:
