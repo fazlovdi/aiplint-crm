@@ -4461,7 +4461,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     f'<button type="button" id="{report_button_id}">Выполнить задачу</button>',
                     unsafe_allow_html=True,
                 )
-                with st.container(key=report_container_key):
+                with st.container(key=report_container_key, border=True):
                     rt = st.text_area("\u041e\u0442\u0447\u0435\u0442 (\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e):", key=f"rt_{key_prefix}", height=100)
                     uf_ver = st.session_state.get(f"uf_ver_{key_prefix}", 0)
                     uf = st.file_uploader("\u0424\u0430\u0439\u043b\u044b/\u0444\u043e\u0442\u043e \u043e\u0442\u0447\u0435\u0442\u0430:", key=f"uf_{key_prefix}_{uf_ver}", accept_multiple_files=True)
