@@ -10055,27 +10055,22 @@ def _calculation_rows(calc, catalog):
         qty=max(0.0,float(item.get("quantity",0) or 0))
         price=max(0.0,float(item.get("unit_price",product.get("price",0)) or 0))
         discount=min(100.0,max(0.0,float(item.get("discount",0) or 0)))
-        after=round(price*(1-discount/100),2)
-        amount=round(qty*after,2)
+        gasket = bool(item.get("rubber_gasket"))
+        after = round(price * (1 - discount / 100) + (105.0 if gasket else 0.0), 2)
+        display_price = round(price + (105.0 if gasket else 0.0), 2)
+        amount = round(qty * after, 2)
+        base_name = item.get("product_name", product.get("name", "Товар"))
+        if gasket:
+            base_name = f"{base_name} с резиновым уплотнителем"
         rows.append({
             "sku": product.get("sku", item.get("sku", item.get("product_id", ""))),
-            "name": item.get("product_name", product.get("name", "Товар")),
+            "name": base_name,
             "color": item.get("color_ral", ""),
             "spec": product.get("characteristics", product.get("description", "")),
             "unit": item.get("unit", product.get("unit", "шт.")),
-            "price": price, "discount": discount, "after": after,
+            "price": display_price, "discount": discount, "after": after,
             "quantity": qty, "amount": amount,
         })
-        if item.get("rubber_gasket"):
-            rows.append({
-                "sku": "",
-                "name": "Резиновый уплотнитель",
-                "color": "",
-                "spec": "Количество соответствует длине плинтуса",
-                "unit": "м",
-                "price": 105.0, "discount": 0.0, "after": 105.0,
-                "quantity": qty, "amount": round(qty * 105.0, 2),
-            })
     return rows
 
 
@@ -12679,6 +12674,8 @@ def deal_calculation_dialog(deal_id, calc_id):
             # При смене товара показываем цену выбранной позиции из актуального прайса
             # сразу в этом же рендере, а не старую цену предыдущего товара.
             display_price = float(product.get("price", 0) or 0) if selected_pid != current_pid else float(item.get("unit_price", product.get("price", 0)) or 0)
+            if bool(st.session_state.get(_gasket_key, item.get("rubber_gasket", False))) and _gasket_eligible:
+                display_price += 105.0
             st.markdown(f"<div style='padding-top:0.15rem;text-align:right;font-size:0.8rem;color:#64748b;white-space:nowrap'>{display_price:,.0f} ₽</div>".replace(",", " "), unsafe_allow_html=True)
         if st.button("Удалить позицию", key=f"{key}_{row_id}_remove"):
             calc["items"] = [x for x in items if x.get("row_id") != row_id]
