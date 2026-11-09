@@ -7830,6 +7830,7 @@ with _header_center:
         align-items: center !important;
         width: 100% !important;
         margin: 0 !important;
+        margin-block: 0 !important;
         padding: 0 !important;
         background: transparent !important;
         border: 0 !important;
@@ -9920,7 +9921,7 @@ def render_deal_standalone(d, cl, cu):
     }}
     .st-key-dls_wrap_{deal_id} button [data-testid="stMarkdownContainer"] p {{
         font-size: 0.86rem !important;
-        line-height: 1.05 !important;
+        line-height: 0.9 !important;
         font-weight: 500 !important;
         text-align: left !important;
         white-space: pre-line !important;
