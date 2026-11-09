@@ -9320,6 +9320,9 @@ def _deal_items_total(items):
         price = max(0.0, float(item.get("unit_price", 0) or 0))
         discount = min(100.0, max(0.0, float(item.get("discount", 0) or 0)))
         total += qty * price * (1 - discount / 100.0)
+        # Резиновый уплотнитель всегда считается по длине плинтуса.
+        if item.get("rubber_gasket"):
+            total += qty * 105.0
     return round(total, 2)
 
 
@@ -10061,6 +10064,16 @@ def _calculation_rows(calc, catalog):
             "price": price, "discount": discount, "after": after,
             "quantity": qty, "amount": amount,
         })
+        if item.get("rubber_gasket"):
+            rows.append({
+                "sku": "",
+                "name": "Резиновый уплотнитель",
+                "color": "",
+                "spec": "Количество соответствует длине плинтуса",
+                "unit": "м",
+                "price": 105.0, "discount": 0.0, "after": 105.0,
+                "quantity": qty, "amount": round(qty * 105.0, 2),
+            })
     return rows
 
 
@@ -12371,6 +12384,10 @@ def deal_calculation_dialog(deal_id, calc_id):
                 row["unit_price"] = float(product_now.get("price", row.get("unit_price", 0)) or 0) if pid != old_pid else float(row.get("unit_price", product_now.get("price", 0)) or 0)
             row["color_ral"] = st.session_state.get(f"{key}_{rid}_color", row.get("color_ral", ""))
             row["quantity"] = float(st.session_state.get(f"{key}_{rid}_qty", row.get("quantity", 1)) or 0)
+            if str(row.get("product_id", "")) in {"APLNT1050", "APLNT1051", "APLNT1052", "APLNT1053"}:
+                row["rubber_gasket"] = bool(st.session_state.get(f"{key}_{rid}_rubber_gasket", row.get("rubber_gasket", False)))
+            else:
+                row["rubber_gasket"] = False
             row["discount"] = float(st.session_state.get(f"{key}_{rid}_discount", row.get("discount", 0)) or 0)
         calc["total"] = _deal_calc_total(calc)
         calc["_draft"] = False
@@ -12660,6 +12677,23 @@ def deal_calculation_dialog(deal_id, calc_id):
         if selected_pid != current_pid:
             st.session_state[price_key] = float(product.get("price", 0) or 0)
             item["unit_price"] = float(product.get("price", 0) or 0)
+
+        _gasket_key = f"{key}_{row_id}_rubber_gasket"
+        _gasket_eligible = str(selected_pid) in {"APLNT1050", "APLNT1051", "APLNT1052", "APLNT1053"}
+        if _gasket_eligible:
+            if _gasket_key not in st.session_state:
+                st.session_state[_gasket_key] = bool(item.get("rubber_gasket", False))
+            st.checkbox(
+                "Резиновый уплотнитель (+105 ₽/м; длина автоматически равна длине плинтуса)",
+                key=_gasket_key,
+                on_change=lambda: st.session_state.__setitem__(dirty_key, True),
+            )
+            item["rubber_gasket"] = bool(st.session_state.get(_gasket_key, False))
+            if item["rubber_gasket"]:
+                st.caption(f"Уплотнитель: {item['quantity']:g} м × 105 ₽ = {item['quantity'] * 105:,.0f} ₽".replace(",", " "))
+        else:
+            item["rubber_gasket"] = False
+            st.session_state.pop(_gasket_key, None)
 
     _add_item_left, _add_item_center, _add_item_right = st.columns([1, 2.2, 1])
     with _add_item_center:
