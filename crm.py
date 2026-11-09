@@ -9948,6 +9948,8 @@ def _deal_items_total(items):
         price = max(0.0, float(item.get("unit_price", 0) or 0))
         discount = min(100.0, max(0.0, float(item.get("discount", 0) or 0)))
         total += qty * price * (1 - discount / 100.0)
+        if item.get("rubber_gasket"):
+            total += qty * 105.0
     return round(total, 2)
 
 
