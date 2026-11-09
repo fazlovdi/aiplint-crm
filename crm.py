@@ -17977,32 +17977,8 @@ def _crm_render_workspace_fragment():
     # Панель окон рендерится в нужном месте через _crm_workspace_render_bottom_panel().
 
 
-@st.fragment(run_every="3s")
-def _crm_live_data_refresh_fragment():
-    """Тихо обновляет рабочие разделы из SQLite при изменениях другой сессии."""
-    try:
-        _active_section = str(st.session_state.get("active_tab", "") or "")
-        # Главную страницу отдельно не обновляем.
-        if not _active_section or _active_section in ("Главная", "Главная страница"):
-            return
-        _login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-        if not _login:
-            return
-        # Существующая проверка не допускает перезапись локальных несохранённых правок.
-        if _crm_refresh_store_if_clean():
-            _crm_log("DATABASE_AUTO_REFRESH", {
-                "revision": int(st.session_state.get("crm_base_revision", 0) or 0),
-                "section": _active_section,
-                "reason": "periodic silent refresh",
-            })
-            st.rerun(scope="app")
-    except Exception as _refresh_exc:
-        _crm_log("DATABASE_AUTO_REFRESH_ERROR", {
-            "section": str(st.session_state.get("active_tab", "") or ""),
-        }, exc=_refresh_exc, remote=False)
-
-
-_crm_live_data_refresh_fragment()
+# Автообновление с полным st.rerun(scope="app") временно отключено:
+# оно вызывало полную перерисовку и могло приводить к WebSocket Cached ForwardMsg MISS.
 
 
 @st.fragment(run_every="3s")
