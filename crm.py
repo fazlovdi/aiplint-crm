@@ -18378,7 +18378,7 @@ def _crm_live_change_notice_fragment():
         _crm_log("DATABASE_LIVE_NOTICE_ERROR", {}, exc=_notice_exc, remote=False)
 
 
-# Уведомления об изменениях отключены: рабочие разделы обновляются автоматически.
+_crm_live_change_notice_fragment()
 
 
 _pending_workspace_restore = st.session_state.pop("_crm_pending_workspace_restore", None)
