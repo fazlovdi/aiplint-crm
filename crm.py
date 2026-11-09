@@ -9912,11 +9912,15 @@ def render_deal_standalone(d, cl, cu):
         white-space: normal !important;
         text-align: left !important;
     }}
-    .st-key-dls_wrap_{deal_id} button p {{
+    .st-key-dls_wrap_{deal_id} button [data-testid="stMarkdownContainer"],
+    .st-key-dls_wrap_{deal_id} button [data-testid="stMarkdownContainer"] p,
+    .st-key-dls_wrap_{deal_id} button [data-testid="stMarkdownContainer"] br {{
         margin: 0 !important;
         padding: 0 !important;
+    }}
+    .st-key-dls_wrap_{deal_id} button [data-testid="stMarkdownContainer"] p {{
         font-size: 0.86rem !important;
-        line-height: 1.3 !important;
+        line-height: 1.05 !important;
         font-weight: 500 !important;
         text-align: left !important;
         white-space: pre-line !important;
