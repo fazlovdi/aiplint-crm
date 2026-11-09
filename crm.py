@@ -9948,29 +9948,7 @@ def render_deal_standalone(d, cl, cu):
     </style>""", unsafe_allow_html=True)
     with st.container(key=f"dls_wrap_{deal_id}"):
         if st.button(label, key=f"dls_btn_{deal_id}", use_container_width=True, type="secondary"):
-            # Открываем сделку напрямую в рабочем пространстве, не через legacy-маркер,
-            # который мог конфликтовать с уже открытыми окнами.
-            _deal_entry = {
-                "name": "deal_detail_dialog",
-                "title": f"Сделка №{num}",
-                "width": "large",
-                "args": (d, cl, cu, f"deal_{deal_id}"),
-                "kwargs": {},
-            }
-            _deal_entry["signature"] = (
-                _crm_dialog_signature_value(_deal_entry["args"]),
-                _crm_dialog_signature_value(_deal_entry["kwargs"]),
-            )
-            _deal_window = _crm_workspace_open_dialog(_deal_entry, client_id=cl.get("id") if cl else None)
-            if _deal_window is not None:
-                _deal_window["minimized"] = False
-                st.session_state["_crm_active_window_id"] = _deal_window.get("id")
-                _deal_tab_key = _crm_workspace_tab_key(_deal_entry)
-                _deal_tab_index = next((i for i, tab in enumerate(_deal_window.get("tabs", []))
-                                        if _crm_workspace_tab_key(tab) == _deal_tab_key), None)
-                if _deal_tab_index is not None:
-                    _deal_window["active_tab"] = _deal_tab_index
-                    st.session_state["_crm_active_dialog"] = _deal_window["tabs"][_deal_tab_index]
+            st.session_state["dialog_deal_key"] = deal_id
             st.rerun()
 
 
@@ -16991,8 +16969,19 @@ elif st.session_state.active_tab == "Задачи":
                     # is activated instead of being sent to the legacy dialog dispatcher.
                     _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
                                            if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
-                    # _crm_workspace_open_dialog сам добавляет вкладку сделки при открытии
-                    # задачи по сделке. Не открываем сначала отдельную сделку вторым вызовом.
+                    if _task_deal_obj is not None:
+                        _deal_entry = {
+                            "name": "deal_detail_dialog",
+                            "title": f"Сделка {_task_deal_obj.get('deal_number', _task_deal_obj.get('title', ''))}",
+                            "width": "large",
+                            "args": (_task_deal_obj, cl, st.session_state.get("user_name", ""), f"task_parent_{_task_deal_obj.get('id')}"),
+                            "kwargs": {},
+                        }
+                        _deal_entry["signature"] = (
+                            _crm_dialog_signature_value(_deal_entry["args"]),
+                            _crm_dialog_signature_value(_deal_entry["kwargs"]),
+                        )
+                        _task_window = _crm_workspace_open_dialog(_deal_entry, client_id=cl.get("id"))
                     _task_entry = {
                         "name": "task_detail_dialog",
                         "title": f"Задача №{task.get('task_number', '')}",
