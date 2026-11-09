@@ -8925,13 +8925,42 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                                 _crm_workspace_open_dialog(_grs["entry"], client_id=_grs["client_id"])
                                 st.rerun()
 
-            # Поле поиска внизу раскрывающегося окна.
-            st.text_input(
-                "Поиск по CRM",
-                key=f"crm_workspace_global_search_input_{_bottom_scope}",
-                placeholder="Номер, имя, тема, телефон…",
-                label_visibility="collapsed",
-            )
+            # Два независимых поля внутри раскрытия лупы: поиск по CRM и AI-помощник.
+            _search_col, _ai_col = st.columns([1.35, 1], gap="small")
+            with _search_col:
+                st.text_input(
+                    "Поиск по CRM",
+                    key=f"crm_workspace_global_search_input_{_bottom_scope}",
+                    placeholder="Поиск по CRM: имя, номер, телефон…",
+                    label_visibility="collapsed",
+                )
+            with _ai_col:
+                _ai_key = f"crm_workspace_ai_prompt_{_bottom_scope}"
+                _ai_submit_key = f"crm_workspace_ai_submitted_{_bottom_scope}"
+                st.text_input(
+                    "Вопрос AI",
+                    key=_ai_key,
+                    placeholder="✨ Спросить AI…",
+                    label_visibility="collapsed",
+                )
+                if st.button("Спросить AI", key=f"crm_workspace_ai_send_{_bottom_scope}", use_container_width=True):
+                    _ai_value = str(st.session_state.get(_ai_key, "") or "").strip()
+                    if _ai_value:
+                        st.session_state[_ai_submit_key] = _ai_value
+                        st.rerun()
+                    else:
+                        st.info("Сначала введи вопрос.")
+            _ai_submitted = str(st.session_state.get(f"crm_workspace_ai_submitted_{_bottom_scope}", "") or "").strip()
+            if _ai_submitted:
+                with st.container(border=True):
+                    st.markdown("**✨ AI-помощник Айплинт**")
+                    st.markdown("**Твой вопрос:**")
+                    st.write(_ai_submitted)
+                    st.info("Интерфейс готов. На следующем этапе подключим Gemini API, чтобы здесь отображались реальные ответы и продолжалась история диалога.")
+                    if st.button("Новый вопрос", key=f"crm_workspace_ai_new_{_bottom_scope}"):
+                        st.session_state[f"crm_workspace_ai_submitted_{_bottom_scope}"] = ""
+                        st.session_state[f"crm_workspace_ai_prompt_{_bottom_scope}"] = ""
+                        st.rerun()
             st.markdown(f"""
             <style>
             /* Compact global search popover: hide scrollbar and minimize vertical spacing. */
@@ -9033,43 +9062,6 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             </script>""", height=0)
             if st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False):
                 st.session_state[f"crm_workspace_global_search_close_{_bottom_scope}"] = False
-
-        # Отдельный интерфейс AI-помощника. На этом этапе без вызовов Gemini.
-        with st.popover("✨", key=f"crm_workspace_ai_assistant_{_bottom_scope}", help="AI-помощник Айплинт"):
-            st.markdown("### ✨ AI-помощник Айплинт")
-            st.caption("Задавай вопросы обычным языком — например, о расчёте материала или продукции.")
-            _ai_key = f"crm_workspace_ai_prompt_{_bottom_scope}"
-            _ai_submit_key = f"crm_workspace_ai_submitted_{_bottom_scope}"
-            _ai_prompt = st.text_area(
-                "Запрос к AI",
-                key=_ai_key,
-                placeholder="Например: посчитай, сколько плинтуса нужно на квартиру 100 м²…",
-                label_visibility="collapsed",
-                height=100,
-            )
-            st.caption("Примеры запросов")
-            st.markdown(
-                "- Рассчитай предварительное количество плинтуса для квартиры 100 м²\n"
-                "- Объясни разницу между магнитным плинтусом и Айплинт Slim\n"
-                "- Помоги подготовить ответ клиенту"
-            )
-            if st.button("Спросить AI", key=f"crm_workspace_ai_send_{_bottom_scope}", type="primary", use_container_width=True):
-                if str(_ai_prompt or "").strip():
-                    st.session_state[_ai_submit_key] = str(_ai_prompt).strip()
-                    st.rerun()
-                else:
-                    st.info("Сначала введи вопрос.")
-            _ai_submitted = str(st.session_state.get(_ai_submit_key, "") or "").strip()
-            if _ai_submitted:
-                st.divider()
-                st.markdown("**Ты:**")
-                st.write(_ai_submitted)
-                st.markdown("**AI-помощник:**")
-                st.info("Интерфейс готов. На следующем этапе подключим Gemini API, чтобы здесь отображались реальные ответы и продолжалась история диалога.")
-                if st.button("Новый вопрос", key=f"crm_workspace_ai_new_{_bottom_scope}"):
-                    st.session_state[_ai_submit_key] = ""
-                    st.session_state[_ai_key] = ""
-                    st.rerun()
 
         for _w in list(_bottom_windows):
             _window_id = str(_w.get("id"))
