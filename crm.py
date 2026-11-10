@@ -15615,22 +15615,43 @@ def statistics_dialog(section="Общая статистика"):
                 or str(client.get("created_by") or "") == _manager_name
             )
         )
-        _manager_tasks = []
+        # Количество выполненных и просроченных задач привязываем к сроку выполнения.
+        # Процент просрочки считаем отдельно — по задачам, созданным в выбранном периоде.
+        _manager_tasks_by_deadline = []
+        _manager_tasks_by_created = []
         for _task_client in clients_all:
             for _task in (_task_client.get("tasks", []) or []):
+                if not isinstance(_task, dict):
+                    continue
                 _task_owner = str(_task.get("manager") or "")
                 _task_delegate = str(_task.get("delegated_to") or "")
                 if _manager_name not in (_task_owner, _task_delegate):
                     continue
-                _task_created = _stat_date(_task.get("created_at") or _task.get("last_modified"))
-                if _start is not None and _end is not None and not (
+
+                _task_deadline = _stat_date(_task.get("deadline"))
+                if _start is None or _end is None or (
+                    _task_deadline and _start <= _task_deadline <= _end
+                ):
+                    _manager_tasks_by_deadline.append(_task)
+
+                _task_created = _stat_date(_task.get("created_at") or _task.get("date_created"))
+                if _start is None or _end is None or (
                     _task_created and _start <= _task_created <= _end
                 ):
-                    continue
-                _manager_tasks.append(_task)
-        _manager_overdue_tasks = sum(1 for _task in _manager_tasks if is_task_overdue(_task))
+                    _manager_tasks_by_created.append(_task)
+
+        _manager_completed_tasks = sum(
+            1 for _task in _manager_tasks_by_deadline if _task.get("done")
+        )
+        _manager_overdue_tasks = sum(
+            1 for _task in _manager_tasks_by_deadline if is_task_overdue(_task)
+        )
+        _manager_created_overdue_tasks = sum(
+            1 for _task in _manager_tasks_by_created if is_task_overdue(_task)
+        )
         _manager_overdue_percent = (
-            _manager_overdue_tasks / len(_manager_tasks) * 100 if _manager_tasks else 0
+            _manager_created_overdue_tasks / len(_manager_tasks_by_created) * 100
+            if _manager_tasks_by_created else 0
         )
         _manager_work_deals = sum(1 for row in _manager_rows if str(row["status"] or "").strip() not in ("Новый", "Сделка закрыта", "Архив"))
         _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8 = st.columns(8, gap="small")
@@ -15645,7 +15666,7 @@ def statistics_dialog(section="Общая статистика"):
         _mc1, _mc2, _mc3, _mc4, _mc5 = st.columns(5, gap="small")
         _mc1.metric("Сделок в работе", _manager_work_deals)
         _mc2.metric("Добавлено клиентов", _manager_added_clients)
-        _mc3.metric("Задач", len(_manager_tasks))
+        _mc3.metric("Задач выполнено", _manager_completed_tasks)
         _mc4.metric("Просрочено задач", _manager_overdue_tasks)
         _mc5.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
         if _manager_rows:
