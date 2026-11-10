@@ -15633,7 +15633,7 @@ def statistics_dialog(section="Общая статистика"):
         _manager_overdue_percent = (
             _manager_overdue_tasks / len(_manager_tasks) * 100 if _manager_tasks else 0
         )
-        _manager_work_deals = sum(1 for row in _manager_rows if row["status"] == "В работе")
+        _manager_work_deals = sum(1 for row in _manager_rows if str(row["status"] or "").strip() not in ("Новый", "Сделка закрыта", "Архив"))
         _c1, _c2, _c3, _c4, _c5, _c6, _c7, _c8 = st.columns(8, gap="small")
         _c1.metric("Заказов / сделок", len(_manager_rows))
         _c2.metric("Продано, м", f"{_manager_metres:,.1f}".replace(",", " "))
