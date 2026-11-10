@@ -4380,69 +4380,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     # Поля отправки заказа отображаются и для задачи, привязанной к сделке.
                     # При редактировании их заменяют поля формы выше.
                     if not show_edit_task:
-                        if _is_shipping_edit:
-                        # Поля отправки заказа на всю ширину блока редактирования.
-                        _selected_calc_id_edit, et_products = render_task_products_editor(
-                            d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
-                        )
-                        _crm_mark_widget_changed(f"edit_order_calc_{key_prefix}", str(_selected_calc_id_edit or "") != str(t.get("calculation_id", "") or ""))
-                        _crm_mark_widget_changed(f"edit_prod_{key_prefix}", str(et_products or "") != str(t.get("products", "") or ""))
-                        et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_city_{key_prefix}", str(et_city) != str(t.get("ship_city", "")))
-                        et_addr = st.text_area("Адрес доставки:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_addr_{key_prefix}", str(et_addr) != str(t.get("ship_addr", "")))
-                        et_recv = st.text_input("Получатель:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_recv_{key_prefix}", str(et_recv) != str(t.get("receiver", "")))
-                        et_rphone = st.text_input("Телефон получателя:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
-                        _crm_mark_widget_changed(f"edit_rphone_{key_prefix}", str(et_rphone) != str(t.get("receiver_phone", "")))
-                        et_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="Укажи плательщика")
-                        _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
-                        _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
-                        _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _amount_key_edit = f"edit_amount_{key_prefix}"
-                        if _auto_amount_edit > 0:
-                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
-                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                        _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
-                        _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
-                        _edit_delivery_col, _edit_track_col = st.columns([1, 1])
-                        with _edit_delivery_col:
-                            et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
-                            _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
-                        with _edit_track_col:
-                            et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
-                            _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
-                        _save_col, _cancel_col = st.columns(2)
-                        with _save_col:
-                            if st.button("Сохранить", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
-                                if not et_mgr:
-                                    st.warning("Выберите ответственного")
-                                else:
-                                    t["text"] = et_topic
-                                    t["type"] = et_type
-                                    t["manager"] = et_mgr
-                                    t["task_comment"] = et_comment
-                                    t["products"] = et_products
-                                    t["ship_city"] = et_city
-                                    t["ship_addr"] = et_addr
-                                    t["receiver"] = et_recv
-                                    t["receiver_phone"] = et_rphone
-                                    t["ship_pay"] = et_pay
-                                    t["ship_method"] = et_method
-                                    t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
-                                    if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
-                                        t["calculation_id"] = str(_selected_calc_id_edit)
-                                    t["tk_num"] = et_tk
-                                    t["last_modified"] = now_str()
-                                    cl["last_modified"] = now_str()
-                                    if d: d["last_modified"] = now_str()
-                                    st.session_state[f"show_edit_task_{key_prefix}"] = False
-                                    commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
-                        with _cancel_col:
-                            if st.button("Отменить", key=f"edit_cancel_{key_prefix}", use_container_width=True):
-                                st.session_state[f"show_edit_task_{key_prefix}"] = False
-                                _smart_rerun()
-
                     st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 1.1rem 0;"></div>', unsafe_allow_html=True)
                         if t.get("products"):
                             st.markdown("**Товары:**")
@@ -4675,6 +4612,67 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             _render_task_shipping_fields(t, cl, d, key_prefix)
                         else:
                             pass  # Для обычных задач блок статуса доставки не используется
+
+                    if _is_shipping_edit:
+                        # Поля отправки заказа на всю ширину блока редактирования.
+                        _selected_calc_id_edit, et_products = render_task_products_editor(
+                            d, f"edit_{key_prefix}", t.get("products", ""), t.get("calculation_id", "")
+                        )
+                        _crm_mark_widget_changed(f"edit_order_calc_{key_prefix}", str(_selected_calc_id_edit or "") != str(t.get("calculation_id", "") or ""))
+                        _crm_mark_widget_changed(f"edit_prod_{key_prefix}", str(et_products or "") != str(t.get("products", "") or ""))
+                        et_city = st.text_input("Город:", value=t.get("ship_city", ""), key=f"edit_city_{key_prefix}")
+                        _crm_mark_widget_changed(f"edit_city_{key_prefix}", str(et_city) != str(t.get("ship_city", "")))
+                        et_addr = st.text_area("Адрес доставки:", value=t.get("ship_addr", ""), key=f"edit_addr_{key_prefix}")
+                        _crm_mark_widget_changed(f"edit_addr_{key_prefix}", str(et_addr) != str(t.get("ship_addr", "")))
+                        et_recv = st.text_input("Получатель:", value=t.get("receiver", ""), key=f"edit_recv_{key_prefix}")
+                        _crm_mark_widget_changed(f"edit_recv_{key_prefix}", str(et_recv) != str(t.get("receiver", "")))
+                        et_rphone = st.text_input("Телефон получателя:", value=t.get("receiver_phone", ""), key=f"edit_rphone_{key_prefix}")
+                        _crm_mark_widget_changed(f"edit_rphone_{key_prefix}", str(et_rphone) != str(t.get("receiver_phone", "")))
+                        et_pay = st.selectbox("Оплата:", SHIP_PAY_OPTIONS, index=SHIP_PAY_OPTIONS.index(t.get("ship_pay", "")) if t.get("ship_pay", "") in SHIP_PAY_OPTIONS else 0, key=f"edit_pay_{key_prefix}", placeholder="Укажи плательщика")
+                        _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
+                        _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
+                        _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
+                        _amount_key_edit = f"edit_amount_{key_prefix}"
+                        if _auto_amount_edit > 0:
+                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
+                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
+                        _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
+                        _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
+                        et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
+                        _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
+                        et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                        _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
+                        _save_col, _cancel_col = st.columns(2)
+                        with _save_col:
+                            if st.button("Сохранить", key=f"edit_save_{key_prefix}", use_container_width=True, type="primary"):
+                                if not et_mgr:
+                                    st.warning("Выберите ответственного")
+                                else:
+                                    t["text"] = et_topic
+                                    t["type"] = et_type
+                                    t["manager"] = et_mgr
+                                    t["task_comment"] = et_comment
+                                    t["products"] = et_products
+                                    t["ship_city"] = et_city
+                                    t["ship_addr"] = et_addr
+                                    t["receiver"] = et_recv
+                                    t["receiver_phone"] = et_rphone
+                                    t["ship_pay"] = et_pay
+                                    t["ship_method"] = et_method
+                                    t["order_amount"] = round(float(et_amount.replace(",", ".")), 2) if et_amount and et_amount.strip() else 0
+                                    if et_type in ("Отправить заказ", "Отправить образцы") and _selected_calc_id_edit:
+                                        t["calculation_id"] = str(_selected_calc_id_edit)
+                                    t["tk_num"] = et_tk
+                                    t["last_modified"] = now_str()
+                                    cl["last_modified"] = now_str()
+                                    if d: d["last_modified"] = now_str()
+                                    st.session_state[f"show_edit_task_{key_prefix}"] = False
+                                    commit_and_rerun(st.session_state.crm_store, "Задача обновлена")
+                        with _cancel_col:
+                            if st.button("Отменить", key=f"edit_cancel_{key_prefix}", use_container_width=True):
+                                st.session_state[f"show_edit_task_{key_prefix}"] = False
+                                _smart_rerun()
+
                     st.markdown('<div style="width:100%;border-bottom:2px solid #DCE0E5;margin:0.55rem 0 1.1rem 0;"></div>', unsafe_allow_html=True)
                     if t.get('products'):
                         st.markdown("**Товары:**")
