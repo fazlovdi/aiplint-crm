@@ -17208,7 +17208,7 @@ elif st.session_state.active_tab == "Задачи":
                                 if not _line:
                                     continue
                                 # В старых задачах разделители и формат товарной строки могли отличаться.
-                                _parts = [p.strip() for p in re.split(r"\s*[—–-]\s*", _line)]
+                                _parts = [p.strip() for p in re.split(r"\s*[—–]\s*", _line)]
                                 _product_name = _line
                                 _product_color = ""
                                 _product_qty = None
