@@ -4344,6 +4344,13 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             st.markdown('<span class="ready-badge">Готово к отправке</span>', unsafe_allow_html=True)
                         _task_description = str(t.get("task_comment", "") or "").strip()
                         st.markdown(f"**Описание:** {linkify_text(_task_description) if _task_description else '—'}", unsafe_allow_html=True)
+                        # Карандаш редактирования для задачи, связанной со сделкой.
+                        if not show_edit_task:
+                            pencil_key = f"btn_pencil_edit_{key_prefix}"
+                            st.markdown(f"<style>.st-key-{pencil_key} button {{ padding: 2px 8px !important; font-size: 0.85rem !important; min-height: 32px !important; }}</style>", unsafe_allow_html=True)
+                            if st.button("✎", key=pencil_key, help="Редактировать задачу"):
+                                st.session_state[f"show_edit_task_{key_prefix}"] = True
+                                _smart_rerun()
                 else:
                     _hdr_inner, _status_inner = st.columns([3, 2])
                     with _hdr_inner:
