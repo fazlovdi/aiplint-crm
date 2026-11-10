@@ -4208,6 +4208,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     t["manager"] = cu
                                     t["delegated_to"] = cu
                                 t["in_work"] = True
+                                t["in_work_at"] = now_str()
                                 t["last_modified"] = now_str()
                                 cl["last_modified"] = now_str()
                                 if d: d["last_modified"] = now_str()
@@ -4431,6 +4432,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     t["manager"] = cu
                                     t["delegated_to"] = cu
                                 t["in_work"] = True
+                                t["in_work_at"] = now_str()
                                 t["last_modified"] = now_str()
                                 cl["last_modified"] = now_str()
                                 if d: d["last_modified"] = now_str()
@@ -15619,6 +15621,7 @@ def statistics_dialog(section="Общая статистика"):
         # Процент просрочки считаем отдельно — по задачам, созданным в выбранном периоде.
         _manager_tasks_by_deadline = []
         _manager_tasks_by_created = []
+        _manager_tasks_taken_in_work = []
         for _task_client in clients_all:
             for _task in (_task_client.get("tasks", []) or []):
                 if not isinstance(_task, dict):
@@ -15640,6 +15643,14 @@ def statistics_dialog(section="Общая статистика"):
                 ):
                     _manager_tasks_by_created.append(_task)
 
+                _task_taken_in_work = _stat_date(_task.get("in_work_at"))
+                if _start is None or _end is None or (
+                    _task_taken_in_work and _start <= _task_taken_in_work <= _end
+                ):
+                    if _task.get("in_work_at"):
+                        _manager_tasks_taken_in_work.append(_task)
+
+        _manager_taken_in_work_tasks = len(_manager_tasks_taken_in_work)
         _manager_completed_tasks = sum(
             1 for _task in _manager_tasks_by_deadline if _task.get("done")
         )
@@ -15663,12 +15674,13 @@ def statistics_dialog(section="Общая статистика"):
         _c6.metric("Конверсия в оплату", f"{_manager_conversion:.1f}%")
         _c7.metric("Средний заказ", f"{_manager_avg_check:,.0f} ₽".replace(",", " "))
         _c8.metric("Средний заказ, м", f"{_manager_avg_metres:,.1f}".replace(",", " "))
-        _mc1, _mc2, _mc3, _mc4, _mc5 = st.columns(5, gap="small")
+        _mc1, _mc2, _mc3, _mc4, _mc5, _mc6 = st.columns(6, gap="small")
         _mc1.metric("Сделок в работе", _manager_work_deals)
         _mc2.metric("Добавлено клиентов", _manager_added_clients)
-        _mc3.metric("Задач выполнено", _manager_completed_tasks)
-        _mc4.metric("Просрочено задач", _manager_overdue_tasks)
-        _mc5.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
+        _mc3.metric("Задач взято в работу", _manager_taken_in_work_tasks)
+        _mc4.metric("Задач выполнено", _manager_completed_tasks)
+        _mc5.metric("Просрочено задач", _manager_overdue_tasks)
+        _mc6.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
         if _manager_rows:
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
