@@ -15637,6 +15637,11 @@ def statistics_dialog(section="Общая статистика"):
             {},
         )
         _manager_login = str(_manager_user.get("login") or "")
+        _manager_identity_values = {
+            str(value or "").strip().casefold()
+            for value in (_manager_name, _manager_login)
+            if str(value or "").strip()
+        }
         _manager_added_clients = sum(
             1 for client in clients
             if (
@@ -15646,6 +15651,8 @@ def statistics_dialog(section="Общая статистика"):
         )
         # Количество выполненных и просроченных задач привязываем к сроку выполнения.
         # Процент просрочки считаем отдельно — по задачам, созданным в выбранном периоде.
+        # Сопоставляем и имя менеджера, и логин; если задача не назначена отдельно,
+        # используем ответственного за клиента как запасной вариант.
         _manager_tasks_by_deadline = []
         _manager_tasks_by_created = []
         _manager_tasks_taken_in_work = []
@@ -15653,9 +15660,14 @@ def statistics_dialog(section="Общая статистика"):
             for _task in (_task_client.get("tasks", []) or []):
                 if not isinstance(_task, dict):
                     continue
-                _task_owner = str(_task.get("manager") or "")
-                _task_delegate = str(_task.get("delegated_to") or "")
-                if _manager_name not in (_task_owner, _task_delegate):
+                _task_owner = str(_task.get("manager") or "").strip()
+                _task_delegate = str(_task.get("delegated_to") or "").strip()
+                _task_client_manager = str(_task_client.get("manager") or "").strip()
+                _task_assignees = {_task_owner.casefold(), _task_delegate.casefold()}
+                _task_assignees.discard("")
+                if not _task_assignees:
+                    _task_assignees = {_task_client_manager.casefold()} if _task_client_manager else set()
+                if not (_manager_identity_values & _task_assignees):
                     continue
 
                 _task_deadline = _stat_date(_task.get("deadline"))
