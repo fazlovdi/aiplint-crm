@@ -4220,7 +4220,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     with dl_btn_col1:
                                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
                                             mark_task_overdue_history(t)
-                                            mark_task_overdue_history(t)
                                             t["deadline"] = ndd.isoformat()
                                             t["last_modified"] = now_str()
                                             cl["last_modified"] = now_str()
@@ -4445,6 +4444,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     </style>""", unsafe_allow_html=True)
                                     with dl_btn_col1:
                                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
+                                            mark_task_overdue_history(t)
                                             t["deadline"] = ndd.isoformat()
                                             t["last_modified"] = now_str()
                                             cl["last_modified"] = now_str()
