@@ -15686,6 +15686,7 @@ def statistics_dialog(section="Общая статистика"):
         # используем ответственного за клиента как запасной вариант.
         _manager_tasks_by_deadline = []
         _manager_tasks_by_created = []
+        _manager_tasks_all = []
         _manager_tasks_taken_in_work = []
         for _task_client in clients_all:
             for _task in (_task_client.get("tasks", []) or []):
@@ -15701,6 +15702,7 @@ def statistics_dialog(section="Общая статистика"):
                 if not (_manager_identity_values & _task_assignees):
                     continue
 
+                _manager_tasks_all.append(_task)
                 _task_deadline = _stat_date(_task.get("deadline"))
                 if _start is None or _end is None or (
                     _task_deadline and _start <= _task_deadline <= _end
@@ -15725,7 +15727,7 @@ def statistics_dialog(section="Общая статистика"):
             1 for _task in _manager_tasks_by_deadline if _task.get("done")
         )
         _manager_overdue_tasks = sum(
-            1 for _task in _manager_tasks_by_deadline
+            1 for _task in _manager_tasks_all
             if task_was_overdue_in_period(_task, _start, _end)
         )
         _manager_created_overdue_tasks = sum(
