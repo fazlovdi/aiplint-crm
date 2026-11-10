@@ -15393,7 +15393,7 @@ def statistics_dialog(section="Общая статистика"):
             st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
 
             _dated_rows = [
-                (_stat_deal_date(row["deal"]), row["amount"])
+                (_stat_deal_date(row["deal"]), row["amount"], bool(row["paid"]))
                 for row in deal_rows if _stat_deal_date(row["deal"]) is not None
             ]
             if _dated_rows:
@@ -15402,14 +15402,18 @@ def statistics_dialog(section="Общая статистика"):
                 _chart_end = _end or max(_dates)
                 _daily = (_chart_end - _chart_start).days <= 31
                 _totals = {}
+                _paid_totals = {}
                 if _daily:
                     _cursor = _chart_start
                     while _cursor <= _chart_end:
                         _totals[_cursor] = 0.0
+                        _paid_totals[_cursor] = 0.0
                         _cursor += timedelta(days=1)
-                    for _date, _amount in _dated_rows:
+                    for _date, _amount, _is_paid in _dated_rows:
                         if _chart_start <= _date <= _chart_end:
                             _totals[_date] = _totals.get(_date, 0.0) + _amount
+                            if _is_paid:
+                                _paid_totals[_date] = _paid_totals.get(_date, 0.0) + _amount
                     _chart_title = "#### Динамика суммы заказов по дням"
                     _labels = [(d, d.strftime("%d.%m")) for d in sorted(_totals)]
                 else:
@@ -15417,24 +15421,33 @@ def statistics_dialog(section="Общая статистика"):
                     _last_month = _chart_end.replace(day=1)
                     while _cursor <= _last_month:
                         _totals[_cursor] = 0.0
+                        _paid_totals[_cursor] = 0.0
                         _cursor = _cursor.replace(year=_cursor.year + 1, month=1) if _cursor.month == 12 else _cursor.replace(month=_cursor.month + 1)
-                    for _date, _amount in _dated_rows:
+                    for _date, _amount, _is_paid in _dated_rows:
                         if _chart_start <= _date <= _chart_end:
                             _key = _date.replace(day=1)
                             _totals[_key] = _totals.get(_key, 0.0) + _amount
+                            if _is_paid:
+                                _paid_totals[_key] = _paid_totals.get(_key, 0.0) + _amount
                     _chart_title = "#### Динамика суммы заказов по месяцам"
                     _labels = [(d, d.strftime("%m.%Y")) for d in sorted(_totals)]
                 st.markdown(_chart_title)
                 _points = [(d, _totals[d]) for d in sorted(_totals)]
+                _paid_points = [(d, _paid_totals[d]) for d in sorted(_paid_totals)]
                 _w, _h = 900, 300
                 _left, _right, _top, _bottom = 68, 22, 18, 55
                 _plot_w, _plot_h = _w - _left - _right, _h - _top - _bottom
-                _max_val = max((v for _, v in _points), default=0.0)
+                _max_val = max((max(_totals[d], _paid_totals[d]) for d in _totals), default=0.0)
                 _scale_max = _max_val * 1.12 if _max_val > 0 else 1.0
                 _xy = [
                     (_left + (i * _plot_w / max(1, len(_points) - 1)),
                      _top + _plot_h - (value / _scale_max * _plot_h))
                     for i, (_, value) in enumerate(_points)
+                ]
+                _paid_xy = [
+                    (_left + (i * _plot_w / max(1, len(_paid_points) - 1)),
+                     _top + _plot_h - (value / _scale_max * _plot_h))
+                    for i, (_, value) in enumerate(_paid_points)
                 ]
                 _svg_parts = [
                     f'<svg viewBox="0 0 {_w} {_h}" width="100%" role="img" aria-label="Динамика суммы заказов" xmlns="http://www.w3.org/2000/svg">',
@@ -15446,11 +15459,13 @@ def statistics_dialog(section="Общая статистика"):
                     _svg_parts.append(f'<line x1="{_left}" y1="{_y:.1f}" x2="{_w-_right}" y2="{_y:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
                     _svg_parts.append(f'<text x="{_left-9}" y="{_y+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_val:,.0f}</text>')
                 if len(_xy) == 1:
-                    _svg_parts.append(f'<circle cx="{_xy[0][0]:.1f}" cy="{_xy[0][1]:.1f}" r="4" fill="#bc1661"/>')
+                    _svg_parts.append(f'<circle cx="{_xy[0][0]:.1f}" cy="{_xy[0][1]:.1f}" r="2" fill="#f28c28"/>')
+                    _svg_parts.append(f'<circle cx="{_paid_xy[0][0]:.1f}" cy="{_paid_xy[0][1]:.1f}" r="2" fill="#2eaa57"/>')
                 else:
                     _polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _xy)
-                    _svg_parts.append(f'<polyline points="{_polyline}" fill="none" stroke="#bc1661" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>')
-                    _svg_parts.extend(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="#bc1661"/>' for x, y in _xy)
+                    _paid_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _paid_xy)
+                    _svg_parts.append(f'<polyline points="{_polyline}" fill="none" stroke="#f28c28" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
+                    _svg_parts.append(f'<polyline points="{_paid_polyline}" fill="none" stroke="#2eaa57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
                 _label_step = max(1, (len(_labels) + 6) // 7)
                 for _i in range(0, len(_labels), _label_step):
                     _x = _left + (_i * _plot_w / max(1, len(_points) - 1))
@@ -15652,7 +15667,7 @@ def statistics_dialog(section="Общая статистика"):
         if _manager_rows:
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
-                (_stat_deal_date(row["deal"]), row["amount"])
+                (_stat_deal_date(row["deal"]), row["amount"], bool(row["paid"]))
                 for row in _manager_rows if _stat_deal_date(row["deal"]) is not None
             ]
             if _manager_dated_rows:
@@ -15661,14 +15676,18 @@ def statistics_dialog(section="Общая статистика"):
                 _manager_chart_end = _end or max(_manager_dates)
                 _manager_daily = (_manager_chart_end - _manager_chart_start).days <= 31
                 _manager_totals = {}
+                _manager_paid_totals = {}
                 if _manager_daily:
                     _manager_cursor = _manager_chart_start
                     while _manager_cursor <= _manager_chart_end:
                         _manager_totals[_manager_cursor] = 0.0
+                        _manager_paid_totals[_manager_cursor] = 0.0
                         _manager_cursor += timedelta(days=1)
-                    for _manager_date, _manager_value in _manager_dated_rows:
+                    for _manager_date, _manager_value, _manager_is_paid in _manager_dated_rows:
                         if _manager_chart_start <= _manager_date <= _manager_chart_end:
                             _manager_totals[_manager_date] = _manager_totals.get(_manager_date, 0.0) + _manager_value
+                            if _manager_is_paid:
+                                _manager_paid_totals[_manager_date] = _manager_paid_totals.get(_manager_date, 0.0) + _manager_value
                     _manager_chart_title = "#### Динамика суммы сделок по дням"
                     _manager_labels = [(d, d.strftime("%d.%m")) for d in sorted(_manager_totals)]
                 else:
@@ -15676,24 +15695,33 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_last_month = _manager_chart_end.replace(day=1)
                     while _manager_cursor <= _manager_last_month:
                         _manager_totals[_manager_cursor] = 0.0
+                        _manager_paid_totals[_manager_cursor] = 0.0
                         _manager_cursor = _manager_cursor.replace(year=_manager_cursor.year + 1, month=1) if _manager_cursor.month == 12 else _manager_cursor.replace(month=_manager_cursor.month + 1)
-                    for _manager_date, _manager_value in _manager_dated_rows:
+                    for _manager_date, _manager_value, _manager_is_paid in _manager_dated_rows:
                         if _manager_chart_start <= _manager_date <= _manager_chart_end:
                             _manager_key = _manager_date.replace(day=1)
                             _manager_totals[_manager_key] = _manager_totals.get(_manager_key, 0.0) + _manager_value
+                            if _manager_is_paid:
+                                _manager_paid_totals[_manager_key] = _manager_paid_totals.get(_manager_key, 0.0) + _manager_value
                     _manager_chart_title = "#### Динамика суммы сделок по месяцам"
                     _manager_labels = [(d, d.strftime("%m.%Y")) for d in sorted(_manager_totals)]
                 st.markdown(_manager_chart_title)
                 _manager_points = [(d, _manager_totals[d]) for d in sorted(_manager_totals)]
+                _manager_paid_points = [(d, _manager_paid_totals[d]) for d in sorted(_manager_paid_totals)]
                 _manager_w, _manager_h = 900, 300
                 _manager_left, _manager_right, _manager_top, _manager_bottom = 68, 22, 18, 55
                 _manager_plot_w, _manager_plot_h = _manager_w - _manager_left - _manager_right, _manager_h - _manager_top - _manager_bottom
-                _manager_max_val = max((v for _, v in _manager_points), default=0.0)
+                _manager_max_val = max((max(_manager_totals[d], _manager_paid_totals[d]) for d in _manager_totals), default=0.0)
                 _manager_scale_max = _manager_max_val * 1.12 if _manager_max_val > 0 else 1.0
                 _manager_xy = [
                     (_manager_left + (i * _manager_plot_w / max(1, len(_manager_points) - 1)),
                      _manager_top + _manager_plot_h - (value / _manager_scale_max * _manager_plot_h))
                     for i, (_, value) in enumerate(_manager_points)
+                ]
+                _manager_paid_xy = [
+                    (_manager_left + (i * _manager_plot_w / max(1, len(_manager_paid_points) - 1)),
+                     _manager_top + _manager_plot_h - (value / _manager_scale_max * _manager_plot_h))
+                    for i, (_, value) in enumerate(_manager_paid_points)
                 ]
                 _manager_svg = [
                     f'<svg viewBox="0 0 {_manager_w} {_manager_h}" width="100%" role="img" aria-label="Динамика суммы сделок менеджера" xmlns="http://www.w3.org/2000/svg">',
@@ -15705,11 +15733,13 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_svg.append(f'<line x1="{_manager_left}" y1="{_manager_y:.1f}" x2="{_manager_w-_manager_right}" y2="{_manager_y:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
                     _manager_svg.append(f'<text x="{_manager_left-9}" y="{_manager_y+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_manager_val:,.0f}</text>')
                 if len(_manager_xy) == 1:
-                    _manager_svg.append(f'<circle cx="{_manager_xy[0][0]:.1f}" cy="{_manager_xy[0][1]:.1f}" r="4" fill="#bc1661"/>')
+                    _manager_svg.append(f'<circle cx="{_manager_xy[0][0]:.1f}" cy="{_manager_xy[0][1]:.1f}" r="2" fill="#f28c28"/>')
+                    _manager_svg.append(f'<circle cx="{_manager_paid_xy[0][0]:.1f}" cy="{_manager_paid_xy[0][1]:.1f}" r="2" fill="#2eaa57"/>')
                 else:
                     _manager_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _manager_xy)
-                    _manager_svg.append(f'<polyline points="{_manager_polyline}" fill="none" stroke="#bc1661" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>')
-                    _manager_svg.extend(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="#bc1661"/>' for x, y in _manager_xy)
+                    _manager_paid_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _manager_paid_xy)
+                    _manager_svg.append(f'<polyline points="{_manager_polyline}" fill="none" stroke="#f28c28" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
+                    _manager_svg.append(f'<polyline points="{_manager_paid_polyline}" fill="none" stroke="#2eaa57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
                 _manager_label_step = max(1, (len(_manager_labels) + 6) // 7)
                 for _manager_i in range(0, len(_manager_labels), _manager_label_step):
                     _manager_x = _manager_left + (_manager_i * _manager_plot_w / max(1, len(_manager_points) - 1))
