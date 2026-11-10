@@ -4296,7 +4296,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _smart_rerun()
 
                     with _status_inner:
-                        if not t.get("done", False) and not t.get("in_work", False):
+                        if not show_edit_task and not t.get("done", False) and not t.get("in_work", False):
                             if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
                                 # Для общей неназначенной задачи ответственным становится тот, кто первым взял её в работу.
                                 if not t.get("manager"):
@@ -4531,7 +4531,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _smart_rerun()
 
                     with _status_inner:
-                        if not t.get("done", False) and not t.get("in_work", False):
+                        if not show_edit_task and not t.get("done", False) and not t.get("in_work", False):
                             if st.button("Взять в работу", key=f"btn_take_work_{key_prefix}", type="primary", use_container_width=True):
                                 # Для общей неназначенной задачи ответственным становится тот, кто первым взял её в работу.
                                 if not t.get("manager"):
