@@ -4338,13 +4338,13 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
                         _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
                         _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _track_col_edit, _method_col_edit = st.columns([1, 1])
-                        with _track_col_edit:
-                            et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
-                            _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
+                        _method_col_edit, _track_col_edit = st.columns([1, 1])
                         with _method_col_edit:
                             et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
                             _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
+                        with _track_col_edit:
+                            et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                            _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
                         _amount_key_edit = f"edit_amount_{key_prefix}"
                         _auto_amount_edit = locals().get("_auto_amount_edit", 0)
                         if _auto_amount_edit > 0:
@@ -4644,13 +4644,13 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
                         _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
                         _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _track_col_edit, _method_col_edit = st.columns([1, 1])
-                        with _track_col_edit:
-                            et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
-                            _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
+                        _method_col_edit, _track_col_edit = st.columns([1, 1])
                         with _method_col_edit:
                             et_method = st.selectbox("Способ доставки:", DELIVERY_METHOD_OPTIONS, index=DELIVERY_METHOD_OPTIONS.index(t.get("ship_method", "Не выбрано")) if t.get("ship_method", "Не выбрано") in DELIVERY_METHOD_OPTIONS else 0, key=f"edit_method_{key_prefix}")
                             _crm_mark_widget_changed(f"edit_method_{key_prefix}", str(et_method or "") != str(t.get("ship_method", "Не выбрано") or "Не выбрано"))
+                        with _track_col_edit:
+                            et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
+                            _crm_mark_widget_changed(f"edit_tk_{key_prefix}", str(et_tk or "") != str(t.get("tk_num", "") or ""))
                         _amount_key_edit = f"edit_amount_{key_prefix}"
                         _auto_amount_edit = locals().get("_auto_amount_edit", 0)
                         if _auto_amount_edit > 0:
