@@ -9017,17 +9017,17 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) {
         position:fixed !important; left:14px !important; bottom:14px !important; z-index:999999 !important;
         display:flex !important; align-items:center !important; justify-content:center !important;
-        flex:0 0 46px !important; width:46px !important; min-width:46px !important; max-width:46px !important;
-        height:46px !important; margin:0 !important; padding:0 !important; overflow:visible !important;
+        flex:0 0 72px !important; width:72px !important; min-width:72px !important; max-width:72px !important;
+        height:84px !important; margin:0 !important; padding:0 !important; overflow:visible !important;
         background:transparent !important; border:0 !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] {
         position:relative !important; display:flex !important; align-items:center !important; justify-content:center !important;
-        box-sizing:border-box !important; width:46px !important; min-width:46px !important; max-width:46px !important;
-        height:46px !important; min-height:46px !important; padding:0 !important; margin:0 !important;
-        border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:none !important;
-        background:rgba(188,22,97,0.25) !important; color:#FFFFFF !important; font-size:0 !important; line-height:1 !important;
-        opacity:1 !important; filter:none !important; transition:background 0.15s ease !important;
+        box-sizing:border-box !important; width:72px !important; min-width:72px !important; max-width:72px !important;
+        height:84px !important; min-height:84px !important; padding:0 !important; margin:0 !important;
+        border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important;
+        background:transparent !important; color:transparent !important; font-size:0 !important; line-height:1 !important;
+        opacity:1 !important; filter:none !important; transition:none !important;
     }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] svg,
@@ -9035,19 +9035,16 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] [data-testid*="Icon"],
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] > span:not([class*="st-emotion-cache"]) { display:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
-        content:"" !important; position:absolute !important; left:12px !important; top:11px !important;
-        width:14px !important; height:14px !important; box-sizing:border-box !important;
-        border:2.5px solid #FFFFFF !important; border-radius:50% !important; opacity:1 !important; filter:none !important;
+        content:"" !important; position:absolute !important; inset:0 !important;
+        width:72px !important; height:84px !important; box-sizing:border-box !important;
+        border:0 !important; border-radius:0 !important; background:transparent !important;
+        background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cg%20fill%3D%22%23fff%22%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%225%22%20r%3D%222.3%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2211%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2217%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2214%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2228%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2234%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2229%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2235%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2241%22%20r%3D%222.3%22%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2223%22%20r%3D%223.1%22%20fill%3D%22%23f4dce7%22%20stroke%3D%22%23fff%22%20stroke-width%3D%22.7%22%2F%3E%3C%2Fsvg%3E") !important; background-position:center !important; background-repeat:no-repeat !important; background-size:contain !important; opacity:1 !important; filter:none !important;
     }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::after {
-        content:"" !important; position:absolute !important; left:26px !important; top:26px !important;
-        width:8px !important; height:2.5px !important; background:#FFFFFF !important;
-        border-radius:2px !important; opacity:1 !important; filter:none !important; transform:rotate(45deg) !important; transform-origin:left center !important;
-    }
+    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::after { display:none !important; content:none !important; }
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:hover,
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:focus,
     [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:active {
-        background:#BC1661 !important; border:0 !important; outline:0 !important; box-shadow:none !important;
+        background:transparent !important; border:0 !important; outline:0 !important; box-shadow:none !important;
     }
     [class*="st-key-crm_workspace_add_client_"] { flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important; margin:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_add_client_"] > div > button,
