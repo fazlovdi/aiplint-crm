@@ -4338,12 +4338,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
                         _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
                         _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _amount_key_edit = f"edit_amount_{key_prefix}"
-                        if _auto_amount_edit > 0:
-                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
-                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                        _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
-                        _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
                         _track_col_edit, _method_col_edit = st.columns([1, 1])
                         with _track_col_edit:
                             et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
@@ -4650,12 +4644,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         _crm_mark_widget_changed(f"edit_pay_{key_prefix}", str(et_pay or "") != str(t.get("ship_pay", "") or ""))
                         _selected_calc_edit = next((c for c in (d or {}).get("calculations", []) if str(c.get("id")) == str(_selected_calc_id_edit)), None)
                         _auto_amount_edit = _deal_items_total(_selected_calc_edit.get("items", [])) if _selected_calc_edit else 0
-                        _amount_key_edit = f"edit_amount_{key_prefix}"
-                        if _auto_amount_edit > 0:
-                            st.session_state[_amount_key_edit] = f"{_auto_amount_edit:g}"
-                        et_amount = st.text_input("Сумма заказа (руб.):", value=f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else ""), key=_amount_key_edit, placeholder="Сумма из расчёта без доставки", disabled=bool(_auto_amount_edit))
-                        _amount_baseline = f"{_auto_amount_edit:g}" if _auto_amount_edit > 0 else (str(t.get("order_amount", 0)) if t.get("order_amount", 0) > 0 else "")
-                        _crm_mark_widget_changed(_amount_key_edit, str(et_amount or "") != str(_amount_baseline or ""))
                         _track_col_edit, _method_col_edit = st.columns([1, 1])
                         with _track_col_edit:
                             et_tk = st.text_input("Трек/комментарий:", value=t.get("tk_num", ""), key=f"edit_tk_{key_prefix}")
