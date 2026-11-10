@@ -17224,19 +17224,19 @@ elif st.session_state.active_tab == "Задачи":
                 st.subheader(f"Предстоящие ({len(ft_list)})")
                 st.markdown(f"**На завтра ({len(ft_tomorrow)})**")
                 if ft_tomorrow:
-                    for t in ft_tomorrow: render_task_block(t, "future_tomorrow")
+                    for t in ft_tomorrow: render_task_block(t, "future")
                 else:
                     st.caption("Задач на завтра нет.")
                 st.divider()
                 st.markdown(f"**На неделю ({len(ft_week)})**")
                 if ft_week:
-                    for t in ft_week: render_task_block(t, "future_week")
+                    for t in ft_week: render_task_block(t, "future")
                 else:
                     st.caption("Других задач на этой неделе нет.")
                 st.divider()
                 st.markdown(f"**На будущее ({len(ft_later)})**")
                 if ft_later:
-                    for t in ft_later: render_task_block(t, "future_later")
+                    for t in ft_later: render_task_block(t, "future")
                 else:
                     st.caption("Задач на следующие недели нет.")
         with col_review:
