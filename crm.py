@@ -15432,53 +15432,33 @@ def statistics_dialog(section="Общая статистика"):
                     _chart_title = "#### Динамика суммы заказов по месяцам"
                     _labels = [(d, d.strftime("%m.%Y")) for d in sorted(_totals)]
                 st.markdown(_chart_title)
-                _points = [(d, _totals[d]) for d in sorted(_totals)]
-                _paid_points = [(d, _paid_totals[d]) for d in sorted(_paid_totals)]
-                _w, _h = 900, 300
-                _left, _right, _top, _bottom = 68, 22, 18, 55
-                _plot_w, _plot_h = _w - _left - _right, _h - _top - _bottom
-                _max_val = max((max(_totals[d], _paid_totals[d]) for d in _totals), default=0.0)
-                _scale_max = _max_val * 1.12 if _max_val > 0 else 1.0
-                _xy = [
-                    (_left + (i * _plot_w / max(1, len(_points) - 1)),
-                     _top + _plot_h - (value / _scale_max * _plot_h))
-                    for i, (_, value) in enumerate(_points)
-                ]
-                _paid_xy = [
-                    (_left + (i * _plot_w / max(1, len(_paid_points) - 1)),
-                     _top + _plot_h - (value / _scale_max * _plot_h))
-                    for i, (_, value) in enumerate(_paid_points)
-                ]
-                _svg_parts = [
-                    f'<svg viewBox="0 0 {_w} {_h}" width="100%" role="img" aria-label="Динамика суммы заказов" xmlns="http://www.w3.org/2000/svg">',
-                    '<rect width="100%" height="100%" fill="transparent"/>',
-                    '<line x1="570" y1="15" x2="590" y2="15" stroke="#f28c28" stroke-width="1.5"/>',
-                    '<text x="596" y="19" font-size="11" fill="currentColor">Все сделки</text>',
-                    '<line x1="700" y1="15" x2="720" y2="15" stroke="#2eaa57" stroke-width="1.5"/>',
-                    '<text x="726" y="19" font-size="11" fill="currentColor">Оплаченные</text>',
-                ]
-                for _tick in range(5):
-                    _y = _top + _plot_h - (_tick * _plot_h / 4)
-                    _val = _scale_max * _tick / 4
-                    _svg_parts.append(f'<line x1="{_left}" y1="{_y:.1f}" x2="{_w-_right}" y2="{_y:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
-                    _svg_parts.append(f'<text x="{_left-9}" y="{_y+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_val:,.0f}</text>')
-                if len(_xy) == 1:
-                    _svg_parts.append(f'<circle cx="{_xy[0][0]:.1f}" cy="{_xy[0][1]:.1f}" r="2" fill="#f28c28"/>')
-                    _svg_parts.append(f'<circle cx="{_paid_xy[0][0]:.1f}" cy="{_paid_xy[0][1]:.1f}" r="2" fill="#2eaa57"/>')
-                else:
-                    _polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _xy)
-                    _paid_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _paid_xy)
-                    _svg_parts.append(f'<polyline points="{_polyline}" fill="none" stroke="#f28c28" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
-                    _svg_parts.append(f'<polyline points="{_paid_polyline}" fill="none" stroke="#2eaa57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
-                _label_step = max(1, (len(_labels) + 6) // 7)
-                for _i in range(0, len(_labels), _label_step):
-                    _x = _left + (_i * _plot_w / max(1, len(_points) - 1))
-                    _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="middle">{_labels[_i][1]}</text>')
-                if _labels and (len(_labels)-1) % _label_step != 0:
-                    _x = _left + _plot_w
-                    _svg_parts.append(f'<text x="{_x:.1f}" y="{_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_labels[-1][1]}</text>')
-                _svg_parts.append('</svg>')
-                st.markdown("\n".join(_svg_parts), unsafe_allow_html=True)
+                import plotly.graph_objects as go
+                _chart_dates = sorted(_totals)
+                _fig = go.Figure()
+                # Зелёная линия рисуется первой, оранжевая — поверх неё,
+                # чтобы общая сумма оставалась видна даже при полном совпадении.
+                _fig.add_trace(go.Scatter(
+                    x=_chart_dates, y=[_paid_totals[d] for d in _chart_dates],
+                    mode="lines", name="Оплаченные", line=dict(color="#2eaa57", width=1.2),
+                    hovertemplate="%{x|%d.%m.%Y}<br>Оплаченные: %{y:,.0f} ₽<extra></extra>",
+                ))
+                _fig.add_trace(go.Scatter(
+                    x=_chart_dates, y=[_totals[d] for d in _chart_dates],
+                    mode="lines", name="Все сделки", line=dict(color="#f28c28", width=1.5),
+                    hovertemplate="%{x|%d.%m.%Y}<br>Все сделки: %{y:,.0f} ₽<extra></extra>",
+                ))
+                _fig.update_layout(
+                    height=320, margin=dict(l=10, r=10, t=12, b=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    hovermode="x unified", dragmode="pan",
+                    xaxis=dict(title=None, showgrid=False, rangeslider=dict(visible=False)),
+                    yaxis=dict(title="Сумма, ₽", fixedrange=True, rangemode="tozero"),
+                )
+                st.plotly_chart(
+                    _fig, use_container_width=True,
+                    config={"scrollZoom": True, "displaylogo": False, "modeBarButtonsToRemove": ["select2d", "lasso2d"]},
+                    key="overall_orders_dynamics_chart",
+                )
             st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
         # Статистика по городам и образцам строится по задачам доставки.
         _city_client_counts = {}
@@ -15710,52 +15690,32 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_chart_title = "#### Динамика суммы сделок по месяцам"
                     _manager_labels = [(d, d.strftime("%m.%Y")) for d in sorted(_manager_totals)]
                 st.markdown(_manager_chart_title)
-                _manager_points = [(d, _manager_totals[d]) for d in sorted(_manager_totals)]
-                _manager_paid_points = [(d, _manager_paid_totals[d]) for d in sorted(_manager_paid_totals)]
-                _manager_w, _manager_h = 900, 300
-                _manager_left, _manager_right, _manager_top, _manager_bottom = 68, 22, 18, 55
-                _manager_plot_w, _manager_plot_h = _manager_w - _manager_left - _manager_right, _manager_h - _manager_top - _manager_bottom
-                _manager_max_val = max((max(_manager_totals[d], _manager_paid_totals[d]) for d in _manager_totals), default=0.0)
-                _manager_scale_max = _manager_max_val * 1.12 if _manager_max_val > 0 else 1.0
-                _manager_xy = [
-                    (_manager_left + (i * _manager_plot_w / max(1, len(_manager_points) - 1)),
-                     _manager_top + _manager_plot_h - (value / _manager_scale_max * _manager_plot_h))
-                    for i, (_, value) in enumerate(_manager_points)
-                ]
-                _manager_paid_xy = [
-                    (_manager_left + (i * _manager_plot_w / max(1, len(_manager_paid_points) - 1)),
-                     _manager_top + _manager_plot_h - (value / _manager_scale_max * _manager_plot_h))
-                    for i, (_, value) in enumerate(_manager_paid_points)
-                ]
-                _manager_svg = [
-                    f'<svg viewBox="0 0 {_manager_w} {_manager_h}" width="100%" role="img" aria-label="Динамика суммы сделок менеджера" xmlns="http://www.w3.org/2000/svg">',
-                    '<rect width="100%" height="100%" fill="transparent"/>',
-                    '<line x1="570" y1="15" x2="590" y2="15" stroke="#f28c28" stroke-width="1.5"/>',
-                    '<text x="596" y="19" font-size="11" fill="currentColor">Все сделки</text>',
-                    '<line x1="700" y1="15" x2="720" y2="15" stroke="#2eaa57" stroke-width="1.5"/>',
-                    '<text x="726" y="19" font-size="11" fill="currentColor">Оплаченные</text>',
-                ]
-                for _manager_tick in range(5):
-                    _manager_y = _manager_top + _manager_plot_h - (_manager_tick * _manager_plot_h / 4)
-                    _manager_val = _manager_scale_max * _manager_tick / 4
-                    _manager_svg.append(f'<line x1="{_manager_left}" y1="{_manager_y:.1f}" x2="{_manager_w-_manager_right}" y2="{_manager_y:.1f}" stroke="#d9d9d9" stroke-width="1"/>')
-                    _manager_svg.append(f'<text x="{_manager_left-9}" y="{_manager_y+4:.1f}" font-size="11" fill="currentColor" text-anchor="end">{_manager_val:,.0f}</text>')
-                if len(_manager_xy) == 1:
-                    _manager_svg.append(f'<circle cx="{_manager_xy[0][0]:.1f}" cy="{_manager_xy[0][1]:.1f}" r="2" fill="#f28c28"/>')
-                    _manager_svg.append(f'<circle cx="{_manager_paid_xy[0][0]:.1f}" cy="{_manager_paid_xy[0][1]:.1f}" r="2" fill="#2eaa57"/>')
-                else:
-                    _manager_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _manager_xy)
-                    _manager_paid_polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in _manager_paid_xy)
-                    _manager_svg.append(f'<polyline points="{_manager_polyline}" fill="none" stroke="#f28c28" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
-                    _manager_svg.append(f'<polyline points="{_manager_paid_polyline}" fill="none" stroke="#2eaa57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>')
-                _manager_label_step = max(1, (len(_manager_labels) + 6) // 7)
-                for _manager_i in range(0, len(_manager_labels), _manager_label_step):
-                    _manager_x = _manager_left + (_manager_i * _manager_plot_w / max(1, len(_manager_points) - 1))
-                    _manager_svg.append(f'<text x="{_manager_x:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="middle">{_manager_labels[_manager_i][1]}</text>')
-                if _manager_labels and (len(_manager_labels)-1) % _manager_label_step != 0:
-                    _manager_svg.append(f'<text x="{_manager_left + _manager_plot_w:.1f}" y="{_manager_h-27}" font-size="11" fill="currentColor" text-anchor="end">{_manager_labels[-1][1]}</text>')
-                _manager_svg.append('</svg>')
-                st.markdown("\n".join(_manager_svg), unsafe_allow_html=True)
+                import plotly.graph_objects as go
+                _manager_chart_dates = sorted(_manager_totals)
+                _manager_fig = go.Figure()
+                # Зелёная линия рисуется первой, оранжевая — поверх неё.
+                _manager_fig.add_trace(go.Scatter(
+                    x=_manager_chart_dates, y=[_manager_paid_totals[d] for d in _manager_chart_dates],
+                    mode="lines", name="Оплаченные", line=dict(color="#2eaa57", width=1.2),
+                    hovertemplate="%{x|%d.%m.%Y}<br>Оплаченные: %{y:,.0f} ₽<extra></extra>",
+                ))
+                _manager_fig.add_trace(go.Scatter(
+                    x=_manager_chart_dates, y=[_manager_totals[d] for d in _manager_chart_dates],
+                    mode="lines", name="Все сделки", line=dict(color="#f28c28", width=1.5),
+                    hovertemplate="%{x|%d.%m.%Y}<br>Все сделки: %{y:,.0f} ₽<extra></extra>",
+                ))
+                _manager_fig.update_layout(
+                    height=320, margin=dict(l=10, r=10, t=12, b=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    hovermode="x unified", dragmode="pan",
+                    xaxis=dict(title=None, showgrid=False, rangeslider=dict(visible=False)),
+                    yaxis=dict(title="Сумма, ₽", fixedrange=True, rangemode="tozero"),
+                )
+                st.plotly_chart(
+                    _manager_fig, use_container_width=True,
+                    config={"scrollZoom": True, "displaylogo": False, "modeBarButtonsToRemove": ["select2d", "lasso2d"]},
+                    key="manager_orders_dynamics_chart",
+                )
                 st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:22px 0 26px 0;"></div>', unsafe_allow_html=True)
             st.dataframe([
                 {
