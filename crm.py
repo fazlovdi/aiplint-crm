@@ -15364,17 +15364,17 @@ def statistics_dialog(section="Общая статистика"):
         _avg_metres = _total_metres / _paid_count if _paid_count else 0
         # Конверсия — доля полностью оплаченных сделок среди всех сделок выбранного периода.
         _conversion = (_paid_count / len(deal_rows) * 100) if deal_rows else 0
-        _m1, _m2, _m3, _m4, _m5, _m6 = st.columns(6, gap="small")
+        _m1, _m2, _m3, _m4, _m5 = st.columns(5, gap="small")
         _m1.metric("Заказов / сделок", f"{len(deal_rows):,}".replace(",", " "))
-        _m2.metric("Продано, м", f"{_total_metres:,.1f}".replace(",", " "))
-        _m3.metric("Сумма заказов", f"{_total_amount:,.0f} ₽".replace(",", " "))
-        _m4.metric("Средний заказ", f"{_avg_check:,.0f} ₽".replace(",", " "))
-        _m5.metric("Средний заказ, м", f"{_avg_metres:,.1f}".replace(",", " "))
-        _m6.metric("Конверсия в оплату", f"{_conversion:.1f}%")
-        _m5, _m6, _m7 = st.columns(3)
-        _m5.metric("Оплачено полностью", _paid_count)
-        _m6.metric("Ожидают оплаты / на паузе", _waiting_count)
-        _m7.metric("Новые клиенты", len(clients))
+        _m2.metric("Оплачено полностью", _paid_count)
+        _m3.metric("Продано, м", f"{_total_metres:,.1f}".replace(",", " "))
+        _m4.metric("Сумма заказов", f"{_total_amount:,.0f} ₽".replace(",", " "))
+        _m5.metric("Конверсия в оплату", f"{_conversion:.1f}%")
+        _m6, _m7, _m8, _m9 = st.columns(4, gap="small")
+        _m6.metric("Средний заказ", f"{_avg_check:,.0f} ₽".replace(",", " "))
+        _m7.metric("Средний заказ, м", f"{_avg_metres:,.1f}".replace(",", " "))
+        _m8.metric("Ожидают оплаты / на паузе", _waiting_count)
+        _m9.metric("Новые клиенты", len(clients))
         if deal_rows:
             _status_counts = {}
             for row in deal_rows:
