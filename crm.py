@@ -4804,6 +4804,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     var confirmClass = {json.dumps("st-key-go_" + str(key_prefix))};
                     var uploaderClass = {json.dumps("st-key-uf_" + str(key_prefix) + "_" + str(uf_ver))};
                     var uploadStorageKey = {json.dumps("crm_task_report_uploading_" + _report_dom_suffix)};
+                    var statusId = "crm_upload_status_" + {json.dumps(_report_dom_suffix)};
                     function sync() {{
                         var b = doc.getElementById(buttonId);
                         var box = doc.querySelector('.' + containerClass);
@@ -4824,35 +4825,66 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 if (b.textContent !== nextLabel) b.textContent = nextLabel;
                             }});
                         }}
-                        // Блокируем подтверждение, пока Streamlit не завершил загрузку выбранных файлов.
+
                         var confirmWrap = doc.getElementsByClassName(confirmClass)[0];
                         var confirmBtn = confirmWrap && confirmWrap.querySelector('button');
                         var uploader = doc.getElementsByClassName(uploaderClass)[0];
                         if (confirmBtn && uploader) {{
+                            // Индикатор находится рядом с загрузчиком и управляет разблокировкой кнопки.
+                            var status = doc.getElementById(statusId);
+                            if (!status) {{
+                                status = doc.createElement('div');
+                                status.id = statusId;
+                                status.style.cssText = 'font-size:0.875rem;margin-top:0.35rem;min-height:1.2rem;';
+                                uploader.insertAdjacentElement('afterend', status);
+                            }}
                             var fileInput = uploader.querySelector('input[type="file"]');
+                            if (!confirmBtn.__crmUploadBound) {{
+                                confirmBtn.__crmUploadBound = true;
+                                confirmBtn.__crmUploadBaseDisabled = confirmBtn.disabled;
+                            }}
                             if (fileInput && !fileInput.__crmUploadBound) {{
                                 fileInput.__crmUploadBound = true;
                                 fileInput.addEventListener('change', function() {{
-                                    if (fileInput.files && fileInput.files.length) {{
-                                        try {{ w.sessionStorage.setItem(uploadStorageKey, String(fileInput.files.length)); }} catch(e) {{}}
+                                    var count = fileInput.files ? fileInput.files.length : 0;
+                                    if (count > 0) {{
+                                        try {{ w.sessionStorage.setItem(uploadStorageKey, String(count)); }} catch(e) {{}}
                                         confirmBtn.disabled = true;
+                                        confirmBtn.setAttribute('aria-busy', 'true');
+                                        status.textContent = 'Загрузка файла...';
+                                        status.style.color = '#666';
+                                    }} else {{
+                                        confirmBtn.disabled = false;
+                                        confirmBtn.removeAttribute('aria-busy');
+                                        status.textContent = '';
                                     }}
                                 }});
                             }}
                             var expectedCount = 0;
                             try {{ expectedCount = parseInt(w.sessionStorage.getItem(uploadStorageKey) || '0', 10) || 0; }} catch(e) {{}}
+                            var fileCount = fileInput && fileInput.files ? fileInput.files.length : 0;
+                            var requiredCount = Math.max(expectedCount, fileCount);
                             var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"]');
                             var uploadedRows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
-                            var selectedCount = fileInput && fileInput.files ? fileInput.files.length : 0;
-                            var requiredCount = Math.max(expectedCount, selectedCount);
-                            var uploading = !!progress || (requiredCount > 0 && uploadedRows.length < requiredCount);
-                            if (uploading) {{
+                            var hasPendingUpload = requiredCount > 0;
+                            var uploaded = hasPendingUpload && !progress && uploadedRows.length >= requiredCount;
+
+                            if (hasPendingUpload && !uploaded) {{
                                 confirmBtn.disabled = true;
                                 confirmBtn.setAttribute('aria-busy', 'true');
-                            }} else {{
+                                status.textContent = 'Загрузка файла...';
+                                status.style.color = '#666';
+                            }} else if (uploaded) {{
                                 confirmBtn.disabled = false;
                                 confirmBtn.removeAttribute('aria-busy');
+                                status.textContent = requiredCount === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
+                                status.style.color = '#16803c';
                                 try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                            }} else {{
+                                // Без выбранных файлов кнопка «Подтвердить» активна.
+                                confirmBtn.disabled = false;
+                                confirmBtn.removeAttribute('aria-busy');
+                                status.textContent = '';
                             }}
                         }}
                         var cancelWrap = doc.querySelector('.' + cancelClass);
@@ -4865,10 +4897,8 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                         }}
                     }}
                     sync();
-                    setTimeout(sync, 50);
-                    setTimeout(sync, 250);
-                    setTimeout(sync, 750);
-                    setTimeout(sync, 1500);
+                    var poll = w.setInterval(sync, 200);
+                    w.setTimeout(function() {{ w.clearInterval(poll); }}, 180000);
                 }})();
                 </script>""", height=0)
             else:
