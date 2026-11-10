@@ -1450,7 +1450,7 @@ def is_task_overdue(task):
             try:
                 deadline = datetime.fromisoformat(normalized)
                 if deadline.tzinfo is not None:
-                    deadline = deadline.astimezone(now.tzinfo).replace(tzinfo=None)
+                    deadline = deadline.astimezone(MOSCOW_TZ).replace(tzinfo=None)
             except (TypeError, ValueError):
                 for fmt in ("%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S"):
                     try:
