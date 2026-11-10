@@ -4406,11 +4406,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             st.markdown(f"**Телефон:** {t['receiver_phone']}")
                         if t.get("ship_pay"):
                             st.markdown(f"**Оплата:** {t['ship_pay']}")
-                        _view_track_col, _view_delivery_col = st.columns([1, 1])
-                        with _view_track_col:
-                            st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
+                        _view_delivery_col, _view_track_col = st.columns([1, 1])
                         with _view_delivery_col:
                             st.markdown(f"**Способ доставки:** {t.get('ship_method', 'Не выбрано') or 'Не выбрано'}")
+                        with _view_track_col:
+                            st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
                         if t.get("order_amount", 0) > 0:
                             st.markdown(f"**Сумма заказа:** {t['order_amount']:,.0f} руб.".replace(",", " "))
                         if t.get("ready_to_ship"):
@@ -4705,11 +4705,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     if t.get('receiver'): st.markdown(f"**\u041f\u043e\u043b\u0443\u0447\u0430\u0442\u0435\u043b\u044c:** {t['receiver']}")
                     if t.get('receiver_phone'): st.markdown(f"**\u0422\u0435\u043b\u0435\u0444\u043e\u043d:** {t['receiver_phone']}")
                     if t.get('ship_pay'): st.markdown(f"**\u041e\u043f\u043b\u0430\u0442\u0430:** {t['ship_pay']}")
-                    _view_track_col, _view_delivery_col = st.columns([1, 1])
-                    with _view_track_col:
-                        st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
+                    _view_delivery_col, _view_track_col = st.columns([1, 1])
                     with _view_delivery_col:
                         st.markdown(f"**Способ доставки:** {t.get('ship_method', 'Не выбрано') or 'Не выбрано'}")
+                    with _view_track_col:
+                        st.markdown(f"**Трек/комментарий:** {t.get('tk_num', '') or '—'}")
                     if t.get('order_amount', 0) > 0: st.markdown(f"**\u0421\u0443\u043c\u043c\u0430 \u0437\u0430\u043a\u0430\u0437\u0430:** {t['order_amount']:,.0f} \u0440\u0443\u0431.".replace(",", " "))
                     if t.get('ready_to_ship'): st.markdown('<span class="ready-badge">\u0413\u043e\u0442\u043e\u0432\u043e \u043a \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0435</span>', unsafe_allow_html=True)
                     # Всегда показываем описание, даже если оно пока не заполнено.
