@@ -15451,12 +15451,12 @@ def statistics_dialog(section="Общая статистика"):
                     height=320, margin=dict(l=10, r=10, t=12, b=10),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     hovermode="x unified", dragmode="pan",
-                    xaxis=dict(title=None, showgrid=False, rangeslider=dict(visible=False)),
+                    xaxis=dict(title=None, showgrid=False, tickformat="%d.%m.%Y", hoverformat="%d.%m.%Y", rangeslider=dict(visible=False)),
                     yaxis=dict(title="Сумма, ₽", fixedrange=True, rangemode="tozero"),
                 )
                 st.plotly_chart(
                     _fig, use_container_width=True,
-                    config={"scrollZoom": True, "displaylogo": False, "modeBarButtonsToRemove": ["select2d", "lasso2d"]},
+                    config={"scrollZoom": True, "displaylogo": False, "locale": "ru", "modeBarButtonsToRemove": ["select2d", "lasso2d"]},
                     key="overall_orders_dynamics_chart",
                 )
             st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#bc1661;margin:12px 0 22px 0;"></div>', unsafe_allow_html=True)
