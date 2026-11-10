@@ -15594,13 +15594,16 @@ def statistics_dialog(section="Общая статистика"):
     elif section in manager_names:
         _manager_name = section
         _manager_rows = [x for x in deal_rows if x["manager"] == _manager_name]
-        _manager_amount = sum(x["amount"] for x in _manager_rows)
-        _manager_metres = sum(x["metres"] for x in _manager_rows)
-        _manager_paid = sum(1 for x in _manager_rows if x["paid"])
-        _manager_paid_amount = sum(x["amount"] for x in _manager_rows if x["paid"])
+        # Продажи и средний заказ менеджера считаем только по полностью оплаченным сделкам.
+        _manager_paid_rows = [x for x in _manager_rows if x["paid"]]
+        _manager_amount = sum(x["amount"] for x in _manager_paid_rows)
+        _manager_metres = sum(x["metres"] for x in _manager_paid_rows)
+        _manager_paid = len(_manager_paid_rows)
+        _manager_paid_amount = _manager_amount
+        # Конверсия — доля полностью оплаченных сделок среди всех сделок менеджера за период.
         _manager_conversion = (_manager_paid / len(_manager_rows) * 100) if _manager_rows else 0
-        _manager_avg_check = _manager_amount / len(_manager_rows) if _manager_rows else 0
-        _manager_avg_metres = _manager_metres / len(_manager_rows) if _manager_rows else 0
+        _manager_avg_check = _manager_amount / _manager_paid if _manager_paid else 0
+        _manager_avg_metres = _manager_metres / _manager_paid if _manager_paid else 0
         _manager_user = next(
             (u for u in users if str(u.get("name") or u.get("login") or "").strip() == _manager_name),
             {},
