@@ -1451,6 +1451,24 @@ def format_date(ds):
     except:
         try: return datetime.strptime(ds, "%Y-%m-%d %H:%M").strftime("%d.%m.%Y")
         except: return ds
+def format_task_deadline_label(ds):
+    """Короткая подпись срока для задач: вчера, сегодня, завтра или дата."""
+    if not ds:
+        return ""
+    try:
+        _deadline_date = datetime.strptime(str(ds)[:10], "%Y-%m-%d").date()
+        _today = moscow_now().date()
+        _delta = (_deadline_date - _today).days
+        if _delta == -1:
+            return "вчера"
+        if _delta == 0:
+            return "сегодня"
+        if _delta == 1:
+            return "завтра"
+    except (TypeError, ValueError):
+        pass
+    return format_date(ds)
+
 
 def format_created_date(entity):
     cd = entity.get("created_at") or entity.get("last_modified", "")
@@ -3965,7 +3983,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
         with left_col:
             _task_header = f"\u0417\u0430\u0434\u0430\u0447\u0430 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435 \u2116{t.get('task_number', '')}" if d else f"\u0417\u0430\u0434\u0430\u0447\u0430 \u2116{t.get('task_number', '')}"
             _tp = t.get('type', '\u0421\u0432\u044f\u0437\u0430\u0442\u044c\u0441\u044f')
-            _fd = format_date(t.get('deadline', ''))
+            _fd = format_task_deadline_label(t.get('deadline', ''))
             _is_client_samples_task = not d and _tp == "Отправить образцы"
             if _is_client_samples_task:
                 st.markdown(f"""<style>
@@ -4172,7 +4190,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2E7D32"
                                     else:
                                         _dl_color = "#2C3E50"
-                                    _dl_clicked = st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key)
+                                    _dl_clicked = st.button(f"\u0421\u0440\u043e\u043a: {format_task_deadline_label(t.get('deadline', ''))}", key=dl_btn_key)
                                     st.markdown(f'<style>.st-key-{dl_btn_key} .stButton > button, .st-key-{dl_btn_key} .stButton > button p, .st-key-{dl_btn_key} .stButton > button span, .st-key-{dl_btn_key} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
                                     if _dl_clicked:
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
@@ -4391,7 +4409,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2E7D32"
                                     else:
                                         _dl_color = "#2C3E50"
-                                    _dl_clicked = st.button(f"\u0421\u0440\u043e\u043a: {format_date(t.get('deadline', ''))}", key=dl_btn_key)
+                                    _dl_clicked = st.button(f"\u0421\u0440\u043e\u043a: {format_task_deadline_label(t.get('deadline', ''))}", key=dl_btn_key)
                                     st.markdown(f'<style>.st-key-{dl_btn_key} .stButton > button, .st-key-{dl_btn_key} .stButton > button p, .st-key-{dl_btn_key} .stButton > button span, .st-key-{dl_btn_key} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
                                     if _dl_clicked:
                                         st.session_state[f"show_edit_dl_{key_prefix}"] = True
@@ -4744,7 +4762,7 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     elif tk_overdue: tk_bg, tk_bc = "#FFEBEE", "#C62828"
     elif t.get("in_work"): tk_bg, tk_bc = "#E8F5E9", "#4CAF50"
     else: tk_bg, tk_bc = "#E3F2FD", "#2196F3"
-    tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_date(t.get('deadline', ''))}"
+    tk_label = f"Задача №{t.get('task_number', '')} — {t.get('text', '')} | {format_task_deadline_label(t.get('deadline', ''))}"
     if _task_is_ready_to_ship(t) and not tk_done: tk_label = '✅ ' + tk_label + ' | Готово к отправке'
     if tk_done and not t.get("reviewed", False): tk_label += ' | На проверке'
     tk_selected = is_tk_exp
@@ -6823,7 +6841,7 @@ def close_deal_dialog(deal_id):
     if incomplete:
         st.warning(f"Нельзя завершить сделку: {len(incomplete)} невыполненных задач(и).")
         for t in incomplete:
-            st.markdown(f"- №{t.get('task_number', '')} — {format_date(t.get('deadline', ''))} — {t.get('text', '')}")
+            st.markdown(f"- №{t.get('task_number', '')} — {format_task_deadline_label(t.get('deadline', ''))} — {t.get('text', '')}")
         if st.button("Понятно", use_container_width=True):
             st.rerun()
         return
