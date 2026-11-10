@@ -4848,12 +4848,17 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 fileInput.addEventListener('change', function() {{
                                     var count = fileInput.files ? fileInput.files.length : 0;
                                     if (count > 0) {{
+                                        fileInput.__crmUploadStartedAt = Date.now();
+                                        fileInput.__crmUploadStablePolls = 0;
                                         try {{ w.sessionStorage.setItem(uploadStorageKey, String(count)); }} catch(e) {{}}
                                         confirmBtn.disabled = true;
                                         confirmBtn.setAttribute('aria-busy', 'true');
                                         status.textContent = 'Загрузка файла...';
                                         status.style.color = '#666';
                                     }} else {{
+                                        fileInput.__crmUploadStartedAt = 0;
+                                        fileInput.__crmUploadStablePolls = 0;
+                                        try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
                                         confirmBtn.disabled = false;
                                         confirmBtn.removeAttribute('aria-busy');
                                         status.textContent = '';
@@ -4862,36 +4867,47 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             }}
                             var selectedFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
                             var uploadedRows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
-                            var uploaderText = uploader.innerText || uploader.textContent || '';
-                            var namesVisible = selectedFiles.length > 0 && selectedFiles.every(function(file) {{
-                                return file.name && uploaderText.indexOf(file.name) !== -1;
-                            }});
-                            // Старое значение в sessionStorage само по себе не означает, что загрузка идёт.
-                            // Если файлов сейчас нет ни в выборе, ни в списке загрузчика — очищаем статус.
+                            var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"], [aria-label*="uploading"]');
+                            var expectedCount = 0;
+                            try {{ expectedCount = parseInt(w.sessionStorage.getItem(uploadStorageKey) || '0', 10) || 0; }} catch(e) {{}}
+
                             if (selectedFiles.length === 0 && uploadedRows.length === 0) {{
                                 try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                                if (fileInput) {{ fileInput.__crmUploadStartedAt = 0; fileInput.__crmUploadStablePolls = 0; }}
                                 confirmBtn.disabled = false;
                                 confirmBtn.removeAttribute('aria-busy');
                                 status.textContent = '';
-                            }} else if (selectedFiles.length > 0 && namesVisible) {{
-                                confirmBtn.disabled = false;
-                                confirmBtn.removeAttribute('aria-busy');
-                                status.textContent = selectedFiles.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
-                                status.style.color = '#16803c';
-                                try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
                             }} else if (selectedFiles.length > 0) {{
-                                try {{ w.sessionStorage.setItem(uploadStorageKey, String(selectedFiles.length)); }} catch(e) {{}}
-                                confirmBtn.disabled = true;
-                                confirmBtn.setAttribute('aria-busy', 'true');
-                                status.textContent = 'Загрузка файла...';
-                                status.style.color = '#666';
-                            }} else {{
-                                // Файл отображается в загрузчике после завершения, даже если браузерный FileList очищен.
+                                var rowsReady = uploadedRows.length >= selectedFiles.length;
+                                var noProgress = !progress;
+                                if (rowsReady && noProgress) {{
+                                    fileInput.__crmUploadStablePolls = (fileInput.__crmUploadStablePolls || 0) + 1;
+                                }} else {{
+                                    fileInput.__crmUploadStablePolls = 0;
+                                }}
+                                var elapsed = Date.now() - (fileInput.__crmUploadStartedAt || Date.now());
+                                var uploadComplete = rowsReady && noProgress && elapsed >= 1500 && fileInput.__crmUploadStablePolls >= 5;
+                                if (uploadComplete) {{
+                                    confirmBtn.disabled = false;
+                                    confirmBtn.removeAttribute('aria-busy');
+                                    status.textContent = selectedFiles.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
+                                    status.style.color = '#16803c';
+                                    try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                                }} else {{
+                                    confirmBtn.disabled = true;
+                                    confirmBtn.setAttribute('aria-busy', 'true');
+                                    status.textContent = 'Загрузка файла...';
+                                    status.style.color = '#666';
+                                }}
+                            }} else if (uploadedRows.length > 0 && expectedCount === 0) {{
                                 confirmBtn.disabled = false;
                                 confirmBtn.removeAttribute('aria-busy');
                                 status.textContent = uploadedRows.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
                                 status.style.color = '#16803c';
-                                try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                            }} else {{
+                                confirmBtn.disabled = false;
+                                confirmBtn.removeAttribute('aria-busy');
+                                status.textContent = '';
                             }}
                         }}
                         var cancelWrap = doc.querySelector('.' + cancelClass);
