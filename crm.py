@@ -4967,26 +4967,43 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
                                 commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
                         else: st.warning("Выберите файл(ы)")
-                # Мгновенно блокируем повторное нажатие на «Загрузить» на время серверной загрузки.
+                # Блокируем повторное нажатие только на время обработки загрузки и затем обязательно разблокируем.
                 st.components.v1.html(f"""<script>
                 (function() {{
                     var w = window.parent, doc = w.document;
                     var suffix = {json.dumps(str(key_prefix))};
-                    function bindUploadButton() {{
+                    var uploaderClass = {json.dumps("st-key-task_upload_" + str(key_prefix) + "_" + str(_tu_ver))};
+                    function sync() {{
                         var wrap = doc.getElementsByClassName("st-key-task_upload_btn_" + suffix)[0];
                         var btn = wrap && wrap.querySelector("button");
-                        if (!btn || btn.__crmDisableWhileUploading) return;
-                        btn.__crmDisableWhileUploading = true;
-                        btn.addEventListener("click", function() {{
-                            if (!btn.disabled) {{
+                        if (!btn) return;
+                        if (!btn.__crmUploadWaitBound) {{
+                            btn.__crmUploadWaitBound = true;
+                            btn.addEventListener("click", function() {{
+                                if (btn.disabled) return;
                                 btn.disabled = true;
                                 btn.setAttribute("aria-busy", "true");
-                            }}
-                        }}, true);
+                                var started = Date.now(), sawSpinner = false;
+                                var timer = w.setInterval(function() {{
+                                    var uploader = doc.getElementsByClassName(uploaderClass)[0];
+                                    var spinner = Array.from(doc.querySelectorAll('[data-testid="stSpinner"]')).some(function(el) {{
+                                        return el.offsetParent !== null;
+                                    }});
+                                    if (spinner) sawSpinner = true;
+                                    // После успешной загрузки ключ загрузчика меняется; при ошибке разблокируемся,
+                                    // когда индикатор загрузки исчезнет. Предохранитель — не более 2 минут.
+                                    if (!uploader || (sawSpinner && !spinner) || Date.now() - started > 120000) {{
+                                        w.clearInterval(timer);
+                                        btn.disabled = false;
+                                        btn.removeAttribute("aria-busy");
+                                    }}
+                                }}, 150);
+                            }}, true);
+                        }}
                     }}
-                    bindUploadButton();
-                    setTimeout(bindUploadButton, 100);
-                    setTimeout(bindUploadButton, 400);
+                    sync();
+                    setTimeout(sync, 100);
+                    setTimeout(sync, 400);
                 }})();
                 </script>""", height=0)
                 with _task_file_pick_col:
