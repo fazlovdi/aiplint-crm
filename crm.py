@@ -4866,28 +4866,33 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 }});
                             }}
                             var selectedFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
-                            var uploadedRows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
+                            var uploaderText = uploader.innerText || uploader.textContent || '';
+                            var namesVisible = selectedFiles.length > 0 && selectedFiles.every(function(file) {{
+                                return file.name && uploaderText.indexOf(file.name) !== -1;
+                            }});
                             var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"], [aria-label*="uploading"]');
                             var expectedCount = 0;
                             try {{ expectedCount = parseInt(w.sessionStorage.getItem(uploadStorageKey) || '0', 10) || 0; }} catch(e) {{}}
 
-                            if (selectedFiles.length === 0 && uploadedRows.length === 0) {{
+                            if (selectedFiles.length === 0) {{
                                 try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
                                 if (fileInput) {{ fileInput.__crmUploadStartedAt = 0; fileInput.__crmUploadStablePolls = 0; }}
                                 confirmBtn.disabled = false;
                                 confirmBtn.removeAttribute('aria-busy');
                                 status.textContent = '';
-                            }} else if (selectedFiles.length > 0) {{
-                                var rowsReady = uploadedRows.length >= selectedFiles.length;
-                                var noProgress = !progress;
-                                if (rowsReady && noProgress) {{
+                            }} else {{
+                                // Don't use filename visibility as proof of completion: Streamlit shows
+                                // the name immediately when selection starts. Wait for progress to disappear
+                                // and for that state to remain stable before enabling confirmation.
+                                if (!fileInput.__crmUploadStartedAt) fileInput.__crmUploadStartedAt = Date.now();
+                                var elapsed = Date.now() - fileInput.__crmUploadStartedAt;
+                                var ready = namesVisible && !progress && elapsed >= 2500;
+                                if (ready) {{
                                     fileInput.__crmUploadStablePolls = (fileInput.__crmUploadStablePolls || 0) + 1;
                                 }} else {{
                                     fileInput.__crmUploadStablePolls = 0;
                                 }}
-                                var elapsed = Date.now() - (fileInput.__crmUploadStartedAt || Date.now());
-                                var uploadComplete = rowsReady && noProgress && elapsed >= 1500 && fileInput.__crmUploadStablePolls >= 5;
-                                if (uploadComplete) {{
+                                if (ready && fileInput.__crmUploadStablePolls >= 8) {{
                                     confirmBtn.disabled = false;
                                     confirmBtn.removeAttribute('aria-busy');
                                     status.textContent = selectedFiles.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
@@ -4899,15 +4904,6 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     status.textContent = 'Загрузка файла...';
                                     status.style.color = '#666';
                                 }}
-                            }} else if (uploadedRows.length > 0 && expectedCount === 0) {{
-                                confirmBtn.disabled = false;
-                                confirmBtn.removeAttribute('aria-busy');
-                                status.textContent = uploadedRows.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
-                                status.style.color = '#16803c';
-                            }} else {{
-                                confirmBtn.disabled = false;
-                                confirmBtn.removeAttribute('aria-busy');
-                                status.textContent = '';
                             }}
                         }}
                         var cancelWrap = doc.querySelector('.' + cancelClass);
