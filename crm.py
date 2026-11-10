@@ -15354,12 +15354,15 @@ def statistics_dialog(section="Общая статистика"):
     if section != "План / факт":
         st.markdown('<div style="display:block;width:100%;height:1px;min-height:1px;background-color:#DCE0E5;margin:12px 0 18px 0;"></div>', unsafe_allow_html=True)
     if section == "Общая статистика":
-        _total_amount = sum(x["amount"] for x in deal_rows)
-        _total_metres = sum(x["metres"] for x in deal_rows)
-        _paid_count = sum(1 for x in deal_rows if x["paid"])
+        # Объём продаж и средний заказ считаем только по полностью оплаченным сделкам.
+        _paid_rows = [x for x in deal_rows if x["paid"]]
+        _total_amount = sum(x["amount"] for x in _paid_rows)
+        _total_metres = sum(x["metres"] for x in _paid_rows)
+        _paid_count = len(_paid_rows)
         _waiting_count = sum(1 for x in deal_rows if x["status"] in ("Ожидание оплаты", "На паузе") or str(x["deal"].get("payment_status") or "") == "Оплачен частично")
-        _avg_check = _total_amount / len(deal_rows) if deal_rows else 0
-        _avg_metres = _total_metres / len(deal_rows) if deal_rows else 0
+        _avg_check = _total_amount / _paid_count if _paid_count else 0
+        _avg_metres = _total_metres / _paid_count if _paid_count else 0
+        # Конверсия — доля полностью оплаченных сделок среди всех сделок выбранного периода.
         _conversion = (_paid_count / len(deal_rows) * 100) if deal_rows else 0
         _m1, _m2, _m3, _m4, _m5, _m6 = st.columns(6, gap="small")
         _m1.metric("Заказов / сделок", f"{len(deal_rows):,}".replace(",", " "))
