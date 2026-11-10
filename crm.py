@@ -1466,15 +1466,49 @@ def is_task_overdue(task):
     return deadline < now.replace(tzinfo=None) if now.tzinfo is not None else deadline < now
 
 def mark_task_overdue_history(task):
-    """Фиксирует первый факт просрочки задачи и сохраняет дату этого события."""
+    """Фиксирует первый факт просрочки и переносит отметку в каноническую запись CRM."""
     if not isinstance(task, dict) or task.get("was_overdue"):
         return False
     if not is_task_overdue(task):
         return False
+
+    overdue_at = now_str()
     task["was_overdue"] = True
-    task["was_overdue_at"] = now_str()
-    # Обновляем timestamp задачи, чтобы слияние SQLite не выбрало старую версию без истории.
-    task["last_modified"] = task["was_overdue_at"]
+    task["was_overdue_at"] = overdue_at
+    task["last_modified"] = overdue_at
+
+    # Некоторые представления передают копию задачи. Сохраняем историю также
+    # в исходной записи crm_store, которую save_data действительно сериализует.
+    try:
+        store = st.session_state.get("crm_store")
+        if isinstance(store, dict):
+            task_id = str(task.get("id") or "").strip()
+            task_number = str(task.get("task_number") or "").strip()
+            candidates = []
+            for client in (store.get("clients", []) or []):
+                if not isinstance(client, dict):
+                    continue
+                for stored_task in (client.get("tasks", []) or []):
+                    if not isinstance(stored_task, dict) or stored_task is task:
+                        continue
+                    same_task = (
+                        task_id and str(stored_task.get("id") or "").strip() == task_id
+                    ) or (
+                        task_number and str(stored_task.get("task_number") or "").strip() == task_number
+                    )
+                    if same_task:
+                        candidates.append(stored_task)
+            # Only update when identity is unambiguous; never stamp a different task.
+            if len(candidates) == 1:
+                stored_task = candidates[0]
+                if not stored_task.get("was_overdue"):
+                    stored_task["was_overdue"] = True
+                    stored_task["was_overdue_at"] = overdue_at
+                    stored_task["last_modified"] = overdue_at
+    except Exception as exc:
+        _crm_log("TASK_OVERDUE_HISTORY_SYNC_ERROR", {
+            "task_number": str(task.get("task_number") or ""),
+        }, exc=exc, remote=False)
     return True
 
 def task_was_overdue_in_period(task, start_date=None, end_date=None):
