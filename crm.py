@@ -4860,35 +4860,38 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     }}
                                 }});
                             }}
-                            var expectedCount = 0;
-                            try {{ expectedCount = parseInt(w.sessionStorage.getItem(uploadStorageKey) || '0', 10) || 0; }} catch(e) {{}}
                             var selectedFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
-                            var requiredCount = Math.max(expectedCount, selectedFiles.length);
+                            var uploadedRows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
                             var uploaderText = uploader.innerText || uploader.textContent || '';
-                            // Streamlit can keep the file input's FileList after upload. Treat each file
-                            // as uploaded only when its filename is visible in the uploader's rendered list.
                             var namesVisible = selectedFiles.length > 0 && selectedFiles.every(function(file) {{
                                 return file.name && uploaderText.indexOf(file.name) !== -1;
                             }});
-                            var hasPendingUpload = requiredCount > 0;
-                            var uploaded = hasPendingUpload && namesVisible;
-
-                            if (hasPendingUpload && !uploaded) {{
+                            // Старое значение в sessionStorage само по себе не означает, что загрузка идёт.
+                            // Если файлов сейчас нет ни в выборе, ни в списке загрузчика — очищаем статус.
+                            if (selectedFiles.length === 0 && uploadedRows.length === 0) {{
+                                try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                                confirmBtn.disabled = false;
+                                confirmBtn.removeAttribute('aria-busy');
+                                status.textContent = '';
+                            }} else if (selectedFiles.length > 0 && namesVisible) {{
+                                confirmBtn.disabled = false;
+                                confirmBtn.removeAttribute('aria-busy');
+                                status.textContent = selectedFiles.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
+                                status.style.color = '#16803c';
+                                try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
+                            }} else if (selectedFiles.length > 0) {{
+                                try {{ w.sessionStorage.setItem(uploadStorageKey, String(selectedFiles.length)); }} catch(e) {{}}
                                 confirmBtn.disabled = true;
                                 confirmBtn.setAttribute('aria-busy', 'true');
                                 status.textContent = 'Загрузка файла...';
                                 status.style.color = '#666';
-                            }} else if (uploaded) {{
+                            }} else {{
+                                // Файл отображается в загрузчике после завершения, даже если браузерный FileList очищен.
                                 confirmBtn.disabled = false;
                                 confirmBtn.removeAttribute('aria-busy');
-                                status.textContent = requiredCount === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
+                                status.textContent = uploadedRows.length === 1 ? '✓ Файл загружен' : '✓ Файлы загружены';
                                 status.style.color = '#16803c';
                                 try {{ w.sessionStorage.removeItem(uploadStorageKey); }} catch(e) {{}}
-                            }} else {{
-                                // Без выбранных файлов кнопка «Подтвердить» активна.
-                                confirmBtn.disabled = false;
-                                confirmBtn.removeAttribute('aria-busy');
-                                status.textContent = '';
                             }}
                         }}
                         var cancelWrap = doc.querySelector('.' + cancelClass);
