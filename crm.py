@@ -14591,8 +14591,8 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                 st.rerun()
 
 
-    # Повторно проверяем состояние загрузчика до фактического завершения загрузки.
-    # Это не даёт кнопке подтверждения остаться отключённой после того, как файл появился в списке.
+    # Используем ту же схему проверки загрузки, что и в рабочем блоке отчёта задачи:
+    # несколько повторных проверок после выбора файла, без постоянного MutationObserver.
     st.components.v1.html(f"""
     <script>
     (function() {{
@@ -14606,12 +14606,6 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
             var uploader = doc.getElementsByClassName(uploaderClass)[0];
             if (!btn || !uploader) return;
             var input = uploader.querySelector('input[type="file"]');
-            var rows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
-            var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"]');
-            var expected = 0;
-            try {{ expected = parseInt(w.sessionStorage.getItem(storageKey) || '0', 10) || 0; }} catch(e) {{}}
-            var selected = input && input.files ? input.files.length : 0;
-            var required = Math.max(expected, selected);
             if (input && !input.__taskCompletionUploadBound) {{
                 input.__taskCompletionUploadBound = true;
                 input.addEventListener('change', function() {{
@@ -14621,10 +14615,19 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                         btn.disabled = true;
                         btn.setAttribute('aria-busy', 'true');
                     }}
-                    setTimeout(syncUploadButton, 100);
+                    setTimeout(syncUploadButton, 50);
+                    setTimeout(syncUploadButton, 250);
+                    setTimeout(syncUploadButton, 750);
+                    setTimeout(syncUploadButton, 1500);
                 }});
             }}
-            var uploading = !!progress || (selected > 0 && required > 0 && rows.length < required);
+            var expected = 0;
+            try {{ expected = parseInt(w.sessionStorage.getItem(storageKey) || '0', 10) || 0; }} catch(e) {{}}
+            var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"]');
+            var rows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
+            var selected = input && input.files ? input.files.length : 0;
+            var required = Math.max(expected, selected);
+            var uploading = !!progress || (required > 0 && rows.length < required);
             if (uploading) {{
                 btn.disabled = true;
                 btn.setAttribute('aria-busy', 'true');
@@ -14635,14 +14638,10 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
             }}
         }}
         syncUploadButton();
-        var observer = new MutationObserver(syncUploadButton);
-        observer.observe(doc.body, {{subtree:true, childList:true, attributes:true, attributeFilter:['disabled','aria-busy']}});
-        var attempts = 0;
-        var timer = w.setInterval(function() {{
-            syncUploadButton();
-            attempts += 1;
-            if (attempts >= 300) w.clearInterval(timer);
-        }}, 200);
+        setTimeout(syncUploadButton, 50);
+        setTimeout(syncUploadButton, 250);
+        setTimeout(syncUploadButton, 750);
+        setTimeout(syncUploadButton, 1500);
     }})();
     </script>
     """, height=0)
