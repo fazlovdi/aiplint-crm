@@ -4156,7 +4156,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             cl["last_modified"] = now_str()
                                             if d: d["last_modified"] = now_str()
                                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                                            commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                                            save_data(st.session_state.crm_store)
+                                            st.toast("\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d", icon="\u2705")
+                                            _crm_workspace_rerun()
                                     with dl_btn_col2:
                                         if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
                                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
@@ -4373,7 +4375,9 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                             cl["last_modified"] = now_str()
                                             if d: d["last_modified"] = now_str()
                                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
-                                            commit_and_rerun(st.session_state.crm_store, "\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d")
+                                            save_data(st.session_state.crm_store)
+                                            st.toast("\u0421\u0440\u043e\u043a \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d", icon="\u2705")
+                                            _crm_workspace_rerun()
                                     with dl_btn_col2:
                                         if st.button("\u041e\u0442\u043c\u0435\u043d\u0438\u0442\u044c", key=f"dl_cancel_{key_prefix}", use_container_width=True):
                                             st.session_state[f"show_edit_dl_{key_prefix}"] = False
