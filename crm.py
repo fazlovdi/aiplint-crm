@@ -1427,16 +1427,43 @@ def parse_optional_date(ds):
             return None
 
 def is_task_overdue(task):
-    if task.get("done"): return False
-    dl = task.get("deadline", "")
-    if not dl: return False
+    if task.get("done"):
+        return False
+    raw_deadline = str(task.get("deadline") or "").strip()
+    if not raw_deadline:
+        return False
     now = moscow_now()
+    deadline = None
+    # Поддерживаем ISO-дату, ISO datetime с T/пробелом и русскую дату.
     try:
-        if len(dl) == 10: deadline = datetime.strptime(dl, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-        elif len(dl) >= 16: deadline = datetime.strptime(dl[:16], "%Y-%m-%d %H:%M")
-        else: return False
-    except: return False
-    return deadline < now
+        if len(raw_deadline) == 10:
+            try:
+                deadline = datetime.strptime(raw_deadline, "%Y-%m-%d").replace(
+                    hour=23, minute=59, second=59
+                )
+            except ValueError:
+                deadline = datetime.strptime(raw_deadline, "%d.%m.%Y").replace(
+                    hour=23, minute=59, second=59
+                )
+        else:
+            normalized = raw_deadline.replace("Z", "+00:00")
+            try:
+                deadline = datetime.fromisoformat(normalized)
+                if deadline.tzinfo is not None:
+                    deadline = deadline.astimezone(now.tzinfo).replace(tzinfo=None)
+            except (TypeError, ValueError):
+                for fmt in ("%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S"):
+                    try:
+                        deadline = datetime.strptime(raw_deadline[:19], fmt)
+                        break
+                    except ValueError:
+                        pass
+    except (TypeError, ValueError):
+        return False
+    if deadline is None:
+        return False
+    # Для сравнения используем локальное время системы CRM.
+    return deadline < now.replace(tzinfo=None) if now.tzinfo is not None else deadline < now
 
 def get_task_sort_date(task):
     dl = task.get("deadline", "")
@@ -15674,13 +15701,15 @@ def statistics_dialog(section="Общая статистика"):
         _c6.metric("Конверсия в оплату", f"{_manager_conversion:.1f}%")
         _c7.metric("Средний заказ", f"{_manager_avg_check:,.0f} ₽".replace(",", " "))
         _c8.metric("Средний заказ, м", f"{_manager_avg_metres:,.1f}".replace(",", " "))
-        _mc1, _mc2, _mc3, _mc4, _mc5, _mc6 = st.columns(6, gap="small")
+        _mc1, _mc2, _mc3, _mc4, _mc5 = st.columns(5, gap="small")
         _mc1.metric("Сделок в работе", _manager_work_deals)
         _mc2.metric("Добавлено клиентов", _manager_added_clients)
         _mc3.metric("Задач взято в работу", _manager_taken_in_work_tasks)
         _mc4.metric("Задач выполнено", _manager_completed_tasks)
-        _mc5.metric("Просрочено задач", _manager_overdue_tasks)
-        _mc6.metric("Просрочено задач, %", f"{_manager_overdue_percent:.1f}%")
+        _mc5.metric(
+            "Задач просрочено, кол. / %",
+            f"{_manager_overdue_tasks} / {_manager_overdue_percent:.0f}%",
+        )
         if _manager_rows:
             # Динамика суммы заказов менеджера за выбранный период — тот же формат, что и в общей статистике.
             _manager_dated_rows = [
