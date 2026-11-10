@@ -4818,6 +4818,10 @@ def render_task_row(t, cl, d, task_key, key_prefix):
     is_tk_exp = st.session_state.expanded_task_key == task_key
     tk_done = t.get("done", False)
     tk_overdue = is_task_overdue(t)
+    # Фиксируем историческую просрочку в момент, когда CRM обнаруживает красный срок.
+    # Сохраняем только при первом обнаружении, чтобы не запускать запись на каждом рендере.
+    if tk_overdue and mark_task_overdue_history(t):
+        save_data(st.session_state.crm_store)
     tk_rework = t.get("needs_rework", False)
     if tk_done and not t.get("reviewed", False): tk_bg, tk_bc = "#FFF8E1", "#FF8F00"
     elif tk_done: tk_bg, tk_bc = "#F5F6F8", "#C9CFD7"
@@ -15190,14 +15194,6 @@ def statistics_dialog(section="Общая статистика"):
     store = st.session_state.get("crm_store", {})
     deals_all = list(store.get("deals", []) or [])
     clients_all = list(store.get("clients", []) or [])
-    # Фиксируем просрочку до любых возможных изменений срока и сохраняем её один раз.
-    _overdue_history_changed = False
-    for _history_client in clients_all:
-        for _history_task in (_history_client.get("tasks", []) or []):
-            if mark_task_overdue_history(_history_task):
-                _overdue_history_changed = True
-    if _overdue_history_changed:
-        save_data(store)
     users = list(store.get("users", []) or [])
     manager_names = sorted({
         str(u.get("name") or u.get("login") or "").strip()
