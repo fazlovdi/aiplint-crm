@@ -14597,9 +14597,9 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
     <script>
     (function() {{
         var w = window.parent, doc = w.document;
-        var buttonClass = {json.dumps("st-key-task_completion_confirm_" + "{key_prefix}")};
-        var uploaderClass = {json.dumps("st-key-" + "{files_key}")};
-        var storageKey = {json.dumps("crm_task_completion_upload_count_" + "{key_prefix}")};
+        var buttonClass = {json.dumps("st-key-task_completion_confirm_" + str(key_prefix))};
+        var uploaderClass = {json.dumps("st-key-" + str(files_key))};
+        var storageKey = {json.dumps("crm_task_completion_upload_count_" + str(key_prefix))};
         function syncUploadButton() {{
             var wrap = doc.getElementsByClassName(buttonClass)[0];
             var btn = wrap && wrap.querySelector('button');
