@@ -9080,13 +9080,15 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
         position:absolute !important; right:0 !important; top:0 !important; z-index:10 !important;
     }
+        [class*="st-key-crm_workspace_global_search_"] button p { font-size:0 !important; line-height:0 !important; }
+    [class*="st-key-crm_workspace_global_search_"] button p::before { content:""; display:block; width:30px; height:30px; background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cg%20fill%3D%22%23fff%22%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%225%22%20r%3D%222.3%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2211%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2217%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2214%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2228%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2234%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2229%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2235%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2241%22%20r%3D%222.3%22%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2223%22%20r%3D%223.1%22%20fill%3D%22%23f4dce7%22%20stroke%3D%22%23fff%22%20stroke-width%3D%22.7%22%2F%3E%3C%2Fsvg%3E"); background-position:center; background-repeat:no-repeat; background-size:contain; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
     with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         # Глобальный поиск по CRM доступен из нижней панели.
-        with st.popover("🔍", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
+        with st.popover("Яша", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
             _global_q = str(st.session_state.get(f"crm_workspace_global_search_input_{_bottom_scope}", "") or "").strip().lower()
             if _global_q:
                 _global_results = []
