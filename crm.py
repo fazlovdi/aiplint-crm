@@ -1467,15 +1467,20 @@ def is_task_overdue(task):
 
 def mark_task_overdue_history(task):
     """Фиксирует первый факт просрочки и переносит отметку в каноническую запись CRM."""
-    if not isinstance(task, dict) or task.get("was_overdue"):
-        return False
-    if not is_task_overdue(task):
+    if not isinstance(task, dict):
         return False
 
-    overdue_at = now_str()
-    task["was_overdue"] = True
-    task["was_overdue_at"] = overdue_at
-    task["last_modified"] = overdue_at
+    already_marked = bool(task.get("was_overdue"))
+    if not already_marked and not is_task_overdue(task):
+        return False
+
+    overdue_at = str(task.get("was_overdue_at") or now_str())
+    changed = False
+    if not already_marked:
+        task["was_overdue"] = True
+        task["was_overdue_at"] = overdue_at
+        task["last_modified"] = overdue_at
+        changed = True
 
     # Некоторые представления передают копию задачи. Сохраняем историю также
     # в исходной записи crm_store, которую save_data действительно сериализует.
@@ -1492,9 +1497,9 @@ def mark_task_overdue_history(task):
                     if not isinstance(stored_task, dict) or stored_task is task:
                         continue
                     same_task = (
-                        task_id and str(stored_task.get("id") or "").strip() == task_id
+                        bool(task_id) and str(stored_task.get("id") or "").strip() == task_id
                     ) or (
-                        task_number and str(stored_task.get("task_number") or "").strip() == task_number
+                        bool(task_number) and str(stored_task.get("task_number") or "").strip() == task_number
                     )
                     if same_task:
                         candidates.append(stored_task)
@@ -1505,11 +1510,12 @@ def mark_task_overdue_history(task):
                     stored_task["was_overdue"] = True
                     stored_task["was_overdue_at"] = overdue_at
                     stored_task["last_modified"] = overdue_at
+                    changed = True
     except Exception as exc:
         _crm_log("TASK_OVERDUE_HISTORY_SYNC_ERROR", {
             "task_number": str(task.get("task_number") or ""),
         }, exc=exc, remote=False)
-    return True
+    return changed
 
 def task_was_overdue_in_period(task, start_date=None, end_date=None):
     """Проверяет сохранённый факт просрочки с учётом выбранного периода."""
