@@ -17199,6 +17199,56 @@ elif st.session_state.active_tab == "Задачи":
                                 "<td class='notes'></td>"
                                 "</tr>"
                             )
+                        # Сводим товары из всех задач на сегодня по наименованию, цвету и единице измерения.
+                        _product_totals = {}
+                        for _pt in tt_list:
+                            _ptask = _pt["task_obj"]
+                            for _raw_line in str(_ptask.get("products", "") or "").splitlines():
+                                _line = _raw_line.strip()
+                                if not _line:
+                                    continue
+                                _parts = [p.strip() for p in _line.split(" — ")]
+                                _product_name = _parts[0] if _parts else _line
+                                _product_color = ""
+                                _product_qty = None
+                                _product_unit = ""
+                                # Формат из расчёта: артикул + наименование — цвет — количество единица.
+                                if len(_parts) >= 3:
+                                    _product_color = _parts[-2]
+                                    _qty_match = re.fullmatch(r"([+-]?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+))\\s*(.*)", _parts[-1])
+                                    if _qty_match:
+                                        _product_qty = float(_qty_match.group(1).replace(",", "."))
+                                        _product_unit = _qty_match.group(2).strip() or "шт."
+                                        _product_name = " — ".join(_parts[:-2]).strip()
+                                if _product_qty is None and len(_parts) >= 2:
+                                    _qty_match = re.fullmatch(r"([+-]?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+))\\s*(.*)", _parts[-1])
+                                    if _qty_match:
+                                        _product_qty = float(_qty_match.group(1).replace(",", "."))
+                                        _product_unit = _qty_match.group(2).strip() or "шт."
+                                        _product_name = " — ".join(_parts[:-1]).strip()
+                                _key = (_product_name, _product_color, _product_unit)
+                                if _key not in _product_totals:
+                                    _product_totals[_key] = {"quantity": 0.0, "has_quantity": False, "raw": _line}
+                                if _product_qty is not None:
+                                    _product_totals[_key]["quantity"] += _product_qty
+                                    _product_totals[_key]["has_quantity"] = True
+                        _product_rows = []
+                        for (_pname, _pcolor, _punit), _pdata in sorted(_product_totals.items(), key=lambda item: (item[0][0].casefold(), item[0][1].casefold(), item[0][2].casefold())):
+                            _qty_value = _pdata["quantity"]
+                            _qty_display = (f"{_qty_value:g} {_punit}".strip() if _pdata["has_quantity"] else "—")
+                            _product_rows.append(
+                                "<tr>"
+                                f"<td>{html.escape(_pname)}</td>"
+                                f"<td>{html.escape(_pcolor or '—')}</td>"
+                                f"<td>{html.escape(_qty_display)}</td>"
+                                "</tr>"
+                            )
+                        _products_summary_html = (
+                            "<h3 class='products-summary-title'>Список товаров</h3>"
+                            "<table class='products-summary'><thead><tr><th>Наименование</th><th>Цвет</th><th>Количество</th></tr></thead><tbody>"
+                            + ("".join(_product_rows) if _product_rows else "<tr><td colspan='3'>В задачах нет товаров</td></tr>")
+                            + "</tbody></table>"
+                        )
                         _print_date = moscow_now().strftime("%d.%m.%Y")
                         _print_html = f'''<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>Задачи на сегодня</title><style>
                         @page {{ size: A4 landscape; margin: 10mm; }}
@@ -17213,11 +17263,16 @@ elif st.session_state.active_tab == "Задачи":
                         th:nth-child(5) {{ width: 15%; }} th:nth-child(6) {{ width: 10%; }}
                         th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
                         td.notes {{ height: 28px; }}
+                        .products-summary-title {{ font-size: 15px; margin: 18px 0 6px; page-break-after: avoid; }}
+                        table.products-summary {{ table-layout: auto; font-size: 11px; margin-bottom: 14px; }}
+                        table.products-summary th, table.products-summary td {{ padding: 5px 7px; }}
+                        table.products-summary th:nth-child(1) {{ width: 55%; }} table.products-summary th:nth-child(2) {{ width: 25%; }} table.products-summary th:nth-child(3) {{ width: 20%; }}
                         @media print {{ th {{ print-color-adjust: exact; -webkit-print-color-adjust: exact; }} }}
                         .torg12-page {{ page-break-before: always; break-before: page; page: torg12; width:100%; }} .torg12-page img {{ display:block; width:100%; height:auto; max-height:185mm; object-fit:contain; }} .torg12-page iframe {{ width:100%;height:95vh;border:0; }} @page torg12 {{ size:A4 landscape; margin:5mm; }}
                         </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
                         <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
                         <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
+                        {_products_summary_html}
                         {''.join(_torg12_print_section(_pt['task_obj'], copies=2) for _pt in tt_list)}
                         <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
                         components.html(_print_html, height=0, width=0)
