@@ -4192,7 +4192,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2C3E50"
                                     _dl_label_col, _dl_value_col = st.columns([0.55, 2.2], gap="small")
                                     with _dl_label_col:
-                                        st.markdown("<div style=\"color:#111;font-weight:600;\">Срок:</div>", unsafe_allow_html=True)
+                                        st.markdown("<div style=\"color:#111;font-weight:600;display:flex;align-items:center;height:2.5rem;\">Срок:</div>", unsafe_allow_html=True)
                                     with _dl_value_col:
                                         _dl_clicked = st.button(format_task_deadline_label(t.get("deadline", "")), key=dl_btn_key)
                                     st.markdown(f'<style>.st-key-{dl_btn_key} .stButton > button, .st-key-{dl_btn_key} .stButton > button p, .st-key-{dl_btn_key} .stButton > button span, .st-key-{dl_btn_key} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
@@ -4415,7 +4415,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                         _dl_color = "#2C3E50"
                                     _dl_label_col, _dl_value_col = st.columns([0.55, 2.2], gap="small")
                                     with _dl_label_col:
-                                        st.markdown("<div style=\"color:#111;font-weight:600;\">Срок:</div>", unsafe_allow_html=True)
+                                        st.markdown("<div style=\"color:#111;font-weight:600;display:flex;align-items:center;height:2.5rem;\">Срок:</div>", unsafe_allow_html=True)
                                     with _dl_value_col:
                                         _dl_clicked = st.button(format_task_deadline_label(t.get("deadline", "")), key=dl_btn_key)
                                     st.markdown(f'<style>.st-key-{dl_btn_key} .stButton > button, .st-key-{dl_btn_key} .stButton > button p, .st-key-{dl_btn_key} .stButton > button span, .st-key-{dl_btn_key} .stButton > button div {{ background:transparent!important;border:0!important;color:{_dl_color}!important;-webkit-text-fill-color:{_dl_color}!important;font-weight:600!important;font-size:1rem!important;padding:0!important;text-align:left!important; }}</style>', unsafe_allow_html=True)
