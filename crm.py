@@ -17284,6 +17284,7 @@ elif st.session_state.active_tab == "Задачи":
                         th:nth-child(7) {{ width: 11%; }} th:nth-child(8) {{ width: 10%; }}
                         td.notes {{ height: 28px; }}
                         .products-summary-title {{ font-size: 15px; margin: 18px 0 6px; page-break-after: avoid; }}
+                        .products-summary-section {{ page-break-inside: avoid; break-inside: avoid-page; }}
                         .products-group-title {{ font-size: 13px; margin: 10px 0 4px; page-break-after: avoid; }}
                         table.products-summary {{ table-layout: auto; font-size: 11px; margin-bottom: 14px; }}
                         table.products-summary th, table.products-summary td {{ padding: 5px 7px; }}
@@ -17293,7 +17294,7 @@ elif st.session_state.active_tab == "Задачи":
                         </style></head><body><h2>Задачи на сегодня</h2><div class="meta">Дата: {_print_date} · Всего задач: {len(_print_rows)}</div>
                         <table><thead><tr><th>№ задачи</th><th>Наименование клиента</th><th>Товары</th><th>Описание</th><th>Комментарии</th><th>Способ доставки</th><th>Трек/комментарий</th><th>Отметки</th></tr></thead>
                         <tbody>{''.join(_print_rows) if _print_rows else '<tr><td colspan="8">На сегодня задач нет</td></tr>'}</tbody></table>
-                        {_products_summary_html}
+                        <div class='products-summary-section'>{_products_summary_html}</div>
                         {''.join(_torg12_print_section(_pt['task_obj'], copies=2) for _pt in tt_list)}
                         <script>window.onload = () => {{ window.focus(); window.print(); }};</script></body></html>'''
                         components.html(_print_html, height=0, width=0)
