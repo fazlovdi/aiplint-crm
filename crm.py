@@ -17207,25 +17207,37 @@ elif st.session_state.active_tab == "Задачи":
                                 _line = _raw_line.strip()
                                 if not _line:
                                     continue
-                                _parts = [p.strip() for p in _line.split(" — ")]
-                                _product_name = _parts[0] if _parts else _line
+                                # В старых задачах разделители и формат товарной строки могли отличаться.
+                                _parts = [p.strip() for p in re.split(r"\s*[—–-]\s*", _line)]
+                                _product_name = _line
                                 _product_color = ""
                                 _product_qty = None
                                 _product_unit = ""
-                                # Формат из расчёта: артикул + наименование — цвет — количество единица.
-                                if len(_parts) >= 3:
-                                    _product_color = _parts[-2]
-                                    _qty_match = re.fullmatch(r"([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*(.*)", _parts[-1])
-                                    if _qty_match:
-                                        _product_qty = float(_qty_match.group(1).replace(",", "."))
-                                        _product_unit = _qty_match.group(2).strip() or "шт."
-                                        _product_name = " — ".join(_parts[:-2]).strip()
-                                if _product_qty is None and len(_parts) >= 2:
-                                    _qty_match = re.fullmatch(r"([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*(.*)", _parts[-1])
-                                    if _qty_match:
-                                        _product_qty = float(_qty_match.group(1).replace(",", "."))
-                                        _product_unit = _qty_match.group(2).strip() or "шт."
-                                        _product_name = " — ".join(_parts[:-1]).strip()
+                                _qty_match = None
+                                _qty_part_index = None
+                                # Ищем количество в любой части строки, а не только строго в конце:
+                                # старые строки могли содержать дополнительные поля после количества.
+                                _qty_pattern = re.compile(
+                                    r"^\s*([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*"
+                                    r"(м(?:\.?|етр(?:а|ов)?)|пог\.?\s*м\.?|п\.?м\.?|"
+                                    r"шт\.?|кг|компл(?:ект)?|упак(?:овка)?)?\s*$",
+                                    re.IGNORECASE,
+                                )
+                                for _pi in range(len(_parts) - 1, -1, -1):
+                                    _candidate_match = _qty_pattern.fullmatch(_parts[_pi])
+                                    if _candidate_match:
+                                        _qty_match = _candidate_match
+                                        _qty_part_index = _pi
+                                        break
+                                if _qty_match is not None:
+                                    _product_qty = float(_qty_match.group(1).replace(",", "."))
+                                    _product_unit = (_qty_match.group(2) or "шт.").strip()
+                                    _product_unit = re.sub(r"\s+", " ", _product_unit)
+                                    if _qty_part_index >= 2:
+                                        _product_color = _parts[_qty_part_index - 1]
+                                        _product_name = " — ".join(_parts[:_qty_part_index - 1]).strip()
+                                    else:
+                                        _product_name = " — ".join(_parts[:_qty_part_index]).strip() or _line
                                 _key = (_product_name, _product_color, _product_unit)
                                 if _key not in _product_totals:
                                     _product_totals[_key] = {"quantity": 0.0, "has_quantity": False, "raw": _line}
