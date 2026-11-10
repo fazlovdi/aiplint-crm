@@ -14624,7 +14624,7 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                     setTimeout(syncUploadButton, 100);
                 }});
             }}
-            var uploading = !!progress || (required > 0 && rows.length < required);
+            var uploading = !!progress || (selected > 0 && required > 0 && rows.length < required);
             if (uploading) {{
                 btn.disabled = true;
                 btn.setAttribute('aria-busy', 'true');
