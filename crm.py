@@ -3645,8 +3645,7 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
     )
     _crm_mark_widget_changed(date_key, (new_date.isoformat() if new_date else "") != str(current_date_raw or ""))
     if st.button("Применить", key=f"apply_shipping_fields_{key_prefix}", type="primary", use_container_width=True):
-        if _persist_shipping_fields():
-            st.rerun()
+        _persist_shipping_fields()
 
 
 def render_deal_pause_panel(d, deal_id):
