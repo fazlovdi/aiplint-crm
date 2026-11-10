@@ -1321,7 +1321,7 @@ def save_uploaded_file(u_file, c_id, prefix=""):
             "duration_ms": round((time.perf_counter() - _yandex_upload_started) * 1000, 1),
             "file_size_bytes": len(b),
             "success": _yandex_upload_ok,
-        }, remote=False)
+        }, remote=True)
         if _yandex_upload_ok:
             _crm_log("FILE_UPLOAD_TIMING", {
                 "stage": "total",
@@ -6700,7 +6700,7 @@ def save_data(data):
         "success": _save_succeeded,
         "clients": len(data.get("clients", [])) if isinstance(data, dict) else 0,
         "deals": len(data.get("deals", [])) if isinstance(data, dict) else 0,
-    }, remote=False)
+    }, remote=True)
     return _save_succeeded
 
 def commit_and_rerun(data=None, toast_msg=None):
@@ -6714,7 +6714,7 @@ def commit_and_rerun(data=None, toast_msg=None):
         "duration_ms_before_rerun": round((time.perf_counter() - _commit_started) * 1000, 1),
         "saved": _save_result,
         "has_data": data is not None,
-    }, remote=False)
+    }, remote=True)
     _smart_rerun()
 
 _in_dialog = False
