@@ -15452,6 +15452,10 @@ def statistics_dialog(section="Общая статистика"):
                 _svg_parts = [
                     f'<svg viewBox="0 0 {_w} {_h}" width="100%" role="img" aria-label="Динамика суммы заказов" xmlns="http://www.w3.org/2000/svg">',
                     '<rect width="100%" height="100%" fill="transparent"/>',
+                    '<line x1="570" y1="15" x2="590" y2="15" stroke="#f28c28" stroke-width="1.5"/>',
+                    '<text x="596" y="19" font-size="11" fill="currentColor">Все сделки</text>',
+                    '<line x1="700" y1="15" x2="720" y2="15" stroke="#2eaa57" stroke-width="1.5"/>',
+                    '<text x="726" y="19" font-size="11" fill="currentColor">Оплаченные</text>',
                 ]
                 for _tick in range(5):
                     _y = _top + _plot_h - (_tick * _plot_h / 4)
@@ -15726,6 +15730,10 @@ def statistics_dialog(section="Общая статистика"):
                 _manager_svg = [
                     f'<svg viewBox="0 0 {_manager_w} {_manager_h}" width="100%" role="img" aria-label="Динамика суммы сделок менеджера" xmlns="http://www.w3.org/2000/svg">',
                     '<rect width="100%" height="100%" fill="transparent"/>',
+                    '<line x1="570" y1="15" x2="590" y2="15" stroke="#f28c28" stroke-width="1.5"/>',
+                    '<text x="596" y="19" font-size="11" fill="currentColor">Все сделки</text>',
+                    '<line x1="700" y1="15" x2="720" y2="15" stroke="#2eaa57" stroke-width="1.5"/>',
+                    '<text x="726" y="19" font-size="11" fill="currentColor">Оплаченные</text>',
                 ]
                 for _manager_tick in range(5):
                     _manager_y = _manager_top + _manager_plot_h - (_manager_tick * _manager_plot_h / 4)
