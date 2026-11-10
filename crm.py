@@ -17064,6 +17064,12 @@ elif st.session_state.active_tab == "Задачи":
         review_tasks.sort(key=_task_sort_key, reverse=_sort_reverse)
         tt_list = [t for t in aat if t["sort_date"] <= now_time.date()]
         ft_list = [t for t in aat if t["sort_date"] > now_time.date()]
+        _today_date = now_time.date()
+        _tomorrow_date = _today_date + timedelta(days=1)
+        _week_end_date = _today_date + timedelta(days=6 - _today_date.weekday())
+        ft_tomorrow = [t for t in ft_list if t["sort_date"] == _tomorrow_date]
+        ft_week = [t for t in ft_list if _tomorrow_date < t["sort_date"] <= _week_end_date]
+        ft_later = [t for t in ft_list if t["sort_date"] > _week_end_date and t["sort_date"] != _tomorrow_date]
         def render_task_block(t, sk):
             task = t["task_obj"]
             cl = t["client_obj"]
@@ -17216,9 +17222,23 @@ elif st.session_state.active_tab == "Задачи":
         with col_future:
             with st.container(border=True):
                 st.subheader(f"Предстоящие ({len(ft_list)})")
-                if ft_list:
-                    for t in ft_list: render_task_block(t, "future")
-                else: st.caption("План на будущие дни пуст.")
+                st.markdown(f"**На завтра ({len(ft_tomorrow)})**")
+                if ft_tomorrow:
+                    for t in ft_tomorrow: render_task_block(t, "future_tomorrow")
+                else:
+                    st.caption("Задач на завтра нет.")
+                st.divider()
+                st.markdown(f"**На неделю ({len(ft_week)})**")
+                if ft_week:
+                    for t in ft_week: render_task_block(t, "future_week")
+                else:
+                    st.caption("Других задач на этой неделе нет.")
+                st.divider()
+                st.markdown(f"**На будущее ({len(ft_later)})**")
+                if ft_later:
+                    for t in ft_later: render_task_block(t, "future_later")
+                else:
+                    st.caption("Задач на следующие недели нет.")
         with col_review:
             with st.container(border=True):
                 st.subheader(f"На проверке ({len(review_tasks)})")
