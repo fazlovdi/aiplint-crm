@@ -1479,7 +1479,7 @@ def task_was_overdue_in_period(task, start_date=None, end_date=None):
     """Проверяет сохранённый факт просрочки с учётом выбранного периода."""
     if not isinstance(task, dict) or not task.get("was_overdue"):
         return False
-    overdue_date = _stat_date(task.get("was_overdue_at"))
+    overdue_date = parse_optional_date(task.get("was_overdue_at"))
     if overdue_date is None:
         # Для старых записей с флагом, но без даты события не теряем сам факт.
         return start_date is None or end_date is None
