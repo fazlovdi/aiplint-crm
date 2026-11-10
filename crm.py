@@ -6018,6 +6018,63 @@ def save_data(data):
             except Exception as _audit_exc:
                 _crm_log("CHANGE_LOG_AUDIT_ERROR", {}, exc=_audit_exc, remote=False)
 
+            # История просрочки — неизменяемое событие. При сохранении срока задача
+            # может слиться из нескольких копий/сессий; не позволяем merge удалить
+            # уже зафиксированный факт was_overdue.
+            try:
+                _overdue_history_by_id = {}
+                _overdue_history_by_number = {}
+
+                def _collect_overdue_history(node):
+                    if isinstance(node, dict):
+                        if node.get("was_overdue"):
+                            _history_date = str(node.get("was_overdue_at") or "").strip()
+                            _history_id = str(node.get("id") or "").strip()
+                            _history_number = str(node.get("task_number") or "").strip()
+                            _history = {"was_overdue": True, "was_overdue_at": _history_date}
+                            if _history_id:
+                                _old = _overdue_history_by_id.get(_history_id)
+                                if _old is None or (not _old.get("was_overdue_at") and _history_date):
+                                    _overdue_history_by_id[_history_id] = _history
+                            if _history_number:
+                                _old = _overdue_history_by_number.get(_history_number)
+                                if _old is None or (not _old.get("was_overdue_at") and _history_date):
+                                    _overdue_history_by_number[_history_number] = _history
+                        for _value in node.values():
+                            _collect_overdue_history(_value)
+                    elif isinstance(node, list):
+                        for _value in node:
+                            _collect_overdue_history(_value)
+
+                for _source in (latest_data, data, merged_data):
+                    _collect_overdue_history(_source)
+
+                def _restore_overdue_history(node):
+                    if isinstance(node, dict):
+                        _is_task = (
+                            ("task_number" in node or "deadline" in node)
+                            and any(_field in node for _field in ("type", "done", "manager", "created_at", "text"))
+                        )
+                        if _is_task:
+                            _task_id = str(node.get("id") or "").strip()
+                            _task_number = str(node.get("task_number") or "").strip()
+                            _history = _overdue_history_by_id.get(_task_id) if _task_id else None
+                            if _history is None and _task_number:
+                                _history = _overdue_history_by_number.get(_task_number)
+                            if _history:
+                                node["was_overdue"] = True
+                                if not node.get("was_overdue_at") and _history.get("was_overdue_at"):
+                                    node["was_overdue_at"] = _history["was_overdue_at"]
+                        for _value in node.values():
+                            _restore_overdue_history(_value)
+                    elif isinstance(node, list):
+                        for _value in node:
+                            _restore_overdue_history(_value)
+
+                _restore_overdue_history(merged_data)
+            except Exception as _history_exc:
+                _crm_log("TASK_OVERDUE_HISTORY_MERGE_ERROR", {}, exc=_history_exc, remote=False)
+
             snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
             new_revision = revision + 1
 
