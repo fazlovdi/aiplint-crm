@@ -11252,7 +11252,7 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
     _is_person_payer = st.session_state.get(_payer_type_key) == "person"
     if _is_person_payer:
         st.text_input("ФИО плательщика",key=f"{key}_legal_name",on_change=lambda:st.session_state.__setitem__(dirty,True))
-        st.text_input("Email (обязательно)",key=f"{key}_email",on_change=lambda:st.session_state.__setitem__(dirty,True))
+        st.text_input("Email",key=f"{key}_email",on_change=lambda:st.session_state.__setitem__(dirty,True))
     else:
         c1,c2=st.columns(2)
         with c1:
@@ -11277,8 +11277,6 @@ def client_requisites_dialog(client_id, return_to_invoice=False, requisite_id=No
         email = str(st.session_state.get(f"{key}_email", "") or "").strip()
         if not name or (payer_type != "person" and not inn):
             st.error("Укажи ФИО физического лица либо наименование плательщика и ИНН для организации/ИП.")
-        elif payer_type == "person" and not email:
-            st.error("Для физического лица Email обязателен для заполнения.")
         else:
             req={k:st.session_state.get(f"{key}_{k}","").strip() if isinstance(st.session_state.get(f"{key}_{k}",""),str) else st.session_state.get(f"{key}_{k}") for k,_ in fields}
             if existing_req:
