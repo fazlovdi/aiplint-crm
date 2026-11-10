@@ -1290,6 +1290,7 @@ def format_phone(p_str):
 
 def save_uploaded_file(u_file, c_id, prefix=""):
     if u_file is None: return None
+    _file_upload_started = time.perf_counter()
     b = u_file.getvalue()
     file_hash = hashlib.sha256(b).hexdigest()
     for c in st.session_state.crm_store.get("clients", []):
@@ -1312,13 +1313,39 @@ def save_uploaded_file(u_file, c_id, prefix=""):
                 return {"path": f.get("file_path", f.get("path", "")), "name": u_file.name, "file_hash": file_hash, "created_at": f.get("created_at") or now_str(), "uploaded_at": now_str()}
     name = f"{c_id}_{prefix}_{int(time.time())}_{u_file.name}"
     if YANDEX_TOKEN:
+        _yandex_upload_started = time.perf_counter()
         rp = f"CRM_NE_TROGAT/uploads/{name}"
-        if upload_file_to_yandex(b, name):
+        _yandex_upload_ok = upload_file_to_yandex(b, name)
+        _crm_log("FILE_UPLOAD_TIMING", {
+            "stage": "yandex",
+            "duration_ms": round((time.perf_counter() - _yandex_upload_started) * 1000, 1),
+            "file_size_bytes": len(b),
+            "success": _yandex_upload_ok,
+        }, remote=False)
+        if _yandex_upload_ok:
+            _crm_log("FILE_UPLOAD_TIMING", {
+                "stage": "total",
+                "duration_ms": round((time.perf_counter() - _file_upload_started) * 1000, 1),
+                "file_size_bytes": len(b),
+                "destination": "yandex",
+            }, remote=False)
             return {"path": rp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str(), "uploaded_at": now_str()}
         st.warning("Не удалось загрузить на Диск, файл сохранён локально")
+    _local_write_started = time.perf_counter()
     os.makedirs("uploads", exist_ok=True)
     lp = f"uploads/{name}"
     with open(lp, "wb") as f: f.write(b)
+    _crm_log("FILE_UPLOAD_TIMING", {
+        "stage": "local_write",
+        "duration_ms": round((time.perf_counter() - _local_write_started) * 1000, 1),
+        "file_size_bytes": len(b),
+    }, remote=False)
+    _crm_log("FILE_UPLOAD_TIMING", {
+        "stage": "total",
+        "duration_ms": round((time.perf_counter() - _file_upload_started) * 1000, 1),
+        "file_size_bytes": len(b),
+        "destination": "local",
+    }, remote=False)
     return {"path": lp, "name": u_file.name, "file_hash": file_hash, "created_at": now_str(), "uploaded_at": now_str()}
 
 def save_uploaded_files(files, c_id, prefix=""):
@@ -5944,6 +5971,7 @@ def _merge_data(local_data, disk_data):
 
 def save_data(data):
     """Транзакционно сохраняет изменения, сливая их с актуальной ревизией без воскрешения удалений."""
+    _save_timing_started = time.perf_counter()
     _save_succeeded = False
     with _save_lock:
         conn = None
@@ -6667,13 +6695,26 @@ def save_data(data):
                 st.sidebar.error(f"Ошибка сохранения: {e}")
             except Exception:
                 pass
+    _crm_log("DATABASE_SAVE_TIMING", {
+        "duration_ms": round((time.perf_counter() - _save_timing_started) * 1000, 1),
+        "success": _save_succeeded,
+        "clients": len(data.get("clients", [])) if isinstance(data, dict) else 0,
+        "deals": len(data.get("deals", [])) if isinstance(data, dict) else 0,
+    }, remote=False)
     return _save_succeeded
 
 def commit_and_rerun(data=None, toast_msg=None):
+    _commit_started = time.perf_counter()
+    _save_result = None
     if data is not None:
-        save_data(data)
+        _save_result = save_data(data)
     if toast_msg:
         st.toast(toast_msg, icon="✅")
+    _crm_log("COMMIT_RERUN_TIMING", {
+        "duration_ms_before_rerun": round((time.perf_counter() - _commit_started) * 1000, 1),
+        "saved": _save_result,
+        "has_data": data is not None,
+    }, remote=False)
     _smart_rerun()
 
 _in_dialog = False
