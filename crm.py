@@ -4122,10 +4122,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     with _hdr_inner:
 
 
-                        if not show_edit_task:
-                            if _tp not in ("Отправить заказ", "Отправить образцы"):
-                                st.markdown(f"**Тема:** {t.get('text', '')}")
-                            st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
+                        if True:  # Keep the edit form reachable when editing.
+                            if not show_edit_task:
+                                if _tp not in ("Отправить заказ", "Отправить образцы"):
+                                    st.markdown(f"**Тема:** {t.get('text', '')}")
+                                st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                             if not show_edit_task:
                                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
                                 mgr_options = get_managers_list()
@@ -4356,10 +4357,11 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                     with _hdr_inner:
 
 
-                        if not show_edit_task:
-                            if _tp not in ("Отправить заказ", "Отправить образцы"):
-                                st.markdown(f"**Тема:** {t.get('text', '')}")
-                            st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
+                        if True:  # Keep the edit form reachable when editing.
+                            if not show_edit_task:
+                                if _tp not in ("Отправить заказ", "Отправить образцы"):
+                                    st.markdown(f"**Тема:** {t.get('text', '')}")
+                                st.markdown(f"**Тип:** {t.get('type', 'Связаться')}")
                             if not show_edit_task:
                                 st.markdown("**\u041e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439:**")
                                 mgr_options = get_managers_list()
