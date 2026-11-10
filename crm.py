@@ -1473,6 +1473,8 @@ def mark_task_overdue_history(task):
         return False
     task["was_overdue"] = True
     task["was_overdue_at"] = now_str()
+    # Обновляем timestamp задачи, чтобы слияние SQLite не выбрало старую версию без истории.
+    task["last_modified"] = task["was_overdue_at"]
     return True
 
 def task_was_overdue_in_period(task, start_date=None, end_date=None):
@@ -4217,6 +4219,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     </style>""", unsafe_allow_html=True)
                                     with dl_btn_col1:
                                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
+                                            mark_task_overdue_history(t)
                                             mark_task_overdue_history(t)
                                             t["deadline"] = ndd.isoformat()
                                             t["last_modified"] = now_str()
@@ -15893,8 +15896,15 @@ def statistics_dialog(section="Общая статистика"):
                 if _start is not None and _end is not None and not (_created and _start <= _created <= _end):
                     continue
                 _all_tasks.append(_task)
+        # Просрочка считается по дате первого факта просрочки, а не по дате создания задачи.
+        _all_tasks_for_overdue_history = [
+            task
+            for _history_client in clients_all
+            for task in (_history_client.get("tasks", []) or [])
+            if isinstance(task, dict)
+        ]
         _overdue_tasks = [
-            task for task in _all_tasks
+            task for task in _all_tasks_for_overdue_history
             if task_was_overdue_in_period(task, _start, _end)
         ]
         _s1, _s2, _s3, _s4 = st.columns(4, gap="small")
