@@ -1465,6 +1465,28 @@ def is_task_overdue(task):
     # Для сравнения используем локальное время системы CRM.
     return deadline < now.replace(tzinfo=None) if now.tzinfo is not None else deadline < now
 
+def mark_task_overdue_history(task):
+    """Фиксирует первый факт просрочки задачи и сохраняет дату этого события."""
+    if not isinstance(task, dict) or task.get("was_overdue"):
+        return False
+    if not is_task_overdue(task):
+        return False
+    task["was_overdue"] = True
+    task["was_overdue_at"] = now_str()
+    return True
+
+def task_was_overdue_in_period(task, start_date=None, end_date=None):
+    """Проверяет сохранённый факт просрочки с учётом выбранного периода."""
+    if not isinstance(task, dict) or not task.get("was_overdue"):
+        return False
+    overdue_date = _stat_date(task.get("was_overdue_at"))
+    if overdue_date is None:
+        # Для старых записей с флагом, но без даты события не теряем сам факт.
+        return start_date is None or end_date is None
+    return (start_date is None or overdue_date >= start_date) and (
+        end_date is None or overdue_date <= end_date
+    )
+
 def get_task_sort_date(task):
     dl = task.get("deadline", "")
     try: return datetime.strptime(dl, "%Y-%m-%d").date()
@@ -4195,6 +4217,7 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                     </style>""", unsafe_allow_html=True)
                                     with dl_btn_col1:
                                         if st.button("\u041e\u043a", key=f"dl_ok_{key_prefix}", use_container_width=True, type="primary"):
+                                            mark_task_overdue_history(t)
                                             t["deadline"] = ndd.isoformat()
                                             t["last_modified"] = now_str()
                                             cl["last_modified"] = now_str()
@@ -15164,6 +15187,14 @@ def statistics_dialog(section="Общая статистика"):
     store = st.session_state.get("crm_store", {})
     deals_all = list(store.get("deals", []) or [])
     clients_all = list(store.get("clients", []) or [])
+    # Фиксируем просрочку до любых возможных изменений срока и сохраняем её один раз.
+    _overdue_history_changed = False
+    for _history_client in clients_all:
+        for _history_task in (_history_client.get("tasks", []) or []):
+            if mark_task_overdue_history(_history_task):
+                _overdue_history_changed = True
+    if _overdue_history_changed:
+        save_data(store)
     users = list(store.get("users", []) or [])
     manager_names = sorted({
         str(u.get("name") or u.get("login") or "").strip()
@@ -15694,10 +15725,12 @@ def statistics_dialog(section="Общая статистика"):
             1 for _task in _manager_tasks_by_deadline if _task.get("done")
         )
         _manager_overdue_tasks = sum(
-            1 for _task in _manager_tasks_by_deadline if is_task_overdue(_task)
+            1 for _task in _manager_tasks_by_deadline
+            if task_was_overdue_in_period(_task, _start, _end)
         )
         _manager_created_overdue_tasks = sum(
-            1 for _task in _manager_tasks_by_created if is_task_overdue(_task)
+            1 for _task in _manager_tasks_by_created
+            if task_was_overdue_in_period(_task, _start, _end)
         )
         _manager_overdue_percent = (
             _manager_created_overdue_tasks / len(_manager_tasks_by_created) * 100
@@ -15858,7 +15891,10 @@ def statistics_dialog(section="Общая статистика"):
                 if _start is not None and _end is not None and not (_created and _start <= _created <= _end):
                     continue
                 _all_tasks.append(_task)
-        _overdue_tasks = [task for task in _all_tasks if is_task_overdue(task)]
+        _overdue_tasks = [
+            task for task in _all_tasks
+            if task_was_overdue_in_period(task, _start, _end)
+        ]
         _s1, _s2, _s3, _s4 = st.columns(4, gap="small")
         _s1.metric("Активных сделок", len(_active_rows))
         _s2.metric("Средний возраст сделки", f"{(sum(_ages) / len(_ages)):.1f} дн." if _ages else "—")
