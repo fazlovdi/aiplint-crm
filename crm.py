@@ -4862,12 +4862,16 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                             }}
                             var expectedCount = 0;
                             try {{ expectedCount = parseInt(w.sessionStorage.getItem(uploadStorageKey) || '0', 10) || 0; }} catch(e) {{}}
-                            var fileCount = fileInput && fileInput.files ? fileInput.files.length : 0;
-                            var requiredCount = Math.max(expectedCount, fileCount);
-                            var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"]');
-                            var uploadedRows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
+                            var selectedFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+                            var requiredCount = Math.max(expectedCount, selectedFiles.length);
+                            var uploaderText = uploader.innerText || uploader.textContent || '';
+                            // Streamlit can keep the file input's FileList after upload. Treat each file
+                            // as uploaded only when its filename is visible in the uploader's rendered list.
+                            var namesVisible = selectedFiles.length > 0 && selectedFiles.every(function(file) {{
+                                return file.name && uploaderText.indexOf(file.name) !== -1;
+                            }});
                             var hasPendingUpload = requiredCount > 0;
-                            var uploaded = hasPendingUpload && !progress && uploadedRows.length >= requiredCount;
+                            var uploaded = hasPendingUpload && namesVisible;
 
                             if (hasPendingUpload && !uploaded) {{
                                 confirmBtn.disabled = true;
