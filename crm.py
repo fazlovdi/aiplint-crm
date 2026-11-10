@@ -15691,6 +15691,7 @@ def statistics_dialog(section="Общая статистика"):
                     _manager_labels = [(d, d.strftime("%m.%Y")) for d in sorted(_manager_totals)]
                 st.markdown(_manager_chart_title)
                 import plotly.graph_objects as go
+                import plotly.graph_objects as go
                 _manager_chart_dates = sorted(_manager_totals)
                 _manager_fig = go.Figure()
                 # Зелёная линия рисуется первой, оранжевая — поверх неё.
