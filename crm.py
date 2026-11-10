@@ -4967,6 +4967,28 @@ def render_task_detail(t, cl, d, key_prefix, show_shipping_status=False):
                                 st.session_state[f"task_upload_ver_{key_prefix}"] = _tu_ver + 1
                                 commit_and_rerun(st.session_state.crm_store, "Файлы добавлены")
                         else: st.warning("Выберите файл(ы)")
+                # Мгновенно блокируем повторное нажатие на «Загрузить» на время серверной загрузки.
+                st.components.v1.html(f"""<script>
+                (function() {{
+                    var w = window.parent, doc = w.document;
+                    var suffix = {json.dumps(str(key_prefix))};
+                    function bindUploadButton() {{
+                        var wrap = doc.getElementsByClassName("st-key-task_upload_btn_" + suffix)[0];
+                        var btn = wrap && wrap.querySelector("button");
+                        if (!btn || btn.__crmDisableWhileUploading) return;
+                        btn.__crmDisableWhileUploading = true;
+                        btn.addEventListener("click", function() {{
+                            if (!btn.disabled) {{
+                                btn.disabled = true;
+                                btn.setAttribute("aria-busy", "true");
+                            }}
+                        }}, true);
+                    }}
+                    bindUploadButton();
+                    setTimeout(bindUploadButton, 100);
+                    setTimeout(bindUploadButton, 400);
+                }})();
+                </script>""", height=0)
                 with _task_file_pick_col:
                     if st.button("Выбрать из загруженных", key=f"task_pick_existing_btn_{key_prefix}", use_container_width=True):
                         _pick_key = f"task_pick_existing_open_{key_prefix}"
