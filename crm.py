@@ -14591,57 +14591,46 @@ def task_completion_report_dialog(client_id, task_number, key_prefix):
                 st.rerun()
 
 
-    # Используем ту же схему проверки загрузки, что и в рабочем блоке отчёта задачи:
-    # несколько повторных проверок после выбора файла, без постоянного MutationObserver.
+    # Кнопка активна по умолчанию. Блокируем её только сразу после выбора файлов,
+    # затем снимаем блокировку после завершения цикла загрузки Streamlit.
     st.components.v1.html(f"""
     <script>
     (function() {{
         var w = window.parent, doc = w.document;
         var buttonClass = {json.dumps("st-key-task_completion_confirm_" + str(key_prefix))};
         var uploaderClass = {json.dumps("st-key-" + str(files_key))};
-        var storageKey = {json.dumps("crm_task_completion_upload_count_" + str(key_prefix))};
-        function syncUploadButton() {{
+        function bindUploadButton() {{
             var wrap = doc.getElementsByClassName(buttonClass)[0];
             var btn = wrap && wrap.querySelector('button');
             var uploader = doc.getElementsByClassName(uploaderClass)[0];
-            if (!btn || !uploader) return;
+            if (!btn || !uploader) return false;
             var input = uploader.querySelector('input[type="file"]');
             if (input && !input.__taskCompletionUploadBound) {{
                 input.__taskCompletionUploadBound = true;
                 input.addEventListener('change', function() {{
-                    var count = input.files ? input.files.length : 0;
-                    if (count > 0) {{
-                        try {{ w.sessionStorage.setItem(storageKey, String(count)); }} catch(e) {{}}
-                        btn.disabled = true;
-                        btn.setAttribute('aria-busy', 'true');
-                    }}
-                    setTimeout(syncUploadButton, 50);
-                    setTimeout(syncUploadButton, 250);
-                    setTimeout(syncUploadButton, 750);
-                    setTimeout(syncUploadButton, 1500);
+                    if (!input.files || !input.files.length) return;
+                    btn.disabled = true;
+                    btn.setAttribute('aria-busy', 'true');
+                    [300, 700, 1200, 2000, 3000].forEach(function(delay) {{
+                        w.setTimeout(function() {{
+                            var currentWrap = doc.getElementsByClassName(buttonClass)[0];
+                            var currentBtn = currentWrap && currentWrap.querySelector('button');
+                            if (currentBtn) {{
+                                currentBtn.disabled = false;
+                                currentBtn.removeAttribute('aria-busy');
+                            }}
+                        }}, delay);
+                    }});
                 }});
             }}
-            var expected = 0;
-            try {{ expected = parseInt(w.sessionStorage.getItem(storageKey) || '0', 10) || 0; }} catch(e) {{}}
-            var progress = uploader.querySelector('[role="progressbar"], [data-testid*="progress"], [aria-label*="Uploading"]');
-            var rows = uploader.querySelectorAll('[data-testid="stFileUploaderFile"]');
-            var selected = input && input.files ? input.files.length : 0;
-            var required = Math.max(expected, selected);
-            var uploading = !!progress || (required > 0 && rows.length < required);
-            if (uploading) {{
-                btn.disabled = true;
-                btn.setAttribute('aria-busy', 'true');
-            }} else {{
-                btn.disabled = false;
-                btn.removeAttribute('aria-busy');
-                try {{ w.sessionStorage.removeItem(storageKey); }} catch(e) {{}}
-            }}
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            return true;
         }}
-        syncUploadButton();
-        setTimeout(syncUploadButton, 50);
-        setTimeout(syncUploadButton, 250);
-        setTimeout(syncUploadButton, 750);
-        setTimeout(syncUploadButton, 1500);
+        bindUploadButton();
+        [100, 300, 700, 1200, 2000].forEach(function(delay) {{
+            w.setTimeout(bindUploadButton, delay);
+        }});
     }})();
     </script>
     """, height=0)
