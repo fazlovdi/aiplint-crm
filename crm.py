@@ -17215,13 +17215,13 @@ elif st.session_state.active_tab == "Задачи":
                                 # Формат из расчёта: артикул + наименование — цвет — количество единица.
                                 if len(_parts) >= 3:
                                     _product_color = _parts[-2]
-                                    _qty_match = re.fullmatch(r"([+-]?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+))\\s*(.*)", _parts[-1])
+                                    _qty_match = re.fullmatch(r"([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*(.*)", _parts[-1])
                                     if _qty_match:
                                         _product_qty = float(_qty_match.group(1).replace(",", "."))
                                         _product_unit = _qty_match.group(2).strip() or "шт."
                                         _product_name = " — ".join(_parts[:-2]).strip()
                                 if _product_qty is None and len(_parts) >= 2:
-                                    _qty_match = re.fullmatch(r"([+-]?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+))\\s*(.*)", _parts[-1])
+                                    _qty_match = re.fullmatch(r"([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+))\s*(.*)", _parts[-1])
                                     if _qty_match:
                                         _product_qty = float(_qty_match.group(1).replace(",", "."))
                                         _product_unit = _qty_match.group(2).strip() or "шт."
