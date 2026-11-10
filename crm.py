@@ -15132,7 +15132,10 @@ def client_tasks_dialog(cl_id):
             _label = f"{_icon} Задача \u2116{t.get('task_number', '')} — {t.get('text', '')} | {_fd}"
             _bg, _bc = "#F5F6F8", "#C9CFD7"
             if not _done:
-                if is_task_overdue(t): _bg, _bc = "#FFEBEE", "#C62828"
+                if is_task_overdue(t):
+                    if mark_task_overdue_history(t):
+                        save_data(st.session_state.crm_store)
+                    _bg, _bc = "#FFEBEE", "#C62828"
                 elif t.get("in_work"): _bg, _bc = "#E8F5E9", "#4CAF50"
                 else: _bg, _bc = "#E3F2FD", "#2196F3"
             st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
@@ -15165,7 +15168,10 @@ def client_tasks_dialog(cl_id):
             _label = f"{_icon} Задача \u2116{t.get('task_number', '')} — {t.get('text', '')} | {_fd} | {_deal_num}"
             _bg, _bc = "#F5F6F8", "#C9CFD7"
             if not _done:
-                if is_task_overdue(t): _bg, _bc = "#FFEBEE", "#C62828"
+                if is_task_overdue(t):
+                    if mark_task_overdue_history(t):
+                        save_data(st.session_state.crm_store)
+                    _bg, _bc = "#FFEBEE", "#C62828"
                 elif t.get("in_work"): _bg, _bc = "#E8F5E9", "#4CAF50"
                 else: _bg, _bc = "#E3F2FD", "#2196F3"
             st.markdown(f"<style>.st-key-{_tk_key} button {{ background-color: {_bg} !important; color: #2C3E50 !important; border: 2px solid {_bc} !important; border-radius: 10px !important; white-space: normal !important; height: auto !important; text-align: left !important; }}</style>", unsafe_allow_html=True)
@@ -17198,6 +17204,9 @@ elif st.session_state.active_tab == "Задачи":
             cl = t["client_obj"]
             tp = task.get("type", "Связаться")
             io_ = is_task_overdue(task)
+            # Сохраняем факт просрочки и в колонках задач, где срок тоже отображается красным.
+            if io_ and mark_task_overdue_history(task):
+                save_data(st.session_state.crm_store)
             fd = format_date(t["deadline_str"])
             task_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
             if task.get("needs_rework"): tk_bg, tk_bc = "#FFEBEE", "#D32F2F"
