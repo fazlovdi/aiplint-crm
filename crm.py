@@ -3759,12 +3759,23 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
             if found_deal:
                 found_deal["last_modified"] = now
         # Persist a copy to avoid replacing live references used by the open workspace.
-        save_data(copy.deepcopy(store))
+        if not save_data(copy.deepcopy(store)):
+            st.error("Не удалось сохранить изменения. Попробуй ещё раз.")
+            return False
+
+        # Сразу синхронизируем модель открытой задачи и сбрасываем признаки
+        # несохранённых изменений. Без этого после устранения двойного rerun
+        # виджеты сравнивались со старым объектом task и оставались оранжевыми.
+        task["shipping_status"] = status_value
+        task["estimated_ship_date"] = date_iso
+        task["last_modified"] = now
+        st.session_state[status_key] = status_value
+        st.session_state[date_key] = date_value
+        st.session_state.pop(f"_crm_widget_changed_{status_key}", None)
+        st.session_state.pop(f"_crm_widget_changed_{date_key}", None)
         st.toast("Статус и дата отправки применены", icon="✅")
         return True
 
-    if str(st.session_state.get(status_key, current_status) or "") != str(current_status or ""):
-        st.markdown(f"<style>.st-key-{status_key} {{ border:2px solid #F59E0B!important;border-radius:8px!important;padding:0.2rem 0.45rem!important; }}</style>", unsafe_allow_html=True)
     new_status = st.selectbox(
         "Статус",
         options=statuses,
