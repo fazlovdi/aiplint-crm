@@ -2857,9 +2857,10 @@ def _crm_workspace_queue_save():
 
 def _crm_workspace_init():
     """Start with an empty window workspace and remove legacy persisted window state."""
-    if st.session_state.get("_crm_workspace_initialized"):
+    if st.session_state.get("_crm_workspace_cleanup_v1"):
         return
-    st.session_state["_crm_workspace_initialized"] = True
+    st.session_state["_crm_workspace_cleanup_v1"] = True
+    st.session_state.pop("_crm_workspace_initialized", None)
 
     # Keep the current in-session window UI, but never restore windows across logins/restarts.
     st.session_state["_crm_windows"] = []
