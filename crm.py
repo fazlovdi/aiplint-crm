@@ -11232,10 +11232,15 @@ def _save_generated_document(deal, pdf_bytes, filename, kind, calc, extra=None, 
                 "document_type": kind, "calculation_id": str(calc.get("id")), "created_at": created_at}
     current_deal.setdefault("deal_files", []).append(file_obj)
     doc_obj = {"id": uuid.uuid4().hex, "kind": kind, "file_name": safe_name,
-               "file_hash": digest, "calculation_id": str(calc.get("id")),
+               "file_hash": digest, "file_path": path,
+               "calculation_id": str(calc.get("id")),
                "calculation_name": calc.get("name", ""), "created_at": created_at,
-               "payer": copy.deepcopy(extra or {}),
-               "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii")}
+               "payer": copy.deepcopy(extra or {})}
+    # Если файл успешно сохранён на Яндекс Диск, не дублируем весь PDF в SQLite:
+    # бинарный документ уже доступен по file_path. Base64 оставляем только для
+    # локального fallback, чтобы не потерять документ, если удалённая загрузка недоступна.
+    if not str(path).startswith("CRM_NE_TROGAT/"):
+        doc_obj["pdf_base64"] = base64.b64encode(pdf_bytes).decode("ascii")
     current_deal.setdefault("generated_documents", []).append(doc_obj)
     current_deal["last_modified"] = created_at
     save_data(st.session_state.crm_store)
@@ -13071,10 +13076,30 @@ def deal_calculation_dialog(deal_id, calc_id):
                        if str(doc.get("calculation_id", "")) == str(calc_id)]
     for _doc_kind, _state_key in (("Коммерческое предложение", f"offer_pdf_{deal_id}_{calc_id}"),
                                   ("Товарная накладная ТОРГ-12", f"torg12_pdf_{deal_id}_{calc_id}")):
-        _matches = [doc for doc in _persisted_docs if doc.get("kind") == _doc_kind and doc.get("pdf_base64")]
+        _matches = [
+            doc for doc in _persisted_docs
+            if doc.get("kind") == _doc_kind and (doc.get("pdf_base64") or doc.get("file_path") or doc.get("file_hash"))
+        ]
         if _matches and not st.session_state.get(_state_key):
             _last_doc = max(_matches, key=lambda d: str(d.get("created_at", "")))
-            st.session_state[_state_key] = {"data": _last_doc["pdf_base64"], "filename": _last_doc.get("file_name", "Документ.pdf")}
+            _pdf_data = _last_doc.get("pdf_base64")
+            if not _pdf_data:
+                _doc_path = _last_doc.get("file_path", "")
+                if not _doc_path:
+                    _matching_file = next(
+                        (f for f in (deal.get("deal_files", []) or [])
+                         if str(f.get("file_hash", "")) == str(_last_doc.get("file_hash", ""))),
+                        None,
+                    )
+                    _doc_path = (_matching_file or {}).get("file_path", "")
+                _pdf_bytes = get_file_bytes(_doc_path) if _doc_path else None
+                if _pdf_bytes:
+                    _pdf_data = base64.b64encode(_pdf_bytes).decode("ascii")
+            if _pdf_data:
+                st.session_state[_state_key] = {
+                    "data": _pdf_data,
+                    "filename": _last_doc.get("file_name", "Документ.pdf"),
+                }
     _offer_pdf_state = st.session_state.get(f"offer_pdf_{deal_id}_{calc_id}")
     _torg12_pdf_state = st.session_state.get(f"torg12_pdf_{deal_id}_{calc_id}")
     if _offer_pdf_state or _torg12_pdf_state:
