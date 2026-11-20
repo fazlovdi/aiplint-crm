@@ -8798,38 +8798,34 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] button:active { border:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
-        [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) {
-        position:fixed !important; left:14px !important; bottom:14px !important; z-index:999999 !important;
+        /* Compact CRM search launcher fixed in the bottom-left corner. */
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) {
+        position:fixed !important; left:18px !important; bottom:18px !important; z-index:999999 !important;
         display:flex !important; align-items:center !important; justify-content:center !important;
-        flex:0 0 72px !important; width:72px !important; min-width:72px !important; max-width:72px !important;
-        height:84px !important; margin:0 !important; padding:0 !important; overflow:visible !important;
+        flex:0 0 54px !important; width:54px !important; min-width:54px !important; max-width:54px !important;
+        height:54px !important; min-height:54px !important; margin:0 !important; padding:0 !important; overflow:visible !important;
         background:transparent !important; border:0 !important;
     }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] {
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"] {
         position:relative !important; display:flex !important; align-items:center !important; justify-content:center !important;
-        box-sizing:border-box !important; width:72px !important; min-width:72px !important; max-width:72px !important;
-        height:84px !important; min-height:84px !important; padding:0 !important; margin:0 !important;
-        border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important;
-        background:transparent !important; color:transparent !important; font-size:0 !important; line-height:1 !important;
-        opacity:1 !important; filter:none !important; transition:none !important;
+        box-sizing:border-box !important; width:54px !important; min-width:54px !important; max-width:54px !important;
+        height:54px !important; min-height:54px !important; padding:0 !important; margin:0 !important;
+        border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:0 3px 12px rgba(188,22,97,0.28) !important;
+        background:#BC1661 !important; color:transparent !important; font-size:0 !important; line-height:1 !important;
+        opacity:1 !important; filter:none !important; transition:background .15s ease !important;
     }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] p { display:none !important; }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] svg,
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] [data-testid="stIconMaterial"],
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] [data-testid*="Icon"],
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"] > span:not([class*="st-emotion-cache"]) { display:none !important; }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::before {
-        content:"" !important; position:absolute !important; inset:0 !important;
-        width:72px !important; height:84px !important; box-sizing:border-box !important;
-        border:0 !important; border-radius:0 !important; background:transparent !important;
-        background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cg%20fill%3D%22%23fff%22%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%225%22%20r%3D%222.3%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2211%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2217%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2214%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2228%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2234%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2229%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2235%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2241%22%20r%3D%222.3%22%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2223%22%20r%3D%223.1%22%20fill%3D%22%23f4dce7%22%20stroke%3D%22%23fff%22%20stroke-width%3D%22.7%22%2F%3E%3C%2Fsvg%3E") !important; background-position:center !important; background-repeat:no-repeat !important; background-size:contain !important; opacity:1 !important; filter:none !important;
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"] p,
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"] svg,
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"] [data-testid="stIconMaterial"],
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"] [data-testid*="Icon"] { display:none !important; }
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"]::before {
+        content:"" !important; position:absolute !important; left:50% !important; top:50% !important;
+        transform:translate(-50%,-50%) !important; width:25px !important; height:25px !important;
+        background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10.8' cy='10.8' r='6.8'/%3E%3Cpath d='m16 16 5 5'/%3E%3C/svg%3E") !important;
+        background-position:center !important; background-repeat:no-repeat !important; background-size:contain !important;
+        visibility:visible !important; opacity:1 !important;
     }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]::after { display:none !important; content:none !important; }
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:hover,
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:focus,
-    [class*="st-key-crm_workspace_global_search_"] button[data-testid^="stPopoverButton"]:active {
-        background:transparent !important; border:0 !important; outline:0 !important; box-shadow:none !important;
-    }
+    [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"]:hover { background:#9A1452 !important; }
     [class*="st-key-crm_workspace_add_client_"] { flex:0 0 50px !important; width:50px !important; min-width:50px !important; max-width:50px !important; margin:0 !important; padding:0 !important; }
     [class*="st-key-crm_workspace_add_client_"] > div > button,
     [class*="st-key-crm_workspace_add_client_"] button[data-testid^="stPopoverButton"] { display:flex !important; box-sizing:border-box !important; align-items:center !important; justify-content:flex-start !important; width:50px !important; min-width:50px !important; max-width:50px !important; height:42px !important; min-height:42px !important; padding:0 0 0 16px !important; margin:0 !important; border:0 !important; border-radius:0 !important; outline:0 !important; box-shadow:none !important; background:transparent !important; color:#BC1661 !important; font-size:26px !important; font-weight:400 !important; }
@@ -8861,16 +8857,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_main_expand_wrap"] {
         position:absolute !important; right:0 !important; top:0 !important; z-index:10 !important;
     }
-    [class*="st-key-crm_workspace_global_search_"] button { position:relative !important; font-size:0 !important; color:transparent !important; }
-    [class*="st-key-crm_workspace_global_search_"] button > * { visibility:hidden !important; }
-    [class*="st-key-crm_workspace_global_search_"] button::before { content:"" !important; display:block !important; position:absolute !important; left:50% !important; top:50% !important; transform:translate(-50%,-50%) !important; width:30px !important; height:30px !important; background-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2048%2048%22%3E%3Cg%20fill%3D%22%23fff%22%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%225%22%20r%3D%222.3%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2211%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2211%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2217%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2217%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2217%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%228%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2214%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2228%22%20cy%3D%2223%22%20r%3D%223%22%2F%3E%3Ccircle%20cx%3D%2234%22%20cy%3D%2223%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2223%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2229%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2229%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2236%22%20cy%3D%2229%22%20r%3D%222.7%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2235%22%20r%3D%222.8%22%2F%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2235%22%20r%3D%222.6%22%2F%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2241%22%20r%3D%222.3%22%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2224%22%20cy%3D%2223%22%20r%3D%223.1%22%20fill%3D%22%23f4dce7%22%20stroke%3D%22%23fff%22%20stroke-width%3D%22.7%22%2F%3E%3C%2Fsvg%3E") !important; background-position:center !important; background-repeat:no-repeat !important; background-size:contain !important; visibility:visible !important; }
     </style>""", unsafe_allow_html=True)
     _bottom_scope = "workspace" if in_workspace else "main"
     with st.container(key=f"crm_workspace_bottom_{_bottom_scope}", horizontal=True, wrap=False, gap=None, horizontal_alignment="left"):
         if not _bottom_windows:
             st.caption("Нет открытых окон")
         # Глобальный поиск по CRM доступен из нижней панели.
-        with st.popover("Яша", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
+        with st.popover("Поиск по CRM", key=f"crm_workspace_global_search_{_bottom_scope}", help="Поиск по клиентам, задачам, сделкам и расчётам"):
             _global_q = str(st.session_state.get(f"crm_workspace_global_search_input_{_bottom_scope}", "") or "").strip().lower()
             if _global_q:
                 _global_results = []
@@ -9050,41 +9043,13 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                                 _crm_workspace_open_dialog(_grs["entry"], client_id=_grs["client_id"])
                                 st.rerun()
 
-            # Два независимых поля внутри раскрытия лупы: поиск по CRM и AI-помощник.
-            _search_col, _ai_col = st.columns([1.35, 1], gap="small")
-            with _search_col:
-                st.text_input(
-                    "Поиск по CRM",
-                    key=f"crm_workspace_global_search_input_{_bottom_scope}",
-                    placeholder="Поиск по CRM: имя, номер, телефон…",
-                    label_visibility="collapsed",
-                )
-            with _ai_col:
-                _ai_key = f"crm_workspace_ai_prompt_{_bottom_scope}"
-                _ai_submit_key = f"crm_workspace_ai_submitted_{_bottom_scope}"
-                def _submit_ai_prompt():
-                    _ai_value = str(st.session_state.get(_ai_key, "") or "").strip()
-                    if _ai_value:
-                        st.session_state[_ai_submit_key] = _ai_value
-
-                st.text_input(
-                    "Вопрос AI",
-                    key=_ai_key,
-                    placeholder="✨ Посоветоваться с Яшей…",
-                    label_visibility="collapsed",
-                    on_change=_submit_ai_prompt,
-                )
-            _ai_submitted = str(st.session_state.get(f"crm_workspace_ai_submitted_{_bottom_scope}", "") or "").strip()
-            if _ai_submitted:
-                with st.container(border=True):
-                    st.markdown("**✨ AI-помощник Айплинт**")
-                    st.markdown("**Твой вопрос:**")
-                    st.write(_ai_submitted)
-                    st.info("Интерфейс готов. На следующем этапе подключим Gemini API, чтобы здесь отображались реальные ответы и продолжалась история диалога.")
-                    if st.button("Новый вопрос", key=f"crm_workspace_ai_new_{_bottom_scope}"):
-                        st.session_state[f"crm_workspace_ai_submitted_{_bottom_scope}"] = ""
-                        st.session_state[f"crm_workspace_ai_prompt_{_bottom_scope}"] = ""
-                        st.rerun()
+            # Единственное поле внутри раскрытия — поиск по CRM.
+            st.text_input(
+                "Поиск по CRM",
+                key=f"crm_workspace_global_search_input_{_bottom_scope}",
+                placeholder="Поиск по CRM: имя, номер, телефон…",
+                label_visibility="collapsed",
+            )
             st.markdown(f"""
             <style>
             /* Compact global search popover: hide scrollbar and minimize vertical spacing. */
