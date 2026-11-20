@@ -8820,7 +8820,9 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
         background:transparent !important; border:0 !important;
     }
     [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) button[data-testid^="stPopoverButton"] {
-        position:relative !important; display:flex !important; align-items:center !important; justify-content:center !important;
+        /* Keep the actual button viewport-fixed too; a later generic rule must not reset it to relative positioning. */
+        position:fixed !important; left:18px !important; right:auto !important; top:auto !important; bottom:18px !important;
+        display:flex !important; align-items:center !important; justify-content:center !important;
         box-sizing:border-box !important; width:54px !important; min-width:54px !important; max-width:54px !important;
         height:54px !important; min-height:54px !important; padding:0 !important; margin:0 !important;
         border:0 !important; border-radius:50% !important; outline:0 !important; box-shadow:0 3px 12px rgba(188,22,97,0.28) !important;
