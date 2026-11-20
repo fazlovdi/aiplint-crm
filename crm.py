@@ -829,25 +829,32 @@ def _validate_backup_snapshot(snapshot_text):
             and isinstance(data["users"][0], dict)
             and data["users"][0].get("login") == "admin"):
         raise ValueError("Подозрительная пустая база (только admin, без клиентов и сделок); резервная копия не загружена")
-    # Не загружаем заведомо повреждённый текст (replacement character или частая UTF-8 mojibake).
-    text_parts = []
-    def collect_strings(value):
+    # Проверяем кодировку потоково по строкам: не создаём второй огромный список
+    # всех строк и объединённую копию всей CRM-базы в памяти.
+    markers = ("Р°", "Рµ", "Рё", "Рё", "Р°", "С‚", "СЏ", "СЋ", "СЂ", "Ð", "Ñ")
+    marker_count = 0
+    total_chars = 0
+    has_replacement_char = False
+
+    def scan_strings(value):
+        nonlocal marker_count, total_chars, has_replacement_char
         if isinstance(value, str):
-            text_parts.append(value)
+            total_chars += len(value)
+            if "\ufffd" in value:
+                has_replacement_char = True
+            marker_count += sum(value.count(marker) for marker in markers)
         elif isinstance(value, dict):
             for k, v in value.items():
-                collect_strings(k)
-                collect_strings(v)
+                scan_strings(k)
+                scan_strings(v)
         elif isinstance(value, list):
             for item in value:
-                collect_strings(item)
-    collect_strings(data)
-    all_text = " ".join(text_parts)
-    if "\ufffd" in all_text:
+                scan_strings(item)
+
+    scan_strings(data)
+    if has_replacement_char:
         raise ValueError("Найдены символы замены � — возможное повреждение кодировки")
-    markers = ("Р°", "Рµ", "Рё", "Рё", "Р°", "С‚", "СЏ", "СЋ", "СЂ", "Ð", "Ñ")
-    marker_count = sum(all_text.count(marker) for marker in markers)
-    threshold = max(25, int(max(len(all_text), 1) * 0.001))
+    threshold = max(25, int(max(total_chars, 1) * 0.001))
     if marker_count > threshold:
         raise ValueError("Обнаружены многочисленные признаки повреждения русской кодировки; резервная копия не загружена")
     return data
