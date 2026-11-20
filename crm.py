@@ -12977,7 +12977,12 @@ def deal_calculation_dialog(deal_id, calc_id):
         offer_col, invoice_col, torg_col, _spacer, close_col = st.columns([7.0, 7.0, 7.0, 5.0, 1.0])
         with offer_col:
             if st.button("Сформировать КП", key=f"{key}_make_offer", use_container_width=True, type="primary"):
+                _offer_stage = "start"
+                _offer_details = {"deal_id": deal_id, "calculation_id": calc_id}
+                _crm_log("COMMERCIAL_OFFER_STARTED", _offer_details)
                 try:
+                    _offer_stage = "save_calculation"
+                    _crm_log("COMMERCIAL_OFFER_STAGE", {**_offer_details, "stage": _offer_stage})
                     _save_current_calc_before_document()
                     if not calc.get("items"):
                         raise ValueError("Добавь хотя бы одну товарную позицию в расчёт.")
@@ -12985,14 +12990,24 @@ def deal_calculation_dialog(deal_id, calc_id):
                     calc["updated_at"] = now_str()
                     deal["budget"] = calc["total"]
                     deal["last_modified"] = now_str()
-                    save_data(st.session_state.crm_store)
+                    # _save_current_calc_before_document() уже сохраняет расчёт.
+                    # Не вызываем save_data() повторно перед генерацией PDF.
+                    _offer_stage = "generate_pdf"
+                    _crm_log("COMMERCIAL_OFFER_STAGE", {**_offer_details, "stage": _offer_stage})
                     pdf = _make_commercial_offer_pdf(deal, get_client_by_id(deal.get("client_id")) or {}, calc)
+                    _offer_details["pdf_bytes"] = len(pdf)
+                    _offer_stage = "save_document"
+                    _crm_log("COMMERCIAL_OFFER_STAGE", {**_offer_details, "stage": _offer_stage})
                     filename = f"{calc['name'].replace('Расчёт','КП',1)} от {moscow_now().strftime('%d.%m.%Y')}.pdf"
                     _save_generated_document(deal, pdf, filename, "Коммерческое предложение", calc)
+                    _offer_stage = "open_pdf"
+                    _crm_log("COMMERCIAL_OFFER_STAGE", {**_offer_details, "stage": _offer_stage})
                     _open_pdf_link(pdf, filename, f"offer_pdf_{deal_id}_{calc_id}")
                     st.session_state[f"{key}_doc_message"] = "КП сохранено в файлах сделки."
                     st.session_state["_refresh_parent_deal_files"] = True
+                    _crm_log("COMMERCIAL_OFFER_COMPLETED", _offer_details)
                 except Exception as exc:
+                    _crm_log("COMMERCIAL_OFFER_FAILED", {**_offer_details, "stage": _offer_stage}, exc=exc)
                     st.session_state[f"{key}_doc_error"] = f"Не удалось сформировать КП: {exc}"
                 _calc_refresh()
         with invoice_col:
