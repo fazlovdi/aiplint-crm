@@ -17358,7 +17358,9 @@ elif st.session_state.active_tab == "Задачи":
             io_ = is_task_overdue(task)
             # Сохраняем факт просрочки и в колонках задач, где срок тоже отображается красным.
             if io_ and mark_task_overdue_history(task):
-                save_data(st.session_state.crm_store)
+                # Не сохраняем всю CRM-базу из цикла рендеринга каждой задачи.
+                # Отложенное сохранение будет выполнено один раз после отрисовки раздела.
+                st.session_state["_tasks_overdue_history_pending_save"] = True
             fd = format_date(t["deadline_str"])
             task_key = f"tb_{sk}_{t['client_id']}_{t['task_idx']}"
             if task.get("needs_rework"): tk_bg, tk_bc = "#FFEBEE", "#D32F2F"
@@ -17670,6 +17672,10 @@ elif st.session_state.active_tab == "Задачи":
                     task_detail_dialog(_tk, _cl, _deal, _dialog_key)
                     _found = True
                     break
+
+    # Сохраняем историю просрочки одним проходом, а не отдельной записью на каждую задачу.
+    if st.session_state.pop("_tasks_overdue_history_pending_save", False):
+        save_data(st.session_state.crm_store)
 
 elif st.session_state.active_tab == "Внутренние задачи":
     internal_tasks = st.session_state.crm_store.setdefault("internal_tasks", [])
