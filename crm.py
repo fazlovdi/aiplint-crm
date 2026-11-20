@@ -16535,7 +16535,9 @@ if st.session_state.active_tab == "Клиенты":
 
     # Постраничный вывод: создаём элементы интерфейса только для текущей страницы,
     # а поиск и сортировка по-прежнему применяются ко всей базе.
-    _client_page_size = 50
+    # Меньше карточек за один rerun: каждая карточка создаёт много Streamlit-виджетов.
+    # Поиск и сортировка по-прежнему выполняются по всей базе.
+    _client_page_size = 10
     _client_page_signature = f"{sq}|{ctf}|{sort_mode}|{len(fcl)}"
     if st.session_state.get("_client_page_signature") != _client_page_signature:
         st.session_state["_client_page_signature"] = _client_page_signature
