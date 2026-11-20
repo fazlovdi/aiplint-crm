@@ -2470,14 +2470,11 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     return window
 
 def _crm_mark_widget_changed(widget_key, changed):
-    """Подсвечивает только реально изменённое поле и снимает старую подсветку после сброса."""
+    """Оставляет стандартную нейтральную рамку; изменённые поля не подсвечиваем оранжевым."""
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "-", str(widget_key))
-    if changed:
-        border_css = "border:2px solid #F59E0B!important;box-shadow:0 0 0 1px rgba(245,158,11,.12)!important;"
-    else:
-        # This rule is deliberately emitted on every rerun: otherwise CSS from an
-        # earlier changed state remains active even after the widget is reset.
-        border_css = "border:1px solid #DCE0E5!important;box-shadow:none!important;"
+    # Сохраняем вызовы этой функции для совместимости с существующими формами,
+    # но не добавляем цветовую индикацию несохранённых изменений.
+    border_css = "border:1px solid #DCE0E5!important;box-shadow:none!important;"
     st.markdown(
         f"<style>.st-key-{safe_key} input, .st-key-{safe_key} textarea, "
         f".st-key-{safe_key} [data-testid='stTextInput'] > div, "
@@ -3471,8 +3468,10 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
                                if str(x.get("id", "")) == deal_id), None)
             if found_deal:
                 found_deal["last_modified"] = now
-        # Persist a copy to avoid replacing live references used by the open workspace.
-        if not save_data(copy.deepcopy(store)):
+        # Save the live session store directly. save_data updates crm_store and its
+        # base snapshot only when passed that exact object; passing a deepcopy left
+        # the session on stale data and caused repeat edits to behave inconsistently.
+        if not save_data(store):
             st.error("Не удалось сохранить изменения. Попробуй ещё раз.")
             return False
 
