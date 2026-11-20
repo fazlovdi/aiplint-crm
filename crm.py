@@ -8799,8 +8799,19 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] { flex:0 0 27px !important; flex-shrink:0 !important; width:27px !important; min-width:27px !important; max-width:27px !important; display:flex !important; visibility:visible !important; opacity:1 !important; overflow:visible !important; }
     [class*="st-key-crm_workspace_bottom_"] [class*="st-key-crm_workspace_window_item_"] [class*="st-key-crm_workspace_taskbar_close_"] button { display:flex !important; box-sizing:border-box !important; width:27px !important; min-width:27px !important; max-width:27px !important; height:42px !important; min-height:42px !important; padding:0 !important; margin:0 !important; align-items:center !important; justify-content:center !important; color:#BC1661 !important; font-size:18px !important; line-height:1 !important; border:0 !important; outline:0 !important; box-shadow:none !important; border-radius:0 !important; background:transparent !important; }
         /* Compact CRM search launcher fixed in the bottom-left corner. */
-    /* The workspace renders a second launcher inside the overlay. Hide that copy: its transformed/overlay ancestors can shift position:fixed. Keep the main-level launcher as the single global search button. */
-    [class*="st-key-crm_workspace_global_search_workspace"] { display:none !important; }
+    /* Pin both search launcher instances to the viewport. Deals renders inside the workspace overlay, so fixing only the outer wrapper can inherit shifted layout from Streamlit containers. */
+    [class*="st-key-crm_workspace_global_search_main"],
+    [class*="st-key-crm_workspace_global_search_workspace"] {
+        position:fixed !important; inset: auto auto 18px 18px !important;
+        transform:none !important; translate:none !important;
+        margin:0 !important; padding:0 !important;
+    }
+    [class*="st-key-crm_workspace_global_search_main"] button[data-testid^="stPopoverButton"],
+    [class*="st-key-crm_workspace_global_search_workspace"] button[data-testid^="stPopoverButton"] {
+        position:fixed !important; left:18px !important; right:auto !important;
+        top:auto !important; bottom:18px !important;
+        transform:none !important; translate:none !important;
+    }
     [class*="st-key-crm_workspace_global_search_"]:not([class*="global_search_input_"]):not([class*="global_search_results_"]):not([class*="global_search_result_"]) {
         position:fixed !important; left:18px !important; bottom:18px !important; z-index:999999 !important;
         display:flex !important; align-items:center !important; justify-content:center !important;
