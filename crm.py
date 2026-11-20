@@ -2462,56 +2462,6 @@ def _crm_workspace_open_dialog(entry, client_id=None, from_host=False):
     _crm_workspace_queue_save()
     return window
 
-# Workspace state is stored separately from the CRM database, per login.
-def _crm_workspace_remote_path(login):
-    safe = hashlib.sha256(str(login or "anonymous").encode("utf-8")).hexdigest()[:24]
-    return f"disk:/CRM_NE_TROGAT/workspaces/workspace_{safe}.json"
-
-def _crm_workspace_load_remote(login):
-    # Keep sign-in responsive if Yandex Disk is slow/unavailable.
-    try:
-        path = _crm_workspace_remote_path(login)
-        r = requests.get(f"{YANDEX_API_URL}/download", params={"path": path}, headers=yandex_headers(), timeout=2)
-        if r.status_code != 200: return None
-        href = r.json().get("href")
-        if not href: return None
-        data = requests.get(href, timeout=2)
-        if data.status_code != 200: return None
-        obj = data.json()
-        return obj if isinstance(obj, dict) and obj.get("version") == 1 else None
-    except Exception:
-        return None
-
-def _crm_workspace_save_remote(login, workspace):
-    """Persist the latest workspace remotely so a container restart cannot revive stale tabs."""
-    if not YANDEX_TOKEN or not login or not isinstance(workspace, dict):
-        return False
-    try:
-        path = _crm_workspace_remote_path(login)
-        payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":")).encode("utf-8")
-        response = requests.get(
-            f"{YANDEX_API_URL}/upload",
-            params={"path": path, "overwrite": "true"},
-            headers=yandex_headers(), timeout=8,
-        )
-        if response.status_code not in (200, 201):
-            return False
-        href = response.json().get("href")
-        if not href:
-            return False
-        uploaded = requests.put(
-            href, data=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10,
-        )
-        return uploaded.status_code in (200, 201, 202)
-    except Exception as exc:
-        _crm_log("WORKSPACE_REMOTE_SAVE_ERROR", {"stage": "Yandex workspace save"}, exc=exc)
-        return False
-
-# Workspace snapshots are uploaded off the UI thread; SQLite remains the immediate local save.
-_CRM_WORKSPACE_REMOTE_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="crm-workspace-sync")
-
 def _crm_mark_widget_changed(widget_key, changed):
     """Подсвечивает только реально изменённое поле и снимает старую подсветку после сброса."""
     safe_key = re.sub(r"[^a-zA-Z0-9_-]", "-", str(widget_key))
@@ -2900,303 +2850,58 @@ def _crm_workspace_activate_tab(window_id, tab_index):
     _crm_workspace_clear_legacy_dialog_markers()
 
 
-def _crm_workspace_save_to_sqlite(login, workspace):
-    """Сохраняет только персональное рабочее пространство, не переписывая всю CRM-базу."""
-    conn = None
-    try:
-        _ensure_sqlite_store()
-        conn = _sqlite_connect()
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS crm_workspaces (login TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL)"
-        )
-        payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":"))
-        conn.execute(
-            "INSERT INTO crm_workspaces (login, data, updated_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(login) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
-            (str(login), payload, now_str()),
-        )
-        conn.commit()
-        return True
-    except Exception as exc:
-        _crm_log("WORKSPACE_SAVE_ERROR", {"stage": "SQLite workspace-only save"}, exc=exc)
-        return False
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-
-def _crm_workspace_load_from_sqlite(login):
-    """Читает компактную запись рабочего пространства без загрузки снимка всей CRM."""
-    conn = None
-    try:
-        if not os.path.isfile(SQLITE_FILE):
-            return None
-        conn = _sqlite_connect()
-        table = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='crm_workspaces'"
-        ).fetchone()
-        if not table:
-            return None
-        row = conn.execute("SELECT data FROM crm_workspaces WHERE login = ?", (str(login),)).fetchone()
-        if not row or not row[0]:
-            return None
-        value = json.loads(row[0])
-        return value if isinstance(value, dict) and value.get("version") == 1 else None
-    except Exception as exc:
-        _crm_log("WORKSPACE_LOAD_ERROR", {"stage": "SQLite workspace-only load"}, exc=exc)
-        return None
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-
 def _crm_workspace_queue_save():
-    """Сохраняет только состояние окон в отдельной SQLite-таблице."""
-    try:
-        login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-        if not login:
-            return
-
-        def _workspace_safe_value(value):
-            # Окна могут содержать вложенные объекты пользователей. Не переносим
-            # в историю авторизационные данные, даже если они оказались в аргументах диалога.
-            sensitive_keys = {
-                "auth_sessions", "remember_tokens", "remember_token", "session_token",
-                "session_tokens", "auth_token", "pin", "password", "password_hash",
-                "login_pin", "secret", "token",
-            }
-            if isinstance(value, dict):
-                return {
-                    k: _workspace_safe_value(v)
-                    for k, v in value.items()
-                    if str(k).lower() not in sensitive_keys
-                }
-            if isinstance(value, (list, tuple)):
-                return [_workspace_safe_value(v) for v in value]
-            return value
-
-        # Dialog args often hold entire client/deal/task dictionaries with file
-        # histories, comments, calculations and nested tasks. Persist only stable
-        # entity IDs for those arguments: _crm_workspace_init() rehydrates them
-        # from the current CRM store on restore. This keeps each workspace save
-        # small and avoids repeatedly serializing large duplicate entity trees.
-        _workspace_store = st.session_state.get("crm_store", {})
-        _workspace_entity_ids = set()
-        if isinstance(_workspace_store, dict):
-            for _collection in ("clients", "deals", "users", "internal_tasks"):
-                for _entity in _workspace_store.get(_collection, []) or []:
-                    if isinstance(_entity, dict) and _entity.get("id") is not None:
-                        _workspace_entity_ids.add(str(_entity.get("id")))
-            for _collection in ("clients", "deals"):
-                for _parent in _workspace_store.get(_collection, []) or []:
-                    if not isinstance(_parent, dict):
-                        continue
-                    for _task in _parent.get("tasks", []) or []:
-                        if isinstance(_task, dict) and _task.get("id") is not None:
-                            _workspace_entity_ids.add(str(_task.get("id")))
-
-        def _workspace_compact_value(value):
-            if isinstance(value, dict):
-                _entity_id = value.get("id")
-                if _entity_id is not None and str(_entity_id) in _workspace_entity_ids:
-                    return {"id": _entity_id}
-                return {k: _workspace_compact_value(v) for k, v in value.items()}
-            if isinstance(value, (list, tuple)):
-                return [_workspace_compact_value(v) for v in value]
-            return value
-
-        windows = st.session_state.get("_crm_windows", [])
-        safe_windows = []
-        for w in windows:
-            safe_tabs = []
-            for tab in w.get("tabs", []):
-                safe_tabs.append({
-                    k: _workspace_compact_value(_workspace_safe_value(tab.get(k)))
-                    for k in ("name", "title", "width", "args", "kwargs", "signature")
-                })
-            safe_windows.append({
-                "id": w.get("id"),
-                "client_id": w.get("client_id"),
-                "title": w.get("title"),
-                "tabs": safe_tabs,
-                "active_tab": w.get("active_tab", 0),
-                "minimized": bool(w.get("minimized")),
-            })
-
-        # Сначала сравниваем только содержимое рабочего пространства. Время
-        # обновления не должно участвовать в сравнении: иначе каждый вызов
-        # получал новый payload и повторно записывал всю базу даже без изменений.
-        workspace_state = {
-            "version": 1,
-            "windows": safe_windows,
-            "active_window_id": st.session_state.get("_crm_active_window_id"),
-            "main_active_tab": st.session_state.get("active_tab", "Клиенты"),
-        }
-        state_payload = json.dumps(
-            workspace_state, ensure_ascii=False, default=str, separators=(",", ":")
-        )
-
-        # Не запускаем повторную транзакцию и не ставим повторные фоновые
-        # копирования, если состав/активность окон фактически не изменились.
-        if st.session_state.get("_crm_last_queued_workspace_state") == state_payload:
-            return
-
-        workspace = {**workspace_state, "updated_at": now_str()}
-        payload = json.dumps(workspace, ensure_ascii=False, default=str, separators=(",", ":"))
-
-        if not isinstance(st.session_state.get("crm_store"), dict):
-            return
-        st.session_state["_crm_workspace_active_tab_dirty"] = False
-
-        # Окна храним отдельно: навигация не должна сериализовать всю CRM-базу,
-        # увеличивать её revision или запускать резервное копирование всего снимка.
-        if not _crm_workspace_save_to_sqlite(login, workspace):
-            return
-        st.session_state["_crm_last_queued_workspace_state"] = state_payload
-        st.session_state["_crm_last_queued_workspace_payload"] = payload
-        # SQLite is saved immediately; Yandex Disk sync must never block opening,
-        # closing, or switching workspace tabs.
-        _CRM_WORKSPACE_REMOTE_EXECUTOR.submit(_crm_workspace_save_remote, login, workspace)
-    except Exception as exc:
-        _crm_log("WORKSPACE_SAVE_ERROR", {"stage": "SQLite workspace save"}, exc=exc)
+    """Window state is session-only; never persist open tabs to SQLite or cloud."""
+    return
 
 
 def _crm_workspace_init():
+    """Start with an empty window workspace and remove legacy persisted window state."""
     if st.session_state.get("_crm_workspace_initialized"):
         return
     st.session_state["_crm_workspace_initialized"] = True
-    login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
-    if not login:
-        return
 
-    store = st.session_state.get("crm_store", {})
-    if not isinstance(store, dict):
-        return
-
-    # Сначала читаем локальную запись, затем сверяем её с постоянной копией
-    # на Яндекс Диске. SQLite в Streamlit Cloud может пережить часть перезапусков,
-    # поэтому приоритет определяется временем обновления, а не только наличием строки.
-    local_saved = _crm_workspace_load_from_sqlite(login)
-    remote_saved = _crm_workspace_load_remote(login)
-    saved = local_saved if isinstance(local_saved, dict) else None
-    if isinstance(remote_saved, dict):
-        local_stamp = str((saved or {}).get("updated_at") or "")
-        remote_stamp = str(remote_saved.get("updated_at") or "")
-        if saved is None or remote_stamp > local_stamp:
-            saved = remote_saved
-
-    # Совместимость со старыми версиями: переносим данные из прежнего хранилища.
-    if not isinstance(saved, dict):
-        workspaces = store.get("_workspaces", {})
-        saved = workspaces.get(login) if isinstance(workspaces, dict) else None
-    if isinstance(saved, dict):
-        _crm_workspace_save_to_sqlite(login, saved)
-
-    if not isinstance(saved, dict):
-        return
-
-    clients = {str(c.get("id")) for c in store.get("clients", [])}
-    deals = {str(d.get("id")) for d in store.get("deals", [])}
-    restored = []
-    for w in saved.get("windows", [])[:20]:
-        cid = str(w.get("client_id")) if w.get("client_id") is not None else None
-        if cid and cid not in clients:
-            continue
-        tabs = []
-        for t in w.get("tabs", [])[:30]:
-            # Восстановление вызывается до выполнения всех определений диалогов
-            # ниже по файлу. Поэтому на этом этапе реестр ещё неполный; проверять
-            # наличие функции здесь нельзя — поздние диалоги будут зарегистрированы
-            # к моменту их фактического отображения в конце скрипта.
-            if not t.get("name"):
-                continue
-            args = t.get("args", [])
-            if not isinstance(args, (list, tuple)):
-                args = []
-
-            # Повторно привязываем сохранённые сущности к актуальным объектам crm_store.
-            def _rehydrate_workspace_arg(value):
-                if isinstance(value, dict):
-                    obj_id = value.get("id")
-                    if obj_id is not None:
-                        for _collection in ("clients", "deals", "users", "internal_tasks"):
-                            _match = next((x for x in store.get(_collection, []) if str(x.get("id")) == str(obj_id)), None)
-                            if _match is not None:
-                                return _match
-                        for _client in store.get("clients", []):
-                            for _task in _client.get("tasks", []) if isinstance(_client.get("tasks"), list) else []:
-                                if str(_task.get("id")) == str(obj_id):
-                                    return _task
-                        for _deal in store.get("deals", []):
-                            for _task in _deal.get("tasks", []) if isinstance(_deal.get("tasks"), list) else []:
-                                if str(_task.get("id")) == str(obj_id):
-                                    return _task
-                    return {k: _rehydrate_workspace_arg(v) for k, v in value.items()}
-                if isinstance(value, list):
-                    return [_rehydrate_workspace_arg(v) for v in value]
-                if isinstance(value, tuple):
-                    return tuple(_rehydrate_workspace_arg(v) for v in value)
-                return value
-
-            args = [_rehydrate_workspace_arg(a) for a in args]
-            if t.get("name") in (
-                "client_detail_dialog", "client_deals_dialog", "create_deal_dialog",
-                "client_tasks_dialog", "client_create_task_dialog", "client_create_deal_task_dialog"
-            ) and args and str(args[0]) not in clients:
-                continue
-            if t.get("name") in (
-                "deal_calculation_dialog", "invoice_document_dialog", "deal_report_dialog", "close_deal_dialog"
-            ) and args and str(args[0]) not in deals:
-                continue
-
-            restored_kwargs = _rehydrate_workspace_arg(t.get("kwargs", {}))
-            restored_signature = (
-                _crm_dialog_signature_value(tuple(args)),
-                _crm_dialog_signature_value(restored_kwargs),
-            )
-            tabs.append({
-                "name": t["name"],
-                "title": t.get("title", "CRM"),
-                "width": t.get("width", "large"),
-                "args": tuple(args),
-                "kwargs": restored_kwargs,
-                "signature": restored_signature,
-            })
-
-        if tabs:
-            active_tab = max(0, min(int(w.get("active_tab", 0) or 0), len(tabs) - 1))
-            restored.append({
-                "id": w.get("id") or ("cw_restored_" + uuid.uuid4().hex[:8]),
-                "client_id": cid,
-                "title": w.get("title") or (_crm_workspace_client_name(cid) if cid else "CRM"),
-                "tabs": tabs,
-                "active_tab": active_tab,
-                # После входа все восстановленные окна должны быть свёрнуты.
-                # Это меняет только начальное отображение, но не сохранённые вкладки.
-                "minimized": True,
-                # Значок показывает, открывали ли окно в текущей сессии, а не его свёрнутое состояние.
-                "session_opened": False,
-            })
-
-    st.session_state["_crm_windows"] = restored
-    main_tab = saved.get("main_active_tab")
-    if main_tab in ("Клиенты", "Сделки", "Задачи", "Внутренние задачи", "Поставщики", "Товары и прайс"):
-        st.session_state["active_tab"] = main_tab
-
-    # Не назначаем активное раскрытое окно при входе.
-    # Все окна доступны в панели свёрнутых окон и открываются по выбору пользователя.
+    # Keep the current in-session window UI, but never restore windows across logins/restarts.
+    st.session_state["_crm_windows"] = []
     st.session_state["_crm_active_window_id"] = None
     st.session_state.pop("_crm_active_dialog", None)
-
-    # Не переносим старый dedupe-маркер из предыдущего входа пользователя.
     st.session_state.pop("_crm_last_queued_workspace_payload", None)
     st.session_state.pop("_crm_last_queued_workspace_state", None)
+    st.session_state.pop("_crm_pending_child_open", None)
+    st.session_state.pop("_crm_workspace_switch_target_key", None)
+
+    # Remove the old standalone SQLite table so saved windows cannot be revived.
+    try:
+        if os.path.isfile(SQLITE_FILE):
+            with _sqlite_connect() as _workspace_conn:
+                _workspace_conn.execute("DROP TABLE IF EXISTS crm_workspaces")
+    except Exception as _workspace_cleanup_exc:
+        _crm_log("WORKSPACE_CLEANUP_ERROR", {"stage": "drop legacy SQLite workspace table"}, exc=_workspace_cleanup_exc)
+
+    # Older versions also embedded workspaces inside the main CRM snapshot.
+    _store = st.session_state.get("crm_store")
+    if isinstance(_store, dict) and "_workspaces" in _store:
+        _store.pop("_workspaces", None)
+        try:
+            save_data(_store)
+        except Exception as _workspace_cleanup_exc:
+            _crm_log("WORKSPACE_CLEANUP_ERROR", {"stage": "remove embedded workspace state"}, exc=_workspace_cleanup_exc)
+
+    # Remove this user's old Yandex Disk snapshot. Other users' old snapshots are
+    # ignored immediately and are removed when each user next logs in.
+    _login = str(st.session_state.get("user_login") or st.session_state.get("user_name") or "")
+    if _login and YANDEX_TOKEN:
+        try:
+            _safe_login_hash = hashlib.sha256(_login.encode("utf-8")).hexdigest()[:24]
+            _old_workspace_path = f"disk:/CRM_NE_TROGAT/workspaces/workspace_{_safe_login_hash}.json"
+            requests.delete(
+                f"{YANDEX_API_URL}/resources",
+                params={"path": _old_workspace_path},
+                headers=yandex_headers(),
+                timeout=3,
+            )
+        except Exception as _workspace_cleanup_exc:
+            _crm_log("WORKSPACE_CLEANUP_ERROR", {"stage": "remove legacy Yandex workspace snapshot"}, exc=_workspace_cleanup_exc)
 
 
 def _crm_finish_pending_child_open():
