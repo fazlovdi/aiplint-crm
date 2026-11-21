@@ -15020,16 +15020,9 @@ def deal_create_task_dialog(deal_id, client_id):
     _created_task = render_task_form(deal_id, client_id, f"cdt_{deal_id}")
     if _created_task:
         save_data(st.session_state.crm_store)
-        if _created_task.get("type") == "Отправить заказ" and _created_task.get("calculation_id"):
-            try:
-                with st.status("Идёт процесс формирования товарной накладной", state="running", expanded=False) as _torg_status:
-                    _attach_auto_torg12_to_task(_created_task, deal_id, client_id)
-                    _torg_status.update(label="Товарная накладная сформирована", state="complete", expanded=False)
-                st.toast("Задача создана, ТОРГ-12 сформирована и прикреплена к сделке и задаче", icon="✅")
-            except Exception as _auto_torg_error:
-                st.warning(f"Задача создана, но автоматически сформировать ТОРГ-12 не удалось: {_auto_torg_error}")
-        else:
-            st.toast("Задача создана", icon="✅")
+        # ТОРГ-12 не формируем автоматически при создании задачи на отправку.
+        # Накладная должна создаваться отдельно по явному действию пользователя.
+        st.toast("Задача создана", icon="✅")
         st.session_state.pop("dialog_create_deal_task_deal_id", None)
         st.session_state.pop("dialog_create_deal_task_client_id", None)
         st.session_state.pop(f"nt_form_initialized_cdt_{deal_id}", None)
