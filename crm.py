@@ -1165,10 +1165,21 @@ _CRM_LOG_LOCAL_DIR.mkdir(parents=True, exist_ok=True)
 def _crm_log(event, details=None, exc=None, remote=True):
     """Записывает безопасное событие локально и, для важных событий, в журнал на Яндекс Диске."""
     try:
+        # Фоновые потоки не имеют ScriptRunContext и не должны обращаться
+        # к st.session_state: это вызывает missing ScriptRunContext и может
+        # создавать побочные ошибки во время синхронизации резервных копий.
+        _thread_name = threading.current_thread().name
+        if _thread_name.startswith(("crm-yandex-sync", "crm-json-mirror", "crm-log-sync")):
+            _log_user = "system"
+        else:
+            try:
+                _log_user = st.session_state.get("user_login", "system") or "system"
+            except Exception:
+                _log_user = "system"
         record = {
             "time_moscow": now_str(),
             "event": str(event)[:100],
-            "user": str(st.session_state.get("user_login", "system") or "system")[:80],
+            "user": str(_log_user)[:80],
         }
         if isinstance(details, dict):
             # Не сохраняем значения ключей, которые могут содержать секреты/персональные данные.
