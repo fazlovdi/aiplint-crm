@@ -17373,19 +17373,8 @@ elif st.session_state.active_tab == "Задачи":
                     # is activated instead of being sent to the legacy dialog dispatcher.
                     _task_deal_obj = next((d for d in st.session_state.crm_store.get("deals", [])
                                            if str(d.get("id", "")) == str(task.get("deal_id", ""))), None)
-                    if _task_deal_obj is not None:
-                        _deal_entry = {
-                            "name": "deal_detail_dialog",
-                            "title": f"Сделка {_task_deal_obj.get('deal_number', _task_deal_obj.get('title', ''))}",
-                            "width": "large",
-                            "args": (_task_deal_obj, cl, st.session_state.get("user_name", ""), f"task_parent_{_task_deal_obj.get('id')}"),
-                            "kwargs": {},
-                        }
-                        _deal_entry["signature"] = (
-                            _crm_dialog_signature_value(_deal_entry["args"]),
-                            _crm_dialog_signature_value(_deal_entry["kwargs"]),
-                        )
-                        _task_window = _crm_workspace_open_dialog(_deal_entry, client_id=cl.get("id"))
+                    # Связанная сделка автоматически добавляется при открытии задачи ниже;
+                    # отдельное открытие приводило к двойному обновлению workspace.
                     _task_entry = {
                         "name": "task_detail_dialog",
                         "title": f"Задача №{task.get('task_number', '')}",
