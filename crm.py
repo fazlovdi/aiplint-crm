@@ -3492,8 +3492,8 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
         task["shipping_status"] = status_value
         task["estimated_ship_date"] = date_iso
         task["last_modified"] = now
-        st.session_state[status_key] = status_value
-        st.session_state[date_key] = date_value
+        # Значения виджетов уже находятся в session_state. Повторное присваивание
+        # после создания selectbox/date_input вызывает StreamlitWidgetAlreadyInstantiatedError.
         st.session_state.pop(f"_crm_widget_changed_{status_key}", None)
         st.session_state.pop(f"_crm_widget_changed_{date_key}", None)
         st.toast("Статус и дата отправки применены", icon="✅")
