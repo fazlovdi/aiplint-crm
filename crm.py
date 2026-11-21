@@ -878,9 +878,9 @@ def _prepare_backup_snapshot(snapshot_text):
     """Проверяет JSON и готовит безопасный снимок для записи на Яндекс Диск."""
     data = _validate_backup_snapshot(snapshot_text)
     safe_data = _sanitize_backup_data(data)
-    safe_text = json.dumps(safe_data, ensure_ascii=False, separators=(",", ":"))
-    _validate_backup_snapshot(safe_text)
-    return safe_text
+    # Санитизация только удаляет секретные поля; структура и пользовательские строки
+    # не меняются. Повторный полный обход JSON после deepcopy/dump был избыточным.
+    return json.dumps(safe_data, ensure_ascii=False, separators=(",", ":"))
 
 def _backup_freshness_key(snapshot_text):
     """Сравнительный ключ свежести снимка: максимальная дата изменения и объём данных."""
@@ -5177,6 +5177,8 @@ def _ensure_sqlite_store():
                 conn.execute("ALTER TABLE crm_change_events ADD COLUMN change_details TEXT NOT NULL DEFAULT '{}'")
             row = conn.execute("SELECT data FROM crm_state WHERE id = 1").fetchone()
             if row is None or not isinstance(row[0], str) or not row[0].strip():
+                _sqlite_init_reason = "missing_row" if row is None else "empty_data"
+                _sqlite_init_source = "local_json"
                 # Восстанавливаем не только отсутствующую строку, но и пустую запись SQLite.
                 # Сначала проверяем локальное JSON-зеркало; если его нет,
                 # используем валидную облачную резервную копию. Рабочая запись
@@ -5190,6 +5192,8 @@ def _ensure_sqlite_store():
                 else:
                     # Облако используем только когда локальной рабочей записи нет.
                     cloud_data = _load_valid_yandex_backup_for_initialization()
+                    if cloud_data is not None:
+                        _sqlite_init_source = "yandex_backup"
                     if cloud_data is None:
                         raise RuntimeError(
                             "Локальная база отсутствует или пуста, а проверенную резервную "
@@ -5212,6 +5216,17 @@ def _ensure_sqlite_store():
                     f.flush()
                     os.fsync(f.fileno())
                 os.replace(tmp_name, FILE_NAME)
+                _crm_log("DATABASE_SQLITE_INITIALIZED", {
+                    "reason": _sqlite_init_reason,
+                    "source": _sqlite_init_source,
+                    "revision": 1,
+                    "clients": len(initial_data.get("clients", [])),
+                    "deals": len(initial_data.get("deals", [])),
+                    "sqlite_path": os.path.abspath(SQLITE_FILE),
+                    "cwd": os.getcwd(),
+                    "pid": os.getpid(),
+                    "instance": os.environ.get("HOSTNAME", "unknown"),
+                })
         finally:
             conn.close()
 
@@ -5676,6 +5691,8 @@ def _merge_data(local_data, disk_data):
 def save_data(data):
     """Транзакционно сохраняет изменения, сливая их с актуальной ревизией без воскрешения удалений."""
     _save_timing_started = time.perf_counter()
+    _save_stage_ms = {}
+    _save_stage_started = _save_timing_started
     _save_succeeded = False
     with _save_lock:
         conn = None
@@ -5686,9 +5703,29 @@ def save_data(data):
             row = conn.execute("SELECT data, revision FROM crm_state WHERE id = 1").fetchone()
             latest_data = json.loads(row[0]) if row and row[0] else {}
             revision = int(row[1]) if row else 0
+            _save_stage_ms["sqlite_read_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
+            _save_stage_started = time.perf_counter()
             base_data = st.session_state.get("crm_base_snapshot")
             base_revision = int(st.session_state.get("crm_base_revision", 0) or 0)
             conflicts = []
+
+            # Ревизия не может штатно уменьшаться в пределах одной SQLite-базы.
+            # Если сессия помнит более новую ревизию, запрещаем запись её полного снимка:
+            # это могло бы затереть данные после переинициализации/смены экземпляра.
+            if base_data is not None and base_revision > revision:
+                _crm_log("DATABASE_REVISION_ROLLBACK_DETECTED", {
+                    "session_revision": base_revision,
+                    "sqlite_revision": revision,
+                    "sqlite_path": os.path.abspath(SQLITE_FILE),
+                    "cwd": os.getcwd(),
+                    "pid": os.getpid(),
+                    "instance": os.environ.get("HOSTNAME", "unknown"),
+                })
+                raise RuntimeError(
+                    f"Обнаружен откат ревизии базы (сессия {base_revision}, SQLite {revision}). "
+                    "Сохранение остановлено, чтобы не перезаписать актуальные данные. "
+                    "Обновите страницу и повторите действие."
+                )
 
             if base_data is None:
                 # Неизвестная база сравнения: не перезаписываем общую базу устаревшей сессией.
@@ -5745,6 +5782,9 @@ def save_data(data):
                 merged_data, conflicts = _three_way_merge(base_data, data, latest_data, conflicts=conflicts)
             else:
                 merged_data = copy.deepcopy(data)
+
+            _save_stage_ms["merge_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
+            _save_stage_started = time.perf_counter()
 
             # Не теряем историю клиента при трёхстороннем слиянии параллельных сессий.
             # Сохраняем объединение записей из последней БД, отправленной сессии и результата merge.
@@ -6012,6 +6052,8 @@ def save_data(data):
             except Exception as _history_exc:
                 _crm_log("TASK_OVERDUE_HISTORY_MERGE_ERROR", {}, exc=_history_exc, remote=False)
 
+            _save_stage_ms["merge_audit_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
+            _save_stage_started = time.perf_counter()
             snapshot = json.dumps(merged_data, ensure_ascii=False, separators=(",", ":"))
             new_revision = revision + 1
 
@@ -6342,6 +6384,8 @@ def save_data(data):
             except Exception as _event_exc:
                 _crm_log("DATABASE_CHANGE_EVENT_ERROR", {"revision": new_revision}, exc=_event_exc, remote=False)
 
+            _save_stage_ms["change_event_build_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
+            _save_stage_started = time.perf_counter()
             conn.execute(
                 "INSERT INTO crm_state (id, data, revision, updated_at) VALUES (1, ?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET data=excluded.data, revision=excluded.revision, updated_at=excluded.updated_at",
@@ -6349,6 +6393,8 @@ def save_data(data):
             conn.execute("COMMIT")
             conn.close()
             conn = None
+            _save_stage_ms["sqlite_commit_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
+            _save_stage_started = time.perf_counter()
             _save_succeeded = True
 
             # Диагностика общей базы: по логам можно сравнить ревизии и
@@ -6377,10 +6423,13 @@ def save_data(data):
                 pass
 
             _queue_yandex_snapshot(snapshot)
+            _save_stage_ms["backup_queue_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
+            _save_stage_started = time.perf_counter()
 
             # JSON — только переносимое зеркало; запись большого файла и fsync
             # выполняются в фоне. SQLite уже содержит подтверждённую транзакцию.
             _queue_json_mirror(snapshot)
+            _save_stage_ms["json_queue_ms"] = round((time.perf_counter() - _save_stage_started) * 1000, 1)
 
             if conflicts:
                 try:
@@ -6401,6 +6450,7 @@ def save_data(data):
                 pass
     _crm_log("DATABASE_SAVE_TIMING", {
         "duration_ms": round((time.perf_counter() - _save_timing_started) * 1000, 1),
+        "stages_ms": _save_stage_ms,
         "success": _save_succeeded,
         "clients": len(data.get("clients", [])) if isinstance(data, dict) else 0,
         "deals": len(data.get("deals", [])) if isinstance(data, dict) else 0,
