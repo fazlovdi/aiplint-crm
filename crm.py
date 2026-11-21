@@ -12602,9 +12602,13 @@ def deal_calculation_dialog(deal_id, calc_id):
     if snapshot_key not in st.session_state:
         st.session_state[snapshot_key] = copy.deepcopy(calc)
     if name_key not in st.session_state:
-        st.session_state[name_key] = calc.get("name") or _calculation_display_name(deal, calc)
-    if re.match(r"^Расчёт\s+\d+$", str(st.session_state.get(name_key, "")), re.I):
-        st.session_state[name_key] = _calculation_display_name(deal, calc)
+        _initial_calc_name = str(calc.get("name") or "").strip()
+        # Нормализуем только старое автосгенерированное имя при первом открытии.
+        # Не перезаписываем значение виджета на каждом rerun: при формировании КП
+        # это могло затирать введённое пользователем название расчёта.
+        if not _initial_calc_name or re.match(r"^Расчёт\s+\d+$", _initial_calc_name, re.I):
+            _initial_calc_name = _calculation_display_name(deal, calc)
+        st.session_state[name_key] = _initial_calc_name
 
     def _save_current_calc_before_document():
         """Считывает актуальные значения виджетов и сохраняет расчёт перед созданием документа."""
