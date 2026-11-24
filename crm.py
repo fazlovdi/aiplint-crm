@@ -8283,7 +8283,8 @@ def _crm_ensure_statistics_window():
 
 
 def _crm_open_statistics_window():
-    """Open or restore the permanent Statistics window."""
+    """Open or restore the Statistics window after an explicit user click."""
+    st.session_state["_crm_statistics_open_requested"] = True
     window = _crm_ensure_statistics_window()
     window["minimized"] = False
     st.session_state["_crm_active_window_id"] = window.get("id")
@@ -8711,9 +8712,15 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
     )
     if next_window is None:
         next_window = next((item for item in reversed(remaining) if not item.get("minimized")), None)
+    # Не разворачиваем статистику автоматически при закрытии последнего рабочего окна.
     if next_window is None and remaining:
-        next_window = remaining[-1]
-        next_window["minimized"] = False
+        next_window = next(
+            (item for item in reversed(remaining)
+             if not any(t.get("name") == "statistics_dialog" for t in item.get("tabs", []))),
+            None,
+        )
+        if next_window is not None:
+            next_window["minimized"] = False
 
     if next_window:
         st.session_state["_crm_active_window_id"] = next_window.get("id")
@@ -9502,6 +9509,23 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 # Восстанавливаем персональное рабочее пространство до первого рендеринга
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
 _crm_workspace_init()
+
+# Убираем статистику, автоматически добавленную старой версией CRM в текущей сессии.
+# Сохраняем окно только если пользователь открывал его кнопкой в новой логике.
+if not st.session_state.get("_crm_statistics_open_requested"):
+    _legacy_stats_window = next(
+        (w for w in st.session_state.get("_crm_windows", [])
+         if any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))),
+        None,
+    )
+    if _legacy_stats_window is not None:
+        st.session_state["_crm_windows"] = [
+            w for w in st.session_state.get("_crm_windows", [])
+            if str(w.get("id")) != str(_legacy_stats_window.get("id"))
+        ]
+        if str(st.session_state.get("_crm_active_window_id")) == str(_legacy_stats_window.get("id")):
+            st.session_state["_crm_active_window_id"] = None
+            st.session_state.pop("_crm_active_dialog", None)
 
 # Окно статистики создаётся только по явному нажатию кнопки «Статистика».
 
@@ -18026,10 +18050,13 @@ def _crm_workspace_close_tab_callback(window_id, tab_index, force=False):
         tabs.pop(int(tab_index))
         if not tabs:
             st.session_state["_crm_windows"] = [w for w in windows if str(w.get("id")) != str(window_id)]
-            next_window = next((w for w in reversed(st.session_state["_crm_windows"]) if not w.get("minimized")), None)
-            if next_window is None and st.session_state["_crm_windows"]:
-                next_window = st.session_state["_crm_windows"][-1]
-                next_window["minimized"] = False
+            next_window = next(
+                (w for w in reversed(st.session_state["_crm_windows"])
+                 if not w.get("minimized")
+                 and not any(t.get("name") == "statistics_dialog" for t in w.get("tabs", []))),
+                None,
+            )
+            # Статистика не должна открываться сама после закрытия последней клиентской вкладки.
             if next_window:
                 st.session_state["_crm_active_window_id"] = next_window.get("id")
                 next_tabs = next_window.get("tabs", [])
