@@ -8654,11 +8654,14 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
         st.session_state["show_notifications_dialog"] = False
 
     if is_statistics:
-        window["minimized"] = True
+        # Закрытая статистика удаляется из списка окон; кнопка запуска остаётся на главном экране.
+        st.session_state["_crm_windows"] = [
+            item for item in windows if str(item.get("id")) != str(window.get("id"))
+        ]
         if str(st.session_state.get("_crm_active_window_id")) == str(window.get("id")):
             next_visible = next(
-                (candidate for candidate in windows
-                 if str(candidate.get("id")) != str(window.get("id")) and not candidate.get("minimized")),
+                (candidate for candidate in reversed(st.session_state["_crm_windows"])
+                 if not candidate.get("minimized")),
                 None,
             )
             if next_visible:
@@ -8674,6 +8677,11 @@ def _crm_workspace_close_window_callback(window_id, in_workspace=False, force=Fa
                 st.session_state.pop("_crm_active_dialog", None)
         _crm_workspace_clear_legacy_dialog_markers()
         _crm_workspace_queue_save()
+        if in_workspace and st.session_state.get("_crm_active_window_id") is None:
+            try:
+                st.rerun(scope="app")
+            except Exception:
+                st.rerun()
         return
 
     for closing_tab in window.get("tabs", []):
@@ -9227,6 +9235,23 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
             if st.session_state.get(f"crm_workspace_global_search_close_{_bottom_scope}", False):
                 st.session_state[f"crm_workspace_global_search_close_{_bottom_scope}"] = False
 
+        _has_statistics_window = any(
+            any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
+            for _w in _bottom_windows
+        )
+        if not in_workspace and not _has_statistics_window:
+            with st.container(
+                key=f"crm_workspace_window_item_{_bottom_scope}_statistics_launcher",
+                horizontal=True, wrap=False, gap=None, width="content",
+                horizontal_alignment="left",
+            ):
+                st.button(
+                    "📊 Статистика",
+                    key=f"crm_workspace_open_statistics_{_bottom_scope}",
+                    on_click=_crm_open_statistics_window,
+                    type="secondary",
+                )
+
         for _w in list(_bottom_windows):
             _window_id = str(_w.get("id"))
             _is_statistics_window = any(t.get("name") == "statistics_dialog" for t in _w.get("tabs", []))
@@ -9243,13 +9268,12 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
                     on_click=_crm_workspace_activate_window_callback,
                     args=(_w.get("id"), in_workspace),
                 )
-                if in_workspace or not _is_statistics_window:
-                    st.button(
-                        "×",
-                        key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_window_id}",
-                        on_click=_crm_workspace_close_window_callback,
-                        args=(_w.get("id"), in_workspace),
-                    )
+                st.button(
+                    "×",
+                    key=f"crm_workspace_taskbar_close_{_bottom_scope}_{_window_id}",
+                    on_click=_crm_workspace_close_window_callback,
+                    args=(_w.get("id"), in_workspace),
+                )
 
         # The client picker belongs to the window strip, not the inner tab strip.
         if in_workspace:
@@ -9479,8 +9503,7 @@ def _crm_workspace_render_bottom_panel(in_workspace=False):
 # панели: иначе при первом заходе _crm_windows ещё пуст и панель не появляется.
 _crm_workspace_init()
 
-# Статистика всегда присутствует первой в панели окон, даже если её окно закрыто.
-_crm_ensure_statistics_window()
+# Окно статистики создаётся только по явному нажатию кнопки «Статистика».
 
 # Миграция уже сохранённых окон создания клиента: в них не должно быть
 # автоматической вкладки «Карточка клиента», добавленной прежней версией.
