@@ -3520,7 +3520,7 @@ def _render_task_shipping_fields(task, client, deal, key_prefix):
 
 def render_deal_pause_panel(d, deal_id):
     _stage_now = d.get("status", "Новый")
-    if _stage_now not in ("В работе", "Оплачено", "Ожидание оплаты", "На паузе"):
+    if _stage_now not in ("В работе", "Отправлено КП", "Оплачено", "Ожидание оплаты", "На паузе"):
         return
     with st.container(border=True):
         st.markdown("<div style='font-size:1.05rem;font-weight:700;line-height:1.35;margin:0 0 0.85rem 0;'>Постановка на паузу</div>", unsafe_allow_html=True)
@@ -3543,7 +3543,13 @@ def render_deal_pause_panel(d, deal_id):
                 _pause_action_clicked = st.button("Поставить на паузу", key=f"dls_pause_{deal_id}", use_container_width=True)
         if _pause_action_clicked:
             if _stage_now == "На паузе":
-                d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
+                _paused_from = d.get("paused_from_status", "В работе")
+                if d.get("payment_status") == "Оплачено":
+                    d["status"] = "Оплачено"
+                elif _deal_has_active_payment_document(d):
+                    d["status"] = "Ожидание оплаты"
+                else:
+                    d["status"] = _paused_from if _paused_from in ("В работе", "Отправлено КП") else "В работе"
                 d.pop("paused_from_status", None)
                 _pause_message = "Сделка возвращена из паузы"
             elif not _pause_reason.strip():
@@ -10110,7 +10116,7 @@ def render_deal_card_expanded(d, cl):
             if st.button("Закрыть сделку", key=f"deal_close_{d['id']}", use_container_width=True, type="primary"):
                 st.session_state["dialog_close_deal_id"] = d["id"]
                 st.rerun()
-        if current_status in ("В работе", "Оплачено", "Ожидание оплаты"):
+        if current_status in ("В работе", "Отправлено КП", "Оплачено", "Ожидание оплаты"):
             st.markdown("<hr style='border:0;height:1px;background:#DCE0E5;margin:0.8rem 0;'>", unsafe_allow_html=True)
             _pause_reason_input = st.text_area("Причина:", value=st.session_state.get(f"deal_pause_reason_input_{d['id']}", ""), key=f"deal_pause_reason_input_{d['id']}", height=90, placeholder="Укажите причину паузы")
             if st.button("Поставить на паузу", key=f"deal_pause_{d['id']}", use_container_width=True):
@@ -10127,7 +10133,13 @@ def render_deal_card_expanded(d, cl):
             if d.get("pause_reason"):
                 st.markdown(f"<div style='font-size:0.9rem;margin:0.35rem 0 0.75rem;'><b>Сделка на паузе по причине:</b> {html.escape(str(d['pause_reason']))}.</div>", unsafe_allow_html=True)
             if st.button("Вернуть в работу", key=f"deal_unpause_{d['id']}", use_container_width=True):
-                d["status"] = "Оплачено" if d.get("payment_status") == "Оплачено" else ("Ожидание оплаты" if _deal_has_active_payment_document(d) else "В работе")
+                _paused_from = d.get("paused_from_status", "В работе")
+                if d.get("payment_status") == "Оплачено":
+                    d["status"] = "Оплачено"
+                elif _deal_has_active_payment_document(d):
+                    d["status"] = "Ожидание оплаты"
+                else:
+                    d["status"] = _paused_from if _paused_from in ("В работе", "Отправлено КП") else "В работе"
                 d.pop("paused_from_status", None)
                 d["last_modified"] = now_str()
                 commit_and_rerun(st.session_state.crm_store, "Сделка возвращена из паузы")
@@ -11918,11 +11930,19 @@ def _tochka_bank_payment_status(deal):
 
 
 def _deal_has_active_payment_document(deal):
-    """True, если в сделке есть хотя бы один активный счёт или платёжная ссылка Точки."""
+    """True, если в сделке есть активный банковский счёт, платёжная ссылка или сохранённый PDF-счёт."""
     for calc in deal.get("calculations", []) or []:
         for record in (calc.get("tochka_documents", []) or []) + (calc.get("ozon_documents", []) or []):
             if not record.get("deleted") and record.get("kind") in ("invoice", "payment_link"):
                 return True
+    # Счета, сформированные и сохранённые как документы CRM, тоже означают ожидание оплаты.
+    invoice_docs = list(deal.get("generated_documents", []) or [])
+    for calc in deal.get("calculations", []) or []:
+        invoice_docs.extend(calc.get("generated_documents", []) or [])
+    for doc in invoice_docs:
+        kind = str(doc.get("kind", "") or "").lower().replace("ё", "е")
+        if not doc.get("deleted") and ("счет" in kind or "invoice" in kind):
+            return True
     return False
 
 
